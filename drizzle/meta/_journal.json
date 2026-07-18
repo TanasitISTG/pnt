@@ -8,6 +8,13 @@
       "when": 1784395983170,
       "tag": "0000_fat_warhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784407893057,
+      "tag": "0001_smart_zombie",
+      "breakpoints": true
     }
   ]
 }

@@ -13,7 +13,11 @@ import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedIndexRouteImport } from './routes/_protected/index'
 import { Route as ProtectedDesignScratchRouteImport } from './routes/_protected/design-scratch'
+import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
+import { Route as ProtectedNovelsNovelIdIndexRouteImport } from './routes/_protected/novels/$novelId/index'
+import { Route as ProtectedNovelsNovelIdEditRouteImport } from './routes/_protected/novels/$novelId/edit'
 
 const ProtectedRoute = ProtectedRouteImport.update({
   id: '/_protected',
@@ -34,23 +38,53 @@ const ProtectedDesignScratchRoute = ProtectedDesignScratchRouteImport.update({
   path: '/design-scratch',
   getParentRoute: () => ProtectedRoute,
 } as any)
+const ProtectedNovelsNewRoute = ProtectedNovelsNewRouteImport.update({
+  id: '/novels/new',
+  path: '/novels/new',
+  getParentRoute: () => ProtectedRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCoversSplatRoute = ApiCoversSplatRouteImport.update({
+  id: '/api/covers/$',
+  path: '/api/covers/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProtectedNovelsNovelIdIndexRoute =
+  ProtectedNovelsNovelIdIndexRouteImport.update({
+    id: '/novels/$novelId/',
+    path: '/novels/$novelId/',
+    getParentRoute: () => ProtectedRoute,
+  } as any)
+const ProtectedNovelsNovelIdEditRoute =
+  ProtectedNovelsNovelIdEditRouteImport.update({
+    id: '/novels/$novelId/edit',
+    path: '/novels/$novelId/edit',
+    getParentRoute: () => ProtectedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ProtectedIndexRoute
   '/login': typeof LoginRoute
   '/design-scratch': typeof ProtectedDesignScratchRoute
+  '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/covers/$': typeof ApiCoversSplatRoute
+  '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
+  '/novels/$novelId/': typeof ProtectedNovelsNovelIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/design-scratch': typeof ProtectedDesignScratchRoute
   '/': typeof ProtectedIndexRoute
+  '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/covers/$': typeof ApiCoversSplatRoute
+  '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
+  '/novels/$novelId': typeof ProtectedNovelsNovelIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -58,26 +92,51 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_protected/design-scratch': typeof ProtectedDesignScratchRoute
   '/_protected/': typeof ProtectedIndexRoute
+  '/_protected/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/covers/$': typeof ApiCoversSplatRoute
+  '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
+  '/_protected/novels/$novelId/': typeof ProtectedNovelsNovelIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/design-scratch' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/design-scratch'
+    | '/novels/new'
+    | '/api/auth/$'
+    | '/api/covers/$'
+    | '/novels/$novelId/edit'
+    | '/novels/$novelId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/design-scratch' | '/' | '/api/auth/$'
+  to:
+    | '/login'
+    | '/design-scratch'
+    | '/'
+    | '/novels/new'
+    | '/api/auth/$'
+    | '/api/covers/$'
+    | '/novels/$novelId/edit'
+    | '/novels/$novelId'
   id:
     | '__root__'
     | '/_protected'
     | '/login'
     | '/_protected/design-scratch'
     | '/_protected/'
+    | '/_protected/novels/new'
     | '/api/auth/$'
+    | '/api/covers/$'
+    | '/_protected/novels/$novelId/edit'
+    | '/_protected/novels/$novelId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   ProtectedRoute: typeof ProtectedRouteWithChildren
   LoginRoute: typeof LoginRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiCoversSplatRoute: typeof ApiCoversSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -110,6 +169,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedDesignScratchRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/novels/new': {
+      id: '/_protected/novels/new'
+      path: '/novels/new'
+      fullPath: '/novels/new'
+      preLoaderRoute: typeof ProtectedNovelsNewRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -117,17 +183,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/covers/$': {
+      id: '/api/covers/$'
+      path: '/api/covers/$'
+      fullPath: '/api/covers/$'
+      preLoaderRoute: typeof ApiCoversSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_protected/novels/$novelId/': {
+      id: '/_protected/novels/$novelId/'
+      path: '/novels/$novelId'
+      fullPath: '/novels/$novelId/'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdIndexRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
+    '/_protected/novels/$novelId/edit': {
+      id: '/_protected/novels/$novelId/edit'
+      path: '/novels/$novelId/edit'
+      fullPath: '/novels/$novelId/edit'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdEditRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
   }
 }
 
 interface ProtectedRouteChildren {
   ProtectedDesignScratchRoute: typeof ProtectedDesignScratchRoute
   ProtectedIndexRoute: typeof ProtectedIndexRoute
+  ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
+  ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
+  ProtectedNovelsNovelIdIndexRoute: typeof ProtectedNovelsNovelIdIndexRoute
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedDesignScratchRoute: ProtectedDesignScratchRoute,
   ProtectedIndexRoute: ProtectedIndexRoute,
+  ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
+  ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,
+  ProtectedNovelsNovelIdIndexRoute: ProtectedNovelsNovelIdIndexRoute,
 }
 
 const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
@@ -138,6 +231,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
   LoginRoute: LoginRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiCoversSplatRoute: ApiCoversSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

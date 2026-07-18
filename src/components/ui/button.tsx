@@ -18,7 +18,8 @@ const buttonVariants = cva(
         cream: "bg-surface text-foreground",
         // Pill / Icon — 9999px, inset shadow, opacity-driven
         pill: "rounded-full bg-surface text-foreground shadow-button-inset opacity-50 hover:opacity-80",
-        destructive: "bg-destructive/10 text-destructive hover:bg-destructive/20",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-button-inset",
         link: "text-foreground underline underline-offset-4",
       },
       size: {
@@ -44,6 +45,7 @@ function Button({
   return (
     <ButtonPrimitive
       data-slot="button"
+      nativeButton={props.render ? false : undefined}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
