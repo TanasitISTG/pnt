@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 
-export const Route = createFileRoute("/")({ component: DesignScratch });
+export const Route = createFileRoute("/_protected/design-scratch")({
+  component: DesignScratch,
+});
 
 const swatches = [
   { name: "background", cls: "bg-background" },
@@ -36,12 +38,16 @@ const opacities = [83, 82, 40, 4, 3] as const;
 function DesignScratch() {
   const [dark, setDark] = useState(false);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-  }, [dark]);
+  const toggleDark = () => {
+    setDark((d) => {
+      const next = !d;
+      document.documentElement.classList.toggle("dark", next);
+      return next;
+    });
+  };
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-16">
+    <div className="mx-auto max-w-5xl py-16">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-display">Design foundation</h1>
@@ -49,12 +55,11 @@ function DesignScratch() {
             Phase 1 scratch page — DESIGN.md tokens in light &amp; dark.
           </p>
         </div>
-        <Button variant="outline" onClick={() => setDark((d) => !d)}>
+        <Button variant="outline" onClick={toggleDark}>
           {dark ? "Light mode" : "Dark mode"}
         </Button>
       </div>
 
-      {/* Colors */}
       <section className="mt-16">
         <h2 className="text-sub">Colors</h2>
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
@@ -79,7 +84,6 @@ function DesignScratch() {
         </div>
       </section>
 
-      {/* Type scale */}
       <section className="mt-16">
         <h2 className="text-sub">Type scale</h2>
         <div className="mt-6 flex flex-col gap-4 rounded-xl border border-border bg-surface p-8">
@@ -95,7 +99,6 @@ function DesignScratch() {
         </div>
       </section>
 
-      {/* Buttons */}
       <section className="mt-16">
         <h2 className="text-sub">Buttons</h2>
         <div className="mt-6 flex flex-wrap items-center gap-4">
@@ -117,7 +120,6 @@ function DesignScratch() {
         </div>
       </section>
 
-      {/* Card + form */}
       <section className="mt-16">
         <h2 className="text-sub">Card &amp; inputs</h2>
         <Card className="mt-6 max-w-md">

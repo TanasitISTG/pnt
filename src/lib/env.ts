@@ -1,4 +1,4 @@
-import "server-only";
+import "@tanstack/react-start/server-only";
 import { z } from "zod";
 
 const envSchema = z.object({
@@ -9,3 +9,9 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
+
+export const seedEnv = {
+  adminEmail: process.env.SEED_ADMIN_EMAIL,
+  adminName: process.env.SEED_ADMIN_NAME,
+  adminPassword: process.env.SEED_ADMIN_PASSWORD,
+};
