@@ -1,0 +1,9 @@
+# Generated files
+src/routeTree.gen.ts
+
+# Build output
+.output
+.nitro
+.tanstack
+dist
+.vercel

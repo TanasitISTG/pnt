@@ -1,0 +1,139 @@
+@import "@fontsource-variable/sofia-sans";
+@import "@fontsource/noto-sans-thai/400.css";
+@import "@fontsource/noto-sans-thai/600.css";
+@import "@fontsource/sarabun/400.css";
+@import "@fontsource/sarabun/600.css";
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens — single source of truth: DESIGN.md
+ * Semantic tokens (background/foreground/muted/border/primary) flip in .dark.
+ * Constant palette (cream/charcoal/off-white) never flips — use for fixed values.
+ * All grays derive from foreground at opacity (charcoal light / cream dark).
+ */
+@theme inline {
+  /* Semantic colors — flip in .dark */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  /* shadcn aliases mapped to the design system */
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--surface-2);
+  --color-popover-foreground: var(--foreground);
+  --color-secondary: var(--muted);
+  --color-secondary-foreground: var(--foreground);
+  --color-accent: var(--muted);
+  --color-accent-foreground: var(--foreground);
+  --color-input: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  /* Constant palette */
+  --color-cream: #f7f4ed;
+  --color-charcoal: #1c1c1c;
+  --color-off-white: #fcfbf8;
+  --color-ring: rgb(59, 130, 246);
+  --color-ring-blue: rgba(59, 130, 246, 0.5);
+
+  /* Elevation — borders > shadows */
+  --shadow-button-inset:
+    rgba(255, 255, 255, 0.2) 0px 0.5px 0px 0px inset, rgba(0, 0, 0, 0.2) 0px 0px 0px 0.5px inset,
+    rgba(0, 0, 0, 0.05) 0px 1px 2px 0px;
+  --shadow-focus: var(--focus-shadow);
+  --shadow-ring-blue: 0 0 0 2px rgba(59, 130, 246, 0.5);
+
+  /* Radius scale (DESIGN.md §5): 4 / 6 / 8 / 12 / 16 + full (pills only) */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+
+  /* Type scale per DESIGN.md §3 — weights 400/600 only (480 special display) */
+  --text-display: 3.75rem;
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -1.5px;
+  --text-display--font-weight: 600;
+  --text-display-alt: 3.75rem;
+  --text-display-alt--line-height: 1;
+  --text-display-alt--font-weight: 480;
+  --text-section: 3rem;
+  --text-section--line-height: 1;
+  --text-section--letter-spacing: -1.2px;
+  --text-section--font-weight: 600;
+  --text-sub: 2.25rem;
+  --text-sub--line-height: 1.1;
+  --text-sub--letter-spacing: -0.9px;
+  --text-sub--font-weight: 600;
+  --text-card-title: 1.25rem;
+  --text-card-title--line-height: 1.25;
+  --text-body-lg: 1.125rem;
+  --text-body-lg--line-height: 1.38;
+  --text-caption: 0.875rem;
+  --text-caption--line-height: 1.5;
+
+  /* Fonts — Thai fallback is mandatory */
+  --font-sans: "Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+  --font-reader: "Sarabun", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --background: #f7f4ed;
+  --foreground: #1c1c1c;
+  --muted: rgba(28, 28, 28, 0.04);
+  --muted-foreground: #5f5f5d;
+  --border: #eceae4;
+  --surface: #f7f4ed;
+  --surface-2: #fcfbf8;
+  --primary: #1c1c1c;
+  --primary-foreground: #fcfbf8;
+  --destructive: #a8442f;
+  --destructive-foreground: #fcfbf8;
+  --focus-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
+}
+
+.dark {
+  --background: #1c1c1c;
+  --foreground: #f7f4ed;
+  --muted: rgba(247, 244, 237, 0.06);
+  --muted-foreground: #a3a3a0;
+  --border: rgba(247, 244, 237, 0.1);
+  --surface: #232320;
+  --surface-2: #2a2a27;
+  --primary: #f7f4ed;
+  --primary-foreground: #1c1c1c;
+  --destructive: #c05a44;
+  --destructive-foreground: #1c1c1c;
+  --focus-shadow: rgba(247, 244, 237, 0.15) 0px 4px 12px;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #app {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: "Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+}
