@@ -29,6 +29,20 @@
       "when": 1784441500730,
       "tag": "0003_lonely_felicia_hardy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784487217962,
+      "tag": "0004_short_cobalt_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784488460624,
+      "tag": "0005_normal_fat_cobra",
+      "breakpoints": true
     }
   ]
 }

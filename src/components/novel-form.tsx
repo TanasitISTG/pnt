@@ -39,6 +39,8 @@ export function NovelForm({
     sourceLang: defaultValues?.sourceLang || "en",
     targetLang: defaultValues?.targetLang || "th",
     customPrompt: defaultValues?.customPrompt || "",
+    chunkSize: defaultValues?.chunkSize ?? 2000,
+    contextTailLength: defaultValues?.contextTailLength ?? 500,
     cover: null,
     coverMime: null,
     removeCover: false,
@@ -194,6 +196,42 @@ export function NovelForm({
           placeholder="Optional: Custom instructions for the AI translator. E.g. 'Use formal language for elder characters...'"
           rows={4}
         />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border/50">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="chunkSize">Chunk Size (chars)</Label>
+          <Input
+            id="chunkSize"
+            type="number"
+            min={500}
+            max={10000}
+            step={100}
+            value={form.chunkSize ?? 2000}
+            onChange={(e) => setForm((prev) => ({ ...prev, chunkSize: Number(e.target.value) }))}
+          />
+          <span className="text-caption text-muted-foreground">
+            Target char count per chunk (default: 2,000)
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="contextTailLength">Context Tail Length (chars)</Label>
+          <Input
+            id="contextTailLength"
+            type="number"
+            min={100}
+            max={2000}
+            step={50}
+            value={form.contextTailLength ?? 500}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, contextTailLength: Number(e.target.value) }))
+            }
+          />
+          <span className="text-caption text-muted-foreground">
+            Length of previous chunk tail passed as context (default: 500)
+          </span>
+        </div>
       </div>
 
       <div className="flex justify-end gap-3 pt-4 border-t border-border">

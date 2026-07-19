@@ -1,9 +1,22 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { ArrowLeft, Edit, Trash2, FileText, X, Check } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit,
+  Trash2,
+  FileText,
+  X,
+  Check,
+  Play,
+  RotateCw,
+  Square,
+  Terminal,
+} from "lucide-react";
 import { toast } from "sonner";
 import { NovelCover } from "@/components/novel-cover";
+import { useTranslationJob } from "@/lib/translation/use-translation-job";
+import { JobLogsDialog } from "@/components/job-logs-dialog";
 
 import {
   getNovel,
@@ -71,9 +84,17 @@ function NovelDetailPage() {
   const { data: novel } = useQuery(novelQueryOptions(novelId));
   const { data: chapters = [] } = useQuery(chaptersQueryOptions(novelId));
 
+  const {
+    start: startTranslate,
+    cancel: cancelTranslate,
+    retry: retryTranslate,
+    activeJobs,
+  } = useTranslationJob(novelId);
+
   // Dialog States
   const [deleteNovelOpen, setDeleteNovelOpen] = useState(false);
   const [deleteChapterId, setDeleteChapterId] = useState<string | null>(null);
+  const [logChapterId, setLogChapterId] = useState<string | null>(null);
 
   // Chapter edit state
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -341,54 +362,141 @@ function NovelDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {chapters.map((chapter) => (
-                  <TableRow
-                    key={chapter.id}
-                    data-editing={editState?.chapterId === chapter.id ? "true" : undefined}
-                    className="data-[editing=true]:bg-muted/50"
-                  >
-                    <TableCell className="font-medium">{Number(chapter.number)}</TableCell>
-                    <TableCell className="font-medium">{chapter.title}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {chapter.rawCharCount.toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <ChapterStatusBadge status={chapter.status} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          onClick={() =>
-                            editState?.chapterId === chapter.id
-                              ? setEditState(null)
-                              : handleStartEdit(chapter)
-                          }
-                          aria-label={
-                            editState?.chapterId === chapter.id ? "Cancel edit" : "Edit chapter"
-                          }
-                        >
-                          {editState?.chapterId === chapter.id ? (
-                            <X className="size-4 text-muted-foreground" />
+                {chapters.map((chapter) => {
+                  const activeJob = activeJobs.get(chapter.id);
+                  const isTranslating =
+                    activeJob?.status === "running" ||
+                    activeJob?.status === "pending" ||
+                    chapter.status === "translating" ||
+                    chapter.status === "queued";
+
+                  return (
+                    <TableRow
+                      key={chapter.id}
+                      data-editing={editState?.chapterId === chapter.id ? "true" : undefined}
+                      className="data-[editing=true]:bg-muted/50"
+                    >
+                      <TableCell className="font-medium">{Number(chapter.number)}</TableCell>
+                      <TableCell className="font-medium">{chapter.title}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {chapter.rawCharCount.toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        {activeJob &&
+                        (activeJob.status === "running" || activeJob.status === "pending") ? (
+                          <div className="flex flex-col gap-1 min-w-28">
+                            <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                              <span>Translating...</span>
+                              <span>
+                                {activeJob.doneChunks}/{activeJob.totalChunks}
+                              </span>
+                            </div>
+                            <Progress
+                              value={
+                                activeJob.totalChunks > 0
+                                  ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
+                                  : 0
+                              }
+                              className="h-1.5"
+                            />
+                          </div>
+                        ) : (
+                          <ChapterStatusBadge status={chapter.status} />
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          {isTranslating && activeJob ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-amber-500 hover:text-amber-600"
+                              onClick={() => cancelTranslate(activeJob.jobId, chapter.id)}
+                              aria-label="Cancel translation"
+                              title="Cancel translation"
+                            >
+                              <Square className="size-4" />
+                            </Button>
+                          ) : chapter.status === "error" || activeJob?.status === "error" ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-destructive hover:text-destructive"
+                              onClick={() =>
+                                activeJob
+                                  ? retryTranslate(activeJob.jobId, chapter.id)
+                                  : startTranslate(chapter.id)
+                              }
+                              aria-label="Retry translation"
+                              title="Retry translation"
+                            >
+                              <RotateCw className="size-4" />
+                            </Button>
                           ) : (
-                            <Edit className="size-4" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-primary hover:text-primary"
+                              onClick={() => startTranslate(chapter.id)}
+                              aria-label={
+                                chapter.status === "translated"
+                                  ? "Re-translate chapter"
+                                  : "Translate chapter"
+                              }
+                              title={
+                                chapter.status === "translated"
+                                  ? "Re-translate chapter"
+                                  : "Translate chapter"
+                              }
+                            >
+                              <Play className="size-4" />
+                            </Button>
                           )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          onClick={() => setDeleteChapterId(chapter.id)}
-                          aria-label="Delete chapter"
-                        >
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          {(activeJob || chapter.status !== "raw") && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:text-foreground"
+                              onClick={() => setLogChapterId(chapter.id)}
+                              aria-label="View translation logs"
+                              title="View translation logs"
+                            >
+                              <Terminal className="size-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            onClick={() =>
+                              editState?.chapterId === chapter.id
+                                ? setEditState(null)
+                                : handleStartEdit(chapter)
+                            }
+                            aria-label={
+                              editState?.chapterId === chapter.id ? "Cancel edit" : "Edit chapter"
+                            }
+                          >
+                            {editState?.chapterId === chapter.id ? (
+                              <X className="size-4 text-muted-foreground" />
+                            ) : (
+                              <Edit className="size-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            onClick={() => setDeleteChapterId(chapter.id)}
+                            aria-label="Delete chapter"
+                          >
+                            <Trash2 className="size-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -601,6 +709,12 @@ function NovelDetailPage() {
         onOpenChange={(open) => !open && setDeleteChapterId(null)}
         onConfirm={() => deleteChapterId && removeChapter({ chapterId: deleteChapterId })}
         pending={deletingChapter}
+      />
+
+      <JobLogsDialog
+        chapterId={logChapterId}
+        open={logChapterId !== null}
+        onOpenChange={(open) => !open && setLogChapterId(null)}
       />
     </div>
   );

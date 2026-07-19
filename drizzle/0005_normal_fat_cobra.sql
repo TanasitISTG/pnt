@@ -1,0 +1,1 @@
+ALTER TABLE "translation_jobs" ADD COLUMN "logs_json" text;

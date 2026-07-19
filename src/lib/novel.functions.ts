@@ -51,6 +51,8 @@ export const getNovel = createServerFn({ method: "GET" })
         sourceLang: novels.sourceLang,
         targetLang: novels.targetLang,
         customPrompt: novels.customPrompt,
+        chunkSize: novels.chunkSize,
+        contextTailLength: novels.contextTailLength,
         cover: novels.cover,
         coverMime: novels.coverMime,
         createdAt: novels.createdAt,
@@ -93,6 +95,8 @@ export const createNovel = createServerFn({ method: "POST" })
       sourceLang: data.sourceLang,
       targetLang: data.targetLang,
       customPrompt: data.customPrompt,
+      chunkSize: data.chunkSize,
+      contextTailLength: data.contextTailLength,
     });
 
     return { id: novelId };
@@ -124,6 +128,10 @@ export const updateNovel = createServerFn({ method: "POST" })
       customPrompt: data.customPrompt,
       updatedAt: new Date(),
     };
+
+    if (data.chunkSize !== undefined) updateValues.chunkSize = data.chunkSize;
+    if (data.contextTailLength !== undefined)
+      updateValues.contextTailLength = data.contextTailLength;
 
     if (data.removeCover) {
       updateValues.cover = null;

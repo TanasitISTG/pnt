@@ -10,6 +10,8 @@ import {
   customType,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
+import { translationJobs } from "./translation-jobs";
+import { glossaryTerms } from "./glossary-terms";
 
 export const chapterStatusEnum = pgEnum("chapter_status", [
   "raw",
@@ -54,6 +56,8 @@ export const novels = pgTable("novels", {
   sourceLang: text("source_lang").notNull(),
   targetLang: text("target_lang").notNull(),
   customPrompt: text("custom_prompt"),
+  chunkSize: integer("chunk_size").notNull().default(2000),
+  contextTailLength: integer("context_tail_length").notNull().default(500),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -82,8 +86,10 @@ export const chapters = pgTable(
 export const novelsRelations = relations(novels, ({ one, many }) => ({
   user: one(user, { fields: [novels.userId], references: [user.id] }),
   chapters: many(chapters),
+  glossaryTerms: many(glossaryTerms),
 }));
 
-export const chaptersRelations = relations(chapters, ({ one }) => ({
+export const chaptersRelations = relations(chapters, ({ one, many }) => ({
   novel: one(novels, { fields: [chapters.novelId], references: [novels.id] }),
+  translationJobs: many(translationJobs),
 }));
