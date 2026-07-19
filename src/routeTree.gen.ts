@@ -19,6 +19,7 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
 import { Route as ProtectedNovelsNovelIdIndexRouteImport } from './routes/_protected/novels/$novelId/index'
 import { Route as ProtectedNovelsNovelIdEditRouteImport } from './routes/_protected/novels/$novelId/edit'
+import { Route as ProtectedNovelsNovelIdGlossaryRouteImport } from './routes/_protected/novels/$novelId/glossary'
 
 const ProtectedRoute = ProtectedRouteImport.update({
   id: '/_protected',
@@ -71,6 +72,12 @@ const ProtectedNovelsNovelIdEditRoute =
     path: '/novels/$novelId/edit',
     getParentRoute: () => ProtectedRoute,
   } as any)
+const ProtectedNovelsNovelIdGlossaryRoute =
+  ProtectedNovelsNovelIdGlossaryRouteImport.update({
+    id: '/novels/$novelId/glossary',
+    path: '/novels/$novelId/glossary',
+    getParentRoute: () => ProtectedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ProtectedIndexRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
+  '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/': typeof ProtectedNovelsNovelIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -92,6 +100,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
+  '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId': typeof ProtectedNovelsNovelIdIndexRoute
 }
 export interface FileRoutesById {
@@ -105,6 +114,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
+  '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/_protected/novels/$novelId/': typeof ProtectedNovelsNovelIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/covers/$'
     | '/novels/$novelId/edit'
+    | '/novels/$novelId/glossary'
     | '/novels/$novelId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/covers/$'
     | '/novels/$novelId/edit'
+    | '/novels/$novelId/glossary'
     | '/novels/$novelId'
   id:
     | '__root__'
@@ -141,6 +153,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/covers/$'
     | '/_protected/novels/$novelId/edit'
+    | '/_protected/novels/$novelId/glossary'
     | '/_protected/novels/$novelId/'
   fileRoutesById: FileRoutesById
 }
@@ -223,6 +236,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedNovelsNovelIdEditRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/novels/$novelId/glossary': {
+      id: '/_protected/novels/$novelId/glossary'
+      path: '/novels/$novelId/glossary'
+      fullPath: '/novels/$novelId/glossary'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdGlossaryRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
   }
 }
 
@@ -232,6 +252,7 @@ interface ProtectedRouteChildren {
   ProtectedIndexRoute: typeof ProtectedIndexRoute
   ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
   ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
+  ProtectedNovelsNovelIdGlossaryRoute: typeof ProtectedNovelsNovelIdGlossaryRoute
   ProtectedNovelsNovelIdIndexRoute: typeof ProtectedNovelsNovelIdIndexRoute
 }
 
@@ -241,6 +262,7 @@ const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedIndexRoute: ProtectedIndexRoute,
   ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
   ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,
+  ProtectedNovelsNovelIdGlossaryRoute: ProtectedNovelsNovelIdGlossaryRoute,
   ProtectedNovelsNovelIdIndexRoute: ProtectedNovelsNovelIdIndexRoute,
 }
 

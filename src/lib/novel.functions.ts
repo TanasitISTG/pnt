@@ -16,7 +16,7 @@ import {
 export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
   const session = await ensureSession();
 
-  return db
+  const rows = await db
     .select({
       id: novels.id,
       title: novels.title,
@@ -28,12 +28,21 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
       createdAt: novels.createdAt,
       updatedAt: novels.updatedAt,
       hasCover: sql<number>`CASE WHEN ${novels.cover} IS NOT NULL THEN 1 ELSE 0 END`,
-      chapterCount: sql<number>`(select count(*)::int from ${chapters} where ${chapters.novelId} = ${novels.id})`,
-      translatedCount: sql<number>`(select count(*)::int from ${chapters} where ${chapters.novelId} = ${novels.id} and ${chapters.status} = 'translated')`,
+      chapterCount: sql<number>`count(${chapters.id})::int`,
+      translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
     })
     .from(novels)
+    .leftJoin(chapters, eq(chapters.novelId, novels.id))
     .where(eq(novels.userId, session.user.id))
+    .groupBy(novels.id)
     .orderBy(desc(novels.createdAt));
+
+  return rows.map((row) => ({
+    ...row,
+    chapterCount: Number(row.chapterCount || 0),
+    translatedCount: Number(row.translatedCount || 0),
+    hasCover: Number(row.hasCover || 0),
+  }));
 });
 
 export const getNovel = createServerFn({ method: "GET" })

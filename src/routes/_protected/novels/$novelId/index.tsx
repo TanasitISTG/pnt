@@ -12,6 +12,7 @@ import {
   RotateCw,
   Square,
   Terminal,
+  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NovelCover } from "@/components/novel-cover";
@@ -27,6 +28,7 @@ import {
   deleteChapter,
   updateChapterRaw,
 } from "@/lib/novel.functions";
+import { getGlossaryStats } from "@/lib/glossary.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,11 +60,18 @@ const chaptersQueryOptions = (novelId: string) =>
     queryFn: () => listChapters({ data: { novelId } }),
   });
 
+const glossaryStatsQueryOptions = (novelId: string) =>
+  queryOptions({
+    queryKey: ["glossaryStats", novelId],
+    queryFn: () => getGlossaryStats({ data: { novelId } }),
+  });
+
 export const Route = createFileRoute("/_protected/novels/$novelId/")({
   loader: async ({ params, context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
+      context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
     ]);
   },
   component: NovelDetailPage,
@@ -83,6 +92,7 @@ function NovelDetailPage() {
 
   const { data: novel } = useQuery(novelQueryOptions(novelId));
   const { data: chapters = [] } = useQuery(chaptersQueryOptions(novelId));
+  const { data: glossaryStats } = useQuery(glossaryStatsQueryOptions(novelId));
 
   const {
     start: startTranslate,
@@ -267,6 +277,22 @@ function NovelDetailPage() {
             <ArrowLeft className="size-4" />
           </Button>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link to="/novels/$novelId/glossary" params={{ novelId }} />}
+            >
+              <BookOpen className="size-4" />
+              Glossary
+              {glossaryStats && glossaryStats.total > 0 && (
+                <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
+                  {glossaryStats.total}
+                </Badge>
+              )}
+              {glossaryStats && glossaryStats.pending > 0 && (
+                <span className="size-2 rounded-full bg-amber-500 animate-pulse ml-0.5" />
+              )}
+            </Button>
             <Button
               variant="outline"
               size="sm"

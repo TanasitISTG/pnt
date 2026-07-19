@@ -10,6 +10,10 @@ import { chunkText } from "@/lib/translation/chunker";
 import { buildSystemPrompt, buildSummaryPrompt } from "@/lib/translation/prompts";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "@/lib/translation/glossary";
 import {
+  buildTermSuggestionPrompt,
+  parseTermSuggestions,
+} from "@/lib/translation/suggest-terms-prompt";
+import {
   startTranslationJobSchema,
   tickTranslationJobSchema,
   cancelTranslationJobSchema,
@@ -359,6 +363,11 @@ export const tickTranslationJob = createServerFn({ method: "POST" })
       // Generate chapter summary in English
       let summaryText: string | null = null;
       logs.push(createLog("info", "Generating English chapter summary..."));
+      await db
+        .update(translationJobs)
+        .set({ logsJson: JSON.stringify(logs), updatedAt: new Date() })
+        .where(eq(translationJobs.id, job.id));
+
       const summaryStartTime = Date.now();
 
       try {
@@ -379,6 +388,94 @@ export const tickTranslationJob = createServerFn({ method: "POST" })
         logs.push(createLog("success", `Summary generated in ${summaryTime}s.`));
       } catch (sumErr: any) {
         logs.push(createLog("warn", `Summary generation skipped: ${sumErr.message || "Failed"}`));
+      }
+
+      // Auto-suggest glossary terms (v1.1)
+      logs.push(createLog("info", "Extracting new glossary term suggestions..."));
+      await db
+        .update(translationJobs)
+        .set({ logsJson: JSON.stringify(logs), updatedAt: new Date() })
+        .where(eq(translationJobs.id, job.id));
+      try {
+        const existingSources = terms.map((t) => t.source);
+        const suggestPrompt = buildTermSuggestionPrompt(
+          `${novel.sourceLang}->${novel.targetLang}`,
+          existingSources,
+        );
+
+        let suggestionContent = "";
+        try {
+          // Attempt structured JSON output first
+          const suggestCompletion = await providerConfig.client.chat.completions.create({
+            model: providerConfig.model,
+            temperature: 0.3,
+            messages: [
+              { role: "system", content: suggestPrompt },
+              {
+                role: "user",
+                content: `Extract glossary terms from this chapter excerpt:\n\n${fullTranslation.slice(0, 8000)}`,
+              },
+            ],
+            response_format: { type: "json_object" },
+          });
+          suggestionContent = suggestCompletion.choices[0]?.message?.content || "";
+        } catch {
+          // Fallback to standard output without response_format
+          const suggestCompletion = await providerConfig.client.chat.completions.create({
+            model: providerConfig.model,
+            temperature: 0.3,
+            messages: [
+              { role: "system", content: suggestPrompt },
+              {
+                role: "user",
+                content: `Extract glossary terms from this chapter excerpt:\n\n${fullTranslation.slice(0, 8000)}`,
+              },
+            ],
+          });
+          suggestionContent = suggestCompletion.choices[0]?.message?.content || "";
+        }
+
+        const suggestedTerms = parseTermSuggestions(suggestionContent);
+        let addedCount = 0;
+
+        for (const st of suggestedTerms) {
+          // Check if already in DB (approved or pending)
+          const [dup] = await db
+            .select({ id: glossaryTerms.id })
+            .from(glossaryTerms)
+            .where(
+              and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.source, st.source)),
+            )
+            .limit(1);
+
+          if (!dup) {
+            await db.insert(glossaryTerms).values({
+              id: nanoid(),
+              novelId: novel.id,
+              source: st.source,
+              target: st.target,
+              category: st.category,
+              note: st.note || null,
+              status: "pending",
+            });
+            addedCount++;
+          }
+        }
+
+        if (addedCount > 0) {
+          logs.push(
+            createLog(
+              "success",
+              `Extracted ${addedCount} pending term suggestion(s) for user review.`,
+            ),
+          );
+        } else {
+          logs.push(createLog("info", "No new term suggestions extracted."));
+        }
+      } catch (sugErr: any) {
+        logs.push(
+          createLog("warn", `Term auto-suggest skipped: ${sugErr.message || "Failed"}`),
+        );
       }
 
       logs.push(
