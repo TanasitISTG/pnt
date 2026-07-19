@@ -16,7 +16,7 @@ import {
 export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
   const session = await ensureSession();
 
-  const novelList = await db
+  return db
     .select({
       id: novels.id,
       title: novels.title,
@@ -25,23 +25,15 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
       description: novels.description,
       sourceLang: novels.sourceLang,
       targetLang: novels.targetLang,
-      cover: novels.cover,
-      coverMime: novels.coverMime,
       createdAt: novels.createdAt,
       updatedAt: novels.updatedAt,
+      hasCover: sql<number>`CASE WHEN ${novels.cover} IS NOT NULL THEN 1 ELSE 0 END`,
       chapterCount: sql<number>`(select count(*)::int from ${chapters} where ${chapters.novelId} = ${novels.id})`,
       translatedCount: sql<number>`(select count(*)::int from ${chapters} where ${chapters.novelId} = ${novels.id} and ${chapters.status} = 'translated')`,
     })
     .from(novels)
     .where(eq(novels.userId, session.user.id))
     .orderBy(desc(novels.createdAt));
-
-  return novelList.map((n) => ({
-    ...n,
-    cover: n.cover
-      ? `data:${n.coverMime || "image/jpeg"};base64,${n.cover.toString("base64")}`
-      : null,
-  }));
 });
 
 export const getNovel = createServerFn({ method: "GET" })
@@ -72,6 +64,9 @@ export const getNovel = createServerFn({ method: "GET" })
 
     return {
       ...novel,
+      sourceLang: novel.sourceLang as "en" | "zh",
+      targetLang: novel.targetLang as "en" | "th",
+      coverMime: (novel.coverMime as "image/jpeg" | "image/png" | "image/webp" | null) || null,
       cover: novel.cover
         ? `data:${novel.coverMime || "image/jpeg"};base64,${novel.cover.toString("base64")}`
         : null,

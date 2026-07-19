@@ -102,9 +102,9 @@ export function CoverUpload({
         className="hidden"
       />
       {loading ? (
-        <div className="aspect-[3/4] w-48 rounded-xl border border-border bg-foreground/5 animate-pulse" />
+        <div className="aspect-3/4 w-48 rounded-xl border border-border bg-foreground/5 animate-pulse" />
       ) : preview ? (
-        <div className="relative group/cover aspect-[3/4] w-48 overflow-hidden rounded-xl border border-border bg-muted">
+        <div className="relative group/cover aspect-3/4 w-48 overflow-hidden rounded-xl border border-border bg-muted">
           <img src={preview} alt="Novel Cover Preview" className="h-full w-full object-cover" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover/cover:opacity-100">
             <div className="flex gap-2">
@@ -121,7 +121,7 @@ export function CoverUpload({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex aspect-[3/4] w-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-foreground/20 bg-foreground/3 transition-colors hover:bg-foreground/5 text-muted-foreground hover:text-foreground text-center"
+          className="flex aspect-3/4 w-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-foreground/20 bg-foreground/3 transition-colors hover:bg-foreground/5 text-muted-foreground hover:text-foreground text-center"
         >
           <Upload className="size-6" />
           <span className="text-caption">

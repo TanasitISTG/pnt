@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import {
   pgTable,
+  pgEnum,
   text,
   timestamp,
   integer,
@@ -9,6 +10,14 @@ import {
   customType,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
+
+export const chapterStatusEnum = pgEnum("chapter_status", [
+  "raw",
+  "queued",
+  "translating",
+  "translated",
+  "error",
+]);
 
 // Custom type for bytea mapping to Buffer in JS/TS
 const bytea = customType<{ data: Buffer; driverData: unknown }>({
@@ -60,7 +69,7 @@ export const chapters = pgTable(
     title: text("title").notNull(),
     rawContent: text("raw_content").notNull(),
     translatedContent: text("translated_content"),
-    status: text("status").notNull().default("raw"), // raw, queued, translating, translated, error
+    status: chapterStatusEnum("status").notNull().default("raw"),
     summary: text("summary"),
     rawCharCount: integer("raw_char_count").notNull(),
     translatedAt: timestamp("translated_at"),

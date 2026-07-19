@@ -12,7 +12,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { CoverUpload } from "@/components/cover-upload";
-import { createNovelSchema } from "@/lib/novel.schemas";
+import { coverMimeSchema, createNovelSchema } from "@/lib/novel.schemas";
 
 type NovelFormData = z.infer<typeof createNovelSchema> & {
   removeCover?: boolean;
@@ -46,7 +46,7 @@ export function NovelForm({
 
   const [errors, setErrors] = useState<Partial<Record<keyof NovelFormData, string>>>({});
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     setErrors({});
 
@@ -54,8 +54,8 @@ export function NovelForm({
     if (!result.success) {
       const fieldErrors: Partial<Record<keyof NovelFormData, string>> = {};
       result.error.issues.forEach((issue) => {
-        if (issue.path[0]) {
-          fieldErrors[issue.path[0] as keyof NovelFormData] = issue.message;
+        if (issue.path[0] !== undefined) {
+          fieldErrors[String(issue.path[0]) as keyof NovelFormData] = issue.message;
         }
       });
       setErrors(fieldErrors);
@@ -65,7 +65,8 @@ export function NovelForm({
     await onSubmit(form);
   };
 
-  const handleSelectChange = (field: "sourceLang" | "targetLang", value: string) => {
+  const handleSelectChange = (field: "sourceLang" | "targetLang", value: string | null) => {
+    if (!value) return;
     setForm((prev) => ({ ...prev, [field]: value as any }));
   };
 
@@ -115,14 +116,18 @@ export function NovelForm({
             existingNovelId={defaultValues?.id}
             hasExistingCover={defaultValues?.hasCover}
             cover={defaultValues?.cover}
-            onChange={(base64, mimeType) =>
+            onChange={(base64, mimeType) => {
+              const validatedMime =
+                mimeType && coverMimeSchema.safeParse(mimeType).success
+                  ? (mimeType as z.infer<typeof coverMimeSchema>)
+                  : null;
               setForm((prev) => ({
                 ...prev,
                 cover: base64,
-                coverMime: mimeType,
+                coverMime: validatedMime,
                 removeCover: false,
-              }))
-            }
+              }));
+            }}
             onRemoveCover={() =>
               setForm((prev) => ({
                 ...prev,

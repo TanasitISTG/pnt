@@ -15,6 +15,13 @@
       "when": 1784407893057,
       "tag": "0001_smart_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784432831375,
+      "tag": "0002_gifted_hercules",
+      "breakpoints": true
     }
   ]
 }
