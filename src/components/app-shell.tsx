@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Menu, X, ChevronDown, LogOut, Loader2 } from "lucide-react";
+import { Menu, X, ChevronDown, LogOut, Loader2, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -55,6 +55,13 @@ export function AppShell({ user, children }: AppShellProps) {
               >
                 Library
               </Link>
+              <Link
+                to="/settings"
+                className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
+                activeProps={{ className: "font-semibold" }}
+              >
+                Settings
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-2">
@@ -82,6 +89,13 @@ export function AppShell({ user, children }: AppShellProps) {
                 onClick={() => setMenuOpen(false)}
               >
                 Library
+              </Link>
+              <Link
+                to="/settings"
+                className="text-body-lg text-foreground no-underline"
+                onClick={() => setMenuOpen(false)}
+              >
+                Settings
               </Link>
             </nav>
             <div className="mt-4 border-t border-border pt-4">
@@ -130,6 +144,15 @@ function UserDropdown({
             <div className="text-card-title text-foreground">{user.name}</div>
             <div className="text-caption text-muted-foreground">{user.email}</div>
           </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            render={<Link to="/settings" className="no-underline text-foreground" />}
+          >
+            <Settings className="size-4" />
+            Settings
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onSignOut} disabled={signingOut}>

@@ -22,6 +22,13 @@
       "when": 1784432831375,
       "tag": "0002_gifted_hercules",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784441500730,
+      "tag": "0003_lonely_felicia_hardy",
+      "breakpoints": true
     }
   ]
 }

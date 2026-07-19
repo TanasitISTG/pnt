@@ -13,6 +13,7 @@ import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedIndexRouteImport } from './routes/_protected/index'
 import { Route as ProtectedDesignScratchRouteImport } from './routes/_protected/design-scratch'
+import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
@@ -36,6 +37,11 @@ const ProtectedIndexRoute = ProtectedIndexRouteImport.update({
 const ProtectedDesignScratchRoute = ProtectedDesignScratchRouteImport.update({
   id: '/design-scratch',
   path: '/design-scratch',
+  getParentRoute: () => ProtectedRoute,
+} as any)
+const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => ProtectedRoute,
 } as any)
 const ProtectedNovelsNewRoute = ProtectedNovelsNewRouteImport.update({
@@ -70,6 +76,7 @@ export interface FileRoutesByFullPath {
   '/': typeof ProtectedIndexRoute
   '/login': typeof LoginRoute
   '/design-scratch': typeof ProtectedDesignScratchRoute
+  '/settings': typeof ProtectedSettingsRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/design-scratch': typeof ProtectedDesignScratchRoute
+  '/settings': typeof ProtectedSettingsRoute
   '/': typeof ProtectedIndexRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   '/_protected': typeof ProtectedRouteWithChildren
   '/login': typeof LoginRoute
   '/_protected/design-scratch': typeof ProtectedDesignScratchRoute
+  '/_protected/settings': typeof ProtectedSettingsRoute
   '/_protected/': typeof ProtectedIndexRoute
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/design-scratch'
+    | '/settings'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
@@ -113,6 +123,7 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/design-scratch'
+    | '/settings'
     | '/'
     | '/novels/new'
     | '/api/auth/$'
@@ -124,6 +135,7 @@ export interface FileRouteTypes {
     | '/_protected'
     | '/login'
     | '/_protected/design-scratch'
+    | '/_protected/settings'
     | '/_protected/'
     | '/_protected/novels/new'
     | '/api/auth/$'
@@ -169,6 +181,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedDesignScratchRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/settings': {
+      id: '/_protected/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof ProtectedSettingsRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
     '/_protected/novels/new': {
       id: '/_protected/novels/new'
       path: '/novels/new'
@@ -209,6 +228,7 @@ declare module '@tanstack/react-router' {
 
 interface ProtectedRouteChildren {
   ProtectedDesignScratchRoute: typeof ProtectedDesignScratchRoute
+  ProtectedSettingsRoute: typeof ProtectedSettingsRoute
   ProtectedIndexRoute: typeof ProtectedIndexRoute
   ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
   ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
@@ -217,6 +237,7 @@ interface ProtectedRouteChildren {
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedDesignScratchRoute: ProtectedDesignScratchRoute,
+  ProtectedSettingsRoute: ProtectedSettingsRoute,
   ProtectedIndexRoute: ProtectedIndexRoute,
   ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
   ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,
