@@ -1,6 +1,6 @@
 {
-  "id": "6ad687a2-f0cc-4cad-b8cc-c61ba59d7767",
-  "prevId": "2e10d977-b254-4723-b98c-fbaa345ad7e3",
+  "id": "0dbe51bc-748f-4ee7-8b68-6d15e6148026",
+  "prevId": "6ad687a2-f0cc-4cad-b8cc-c61ba59d7767",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -354,6 +354,12 @@
         },
         "translated_at": {
           "name": "translated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edited_at": {
+          "name": "edited_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false

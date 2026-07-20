@@ -22,10 +22,10 @@ describe("prompts module", () => {
   });
 
   it("includes glossary block when provided", () => {
-    const glossary = "- Lin Fan -> ลินฟาน (character)\n- Sun Peak -> ยอดเขาอาทิตย์ (place)";
+    const glossary = "- Lin Fan -> หลินฟาน (character)\n- Sun Peak -> ยอดเขาอาทิตย์ (place)";
     const prompt = buildSystemPrompt("en->th", glossary);
     expect(prompt).toContain("## Terminology & Glossary");
-    expect(prompt).toContain("Lin Fan -> ลินฟาน");
+    expect(prompt).toContain("Lin Fan -> หลินฟาน");
   });
 
   it("includes context block when summary or tail provided", () => {

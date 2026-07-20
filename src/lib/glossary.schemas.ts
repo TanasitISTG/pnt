@@ -1,12 +1,6 @@
 import { z } from "zod";
 
-export const termCategorySchema = z.enum([
-  "character",
-  "place",
-  "skill",
-  "item",
-  "other",
-]);
+export const termCategorySchema = z.enum(["character", "place", "skill", "item", "other"]);
 
 export const termStatusSchema = z.enum(["approved", "pending"]);
 

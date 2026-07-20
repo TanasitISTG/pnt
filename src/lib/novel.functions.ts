@@ -11,6 +11,7 @@ import {
   updateNovelSchema,
   createChapterSchema,
   updateChapterSchema,
+  updateChapterTranslationSchema,
 } from "@/lib/novel.schemas";
 
 export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
@@ -220,6 +221,7 @@ export const getChapter = createServerFn({ method: "GET" })
         summary: chapters.summary,
         rawCharCount: chapters.rawCharCount,
         translatedAt: chapters.translatedAt,
+        editedAt: chapters.editedAt,
         createdAt: chapters.createdAt,
         updatedAt: chapters.updatedAt,
       })
@@ -295,6 +297,35 @@ export const updateChapterRaw = createServerFn({ method: "POST" })
     }
 
     await db.update(chapters).set(updateValues).where(eq(chapters.id, data.chapterId));
+
+    return { id: data.chapterId };
+  });
+
+export const updateChapterTranslation = createServerFn({ method: "POST" })
+  .validator(updateChapterTranslationSchema)
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+
+    // Verify ownership by inner joining
+    const [existing] = await db
+      .select({ id: chapters.id })
+      .from(chapters)
+      .innerJoin(novels, eq(chapters.novelId, novels.id))
+      .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
+      .limit(1);
+
+    if (!existing) {
+      throw new Error("Chapter not found or unauthorized");
+    }
+
+    await db
+      .update(chapters)
+      .set({
+        translatedContent: data.translatedContent,
+        editedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(chapters.id, data.chapterId));
 
     return { id: data.chapterId };
   });

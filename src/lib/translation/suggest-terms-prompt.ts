@@ -5,10 +5,7 @@ export interface SuggestedTerm {
   note?: string;
 }
 
-export function buildTermSuggestionPrompt(
-  languagePair: string,
-  existingSources: string[],
-): string {
+export function buildTermSuggestionPrompt(languagePair: string, existingSources: string[]): string {
   const existingList =
     existingSources.length > 0
       ? `Do NOT include any of the following terms which are already present in the glossary:\n${existingSources.slice(0, 100).join(", ")}`

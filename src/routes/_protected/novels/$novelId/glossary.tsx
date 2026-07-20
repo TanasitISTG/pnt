@@ -155,7 +155,9 @@ function NovelGlossaryPage() {
   // Add Term Form state
   const [newSource, setNewSource] = useState("");
   const [newTarget, setNewTarget] = useState("");
-  const [newCategory, setNewCategory] = useState<"character" | "place" | "skill" | "item" | "other">("character");
+  const [newCategory, setNewCategory] = useState<
+    "character" | "place" | "skill" | "item" | "other"
+  >("character");
   const [newNote, setNewNote] = useState("");
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
 
@@ -346,7 +348,10 @@ function NovelGlossaryPage() {
               <h1 className="text-card-title sm:text-sub md:text-section font-semibold text-foreground tracking-tight">
                 {novel.title} Glossary
               </h1>
-              <Badge variant="outline" className="uppercase font-semibold text-xs border-foreground/40">
+              <Badge
+                variant="outline"
+                className="uppercase font-semibold text-xs border-foreground/40"
+              >
                 {novel.sourceLang} → {novel.targetLang}
               </Badge>
             </div>
@@ -359,11 +364,17 @@ function NovelGlossaryPage() {
             <Badge variant="secondary" className="px-3 py-1 text-xs font-mono">
               Total: {stats?.total ?? 0}
             </Badge>
-            <Badge variant="outline" className="px-3 py-1 text-xs font-mono text-emerald-600 border-emerald-500/30">
+            <Badge
+              variant="outline"
+              className="px-3 py-1 text-xs font-mono text-emerald-600 border-emerald-500/30"
+            >
               Approved: {stats?.approved ?? 0}
             </Badge>
             {(stats?.pending ?? 0) > 0 && (
-              <Badge variant="outline" className="px-3 py-1 text-xs font-mono text-amber-600 border-amber-500/40 bg-amber-500/10 animate-pulse">
+              <Badge
+                variant="outline"
+                className="px-3 py-1 text-xs font-mono text-amber-600 border-amber-500/40 bg-amber-500/10 animate-pulse"
+              >
                 Pending: {stats?.pending}
               </Badge>
             )}
@@ -396,7 +407,8 @@ function NovelGlossaryPage() {
               </Button>
             </div>
             <p className="text-sm text-muted-foreground">
-              These terms were extracted automatically from your recent chapter translations. Approved terms will be used in future prompt injections.
+              These terms were extracted automatically from your recent chapter translations.
+              Approved terms will be used in future prompt injections.
             </p>
 
             <div className="rounded-lg border border-amber-500/20 bg-card overflow-hidden">
@@ -418,7 +430,9 @@ function NovelGlossaryPage() {
                       <TableCell>
                         <CategoryBadge category={term.category} />
                       </TableCell>
-                      <TableCell className="text-caption text-muted-foreground">{term.note || "—"}</TableCell>
+                      <TableCell className="text-caption text-muted-foreground">
+                        {term.note || "—"}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button
@@ -468,7 +482,7 @@ function NovelGlossaryPage() {
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="w-36">
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <Select value={categoryFilter} onValueChange={(val: any) => setCategoryFilter(val)}>
               <SelectTrigger>
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
@@ -484,7 +498,7 @@ function NovelGlossaryPage() {
           </div>
 
           <div className="w-32">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
               <SelectTrigger>
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -696,7 +710,7 @@ function NovelGlossaryPage() {
                   <Label htmlFor="target">Target Translation *</Label>
                   <Input
                     id="target"
-                    placeholder="e.g. ลินฟาน"
+                    placeholder="e.g. หลินฟาน"
                     value={newTarget}
                     onChange={(e) => {
                       setAddErrors((err) => ({ ...err, target: "" }));
@@ -713,10 +727,7 @@ function NovelGlossaryPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="category">Category</Label>
-                  <Select
-                    value={newCategory}
-                    onValueChange={(val: any) => setNewCategory(val)}
-                  >
+                  <Select value={newCategory} onValueChange={(val: any) => setNewCategory(val)}>
                     <SelectTrigger id="category">
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
@@ -781,7 +792,7 @@ function NovelGlossaryPage() {
               <span>Example TSV format:</span>
             </div>
             <pre className="text-xs bg-muted p-3 rounded-md font-mono text-muted-foreground overflow-x-auto select-all">
-{`Lin Fan\tลินฟาน\tcharacter\tProtagonist
+              {`Lin Fan\tหลินฟาน\tcharacter\tProtagonist
 Sun Peak\tยอดเขาอาทิตย์\tplace\tSect location
 Solar Slash\tเพลงดาบสุริยะ\tskill`}
             </pre>
@@ -808,10 +819,7 @@ Solar Slash\tเพลงดาบสุริยะ\tskill`}
             >
               Cancel
             </Button>
-            <Button
-              onClick={() => doBulkImport(tsvText)}
-              disabled={importing || !tsvText.trim()}
-            >
+            <Button onClick={() => doBulkImport(tsvText)} disabled={importing || !tsvText.trim()}>
               <Upload className="size-4" />
               {importing ? "Importing..." : "Import Terms"}
             </Button>

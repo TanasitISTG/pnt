@@ -77,6 +77,7 @@ export const chapters = pgTable(
     summary: text("summary"),
     rawCharCount: integer("raw_char_count").notNull(),
     translatedAt: timestamp("translated_at"),
+    editedAt: timestamp("edited_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

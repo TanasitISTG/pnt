@@ -1,0 +1,1 @@
+ALTER TABLE "chapters" ADD COLUMN "edited_at" timestamp;

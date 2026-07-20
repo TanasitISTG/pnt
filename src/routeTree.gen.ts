@@ -21,6 +21,7 @@ import { Route as ApiCronTranslationWorkerRouteImport } from './routes/api/cron/
 import { Route as ProtectedNovelsNovelIdIndexRouteImport } from './routes/_protected/novels/$novelId/index'
 import { Route as ProtectedNovelsNovelIdEditRouteImport } from './routes/_protected/novels/$novelId/edit'
 import { Route as ProtectedNovelsNovelIdGlossaryRouteImport } from './routes/_protected/novels/$novelId/glossary'
+import { Route as ProtectedNovelsNovelIdChaptersChapterIdRouteImport } from './routes/_protected/novels/$novelId/chapters/$chapterId'
 
 const ProtectedRoute = ProtectedRouteImport.update({
   id: '/_protected',
@@ -85,6 +86,12 @@ const ProtectedNovelsNovelIdGlossaryRoute =
     path: '/novels/$novelId/glossary',
     getParentRoute: () => ProtectedRoute,
   } as any)
+const ProtectedNovelsNovelIdChaptersChapterIdRoute =
+  ProtectedNovelsNovelIdChaptersChapterIdRouteImport.update({
+    id: '/novels/$novelId/chapters/$chapterId',
+    path: '/novels/$novelId/chapters/$chapterId',
+    getParentRoute: () => ProtectedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ProtectedIndexRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/': typeof ProtectedNovelsNovelIdIndexRoute
+  '/novels/$novelId/chapters/$chapterId': typeof ProtectedNovelsNovelIdChaptersChapterIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -111,6 +119,7 @@ export interface FileRoutesByTo {
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId': typeof ProtectedNovelsNovelIdIndexRoute
+  '/novels/$novelId/chapters/$chapterId': typeof ProtectedNovelsNovelIdChaptersChapterIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -126,6 +135,7 @@ export interface FileRoutesById {
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/_protected/novels/$novelId/': typeof ProtectedNovelsNovelIdIndexRoute
+  '/_protected/novels/$novelId/chapters/$chapterId': typeof ProtectedNovelsNovelIdChaptersChapterIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/'
+    | '/novels/$novelId/chapters/$chapterId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId'
+    | '/novels/$novelId/chapters/$chapterId'
   id:
     | '__root__'
     | '/_protected'
@@ -168,6 +180,7 @@ export interface FileRouteTypes {
     | '/_protected/novels/$novelId/edit'
     | '/_protected/novels/$novelId/glossary'
     | '/_protected/novels/$novelId/'
+    | '/_protected/novels/$novelId/chapters/$chapterId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -264,6 +277,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedNovelsNovelIdGlossaryRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/novels/$novelId/chapters/$chapterId': {
+      id: '/_protected/novels/$novelId/chapters/$chapterId'
+      path: '/novels/$novelId/chapters/$chapterId'
+      fullPath: '/novels/$novelId/chapters/$chapterId'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdChaptersChapterIdRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
   }
 }
 
@@ -275,6 +295,7 @@ interface ProtectedRouteChildren {
   ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
   ProtectedNovelsNovelIdGlossaryRoute: typeof ProtectedNovelsNovelIdGlossaryRoute
   ProtectedNovelsNovelIdIndexRoute: typeof ProtectedNovelsNovelIdIndexRoute
+  ProtectedNovelsNovelIdChaptersChapterIdRoute: typeof ProtectedNovelsNovelIdChaptersChapterIdRoute
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
@@ -285,6 +306,8 @@ const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,
   ProtectedNovelsNovelIdGlossaryRoute: ProtectedNovelsNovelIdGlossaryRoute,
   ProtectedNovelsNovelIdIndexRoute: ProtectedNovelsNovelIdIndexRoute,
+  ProtectedNovelsNovelIdChaptersChapterIdRoute:
+    ProtectedNovelsNovelIdChaptersChapterIdRoute,
 }
 
 const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(

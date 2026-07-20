@@ -403,7 +403,15 @@ function NovelDetailPage() {
                       className="data-[editing=true]:bg-muted/50"
                     >
                       <TableCell className="font-medium">{Number(chapter.number)}</TableCell>
-                      <TableCell className="font-medium">{chapter.title}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link
+                          to="/novels/$novelId/chapters/$chapterId"
+                          params={{ novelId, chapterId: chapter.id }}
+                          className="text-foreground hover:underline underline-offset-4"
+                        >
+                          {chapter.title}
+                        </Link>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {chapter.rawCharCount.toLocaleString()}
                       </TableCell>

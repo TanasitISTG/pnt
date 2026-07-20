@@ -11,7 +11,7 @@ describe("suggest-terms-prompt", () => {
   it("parses clean JSON response", () => {
     const json = JSON.stringify({
       terms: [
-        { source: "Lin Fan", target: "ลินฟาน", category: "character", note: "MC" },
+        { source: "Lin Fan", target: "หลินฟาน", category: "character", note: "MC" },
         { source: "Sun Peak", target: "ยอดเขาอาทิตย์", category: "place" },
       ],
     });
@@ -19,7 +19,7 @@ describe("suggest-terms-prompt", () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual({
       source: "Lin Fan",
-      target: "ลินฟาน",
+      target: "หลินฟาน",
       category: "character",
       note: "MC",
     });
@@ -27,7 +27,8 @@ describe("suggest-terms-prompt", () => {
   });
 
   it("parses JSON inside markdown code block", () => {
-    const md = "Here are the extracted terms:\n```json\n{\n  \"terms\": [\n    { \"source\": \"Sword\", \"target\": \"กระบี่\", \"category\": \"item\" }\n  ]\n}\n```";
+    const md =
+      'Here are the extracted terms:\n```json\n{\n  "terms": [\n    { "source": "Sword", "target": "กระบี่", "category": "item" }\n  ]\n}\n```';
     const result = parseTermSuggestions(md);
     expect(result).toHaveLength(1);
     expect(result[0].source).toBe("Sword");

@@ -167,7 +167,7 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
                       >
                         [{log.level.toUpperCase()}]
                       </span>
-                      <span className="break-words text-cream/90">{log.message}</span>
+                      <span className="wrap-break-word text-cream/90">{log.message}</span>
                     </div>
                   ))
                 )}

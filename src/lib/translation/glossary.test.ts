@@ -3,7 +3,7 @@ import { filterGlossaryForChunk, formatGlossaryBlock } from "./glossary";
 
 describe("glossary module", () => {
   const sampleTerms = [
-    { source: "Lin Fan", target: "ลินฟาน", category: "character" },
+    { source: "Lin Fan", target: "หลินฟาน", category: "character" },
     { source: "Sun", target: "อาทิตย์", category: "other" },
     { source: "Sun Peak", target: "ยอดเขาอาทิตย์", category: "place" },
     { source: "林凡", target: "Lin Fan", category: "character" },
@@ -36,10 +36,10 @@ describe("glossary module", () => {
 
   it("formats glossary terms correctly", () => {
     const terms = [
-      { source: "Lin Fan", target: "ลินฟาน", category: "character" },
+      { source: "Lin Fan", target: "หลินฟาน", category: "character" },
       { source: "Sun Peak", target: "ยอดเขาอาทิตย์", category: "place" },
     ];
     const block = formatGlossaryBlock(terms);
-    expect(block).toBe("- Lin Fan -> ลินฟาน (character)\n- Sun Peak -> ยอดเขาอาทิตย์ (place)");
+    expect(block).toBe("- Lin Fan -> หลินฟาน (character)\n- Sun Peak -> ยอดเขาอาทิตย์ (place)");
   });
 });

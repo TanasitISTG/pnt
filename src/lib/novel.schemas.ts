@@ -36,3 +36,8 @@ export const updateChapterSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   rawContent: z.string().min(1).optional(),
 });
+
+export const updateChapterTranslationSchema = z.object({
+  chapterId: z.string().min(1),
+  translatedContent: z.string().min(1, "Translation cannot be empty"),
+});
