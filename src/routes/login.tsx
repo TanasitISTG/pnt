@@ -57,7 +57,8 @@ function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">
       <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
+        <CardHeader className="items-center text-center">
+          <img src="/logo-256.png" alt="Pnt logo" className="size-16 rounded-lg" />
           <CardTitle className="text-sub">Pnt</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>

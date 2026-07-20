@@ -45,7 +45,11 @@ export function AppShell({ user, children }: AppShellProps) {
       <header className="sticky top-0 z-50 border-b border-border bg-background">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-6">
           <div className="flex items-center gap-8">
-            <Link to="/" className="text-card-title font-semibold text-foreground no-underline">
+            <Link
+              to="/"
+              className="flex items-center gap-2 text-card-title font-semibold text-foreground no-underline"
+            >
+              <img src="/logo-256.png" alt="" className="size-8 rounded-md" />
               Pnt
             </Link>
             <nav className="hidden items-center gap-6 md:flex">
