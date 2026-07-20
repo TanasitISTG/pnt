@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, desc, asc, isNull } from "drizzle-orm";
+import { eq, and, sql, desc, asc, isNull, lte } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { novels, chapters } from "@/lib/db/schema";
-import { ensureSession } from "@/lib/auth.functions";
+import { ensureSession, getSession } from "@/lib/auth.functions";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "@/lib/translation/provider-client";
 import { translateChapterTitle } from "@/lib/translation/title";
@@ -14,10 +15,20 @@ import {
   createChapterSchema,
   updateChapterSchema,
   updateChapterTranslationSchema,
+  setNovelPublishedSchema,
+  setChapterPublishedSchema,
 } from "@/lib/novel.schemas";
 
+// Guests hit these without a session; per-IP per-minute caps for scraping control.
+const GUEST_READ_LIMIT = 60;
+
+// Live = published_at reached (null fails the comparison, so drafts are excluded).
+const novelLive = () => lte(novels.publishedAt, new Date());
+const chapterLive = () => lte(chapters.publishedAt, new Date());
+
 export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
-  const session = await ensureSession();
+  const session = await getSession();
+  if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
   const rows = await db
     .select({
@@ -28,6 +39,7 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
       description: novels.description,
       sourceLang: novels.sourceLang,
       targetLang: novels.targetLang,
+      publishedAt: novels.publishedAt,
       createdAt: novels.createdAt,
       updatedAt: novels.updatedAt,
       hasCover: sql<number>`CASE WHEN ${novels.cover} IS NOT NULL THEN 1 ELSE 0 END`,
@@ -35,8 +47,13 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
       translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
     })
     .from(novels)
-    .leftJoin(chapters, eq(chapters.novelId, novels.id))
-    .where(eq(novels.userId, session.user.id))
+    .leftJoin(
+      chapters,
+      session
+        ? eq(chapters.novelId, novels.id)
+        : and(eq(chapters.novelId, novels.id), chapterLive()),
+    )
+    .where(session ? eq(novels.userId, session.user.id) : novelLive())
     .groupBy(novels.id)
     .orderBy(desc(novels.createdAt));
 
@@ -51,7 +68,8 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
 export const getNovel = createServerFn({ method: "GET" })
   .validator(z.object({ novelId: z.string() }))
   .handler(async ({ data }) => {
-    const session = await ensureSession();
+    const session = await getSession();
+    if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
     const [novel] = await db
       .select({
@@ -65,13 +83,18 @@ export const getNovel = createServerFn({ method: "GET" })
         customPrompt: novels.customPrompt,
         chunkSize: novels.chunkSize,
         contextTailLength: novels.contextTailLength,
+        publishedAt: novels.publishedAt,
         cover: novels.cover,
         coverMime: novels.coverMime,
         createdAt: novels.createdAt,
         updatedAt: novels.updatedAt,
       })
       .from(novels)
-      .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+      .where(
+        session
+          ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
+          : and(eq(novels.id, data.novelId), novelLive()),
+      )
       .limit(1);
 
     if (!novel) return null;
@@ -81,9 +104,13 @@ export const getNovel = createServerFn({ method: "GET" })
       sourceLang: novel.sourceLang as "en" | "zh",
       targetLang: novel.targetLang as "en" | "th",
       coverMime: (novel.coverMime as "image/jpeg" | "image/png" | "image/webp" | null) || null,
-      cover: novel.cover
-        ? `data:${novel.coverMime || "image/jpeg"};base64,${novel.cover.toString("base64")}`
-        : null,
+      // Guests don't get admin-only settings or the inline cover payload —
+      // their NovelCover fetches it from the public /api/covers route instead.
+      customPrompt: session ? novel.customPrompt : null,
+      cover:
+        session && novel.cover
+          ? `data:${novel.coverMime || "image/jpeg"};base64,${novel.cover.toString("base64")}`
+          : null,
     };
   });
 
@@ -174,13 +201,18 @@ export const deleteNovel = createServerFn({ method: "POST" })
 export const listChapters = createServerFn({ method: "GET" })
   .validator(z.object({ novelId: z.string() }))
   .handler(async ({ data }) => {
-    const session = await ensureSession();
+    const session = await getSession();
+    if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
-    // Verify novel ownership
+    // Admin: verify ownership. Guest: novel must be live.
     const [novel] = await db
       .select({ id: novels.id })
       .from(novels)
-      .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+      .where(
+        session
+          ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
+          : and(eq(novels.id, data.novelId), novelLive()),
+      )
       .limit(1);
 
     if (!novel) {
@@ -196,12 +228,17 @@ export const listChapters = createServerFn({ method: "GET" })
         translatedTitle: chapters.translatedTitle,
         rawCharCount: chapters.rawCharCount,
         status: chapters.status,
+        publishedAt: chapters.publishedAt,
         translatedAt: chapters.translatedAt,
         createdAt: chapters.createdAt,
         updatedAt: chapters.updatedAt,
       })
       .from(chapters)
-      .where(eq(chapters.novelId, data.novelId))
+      .where(
+        session
+          ? eq(chapters.novelId, data.novelId)
+          : and(eq(chapters.novelId, data.novelId), chapterLive()),
+      )
       .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
 
     return chapterList;
@@ -210,7 +247,8 @@ export const listChapters = createServerFn({ method: "GET" })
 export const getChapter = createServerFn({ method: "GET" })
   .validator(z.object({ chapterId: z.string() }))
   .handler(async ({ data }) => {
-    const session = await ensureSession();
+    const session = await getSession();
+    if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
     const [chapter] = await db
       .select({
@@ -224,6 +262,7 @@ export const getChapter = createServerFn({ method: "GET" })
         status: chapters.status,
         summary: chapters.summary,
         rawCharCount: chapters.rawCharCount,
+        publishedAt: chapters.publishedAt,
         translatedAt: chapters.translatedAt,
         editedAt: chapters.editedAt,
         createdAt: chapters.createdAt,
@@ -231,7 +270,11 @@ export const getChapter = createServerFn({ method: "GET" })
       })
       .from(chapters)
       .innerJoin(novels, eq(chapters.novelId, novels.id))
-      .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
+      .where(
+        session
+          ? and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id))
+          : and(eq(chapters.id, data.chapterId), chapterLive(), novelLive()),
+      )
       .limit(1);
 
     return chapter || null;
@@ -403,4 +446,51 @@ export const deleteChapter = createServerFn({ method: "POST" })
     await db.delete(chapters).where(eq(chapters.id, data.chapterId));
 
     return { success: true };
+  });
+
+export const setNovelPublished = createServerFn({ method: "POST" })
+  .validator(setNovelPublishedSchema)
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+
+    const [existing] = await db
+      .select({ id: novels.id })
+      .from(novels)
+      .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+      .limit(1);
+
+    if (!existing) {
+      throw new Error("Novel not found or unauthorized");
+    }
+
+    await db
+      .update(novels)
+      .set({ publishedAt: data.publishedAt, updatedAt: new Date() })
+      .where(eq(novels.id, data.novelId));
+
+    return { id: data.novelId };
+  });
+
+export const setChapterPublished = createServerFn({ method: "POST" })
+  .validator(setChapterPublishedSchema)
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+
+    const [existing] = await db
+      .select({ id: chapters.id })
+      .from(chapters)
+      .innerJoin(novels, eq(chapters.novelId, novels.id))
+      .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
+      .limit(1);
+
+    if (!existing) {
+      throw new Error("Chapter not found or unauthorized");
+    }
+
+    await db
+      .update(chapters)
+      .set({ publishedAt: data.publishedAt, updatedAt: new Date() })
+      .where(eq(chapters.id, data.chapterId));
+
+    return { id: data.chapterId };
   });

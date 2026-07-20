@@ -3,9 +3,11 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
-import { getNovel, updateNovel } from "@/lib/novel.functions";
+import { getNovel, updateNovel, setNovelPublished } from "@/lib/novel.functions";
 import { NovelForm } from "@/components/novel-form";
+import { PublishMenu } from "@/components/publish-menu";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 const novelQueryOptions = (novelId: string) =>
   queryOptions({
@@ -36,6 +38,18 @@ function EditNovelPage() {
     },
     onError: (error) => {
       toast.error(error.message || "Failed to update novel");
+    },
+  });
+
+  const { mutate: publish, isPending: publishing } = useMutation({
+    mutationFn: (publishedAt: Date | null) => setNovelPublished({ data: { novelId, publishedAt } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["novels"] });
+      queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
+      toast.success("Publish state updated");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update publish state");
     },
   });
 
@@ -82,6 +96,19 @@ function EditNovelPage() {
         submitLabel="Save Changes"
         pending={isPending}
       />
+
+      <Card className="max-w-3xl">
+        <CardContent className="p-6 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-card-title font-semibold text-foreground">Publishing</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Guests can see this novel and its published chapters once it is live. Chapters are
+              published individually from the chapter list.
+            </p>
+          </div>
+          <PublishMenu publishedAt={novel.publishedAt} pending={publishing} onChange={publish} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

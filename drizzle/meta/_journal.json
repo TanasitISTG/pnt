@@ -71,6 +71,13 @@
       "when": 1784525104362,
       "tag": "0009_spooky_freak",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784537304163,
+      "tag": "0010_past_miss_america",
+      "breakpoints": true
     }
   ]
 }

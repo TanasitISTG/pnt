@@ -14,7 +14,7 @@ Before editing files for a substantial task:
 
 # AGENTS.md — Personal Novel Translator
 
-Single-admin novel translation app (EN→TH default, ZH→EN, ZH→TH). TanStack Start + Drizzle/Neon + Better Auth, deployed on Vercel.
+Single-admin novel translation app (EN→TH default, ZH→EN, ZH→TH) with guest read-only access. TanStack Start + Drizzle/Neon + Better Auth, deployed on Vercel.
 
 > This file covers Phase 8 state and is finalized at P8.9. Task IDs (`P<phase>.<n>`) reference [docs/TASKS.md](docs/TASKS.md).
 
@@ -54,6 +54,13 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 - **shadcn components** live in `src/components/ui` — restyle their class strings to design tokens, don't fork the structure.
 - **Server code:** server functions validated with zod; env access only via `src/lib/env.ts` (zod-parsed, server-only).
 - **Routes:** file-based under `src/routes`; `src/routeTree.gen.ts` is generated — never edit by hand.
+
+## Guest access & publishing
+
+- Two layout routes: `_public` (library, novel detail, reader — anyone) and `_protected` (new/edit/glossary/settings — redirects to `/login`). `__root.tsx` `beforeLoad` puts nullable `user` in context; UI gates admin controls on it, but **server functions are the real boundary**.
+- Visibility is row-level: `novels.publishedAt` / `chapters.publishedAt` (null = draft, `<= now` = live, `> now` = scheduled). Reads (`listNovels`/`getNovel`/`listChapters`/`getChapter`) apply the live filter only when no session; mutations always require a session. Admin sets them via `PublishMenu` → `setNovelPublished` / `setChapterPublished`. A chapter is guest-visible only when both it and its novel are live. Scheduled publishing is evaluated lazily at read time — no cron sweep.
+- Covers are public for live novels (`/api/covers/$`), `Cache-Control: public` for guests.
+- **Rate limiting:** guests only (session skips the check). App-level fixed window in the `rate_limits` table via `src/lib/rate-limit.ts` (`checkRateLimit`, 60/min reads, 120/min covers, fail-open). Auth endpoints use better-auth's built-in limiter (`rateLimit.storage: "database"`, `rate_limit` table). No Upstash — escalate there if abuse appears.
 
 ## Translation execution (P5.13)
 

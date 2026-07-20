@@ -58,6 +58,8 @@ export const novels = pgTable("novels", {
   customPrompt: text("custom_prompt"),
   chunkSize: integer("chunk_size").notNull().default(2000),
   contextTailLength: integer("context_tail_length").notNull().default(500),
+  // null = draft (admin-only); <= now = live for guests; > now = scheduled
+  publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -77,6 +79,7 @@ export const chapters = pgTable(
     status: chapterStatusEnum("status").notNull().default("raw"),
     summary: text("summary"),
     rawCharCount: integer("raw_char_count").notNull(),
+    publishedAt: timestamp("published_at"),
     translatedAt: timestamp("translated_at"),
     editedAt: timestamp("edited_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

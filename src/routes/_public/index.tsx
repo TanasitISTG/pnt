@@ -11,12 +11,13 @@ const novelsQueryOptions = queryOptions({
   queryFn: () => listNovels(),
 });
 
-export const Route = createFileRoute("/_protected/")({
+export const Route = createFileRoute("/_public/")({
   loader: ({ context }) => context.queryClient.ensureQueryData(novelsQueryOptions),
   component: LibraryPage,
 });
 
 function LibraryPage() {
+  const { user } = Route.useRouteContext();
   const { data: novels = [] } = useQuery(novelsQueryOptions);
 
   return (
@@ -24,13 +25,15 @@ function LibraryPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-sub sm:text-section font-semibold text-foreground tracking-tight">
-            Your Library
+            {user ? "Your Library" : "Library"}
           </h1>
           <p className="text-body text-muted-foreground mt-1">
-            Manage and translate your web novel collection.
+            {user
+              ? "Manage and translate your web novel collection."
+              : "Browse the translated novel collection."}
           </p>
         </div>
-        {novels.length > 0 && (
+        {user && novels.length > 0 && (
           <Button className="self-start sm:self-auto" render={<Link to="/novels/new" />}>
             <Plus className="size-4" />
             New Novel
@@ -43,21 +46,27 @@ function LibraryPage() {
           <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
             <BookOpen className="size-6 text-muted-foreground" />
           </div>
-          <h3 className="text-card-title font-semibold text-foreground">No novels yet</h3>
+          <h3 className="text-card-title font-semibold text-foreground">
+            {user ? "No novels yet" : "Nothing published yet"}
+          </h3>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Create a novel project to start pasting chapters and translating them.
+            {user
+              ? "Create a novel project to start pasting chapters and translating them."
+              : "Check back later — published novels will appear here."}
           </p>
-          <div className="mt-6">
-            <Button render={<Link to="/novels/new" />}>
-              <Plus className="size-4" />
-              New Novel
-            </Button>
-          </div>
+          {user && (
+            <div className="mt-6">
+              <Button render={<Link to="/novels/new" />}>
+                <Plus className="size-4" />
+                New Novel
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
           {novels.map((novel) => (
-            <NovelCard key={novel.id} novel={novel} />
+            <NovelCard key={novel.id} novel={novel} showPublishState={!!user} />
           ))}
         </div>
       )}

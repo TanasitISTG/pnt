@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { Menu, X, ChevronDown, LogOut, Loader2, Moon, Settings, Sun } from "lucide-react";
+import { Menu, X, ChevronDown, LogIn, LogOut, Loader2, Moon, Settings, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ import { signOut } from "@/lib/auth-client";
 import type { User } from "@/lib/auth";
 
 interface AppShellProps {
-  user: User;
+  user: User | null;
   children: React.ReactNode;
 }
 
@@ -60,20 +60,29 @@ export function AppShell({ user, children }: AppShellProps) {
               >
                 Library
               </Link>
-              <Link
-                to="/settings"
-                className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
-                activeProps={{ className: "font-semibold" }}
-              >
-                Settings
-              </Link>
+              {user && (
+                <Link
+                  to="/settings"
+                  className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
+                  activeProps={{ className: "font-semibold" }}
+                >
+                  Settings
+                </Link>
+              )}
             </nav>
           </div>
           <div className="flex items-center gap-2">
             <span aria-hidden="true" />
             <ThemeToggle />
             <div className="hidden md:block">
-              <UserDropdown user={user} signingOut={signingOut} onSignOut={handleSignOut} />
+              {user ? (
+                <UserDropdown user={user} signingOut={signingOut} onSignOut={handleSignOut} />
+              ) : (
+                <Button variant="ghost" render={<Link to="/login" />}>
+                  <LogIn className="size-4" />
+                  Sign in
+                </Button>
+              )}
             </div>
             <Button
               variant="ghost"
@@ -96,26 +105,42 @@ export function AppShell({ user, children }: AppShellProps) {
               >
                 Library
               </Link>
-              <Link
-                to="/settings"
-                className="text-body-lg text-foreground no-underline"
-                onClick={() => setMenuOpen(false)}
-              >
-                Settings
-              </Link>
+              {user && (
+                <Link
+                  to="/settings"
+                  className="text-body-lg text-foreground no-underline"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Settings
+                </Link>
+              )}
             </nav>
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
-              <span className="truncate text-caption text-muted-foreground">{user.email}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0"
-                onClick={handleSignOut}
-                disabled={signingOut}
-              >
-                {signingOut ? <Loader2 className="animate-spin" /> : <LogOut />}
-                {signingOut ? "Signing out…" : "Sign out"}
-              </Button>
+              {user ? (
+                <>
+                  <span className="truncate text-caption text-muted-foreground">{user.email}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                  >
+                    {signingOut ? <Loader2 className="animate-spin" /> : <LogOut />}
+                    {signingOut ? "Signing out…" : "Sign out"}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={<Link to="/login" />}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <LogIn className="size-4" />
+                  Sign in
+                </Button>
+              )}
             </div>
           </div>
         )}

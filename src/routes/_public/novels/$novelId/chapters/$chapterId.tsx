@@ -65,7 +65,7 @@ const chaptersQueryOptions = (novelId: string) =>
     queryFn: () => listChapters({ data: { novelId } }),
   });
 
-export const Route = createFileRoute("/_protected/novels/$novelId/chapters/$chapterId")({
+export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapterId")({
   loader: async ({ params, context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(chapterQueryOptions(params.chapterId)),
@@ -83,6 +83,7 @@ const VIEW_MODES: { value: ReaderViewMode; label: string; icon: typeof Columns2 
 
 function ReaderPage() {
   const { novelId, chapterId } = Route.useParams();
+  const { user } = Route.useRouteContext();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -95,7 +96,7 @@ function ReaderPage() {
   const [editValue, setEditValue] = useState<string | null>(null);
   const editing = editValue !== null;
 
-  const { start: startTranslate, activeJobs } = useTranslationJob(novelId);
+  const { start: startTranslate, activeJobs } = useTranslationJob(novelId, !!user);
   const activeJob = activeJobs.get(chapterId);
   const jobRunning = activeJob?.status === "pending" || activeJob?.status === "running";
 
@@ -333,69 +334,71 @@ function ReaderPage() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {hasTranslation && !editing && !jobRunning && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditValue(chapter.translatedContent ?? "")}
-                aria-label="Edit translation"
-                title="Edit translation"
-              >
-                <Pencil className="size-4" />
-                <span className="hidden sm:inline">Edit</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  downloadText(
-                    `${sanitizeFilename(`ch-${Number(chapter.number)}-${chapter.translatedTitle ?? chapter.title}`)}.txt`,
-                    chapter.translatedContent ?? "",
-                  )
-                }
-                aria-label="Export chapter as .txt"
-                title="Export chapter as .txt"
-              >
-                <Download className="size-4" />
-                <span className="hidden sm:inline">.txt</span>
-              </Button>
-            </>
+          {user && hasTranslation && !editing && !jobRunning && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditValue(chapter.translatedContent ?? "")}
+              aria-label="Edit translation"
+              title="Edit translation"
+            >
+              <Pencil className="size-4" />
+              <span className="hidden sm:inline">Edit</span>
+            </Button>
           )}
 
-          {jobRunning && activeJob ? (
-            <div className="flex min-w-36 flex-col gap-1">
-              <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                <span>Translating...</span>
-                <span>
-                  {activeJob.doneChunks}/{activeJob.totalChunks}
-                </span>
-              </div>
-              <Progress
-                value={
-                  activeJob.totalChunks > 0
-                    ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
-                    : 0
-                }
-                className="h-1.5"
-              />
-            </div>
-          ) : (
-            !editing && (
-              <Button
-                variant={hasTranslation ? "outline" : "default"}
-                size="sm"
-                onClick={() => startTranslate(chapterId)}
-                aria-label={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
-                title={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
-              >
-                <RotateCw className="size-4" />
-                <span className="hidden sm:inline">
-                  {hasTranslation ? "Re-translate" : "Translate"}
-                </span>
-              </Button>
-            )
+          {hasTranslation && !editing && !jobRunning && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadText(
+                  `${sanitizeFilename(`ch-${Number(chapter.number)}-${chapter.translatedTitle ?? chapter.title}`)}.txt`,
+                  chapter.translatedContent ?? "",
+                )
+              }
+              aria-label="Export chapter as .txt"
+              title="Export chapter as .txt"
+            >
+              <Download className="size-4" />
+              <span className="hidden sm:inline">.txt</span>
+            </Button>
           )}
+
+          {user &&
+            (jobRunning && activeJob ? (
+              <div className="flex min-w-36 flex-col gap-1">
+                <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                  <span>Translating...</span>
+                  <span>
+                    {activeJob.doneChunks}/{activeJob.totalChunks}
+                  </span>
+                </div>
+                <Progress
+                  value={
+                    activeJob.totalChunks > 0
+                      ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
+                      : 0
+                  }
+                  className="h-1.5"
+                />
+              </div>
+            ) : (
+              !editing && (
+                <Button
+                  variant={hasTranslation ? "outline" : "default"}
+                  size="sm"
+                  onClick={() => startTranslate(chapterId)}
+                  aria-label={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
+                  title={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
+                >
+                  <RotateCw className="size-4" />
+                  <span className="hidden sm:inline">
+                    {hasTranslation ? "Re-translate" : "Translate"}
+                  </span>
+                </Button>
+              )
+            ))}
         </div>
       </div>
 

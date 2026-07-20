@@ -7,6 +7,8 @@ import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
 import appCss from "../styles/globals.css?url";
 
+import { getSession } from "../lib/auth.functions";
+
 import type { QueryClient } from "@tanstack/react-query";
 
 interface MyRouterContext {
@@ -14,6 +16,10 @@ interface MyRouterContext {
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
+  beforeLoad: async () => {
+    const session = await getSession();
+    return { user: session?.user ?? null };
+  },
   head: () => ({
     meta: [
       {

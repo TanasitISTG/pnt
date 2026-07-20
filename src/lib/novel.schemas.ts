@@ -41,3 +41,14 @@ export const updateChapterTranslationSchema = z.object({
   chapterId: z.string().min(1),
   translatedContent: z.string().min(1, "Translation cannot be empty"),
 });
+
+// publishedAt: null = unpublish (draft), any date = live at that time (past = now, future = scheduled)
+export const setNovelPublishedSchema = z.object({
+  novelId: z.string().min(1),
+  publishedAt: z.coerce.date().nullable(),
+});
+
+export const setChapterPublishedSchema = z.object({
+  chapterId: z.string().min(1),
+  publishedAt: z.coerce.date().nullable(),
+});

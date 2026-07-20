@@ -1,16 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { eq, and } from "drizzle-orm";
+import { eq, and, lte } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels } from "@/lib/db/schema";
-import { ensureSession } from "@/lib/auth.functions";
+import { getSession } from "@/lib/auth.functions";
+import { checkRateLimit, RateLimitError } from "@/lib/rate-limit";
 
 export const Route = createFileRoute("/api/covers/$")({
   server: {
     handlers: {
       GET: async ({ request }) => {
         try {
-          const session = await ensureSession();
+          const session = await getSession();
+
+          // Guests are rate-limited; the admin browsing their own library is not.
+          if (!session) await checkRateLimit("covers", 120);
 
           // Extract novelId from the last segment of the pathname
           const url = new URL(request.url);
@@ -24,7 +28,11 @@ export const Route = createFileRoute("/api/covers/$")({
               coverMime: novels.coverMime,
             })
             .from(novels)
-            .where(and(eq(novels.id, novelId), eq(novels.userId, session.user.id)))
+            .where(
+              session
+                ? and(eq(novels.id, novelId), eq(novels.userId, session.user.id))
+                : and(eq(novels.id, novelId), lte(novels.publishedAt, new Date())),
+            )
             .limit(1);
 
           if (!novel || !novel.cover) {
@@ -40,12 +48,12 @@ export const Route = createFileRoute("/api/covers/$")({
           return new Response(buffer, {
             headers: {
               "Content-Type": novel.coverMime || "image/jpeg",
-              "Cache-Control": "private, max-age=3600",
+              "Cache-Control": session ? "private, max-age=3600" : "public, max-age=3600",
             },
           });
         } catch (err: any) {
-          if (err.message === "Unauthorized") {
-            return new Response("Unauthorized", { status: 401 });
+          if (err instanceof RateLimitError) {
+            return new Response("Too Many Requests", { status: 429 });
           }
           return new Response("Internal Server Error", { status: 500 });
         }

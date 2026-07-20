@@ -18,6 +18,12 @@ export const auth = betterAuth({
     enabled: true,
     disableSignUp: true,
   },
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 10,
+    storage: "database",
+  },
   plugins: [tanstackStartCookies()],
 });
 

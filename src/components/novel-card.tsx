@@ -3,6 +3,7 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { NovelCover } from "@/components/novel-cover";
+import { publishState } from "@/lib/publish";
 
 interface Novel {
   id: string;
@@ -15,15 +16,18 @@ interface Novel {
   chapterCount: number;
   translatedCount: number;
   hasCover: number;
+  publishedAt?: Date | string | null;
 }
 
 interface NovelCardProps {
   novel: Novel;
+  showPublishState?: boolean;
 }
 
-export function NovelCard({ novel }: NovelCardProps) {
+export function NovelCard({ novel, showPublishState = false }: NovelCardProps) {
   const percent =
     novel.chapterCount > 0 ? Math.round((novel.translatedCount / novel.chapterCount) * 100) : 0;
+  const state = publishState(novel.publishedAt);
 
   return (
     <Link
@@ -45,6 +49,14 @@ export function NovelCard({ novel }: NovelCardProps) {
           >
             {novel.sourceLang} → {novel.targetLang}
           </Badge>
+          {showPublishState && state !== "live" && (
+            <Badge
+              variant="secondary"
+              className="absolute top-3 right-3 z-20 uppercase font-semibold text-xs bg-background/85 backdrop-blur-xs"
+            >
+              {state}
+            </Badge>
+          )}
         </div>
         <CardContent className="flex flex-col gap-3 p-4 flex-1">
           <div className="flex flex-col min-w-0">

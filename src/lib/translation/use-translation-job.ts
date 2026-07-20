@@ -21,7 +21,8 @@ export interface ActiveJobState {
 // This hook is a read-only observer: translation work is executed by the cron
 // worker (see /api/cron/translation-worker), never by the browser — so page
 // refreshes can no longer duplicate chunks or finalization.
-export function useTranslationJob(novelId: string) {
+// `enabled=false` (guests) skips all server calls — job endpoints are admin-only.
+export function useTranslationJob(novelId: string, enabled = true) {
   const queryClient = useQueryClient();
   const [activeJobs, setActiveJobs] = useState<Map<string, ActiveJobState>>(new Map());
 
@@ -49,6 +50,7 @@ export function useTranslationJob(novelId: string) {
 
   // Rehydrate active jobs from DB on mount — shows jobs the worker is processing
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     listActiveTranslationJobs({ data: { novelId } })
       .then((jobs) => {
@@ -74,7 +76,7 @@ export function useTranslationJob(novelId: string) {
     return () => {
       cancelled = true;
     };
-  }, [novelId]);
+  }, [novelId, enabled]);
 
   // Poll status for active jobs (read-only, idempotent)
   useEffect(() => {

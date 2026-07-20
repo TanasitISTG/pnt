@@ -32,6 +32,7 @@ import {
   deleteChapter,
   updateChapterRaw,
   translateMissingTitles,
+  setChapterPublished,
 } from "@/lib/novel.functions";
 import { getGlossaryStats } from "@/lib/glossary.functions";
 import { getNovelCosts } from "@/lib/translation/translation.functions";
@@ -44,6 +45,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { PublishMenu } from "@/components/publish-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -90,14 +92,20 @@ const costsQueryOptions = (novelId: string) =>
 const formatTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 const formatCost = (n: number) => `$${n.toFixed(n < 1 ? 3 : 2)}`;
 
-export const Route = createFileRoute("/_protected/novels/$novelId/")({
+export const Route = createFileRoute("/_public/novels/$novelId/")({
   loader: async ({ params, context }) => {
-    await Promise.all([
+    const tasks: Promise<unknown>[] = [
       context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
-      context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
-      context.queryClient.ensureQueryData(costsQueryOptions(params.novelId)),
-    ]);
+    ];
+    // Admin-only data — these endpoints require a session, skip for guests.
+    if (context.user) {
+      tasks.push(
+        context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
+        context.queryClient.ensureQueryData(costsQueryOptions(params.novelId)),
+      );
+    }
+    await Promise.all(tasks);
   },
   component: NovelDetailPage,
 });
@@ -112,13 +120,17 @@ interface EditState {
 
 function NovelDetailPage() {
   const { novelId } = Route.useParams();
+  const { user } = Route.useRouteContext();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data: novel } = useQuery(novelQueryOptions(novelId));
   const { data: chapters = [] } = useQuery(chaptersQueryOptions(novelId));
-  const { data: glossaryStats } = useQuery(glossaryStatsQueryOptions(novelId));
-  const { data: costData } = useQuery(costsQueryOptions(novelId));
+  const { data: glossaryStats } = useQuery({
+    ...glossaryStatsQueryOptions(novelId),
+    enabled: !!user,
+  });
+  const { data: costData } = useQuery({ ...costsQueryOptions(novelId), enabled: !!user });
 
   const {
     start: startTranslate,
@@ -126,7 +138,7 @@ function NovelDetailPage() {
     cancel: cancelTranslate,
     retry: retryTranslate,
     activeJobs,
-  } = useTranslationJob(novelId);
+  } = useTranslationJob(novelId, !!user);
 
   // Batch translate selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -226,6 +238,18 @@ function NovelDetailPage() {
     },
     onError: (error) => {
       toast.error(error.message || "Failed to delete chapter");
+    },
+  });
+
+  const { mutate: publishChapter, isPending: publishingChapter } = useMutation({
+    mutationFn: (vars: { chapterId: string; publishedAt: Date | null }) =>
+      setChapterPublished({ data: vars }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      toast.success("Publish state updated");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update publish state");
     },
   });
 
@@ -385,72 +409,74 @@ function NovelDetailPage() {
           <Button variant="ghost" size="icon" render={<Link to="/" />} aria-label="Go to Library">
             <ArrowLeft className="size-4" />
           </Button>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              render={<Link to="/novels/$novelId/glossary" params={{ novelId }} />}
-              aria-label="Glossary"
-              title="Glossary"
-            >
-              <BookOpen className="size-4" />
-              <span className="hidden sm:inline">Glossary</span>
-              {glossaryStats && glossaryStats.total > 0 && (
-                <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
-                  {glossaryStats.total}
-                </Badge>
-              )}
-              {glossaryStats && glossaryStats.pending > 0 && (
-                <span className="size-2 rounded-full bg-amber-500 animate-pulse ml-0.5" />
-              )}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button variant="outline" size="sm" disabled={exporting !== null} />}
-                aria-label="Export novel"
-                title="Export novel"
+          {user && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link to="/novels/$novelId/glossary" params={{ novelId }} />}
+                aria-label="Glossary"
+                title="Glossary"
               >
-                {exporting ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Download className="size-4" />
+                <BookOpen className="size-4" />
+                <span className="hidden sm:inline">Glossary</span>
+                {glossaryStats && glossaryStats.total > 0 && (
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
+                    {glossaryStats.total}
+                  </Badge>
                 )}
-                <span className="hidden sm:inline">Export</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={handleExportTxt}>
-                    <FileText className="size-4" />
-                    Novel as .txt
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExportEpub}>
-                    <FileType className="size-4" />
-                    Novel as .epub
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="outline"
-              size="sm"
-              render={<Link to="/novels/$novelId/edit" params={{ novelId }} />}
-              aria-label="Edit novel"
-              title="Edit novel"
-            >
-              <Edit className="size-4" />
-              <span className="hidden sm:inline">Edit</span>
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeleteNovelOpen(true)}
-              aria-label="Delete novel"
-              title="Delete novel"
-            >
-              <Trash2 className="size-4" />
-              <span className="hidden sm:inline">Delete</span>
-            </Button>
-          </div>
+                {glossaryStats && glossaryStats.pending > 0 && (
+                  <span className="size-2 rounded-full bg-amber-500 animate-pulse ml-0.5" />
+                )}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" size="sm" disabled={exporting !== null} />}
+                  aria-label="Export novel"
+                  title="Export novel"
+                >
+                  {exporting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Download className="size-4" />
+                  )}
+                  <span className="hidden sm:inline">Export</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={handleExportTxt}>
+                      <FileText className="size-4" />
+                      Novel as .txt
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportEpub}>
+                      <FileType className="size-4" />
+                      Novel as .epub
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link to="/novels/$novelId/edit" params={{ novelId }} />}
+                aria-label="Edit novel"
+                title="Edit novel"
+              >
+                <Edit className="size-4" />
+                <span className="hidden sm:inline">Edit</span>
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setDeleteNovelOpen(true)}
+                aria-label="Delete novel"
+                title="Delete novel"
+              >
+                <Trash2 className="size-4" />
+                <span className="hidden sm:inline">Delete</span>
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-start">
@@ -524,38 +550,42 @@ function NovelDetailPage() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sub font-semibold text-foreground tracking-tight">Chapters</h2>
-          <div className="flex items-center gap-2">
-            {selectedIds.size > 0 && (
-              <Button size="sm" onClick={handleBatchTranslate} disabled={batchStarting}>
-                {batchStarting ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Play className="size-4" />
-                )}
-                {batchStarting ? "Queueing..." : `Translate selected (${selectedIds.size})`}
-              </Button>
-            )}
-            {missingTitleCount > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => backfillTitles()}
-                disabled={backfillingTitles}
-              >
-                <Languages className="size-4" />
-                {backfillingTitles
-                  ? "Translating titles..."
-                  : `Translate titles (${missingTitleCount})`}
-              </Button>
-            )}
-          </div>
+          {user && (
+            <div className="flex items-center gap-2">
+              {selectedIds.size > 0 && (
+                <Button size="sm" onClick={handleBatchTranslate} disabled={batchStarting}>
+                  {batchStarting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Play className="size-4" />
+                  )}
+                  {batchStarting ? "Queueing..." : `Translate selected (${selectedIds.size})`}
+                </Button>
+              )}
+              {missingTitleCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => backfillTitles()}
+                  disabled={backfillingTitles}
+                >
+                  <Languages className="size-4" />
+                  {backfillingTitles
+                    ? "Translating titles..."
+                    : `Translate titles (${missingTitleCount})`}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {chapters.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 py-12 text-center">
             <FileText className="size-8 text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">
-              No chapters in this novel yet. Paste one below to start.
+              {user
+                ? "No chapters in this novel yet. Paste one below to start."
+                : "No chapters published yet."}
             </p>
           </div>
         ) : (
@@ -563,20 +593,22 @@ function NovelDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={(e) => toggleSelectAll(e.target.checked)}
-                      aria-label="Select all chapters"
-                      className="size-4 accent-primary align-middle"
-                    />
-                  </TableHead>
+                  {user && (
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={(e) => toggleSelectAll(e.target.checked)}
+                        aria-label="Select all chapters"
+                        className="size-4 accent-primary align-middle"
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="w-16">#</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead className="w-32">Chars</TableHead>
                   <TableHead className="w-32">Status</TableHead>
-                  <TableHead className="w-24 text-right">Actions</TableHead>
+                  {user && <TableHead className="w-24 text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -590,16 +622,18 @@ function NovelDetailPage() {
                       data-editing={editState?.chapterId === chapter.id ? "true" : undefined}
                       className="data-[editing=true]:bg-muted/50"
                     >
-                      <TableCell className="w-10">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(chapter.id)}
-                          disabled={isTranslating}
-                          onChange={(e) => toggleSelect(chapter.id, e.target.checked)}
-                          aria-label={`Select chapter ${Number(chapter.number)}`}
-                          className="size-4 accent-primary align-middle"
-                        />
-                      </TableCell>
+                      {user && (
+                        <TableCell className="w-10">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(chapter.id)}
+                            disabled={isTranslating}
+                            onChange={(e) => toggleSelect(chapter.id, e.target.checked)}
+                            aria-label={`Select chapter ${Number(chapter.number)}`}
+                            className="size-4 accent-primary align-middle"
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium">{Number(chapter.number)}</TableCell>
                       <TableCell className="font-medium">
                         <Link
@@ -647,96 +681,105 @@ function NovelDetailPage() {
                           <ChapterStatusBadge status={chapter.status} />
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          {isTranslating && activeJob ? (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-amber-500 hover:text-amber-600"
-                              onClick={() => cancelTranslate(activeJob.jobId, chapter.id)}
-                              aria-label="Cancel translation"
-                              title="Cancel translation"
-                            >
-                              <Square className="size-4" />
-                            </Button>
-                          ) : chapter.status === "error" || activeJob?.status === "error" ? (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-destructive hover:text-destructive"
-                              onClick={() =>
-                                activeJob
-                                  ? retryTranslate(activeJob.jobId, chapter.id)
-                                  : startTranslate(chapter.id)
+                      {user && (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end items-center gap-1">
+                            <PublishMenu
+                              publishedAt={chapter.publishedAt}
+                              pending={publishingChapter}
+                              onChange={(publishedAt) =>
+                                publishChapter({ chapterId: chapter.id, publishedAt })
                               }
-                              aria-label="Retry translation"
-                              title="Retry translation"
-                            >
-                              <RotateCw className="size-4" />
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-primary hover:text-primary"
-                              onClick={() => startTranslate(chapter.id)}
-                              aria-label={
-                                chapter.status === "translated"
-                                  ? "Re-translate chapter"
-                                  : "Translate chapter"
-                              }
-                              title={
-                                chapter.status === "translated"
-                                  ? "Re-translate chapter"
-                                  : "Translate chapter"
-                              }
-                            >
-                              <Play className="size-4" />
-                            </Button>
-                          )}
-                          {(activeJob || chapter.status !== "raw") && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-muted-foreground hover:text-foreground"
-                              onClick={() => setLogChapterId(chapter.id)}
-                              aria-label="View translation logs"
-                              title="View translation logs"
-                            >
-                              <Terminal className="size-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() =>
-                              editState?.chapterId === chapter.id
-                                ? setEditState(null)
-                                : handleStartEdit(chapter)
-                            }
-                            aria-label={
-                              editState?.chapterId === chapter.id ? "Cancel edit" : "Edit chapter"
-                            }
-                          >
-                            {editState?.chapterId === chapter.id ? (
-                              <X className="size-4 text-muted-foreground" />
+                            />
+                            {isTranslating && activeJob ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 text-amber-500 hover:text-amber-600"
+                                onClick={() => cancelTranslate(activeJob.jobId, chapter.id)}
+                                aria-label="Cancel translation"
+                                title="Cancel translation"
+                              >
+                                <Square className="size-4" />
+                              </Button>
+                            ) : chapter.status === "error" || activeJob?.status === "error" ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 text-destructive hover:text-destructive"
+                                onClick={() =>
+                                  activeJob
+                                    ? retryTranslate(activeJob.jobId, chapter.id)
+                                    : startTranslate(chapter.id)
+                                }
+                                aria-label="Retry translation"
+                                title="Retry translation"
+                              >
+                                <RotateCw className="size-4" />
+                              </Button>
                             ) : (
-                              <Edit className="size-4" />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 text-primary hover:text-primary"
+                                onClick={() => startTranslate(chapter.id)}
+                                aria-label={
+                                  chapter.status === "translated"
+                                    ? "Re-translate chapter"
+                                    : "Translate chapter"
+                                }
+                                title={
+                                  chapter.status === "translated"
+                                    ? "Re-translate chapter"
+                                    : "Translate chapter"
+                                }
+                              >
+                                <Play className="size-4" />
+                              </Button>
                             )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => setDeleteChapterId(chapter.id)}
-                            aria-label="Delete chapter"
-                          >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                            {(activeJob || chapter.status !== "raw") && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => setLogChapterId(chapter.id)}
+                                aria-label="View translation logs"
+                                title="View translation logs"
+                              >
+                                <Terminal className="size-4" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              onClick={() =>
+                                editState?.chapterId === chapter.id
+                                  ? setEditState(null)
+                                  : handleStartEdit(chapter)
+                              }
+                              aria-label={
+                                editState?.chapterId === chapter.id ? "Cancel edit" : "Edit chapter"
+                              }
+                            >
+                              {editState?.chapterId === chapter.id ? (
+                                <X className="size-4 text-muted-foreground" />
+                              ) : (
+                                <Edit className="size-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              onClick={() => setDeleteChapterId(chapter.id)}
+                              aria-label="Delete chapter"
+                            >
+                              <Trash2 className="size-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -855,85 +898,89 @@ function NovelDetailPage() {
         )}
       </div>
 
-      <hr className="border-border" />
+      {user && (
+        <>
+          <hr className="border-border" />
 
-      {/* Add Chapter Form */}
-      <div className="flex flex-col gap-4">
-        <h2 className="text-sub font-semibold text-foreground tracking-tight">Add Chapter</h2>
-        <Card className="max-w-3xl">
-          <CardContent className="p-6">
-            <form onSubmit={handleAddChapter} className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="flex flex-col gap-1.5 sm:col-span-1">
-                  <Label htmlFor="chapNumber">Number *</Label>
-                  <Input
-                    id="chapNumber"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="e.g. 1"
-                    value={chapNumber}
-                    onChange={(e) => {
-                      setFormErrors((err) => ({ ...err, number: "" }));
-                      setChapNumber(e.target.value);
-                    }}
-                    required
-                  />
-                  {formErrors.number && (
-                    <span className="text-caption text-destructive">{formErrors.number}</span>
-                  )}
-                </div>
+          {/* Add Chapter Form */}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-sub font-semibold text-foreground tracking-tight">Add Chapter</h2>
+            <Card className="max-w-3xl">
+              <CardContent className="p-6">
+                <form onSubmit={handleAddChapter} className="flex flex-col gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="flex flex-col gap-1.5 sm:col-span-1">
+                      <Label htmlFor="chapNumber">Number *</Label>
+                      <Input
+                        id="chapNumber"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="e.g. 1"
+                        value={chapNumber}
+                        onChange={(e) => {
+                          setFormErrors((err) => ({ ...err, number: "" }));
+                          setChapNumber(e.target.value);
+                        }}
+                        required
+                      />
+                      {formErrors.number && (
+                        <span className="text-caption text-destructive">{formErrors.number}</span>
+                      )}
+                    </div>
 
-                <div className="flex flex-col gap-1.5 sm:col-span-3">
-                  <Label htmlFor="chapTitle">Title *</Label>
-                  <Input
-                    id="chapTitle"
-                    placeholder="e.g. The Awakening"
-                    value={chapTitle}
-                    onChange={(e) => {
-                      setFormErrors((err) => ({ ...err, title: "" }));
-                      setChapTitle(e.target.value);
-                    }}
-                    required
-                  />
-                  {formErrors.title && (
-                    <span className="text-caption text-destructive">{formErrors.title}</span>
-                  )}
-                </div>
-              </div>
+                    <div className="flex flex-col gap-1.5 sm:col-span-3">
+                      <Label htmlFor="chapTitle">Title *</Label>
+                      <Input
+                        id="chapTitle"
+                        placeholder="e.g. The Awakening"
+                        value={chapTitle}
+                        onChange={(e) => {
+                          setFormErrors((err) => ({ ...err, title: "" }));
+                          setChapTitle(e.target.value);
+                        }}
+                        required
+                      />
+                      {formErrors.title && (
+                        <span className="text-caption text-destructive">{formErrors.title}</span>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="flex flex-col gap-1.5">
-                <div className="flex justify-between items-baseline">
-                  <Label htmlFor="chapContent">Raw Content *</Label>
-                  <span className="text-caption text-muted-foreground">
-                    {chapContent.length.toLocaleString()} characters
-                  </span>
-                </div>
-                <Textarea
-                  id="chapContent"
-                  placeholder="Paste raw chapter text here..."
-                  value={chapContent}
-                  onChange={(e) => {
-                    setFormErrors((err) => ({ ...err, rawContent: "" }));
-                    setChapContent(e.target.value);
-                  }}
-                  rows={8}
-                  required
-                />
-                {formErrors.rawContent && (
-                  <span className="text-caption text-destructive">{formErrors.rawContent}</span>
-                )}
-              </div>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-baseline">
+                      <Label htmlFor="chapContent">Raw Content *</Label>
+                      <span className="text-caption text-muted-foreground">
+                        {chapContent.length.toLocaleString()} characters
+                      </span>
+                    </div>
+                    <Textarea
+                      id="chapContent"
+                      placeholder="Paste raw chapter text here..."
+                      value={chapContent}
+                      onChange={(e) => {
+                        setFormErrors((err) => ({ ...err, rawContent: "" }));
+                        setChapContent(e.target.value);
+                      }}
+                      rows={8}
+                      required
+                    />
+                    {formErrors.rawContent && (
+                      <span className="text-caption text-destructive">{formErrors.rawContent}</span>
+                    )}
+                  </div>
 
-              <div className="flex justify-end gap-3 pt-2">
-                <Button type="submit" disabled={addingChapter}>
-                  {addingChapter ? "Adding..." : "Add Chapter"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button type="submit" disabled={addingChapter}>
+                      {addingChapter ? "Adding..." : "Add Chapter"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
 
       {/* Confirmation Dialogs */}
       <DeleteConfirmDialog
