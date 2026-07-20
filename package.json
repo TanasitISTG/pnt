@@ -18,7 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed:user": "bun scripts/seed-user.ts",
-    "worker": "bun scripts/dev-worker.ts"
+    "inngest": "bunx inngest-cli dev"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -36,13 +36,13 @@
     "@tanstack/react-router-ssr-query": "latest",
     "@tanstack/react-start": "latest",
     "@tanstack/router-plugin": "^1.132.0",
-    "@vercel/functions": "^3.7.5",
     "better-auth": "^1.6.23",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "fflate": "^0.8.3",
     "framer-motion": "^12.42.2",
+    "inngest": "^4.13.0",
     "lucide-react": "^0.545.0",
     "nanoid": "^6.0.0",
     "next-themes": "^0.4.6",

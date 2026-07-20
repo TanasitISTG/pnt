@@ -36,7 +36,7 @@ Single-admin novel translation app (EN→TH default, ZH→EN, ZH→TH) with gues
 | DB generate / migrate  | `bun run db:generate` / `bun run db:migrate` |
 | Seed admin user        | `bun run seed:user`                          |
 | Regenerate route tree  | `bun run generate-routes`                    |
-| Translation worker     | `bun run worker` (run alongside `bun dev`)   |
+| Inngest dev server     | `bun run inngest` (run alongside `bun dev`)  |
 
 Package manager + script runner: **Bun**. Quality gate: `lint` + `format:check` + `test` must stay green.
 
@@ -65,9 +65,8 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 ## Translation execution (P5.13)
 
 - The browser **never executes translation work** — the client hook only enqueues jobs and polls `getTranslationJobStatus` (read-only). Refreshing the page is always safe.
-- Work runs in `src/lib/translation/worker.ts` (`processJobOnce` = one chunk or finalization per run), driven two ways: `startTranslationJob`/`retryTranslationJob` kick it in the background on enqueue (translation starts instantly), and `GET|POST /api/cron/translation-worker` (Bearer `CRON_SECRET`) drives continuation.
-- Background execution goes through `runInBackground` (`src/lib/background.ts` — `@vercel/functions` `waitUntil`; plain-promise fallback in local dev). The cron endpoint responds instantly and processes in the background: a slow response counts as a failed ping at cron-job.org, which **auto-disables the job** after repeated "failures".
-- **Local:** run `bun run worker` next to `bun dev` (pings every 5s). **Prod:** cron-job.org pings the endpoint every 1 min (Hobby plan — Vercel Cron is 1/day there).
-- Concurrency is serialized by the `translation_jobs.locked_until` lease (15 min, atomic conditional UPDATE). Crash → lease expires → next ping resumes. Never process a job outside this lease.
-- Vercel Hobby kills functions at 5 min — the provider client sets a 4-min request timeout with `maxRetries: 0` (the worker retries 3× itself) so a stalled LLM call doesn't burn the whole run.
-- `CRON_SECRET` (min 32 chars) is a required env var — must exist in `.env.local` and Vercel project env, or the server refuses to boot.
+- Execution is **Inngest-driven**. `startTranslationJob`/`retryTranslationJob` send `translation/job.requested` `{ jobId, runKey }`; `cancelTranslationJob` sends `translation/job.cancelled`. The durable function lives in `src/lib/inngest/functions.ts` (`translate-chapter`), served at `GET|POST|PUT /api/inngest` (`inngest/edge` handler).
+- One run per job: `init` step → one `chunk-N` step per chunk → `finalize` step (title + summary + glossary suggestions). Each step is its own HTTP invocation from Inngest, so every chunk gets a fresh 5-min Vercel budget and automatic retries (function `retries: 3`); a crash resumes from the last completed step. Step logic lives in `src/lib/translation/worker.ts` (`initJob`/`translateChunk`/`finalizeJob`/`failJob`).
+- Duplicate protection: Inngest `idempotency: "event.data.runKey"` (fresh nanoid per enqueue) — no DB lease; `locked_until` column is unused. Steps also re-check job status so cancel/error mid-run exits cleanly; `onFailure` marks job+chapter `error` for the UI.
+- **Local:** `bun run inngest` (dev dashboard `localhost:8288`) next to `bun dev`, with `INNGEST_DEV=1` in `.env.local` (SDK v4 defaults to cloud mode) — no keys needed. **Prod:** Inngest Cloud — `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` in Vercel env (optional in the zod schema so local boots keyless), then sync the app in the Inngest dashboard. No cron pinger anywhere.
+- The provider client sets a 4-min request timeout with `maxRetries: 0` (Inngest owns retries at the step level) so a stalled LLM call fails fast instead of burning the step's budget.

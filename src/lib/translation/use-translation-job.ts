@@ -18,8 +18,8 @@ export interface ActiveJobState {
   error?: string | null;
 }
 
-// This hook is a read-only observer: translation work is executed by the cron
-// worker (see /api/cron/translation-worker), never by the browser — so page
+// This hook is a read-only observer: translation work is executed by Inngest
+// (see src/lib/inngest/functions.ts), never by the browser — so page
 // refreshes can no longer duplicate chunks or finalization.
 // `enabled=false` (guests) skips all server calls — job endpoints are admin-only.
 export function useTranslationJob(novelId: string, enabled = true) {

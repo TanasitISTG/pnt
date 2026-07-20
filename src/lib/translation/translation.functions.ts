@@ -7,8 +7,7 @@ import { ensureSession } from "@/lib/auth.functions";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "@/lib/translation/provider-client";
 import { chunkText } from "@/lib/translation/chunker";
-import { processJobOnce } from "@/lib/translation/worker";
-import { runInBackground } from "@/lib/background";
+import { inngest } from "@/lib/inngest/client";
 import {
   startTranslationJobSchema,
   cancelTranslationJobSchema,
@@ -120,8 +119,8 @@ export const startTranslationJob = createServerFn({ method: "POST" })
       .set({ status: "queued", updatedAt: new Date() })
       .where(eq(chapters.id, chapter.id));
 
-    // Start chunk 1 immediately instead of waiting for the next cron ping.
-    runInBackground(processJobOnce(jobId));
+    // Kick off the Inngest run — chunk 1 starts within seconds.
+    await inngest.send({ name: "translation/job.requested", data: { jobId, runKey: nanoid() } });
 
     return { jobId, totalChunks: chunkInfos.length, logs };
   });
@@ -165,6 +164,14 @@ export const cancelTranslationJob = createServerFn({ method: "POST" })
       .set({ status: newStatus, updatedAt: new Date() })
       .where(eq(chapters.id, row.chapter.id));
 
+    // Best-effort: DB status is the real cancel — worker steps re-check it;
+    // the event just stops the Inngest run sooner (between steps).
+    try {
+      await inngest.send({ name: "translation/job.cancelled", data: { jobId: row.job.id } });
+    } catch {
+      // Inngest unreachable — the status check in each step still stops the job.
+    }
+
     return { success: true };
   });
 
@@ -207,7 +214,10 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
       .set({ status: "queued", updatedAt: new Date() })
       .where(eq(chapters.id, row.chapter.id));
 
-    runInBackground(processJobOnce(row.job.id));
+    await inngest.send({
+      name: "translation/job.requested",
+      data: { jobId: row.job.id, runKey: nanoid() },
+    });
 
     return { success: true, jobId: row.job.id };
   });

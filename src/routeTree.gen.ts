@@ -15,10 +15,10 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedDesignScratchRouteImport } from './routes/_protected/design-scratch'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
+import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
-import { Route as ApiCronTranslationWorkerRouteImport } from './routes/api/cron/translation-worker'
 import { Route as ProtectedNovelsNovelIdEditRouteImport } from './routes/_protected/novels/$novelId/edit'
 import { Route as ProtectedNovelsNovelIdGlossaryRouteImport } from './routes/_protected/novels/$novelId/glossary'
 import { Route as PublicNovelsNovelIdIndexRouteImport } from './routes/_public/novels/$novelId/index'
@@ -52,6 +52,11 @@ const PublicIndexRoute = PublicIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PublicRoute,
 } as any)
+const ApiInngestRoute = ApiInngestRouteImport.update({
+  id: '/api/inngest',
+  path: '/api/inngest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProtectedNovelsNewRoute = ProtectedNovelsNewRouteImport.update({
   id: '/novels/new',
   path: '/novels/new',
@@ -67,12 +72,6 @@ const ApiCoversSplatRoute = ApiCoversSplatRouteImport.update({
   path: '/api/covers/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiCronTranslationWorkerRoute =
-  ApiCronTranslationWorkerRouteImport.update({
-    id: '/api/cron/translation-worker',
-    path: '/api/cron/translation-worker',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ProtectedNovelsNovelIdEditRoute =
   ProtectedNovelsNovelIdEditRouteImport.update({
     id: '/novels/$novelId/edit',
@@ -103,10 +102,10 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/design-scratch': typeof ProtectedDesignScratchRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/api/inngest': typeof ApiInngestRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
-  '/api/cron/translation-worker': typeof ApiCronTranslationWorkerRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
@@ -117,10 +116,10 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/design-scratch': typeof ProtectedDesignScratchRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/api/inngest': typeof ApiInngestRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
-  '/api/cron/translation-worker': typeof ApiCronTranslationWorkerRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId': typeof PublicNovelsNovelIdIndexRoute
@@ -133,11 +132,11 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_protected/design-scratch': typeof ProtectedDesignScratchRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
+  '/api/inngest': typeof ApiInngestRoute
   '/_public/': typeof PublicIndexRoute
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
-  '/api/cron/translation-worker': typeof ApiCronTranslationWorkerRoute
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/_public/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
@@ -150,10 +149,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/design-scratch'
     | '/settings'
+    | '/api/inngest'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
-    | '/api/cron/translation-worker'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/'
@@ -164,10 +163,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/design-scratch'
     | '/settings'
+    | '/api/inngest'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
-    | '/api/cron/translation-worker'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId'
@@ -179,11 +178,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/_protected/design-scratch'
     | '/_protected/settings'
+    | '/api/inngest'
     | '/_public/'
     | '/_protected/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
-    | '/api/cron/translation-worker'
     | '/_protected/novels/$novelId/edit'
     | '/_protected/novels/$novelId/glossary'
     | '/_public/novels/$novelId/'
@@ -194,9 +193,9 @@ export interface RootRouteChildren {
   ProtectedRoute: typeof ProtectedRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiInngestRoute: typeof ApiInngestRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCoversSplatRoute: typeof ApiCoversSplatRoute
-  ApiCronTranslationWorkerRoute: typeof ApiCronTranslationWorkerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -243,6 +242,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicIndexRouteImport
       parentRoute: typeof PublicRoute
     }
+    '/api/inngest': {
+      id: '/api/inngest'
+      path: '/api/inngest'
+      fullPath: '/api/inngest'
+      preLoaderRoute: typeof ApiInngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_protected/novels/new': {
       id: '/_protected/novels/new'
       path: '/novels/new'
@@ -262,13 +268,6 @@ declare module '@tanstack/react-router' {
       path: '/api/covers/$'
       fullPath: '/api/covers/$'
       preLoaderRoute: typeof ApiCoversSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/cron/translation-worker': {
-      id: '/api/cron/translation-worker'
-      path: '/api/cron/translation-worker'
-      fullPath: '/api/cron/translation-worker'
-      preLoaderRoute: typeof ApiCronTranslationWorkerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_protected/novels/$novelId/edit': {
@@ -342,9 +341,9 @@ const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiInngestRoute: ApiInngestRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCoversSplatRoute: ApiCoversSplatRoute,
-  ApiCronTranslationWorkerRoute: ApiCronTranslationWorkerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
