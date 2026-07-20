@@ -98,11 +98,12 @@ export function AppShell({ user, children }: AppShellProps) {
                 Settings
               </Link>
             </nav>
-            <div className="mt-4 border-t border-border pt-4">
-              <div className="mb-3 text-caption text-muted-foreground">{user.email}</div>
+            <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
+              <span className="truncate text-caption text-muted-foreground">{user.email}</span>
               <Button
                 variant="ghost"
-                className="w-full justify-start"
+                size="sm"
+                className="shrink-0"
                 onClick={handleSignOut}
                 disabled={signingOut}
               >

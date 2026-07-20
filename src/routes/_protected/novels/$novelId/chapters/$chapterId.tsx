@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Columns2,
   FileText,
+  List,
   Pencil,
   RotateCw,
   Settings2,
@@ -224,7 +225,7 @@ function ReaderPage() {
           </Button>
 
           <Select value={chapterId} onValueChange={(id) => goToChapter(id as string)}>
-            <SelectTrigger className="max-w-56 sm:max-w-80">
+            <SelectTrigger className="min-w-0 flex-1 sm:max-w-80 sm:flex-none">
               <SelectValue>
                 {`Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
               </SelectValue>
@@ -263,7 +264,7 @@ function ReaderPage() {
             </Button>
           </div>
 
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
             {hasTranslation && !editing && (
               <div
                 className="inline-flex items-center gap-0.5 rounded-lg border border-border p-0.5"
@@ -343,9 +344,11 @@ function ReaderPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setEditValue(chapter.translatedContent ?? "")}
+                aria-label="Edit translation"
+                title="Edit translation"
               >
                 <Pencil className="size-4" />
-                Edit
+                <span className="hidden sm:inline">Edit</span>
               </Button>
             )}
 
@@ -372,9 +375,13 @@ function ReaderPage() {
                   variant={hasTranslation ? "outline" : "default"}
                   size="sm"
                   onClick={() => startTranslate(chapterId)}
+                  aria-label={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
+                  title={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
                 >
                   <RotateCw className="size-4" />
-                  {hasTranslation ? "Re-translate" : "Translate"}
+                  <span className="hidden sm:inline">
+                    {hasTranslation ? "Re-translate" : "Translate"}
+                  </span>
                 </Button>
               )
             )}
@@ -465,6 +472,53 @@ function ReaderPage() {
             )}
           </div>
         )}
+
+        {/* Bottom navigation */}
+        <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
+          {prevChapter ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-w-0 max-w-32 sm:max-w-64"
+              onClick={() => goToChapter(prevChapter.id)}
+              title={`Ch. ${Number(prevChapter.number)} — ${prevChapter.translatedTitle ?? prevChapter.title}`}
+            >
+              <ChevronLeft className="size-4 shrink-0" />
+              <span className="truncate">
+                {`Ch. ${Number(prevChapter.number)} — ${prevChapter.translatedTitle ?? prevChapter.title}`}
+              </span>
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0"
+            render={<Link to="/novels/$novelId" params={{ novelId }} />}
+            aria-label="All chapters"
+            title="All chapters"
+          >
+            <List className="size-4 sm:hidden" />
+            <span className="hidden sm:inline">All chapters</span>
+          </Button>
+          {nextChapter ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-w-0 max-w-32 sm:max-w-64"
+              onClick={() => goToChapter(nextChapter.id)}
+              title={`Ch. ${Number(nextChapter.number)} — ${nextChapter.translatedTitle ?? nextChapter.title}`}
+            >
+              <span className="truncate">
+                {`Ch. ${Number(nextChapter.number)} — ${nextChapter.translatedTitle ?? nextChapter.title}`}
+              </span>
+              <ChevronRight className="size-4 shrink-0" />
+            </Button>
+          ) : (
+            <span />
+          )}
+        </div>
       </div>
     </div>
   );

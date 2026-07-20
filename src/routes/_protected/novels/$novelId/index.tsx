@@ -301,9 +301,11 @@ function NovelDetailPage() {
               variant="outline"
               size="sm"
               render={<Link to="/novels/$novelId/glossary" params={{ novelId }} />}
+              aria-label="Glossary"
+              title="Glossary"
             >
               <BookOpen className="size-4" />
-              Glossary
+              <span className="hidden sm:inline">Glossary</span>
               {glossaryStats && glossaryStats.total > 0 && (
                 <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
                   {glossaryStats.total}
@@ -317,13 +319,21 @@ function NovelDetailPage() {
               variant="outline"
               size="sm"
               render={<Link to="/novels/$novelId/edit" params={{ novelId }} />}
+              aria-label="Edit novel"
+              title="Edit novel"
             >
               <Edit className="size-4" />
-              Edit
+              <span className="hidden sm:inline">Edit</span>
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => setDeleteNovelOpen(true)}>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteNovelOpen(true)}
+              aria-label="Delete novel"
+              title="Delete novel"
+            >
               <Trash2 className="size-4" />
-              Delete
+              <span className="hidden sm:inline">Delete</span>
             </Button>
           </div>
         </div>
