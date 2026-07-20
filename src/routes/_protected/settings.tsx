@@ -39,6 +39,10 @@ function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initialSettings.model);
   const [temperature, setTemperature] = useState(initialSettings.temperature);
+  const [inputPrice, setInputPrice] = useState(initialSettings.inputPricePer1M?.toString() ?? "");
+  const [outputPrice, setOutputPrice] = useState(
+    initialSettings.outputPricePer1M?.toString() ?? "",
+  );
 
   const [hasApiKey, setHasApiKey] = useState(initialSettings.hasApiKey);
   const [apiKeyMasked, setApiKeyMasked] = useState(initialSettings.apiKeyMasked);
@@ -72,6 +76,8 @@ function SettingsPage() {
           apiKey: apiKey ? apiKey.trim() : undefined,
           model,
           temperature,
+          inputPricePer1M: inputPrice === "" ? null : Number(inputPrice),
+          outputPricePer1M: outputPrice === "" ? null : Number(outputPrice),
         },
       });
 
@@ -300,6 +306,41 @@ function SettingsPage() {
               <p className="text-caption text-muted-foreground">
                 Lower values (0.2–0.5) produce more accurate translations; higher values (0.7–1.0)
                 allow more creative flair.
+              </p>
+            </div>
+
+            {/* Cost tracking prices */}
+            <div className="space-y-2">
+              <Label>Token Prices (USD per 1M tokens, optional)</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Input
+                    id="inputPrice"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={inputPrice}
+                    onChange={(e) => setInputPrice(e.target.value)}
+                    placeholder="Input, e.g. 2.50"
+                  />
+                  <p className="text-caption text-muted-foreground">Input / prompt</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Input
+                    id="outputPrice"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={outputPrice}
+                    onChange={(e) => setOutputPrice(e.target.value)}
+                    placeholder="Output, e.g. 10.00"
+                  />
+                  <p className="text-caption text-muted-foreground">Output / completion</p>
+                </div>
+              </div>
+              <p className="text-caption text-muted-foreground">
+                Used to show per-chapter translation cost on the novel page. Leave blank to track
+                tokens only.
               </p>
             </div>
 

@@ -10,6 +10,9 @@ export const providerSettings = pgTable("provider_settings", {
   apiKeyEnc: text("api_key_enc").notNull(),
   model: text("model").notNull(),
   temperature: real("temperature").notNull().default(0.7),
+  // Optional USD prices per 1M tokens, used for per-chapter cost display (P8.3).
+  inputPricePer1M: real("input_price_per_1m"),
+  outputPricePer1M: real("output_price_per_1m"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

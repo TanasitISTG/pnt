@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { Menu, X, ChevronDown, LogOut, Loader2, Settings } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
+import { Menu, X, ChevronDown, LogOut, Loader2, Moon, Settings, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -66,6 +67,7 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
           <div className="flex items-center gap-2">
             <span aria-hidden="true" />
+            <ThemeToggle />
             <div className="hidden md:block">
               <UserDropdown user={user} signingOut={signingOut} onSignOut={handleSignOut} />
             </div>
@@ -116,6 +118,26 @@ export function AppShell({ user, children }: AppShellProps) {
       </header>
       <main className="mx-auto max-w-[1200px] px-6 py-8">{children}</main>
     </div>
+  );
+}
+
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const dark = mounted && resolvedTheme === "dark";
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-9"
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+      title={dark ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+    </Button>
   );
 }
 

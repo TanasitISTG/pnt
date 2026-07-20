@@ -37,6 +37,8 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
       temperature: 0.7,
       apiKeyMasked: "",
       hasApiKey: false,
+      inputPricePer1M: null,
+      outputPricePer1M: null,
     };
   }
 
@@ -59,6 +61,8 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
     temperature: row.temperature,
     apiKeyMasked,
     hasApiKey,
+    inputPricePer1M: row.inputPricePer1M,
+    outputPricePer1M: row.outputPricePer1M,
   };
 });
 
@@ -91,6 +95,8 @@ export const saveProviderSettings = createServerFn({ method: "POST" })
         apiKeyEnc,
         model: data.model,
         temperature: data.temperature,
+        inputPricePer1M: data.inputPricePer1M ?? null,
+        outputPricePer1M: data.outputPricePer1M ?? null,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -100,6 +106,8 @@ export const saveProviderSettings = createServerFn({ method: "POST" })
           apiKeyEnc,
           model: data.model,
           temperature: data.temperature,
+          inputPricePer1M: data.inputPricePer1M ?? null,
+          outputPricePer1M: data.outputPricePer1M ?? null,
           updatedAt: new Date(),
         },
       });

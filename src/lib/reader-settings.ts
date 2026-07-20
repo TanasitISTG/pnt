@@ -1,13 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type ReaderFontSize = "S" | "M" | "L" | "XL";
 export type ReaderTypeface = "default" | "reader";
-export type ReaderTheme = "light" | "dark";
+export type ReaderViewMode = "side" | "translated" | "raw";
 
 export interface ReaderSettings {
   fontSize: ReaderFontSize;
   typeface: ReaderTypeface;
-  theme: ReaderTheme;
+  viewMode: ReaderViewMode;
 }
 
 const STORAGE_KEY = "pnt-reader-settings";
@@ -15,7 +15,7 @@ const STORAGE_KEY = "pnt-reader-settings";
 const DEFAULTS: ReaderSettings = {
   fontSize: "M",
   typeface: "default",
-  theme: "light",
+  viewMode: "side",
 };
 
 // Reader body sizes on top of the 16px/1.5 body base
@@ -31,18 +31,38 @@ function load(): ReaderSettings {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
-    return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<ReaderSettings>) };
+    const parsed = JSON.parse(raw) as Partial<ReaderSettings>;
+    return {
+      fontSize: parsed.fontSize ?? DEFAULTS.fontSize,
+      typeface: parsed.typeface ?? DEFAULTS.typeface,
+      viewMode: parsed.viewMode ?? DEFAULTS.viewMode,
+    };
   } catch {
     return DEFAULTS;
   }
 }
 
+// Module-level cache: survives SPA navigations, so client-side route changes
+// render the stored settings synchronously (no flash). Null on fresh page load.
+let cached: ReaderSettings | null = null;
+
 export function useReaderSettings() {
-  const [settings, setSettings] = useState<ReaderSettings>(load);
+  // First hydration must match SSR (DEFAULTS) — stored settings are applied
+  // after mount; `hydrated` lets the page hide settings-dependent content
+  // until then. Later SPA navigations read `cached` synchronously.
+  const [settings, setSettings] = useState<ReaderSettings>(() => cached ?? DEFAULTS);
+  const [hydrated, setHydrated] = useState(cached !== null);
+
+  useEffect(() => {
+    if (!cached) cached = load();
+    setSettings(cached);
+    setHydrated(true);
+  }, []);
 
   const update = useCallback((patch: Partial<ReaderSettings>) => {
     setSettings((prev) => {
       const next = { ...prev, ...patch };
+      cached = next;
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch {
@@ -52,5 +72,5 @@ export function useReaderSettings() {
     });
   }, []);
 
-  return { settings, update };
+  return { settings, update, hydrated };
 }

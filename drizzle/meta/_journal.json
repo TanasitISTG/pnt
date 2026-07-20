@@ -64,6 +64,13 @@
       "when": 1784522013267,
       "tag": "0008_lively_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784525104362,
+      "tag": "0009_spooky_freak",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { eq, and, sql, desc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { novels, chapters, translationJobs } from "@/lib/db/schema";
+import { novels, chapters, translationJobs, providerSettings } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "@/lib/translation/provider-client";
@@ -232,6 +232,87 @@ export const listActiveTranslationJobs = createServerFn({ method: "GET" })
       totalChunks: r.job.totalChunks,
       error: r.job.error,
     }));
+  });
+
+// P8.3 — per-chapter token usage + cost from the latest done job per chapter.
+export const getNovelCosts = createServerFn({ method: "GET" })
+  .validator(listActiveJobsSchema)
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+
+    const rows = await db
+      .select({
+        chapterId: translationJobs.chapterId,
+        usageJson: translationJobs.usageJson,
+        updatedAt: translationJobs.updatedAt,
+      })
+      .from(translationJobs)
+      .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+      .innerJoin(novels, eq(chapters.novelId, novels.id))
+      .where(
+        and(
+          eq(novels.id, data.novelId),
+          eq(novels.userId, session.user.id),
+          eq(translationJobs.status, "done"),
+        ),
+      )
+      .orderBy(desc(translationJobs.updatedAt));
+
+    // Rows are newest-first — first occurrence per chapter is the latest done job.
+    const perChapter: Record<string, { promptTokens: number; completionTokens: number }> = {};
+    for (const row of rows) {
+      if (perChapter[row.chapterId] || !row.usageJson) continue;
+      try {
+        const usage = JSON.parse(row.usageJson) as {
+          totalPromptTokens?: number;
+          totalCompletionTokens?: number;
+        };
+        perChapter[row.chapterId] = {
+          promptTokens: usage.totalPromptTokens ?? 0,
+          completionTokens: usage.totalCompletionTokens ?? 0,
+        };
+      } catch {
+        // malformed usageJson — skip this chapter
+      }
+    }
+
+    const [settings] = await db
+      .select({
+        inputPricePer1M: providerSettings.inputPricePer1M,
+        outputPricePer1M: providerSettings.outputPricePer1M,
+      })
+      .from(providerSettings)
+      .where(eq(providerSettings.userId, session.user.id))
+      .limit(1);
+
+    const hasPrices = settings?.inputPricePer1M != null && settings?.outputPricePer1M != null;
+    const costOf = (promptTokens: number, completionTokens: number) =>
+      hasPrices
+        ? (promptTokens * settings.inputPricePer1M! +
+            completionTokens * settings.outputPricePer1M!) /
+          1_000_000
+        : null;
+
+    const costs: Record<
+      string,
+      { promptTokens: number; completionTokens: number; cost: number | null }
+    > = {};
+    let totalPrompt = 0;
+    let totalCompletion = 0;
+    for (const [chapterId, usage] of Object.entries(perChapter)) {
+      costs[chapterId] = { ...usage, cost: costOf(usage.promptTokens, usage.completionTokens) };
+      totalPrompt += usage.promptTokens;
+      totalCompletion += usage.completionTokens;
+    }
+
+    return {
+      costs,
+      totals: {
+        promptTokens: totalPrompt,
+        completionTokens: totalCompletion,
+        cost: costOf(totalPrompt, totalCompletion),
+      },
+    };
   });
 
 export const getTranslationJobStatus = createServerFn({ method: "GET" })

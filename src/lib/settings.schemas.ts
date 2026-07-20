@@ -5,6 +5,8 @@ export const saveProviderSettingsSchema = z.object({
   apiKey: z.string().optional().nullable(),
   model: z.string().min(1, "Model name is required"),
   temperature: z.number().min(0, "Min temperature is 0").max(2, "Max temperature is 2"),
+  inputPricePer1M: z.number().min(0).optional().nullable(),
+  outputPricePer1M: z.number().min(0).optional().nullable(),
 });
 
 export const testProviderConnectionSchema = z.object({

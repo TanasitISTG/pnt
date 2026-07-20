@@ -13,7 +13,10 @@ import {
   Square,
   Terminal,
   BookOpen,
+  Download,
+  FileType,
   Languages,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NovelCover } from "@/components/novel-cover";
@@ -31,6 +34,9 @@ import {
   translateMissingTitles,
 } from "@/lib/novel.functions";
 import { getGlossaryStats } from "@/lib/glossary.functions";
+import { getNovelCosts } from "@/lib/translation/translation.functions";
+import { exportNovelEpub, exportNovelTxt } from "@/lib/export.functions";
+import { downloadBase64, downloadText } from "@/lib/download";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +44,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -68,12 +81,22 @@ const glossaryStatsQueryOptions = (novelId: string) =>
     queryFn: () => getGlossaryStats({ data: { novelId } }),
   });
 
+const costsQueryOptions = (novelId: string) =>
+  queryOptions({
+    queryKey: ["costs", novelId],
+    queryFn: () => getNovelCosts({ data: { novelId } }),
+  });
+
+const formatTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+const formatCost = (n: number) => `$${n.toFixed(n < 1 ? 3 : 2)}`;
+
 export const Route = createFileRoute("/_protected/novels/$novelId/")({
   loader: async ({ params, context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
+      context.queryClient.ensureQueryData(costsQueryOptions(params.novelId)),
     ]);
   },
   component: NovelDetailPage,
@@ -95,13 +118,53 @@ function NovelDetailPage() {
   const { data: novel } = useQuery(novelQueryOptions(novelId));
   const { data: chapters = [] } = useQuery(chaptersQueryOptions(novelId));
   const { data: glossaryStats } = useQuery(glossaryStatsQueryOptions(novelId));
+  const { data: costData } = useQuery(costsQueryOptions(novelId));
 
   const {
     start: startTranslate,
+    startMany: startBatchTranslate,
     cancel: cancelTranslate,
     retry: retryTranslate,
     activeJobs,
   } = useTranslationJob(novelId);
+
+  // Batch translate selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchStarting, setBatchStarting] = useState(false);
+
+  const isRowTranslating = (chapterId: string, status: string) => {
+    const job = activeJobs.get(chapterId);
+    return (
+      job?.status === "running" ||
+      job?.status === "pending" ||
+      status === "translating" ||
+      status === "queued"
+    );
+  };
+
+  const selectableIds = chapters.filter((c) => !isRowTranslating(c.id, c.status)).map((c) => c.id);
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+
+  const toggleSelect = (id: string, checked: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const toggleSelectAll = (checked: boolean) =>
+    setSelectedIds(checked ? new Set(selectableIds) : new Set());
+
+  const handleBatchTranslate = async () => {
+    setBatchStarting(true);
+    try {
+      await startBatchTranslate([...selectedIds]);
+      setSelectedIds(new Set());
+    } finally {
+      setBatchStarting(false);
+    }
+  };
 
   // Dialog States
   const [deleteNovelOpen, setDeleteNovelOpen] = useState(false);
@@ -183,6 +246,32 @@ function NovelDetailPage() {
     () => chapters.filter((c) => c.status === "translated" && !c.translatedTitle).length,
     [chapters],
   );
+
+  const [exporting, setExporting] = useState<"txt" | "epub" | null>(null);
+
+  const handleExportTxt = async () => {
+    setExporting("txt");
+    try {
+      const res = await exportNovelTxt({ data: { novelId } });
+      downloadText(res.filename, res.content);
+    } catch (err: any) {
+      toast.error(err.message || "Export failed");
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportEpub = async () => {
+    setExporting("epub");
+    try {
+      const res = await exportNovelEpub({ data: { novelId } });
+      downloadBase64(res.filename, res.dataBase64, "application/epub+zip");
+    } catch (err: any) {
+      toast.error(err.message || "Export failed");
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const { mutate: backfillTitles, isPending: backfillingTitles } = useMutation({
     mutationFn: () => translateMissingTitles({ data: { novelId } }),
@@ -315,6 +404,32 @@ function NovelDetailPage() {
                 <span className="size-2 rounded-full bg-amber-500 animate-pulse ml-0.5" />
               )}
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button variant="outline" size="sm" disabled={exporting !== null} />}
+                aria-label="Export novel"
+                title="Export novel"
+              >
+                {exporting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                <span className="hidden sm:inline">Export</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={handleExportTxt}>
+                    <FileText className="size-4" />
+                    Novel as .txt
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportEpub}>
+                    <FileType className="size-4" />
+                    Novel as .epub
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="outline"
               size="sm"
@@ -387,6 +502,17 @@ function NovelDetailPage() {
                 </span>
               </div>
               <Progress value={progressPercent} className="h-2" />
+              {costData &&
+                (costData.totals.promptTokens > 0 || costData.totals.completionTokens > 0) && (
+                  <div className="flex justify-between text-caption text-muted-foreground font-mono">
+                    <span>Translation usage</span>
+                    <span>
+                      {formatTokens(costData.totals.promptTokens)} in /{" "}
+                      {formatTokens(costData.totals.completionTokens)} out
+                      {costData.totals.cost != null && ` · ${formatCost(costData.totals.cost)}`}
+                    </span>
+                  </div>
+                )}
             </div>
           </div>
         </div>
@@ -398,19 +524,31 @@ function NovelDetailPage() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sub font-semibold text-foreground tracking-tight">Chapters</h2>
-          {missingTitleCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => backfillTitles()}
-              disabled={backfillingTitles}
-            >
-              <Languages className="size-4" />
-              {backfillingTitles
-                ? "Translating titles..."
-                : `Translate titles (${missingTitleCount})`}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <Button size="sm" onClick={handleBatchTranslate} disabled={batchStarting}>
+                {batchStarting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Play className="size-4" />
+                )}
+                {batchStarting ? "Queueing..." : `Translate selected (${selectedIds.size})`}
+              </Button>
+            )}
+            {missingTitleCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => backfillTitles()}
+                disabled={backfillingTitles}
+              >
+                <Languages className="size-4" />
+                {backfillingTitles
+                  ? "Translating titles..."
+                  : `Translate titles (${missingTitleCount})`}
+              </Button>
+            )}
+          </div>
         </div>
 
         {chapters.length === 0 ? (
@@ -425,6 +563,15 @@ function NovelDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={(e) => toggleSelectAll(e.target.checked)}
+                      aria-label="Select all chapters"
+                      className="size-4 accent-primary align-middle"
+                    />
+                  </TableHead>
                   <TableHead className="w-16">#</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead className="w-32">Chars</TableHead>
@@ -435,11 +582,7 @@ function NovelDetailPage() {
               <TableBody>
                 {chapters.map((chapter) => {
                   const activeJob = activeJobs.get(chapter.id);
-                  const isTranslating =
-                    activeJob?.status === "running" ||
-                    activeJob?.status === "pending" ||
-                    chapter.status === "translating" ||
-                    chapter.status === "queued";
+                  const isTranslating = isRowTranslating(chapter.id, chapter.status);
 
                   return (
                     <TableRow
@@ -447,6 +590,16 @@ function NovelDetailPage() {
                       data-editing={editState?.chapterId === chapter.id ? "true" : undefined}
                       className="data-[editing=true]:bg-muted/50"
                     >
+                      <TableCell className="w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(chapter.id)}
+                          disabled={isTranslating}
+                          onChange={(e) => toggleSelect(chapter.id, e.target.checked)}
+                          aria-label={`Select chapter ${Number(chapter.number)}`}
+                          className="size-4 accent-primary align-middle"
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{Number(chapter.number)}</TableCell>
                       <TableCell className="font-medium">
                         <Link
@@ -459,6 +612,17 @@ function NovelDetailPage() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {chapter.rawCharCount.toLocaleString()}
+                        {costData?.costs[chapter.id] && (
+                          <div className="text-caption font-mono text-muted-foreground">
+                            {formatTokens(
+                              costData.costs[chapter.id].promptTokens +
+                                costData.costs[chapter.id].completionTokens,
+                            )}{" "}
+                            tok
+                            {costData.costs[chapter.id].cost != null &&
+                              ` · ${formatCost(costData.costs[chapter.id].cost!)}`}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         {activeJob &&

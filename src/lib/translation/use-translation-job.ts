@@ -44,6 +44,7 @@ export function useTranslationJob(novelId: string) {
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
+    queryClient.invalidateQueries({ queryKey: ["costs", novelId] });
   }, [novelId, queryClient]);
 
   // Rehydrate active jobs from DB on mount — shows jobs the worker is processing
@@ -150,6 +151,33 @@ export function useTranslationJob(novelId: string) {
     [invalidate, updateJob],
   );
 
+  const startMany = useCallback(
+    async (chapterIds: string[]) => {
+      let queued = 0;
+      let failed = 0;
+      for (const chapterId of chapterIds) {
+        try {
+          const res = await startTranslationJob({ data: { chapterId } });
+          updateJob(chapterId, {
+            jobId: res.jobId,
+            chapterId,
+            status: "pending",
+            doneChunks: 0,
+            totalChunks: res.totalChunks,
+          });
+          queued++;
+        } catch {
+          failed++;
+        }
+      }
+      if (queued > 0) toast.info(`Queued ${queued} chapter${queued === 1 ? "" : "s"}`);
+      if (failed > 0) toast.error(`Failed to queue ${failed} chapter${failed === 1 ? "" : "s"}`);
+      invalidate();
+      return queued;
+    },
+    [invalidate, updateJob],
+  );
+
   const cancel = useCallback(
     async (jobId: string, chapterId: string) => {
       try {
@@ -191,6 +219,7 @@ export function useTranslationJob(novelId: string) {
 
   return {
     start,
+    startMany,
     cancel,
     retry,
     activeJobs,
