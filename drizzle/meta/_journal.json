@@ -43,6 +43,13 @@
       "when": 1784488460624,
       "tag": "0005_normal_fat_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784499266393,
+      "tag": "0006_bright_amphibian",
+      "breakpoints": true
     }
   ]
 }

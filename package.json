@@ -17,7 +17,8 @@
     "format:check": "oxfmt --check .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "seed:user": "bun scripts/seed-user.ts"
+    "seed:user": "bun scripts/seed-user.ts",
+    "worker": "bun scripts/dev-worker.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

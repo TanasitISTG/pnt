@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   startTranslationJob,
-  tickTranslationJob,
   cancelTranslationJob,
   retryTranslationJob,
+  listActiveTranslationJobs,
+  getTranslationJobStatus,
 } from "./translation.functions";
 
 export interface ActiveJobState {
@@ -17,11 +18,12 @@ export interface ActiveJobState {
   error?: string | null;
 }
 
+// This hook is a read-only observer: translation work is executed by the cron
+// worker (see /api/cron/translation-worker), never by the browser — so page
+// refreshes can no longer duplicate chunks or finalization.
 export function useTranslationJob(novelId: string) {
   const queryClient = useQueryClient();
   const [activeJobs, setActiveJobs] = useState<Map<string, ActiveJobState>>(new Map());
-  const activeJobsRef = useRef(activeJobs);
-  activeJobsRef.current = activeJobs;
 
   const updateJob = useCallback((chapterId: string, state: ActiveJobState) => {
     setActiveJobs((prev) => {
@@ -39,49 +41,41 @@ export function useTranslationJob(novelId: string) {
     });
   }, []);
 
-  const runTick = useCallback(
-    async (jobId: string, chapterId: string) => {
-      try {
-        const res = await tickTranslationJob({ data: { jobId } });
-        updateJob(chapterId, {
-          jobId,
-          chapterId,
-          status: res.status as any,
-          doneChunks: res.doneChunks,
-          totalChunks: res.totalChunks,
-          error: res.error,
-        });
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["novels"] });
+  }, [novelId, queryClient]);
 
-        if (res.status === "done") {
-          toast.success("Translation completed successfully!");
-          queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
-          queryClient.invalidateQueries({ queryKey: ["novels"] });
-          removeJob(chapterId);
-        } else if (res.status === "error") {
-          toast.error(`Translation failed: ${res.error || "Unknown error"}`);
-          queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
-          queryClient.invalidateQueries({ queryKey: ["novels"] });
-        } else if (res.status === "cancelled") {
-          toast.info("Translation job cancelled");
-          queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
-          removeJob(chapterId);
-        }
-      } catch (err: any) {
-        toast.error(err.message || "Failed to tick translation job");
-        updateJob(chapterId, {
-          jobId,
-          chapterId,
-          status: "error",
-          doneChunks: activeJobsRef.current.get(chapterId)?.doneChunks || 0,
-          totalChunks: activeJobsRef.current.get(chapterId)?.totalChunks || 1,
-          error: err.message,
+  // Rehydrate active jobs from DB on mount — shows jobs the worker is processing
+  useEffect(() => {
+    let cancelled = false;
+    listActiveTranslationJobs({ data: { novelId } })
+      .then((jobs) => {
+        if (cancelled || jobs.length === 0) return;
+        setActiveJobs((prev) => {
+          const next = new Map(prev);
+          for (const j of jobs) {
+            if (!next.has(j.chapterId)) {
+              next.set(j.chapterId, {
+                jobId: j.id,
+                chapterId: j.chapterId,
+                status: j.status as ActiveJobState["status"],
+                doneChunks: j.doneChunks,
+                totalChunks: j.totalChunks,
+                error: j.error,
+              });
+            }
+          }
+          return next;
         });
-      }
-    },
-    [novelId, queryClient, removeJob, updateJob],
-  );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [novelId]);
 
-  // Polling loop effect for active running/pending jobs
+  // Poll status for active jobs (read-only, idempotent)
   useEffect(() => {
     const activeList = Array.from(activeJobs.values()).filter(
       (j) => j.status === "pending" || j.status === "running",
@@ -89,37 +83,71 @@ export function useTranslationJob(novelId: string) {
 
     if (activeList.length === 0) return;
 
-    const interval = setInterval(() => {
-      activeList.forEach((j) => {
-        runTick(j.jobId, j.chapterId);
-      });
-    }, 2000);
+    const interval = setInterval(async () => {
+      for (const j of activeList) {
+        try {
+          const res = await getTranslationJobStatus({ data: { jobId: j.jobId } });
+          if (!res) {
+            removeJob(j.chapterId);
+            continue;
+          }
+
+          if (res.status === "done") {
+            toast.success("Translation completed successfully!");
+            invalidate();
+            removeJob(j.chapterId);
+          } else if (res.status === "error") {
+            toast.error(`Translation failed: ${res.error || "Unknown error"}`);
+            invalidate();
+            updateJob(j.chapterId, {
+              jobId: j.jobId,
+              chapterId: j.chapterId,
+              status: "error",
+              doneChunks: res.doneChunks,
+              totalChunks: res.totalChunks,
+              error: res.error,
+            });
+          } else if (res.status === "cancelled") {
+            toast.info("Translation job cancelled");
+            invalidate();
+            removeJob(j.chapterId);
+          } else {
+            updateJob(j.chapterId, {
+              jobId: j.jobId,
+              chapterId: j.chapterId,
+              status: res.status as ActiveJobState["status"],
+              doneChunks: res.doneChunks,
+              totalChunks: res.totalChunks,
+              error: res.error,
+            });
+          }
+        } catch {
+          // Transient read failure — next poll retries.
+        }
+      }
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [activeJobs, runTick]);
+  }, [activeJobs, invalidate, removeJob, updateJob]);
 
   const start = useCallback(
     async (chapterId: string) => {
       try {
         const res = await startTranslationJob({ data: { chapterId } });
-        const initialState: ActiveJobState = {
+        updateJob(chapterId, {
           jobId: res.jobId,
           chapterId,
           status: "pending",
           doneChunks: 0,
           totalChunks: res.totalChunks,
-        };
-        updateJob(chapterId, initialState);
-        toast.info("Translation started");
-        queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
-
-        // Trigger immediate first tick
-        runTick(res.jobId, chapterId);
+        });
+        toast.info("Translation queued");
+        invalidate();
       } catch (err: any) {
         toast.error(err.message || "Failed to start translation");
       }
     },
-    [novelId, queryClient, runTick, updateJob],
+    [invalidate, updateJob],
   );
 
   const cancel = useCallback(
@@ -128,36 +156,37 @@ export function useTranslationJob(novelId: string) {
         await cancelTranslationJob({ data: { jobId } });
         removeJob(chapterId);
         toast.info("Translation cancelled");
-        queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+        invalidate();
       } catch (err: any) {
         toast.error(err.message || "Failed to cancel translation");
       }
     },
-    [novelId, queryClient, removeJob],
+    [invalidate, removeJob],
   );
 
   const retry = useCallback(
     async (jobId: string, chapterId: string) => {
       try {
         await retryTranslationJob({ data: { jobId } });
-        const existing = activeJobsRef.current.get(chapterId);
-        updateJob(chapterId, {
-          jobId,
-          chapterId,
-          status: "pending",
-          doneChunks: existing?.doneChunks || 0,
-          totalChunks: existing?.totalChunks || 1,
+        setActiveJobs((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(chapterId);
+          next.set(chapterId, {
+            jobId,
+            chapterId,
+            status: "pending",
+            doneChunks: existing?.doneChunks || 0,
+            totalChunks: existing?.totalChunks || 1,
+          });
+          return next;
         });
-        toast.info("Retrying translation");
-        queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
-
-        // Trigger immediate first tick
-        runTick(jobId, chapterId);
+        toast.info("Translation requeued");
+        invalidate();
       } catch (err: any) {
         toast.error(err.message || "Failed to retry translation");
       }
     },
-    [novelId, queryClient, runTick, updateJob],
+    [invalidate],
   );
 
   return {

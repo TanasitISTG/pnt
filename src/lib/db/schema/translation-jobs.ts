@@ -22,6 +22,8 @@ export const translationJobs = pgTable("translation_jobs", {
   error: text("error"),
   usageJson: text("usage_json"),
   logsJson: text("logs_json"),
+  // Worker lease: only the cron worker holding an unexpired lease may process the job.
+  lockedUntil: timestamp("locked_until"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
