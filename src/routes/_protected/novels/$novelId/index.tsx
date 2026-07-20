@@ -13,6 +13,7 @@ import {
   Square,
   Terminal,
   BookOpen,
+  Languages,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NovelCover } from "@/components/novel-cover";
@@ -27,6 +28,7 @@ import {
   createChapter,
   deleteChapter,
   updateChapterRaw,
+  translateMissingTitles,
 } from "@/lib/novel.functions";
 import { getGlossaryStats } from "@/lib/glossary.functions";
 import { Button } from "@/components/ui/button";
@@ -174,6 +176,24 @@ function NovelDetailPage() {
     },
     onError: (error) => {
       toast.error(error.message || "Failed to update chapter");
+    },
+  });
+
+  const missingTitleCount = useMemo(
+    () => chapters.filter((c) => c.status === "translated" && !c.translatedTitle).length,
+    [chapters],
+  );
+
+  const { mutate: backfillTitles, isPending: backfillingTitles } = useMutation({
+    mutationFn: () => translateMissingTitles({ data: { novelId } }),
+    onSuccess: ({ translated }) => {
+      queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      toast.success(
+        translated > 0 ? `Translated ${translated} chapter title(s)` : "No titles translated",
+      );
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to translate titles");
     },
   });
 
@@ -366,7 +386,22 @@ function NovelDetailPage() {
 
       {/* Chapters Table */}
       <div className="flex flex-col gap-4">
-        <h2 className="text-sub font-semibold text-foreground tracking-tight">Chapters</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sub font-semibold text-foreground tracking-tight">Chapters</h2>
+          {missingTitleCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => backfillTitles()}
+              disabled={backfillingTitles}
+            >
+              <Languages className="size-4" />
+              {backfillingTitles
+                ? "Translating titles..."
+                : `Translate titles (${missingTitleCount})`}
+            </Button>
+          )}
+        </div>
 
         {chapters.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 py-12 text-center">
@@ -409,7 +444,7 @@ function NovelDetailPage() {
                           params={{ novelId, chapterId: chapter.id }}
                           className="text-foreground hover:underline underline-offset-4"
                         >
-                          {chapter.title}
+                          {chapter.translatedTitle ?? chapter.title}
                         </Link>
                       </TableCell>
                       <TableCell className="text-muted-foreground">

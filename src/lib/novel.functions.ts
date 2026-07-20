@@ -1,11 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, desc, asc } from "drizzle-orm";
+import { eq, and, sql, desc, asc, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { novels, chapters } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { nanoid } from "@/lib/utils";
+import { createProviderClient } from "@/lib/translation/provider-client";
+import { translateChapterTitle } from "@/lib/translation/title";
 import {
   createNovelSchema,
   updateNovelSchema,
@@ -191,6 +193,7 @@ export const listChapters = createServerFn({ method: "GET" })
         novelId: chapters.novelId,
         number: chapters.number,
         title: chapters.title,
+        translatedTitle: chapters.translatedTitle,
         rawCharCount: chapters.rawCharCount,
         status: chapters.status,
         translatedAt: chapters.translatedAt,
@@ -215,6 +218,7 @@ export const getChapter = createServerFn({ method: "GET" })
         novelId: chapters.novelId,
         number: chapters.number,
         title: chapters.title,
+        translatedTitle: chapters.translatedTitle,
         rawContent: chapters.rawContent,
         translatedContent: chapters.translatedContent,
         status: chapters.status,
@@ -328,6 +332,55 @@ export const updateChapterTranslation = createServerFn({ method: "POST" })
       .where(eq(chapters.id, data.chapterId));
 
     return { id: data.chapterId };
+  });
+
+export const translateMissingTitles = createServerFn({ method: "POST" })
+  .validator(z.object({ novelId: z.string() }))
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+
+    const [novel] = await db
+      .select()
+      .from(novels)
+      .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+      .limit(1);
+
+    if (!novel) {
+      throw new Error("Novel not found or unauthorized");
+    }
+
+    const missing = await db
+      .select({ id: chapters.id, title: chapters.title })
+      .from(chapters)
+      .where(
+        and(
+          eq(chapters.novelId, data.novelId),
+          eq(chapters.status, "translated"),
+          isNull(chapters.translatedTitle),
+        ),
+      )
+      .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
+
+    if (missing.length === 0) {
+      return { translated: 0 };
+    }
+
+    const providerConfig = await createProviderClient(session.user.id);
+    const pair = `${novel.sourceLang}->${novel.targetLang}`;
+
+    let translated = 0;
+    for (const ch of missing) {
+      const title = await translateChapterTitle(providerConfig, pair, ch.title);
+      if (title) {
+        await db
+          .update(chapters)
+          .set({ translatedTitle: title, updatedAt: new Date() })
+          .where(eq(chapters.id, ch.id));
+        translated++;
+      }
+    }
+
+    return { translated };
   });
 
 export const deleteChapter = createServerFn({ method: "POST" })

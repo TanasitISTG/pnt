@@ -44,6 +44,19 @@ export function buildSystemPrompt(
   return sections.join("\n\n");
 }
 
+export function buildTitlePrompt(pair: string): string {
+  const normalizedPair = normalizePair(pair);
+  const langs: Record<LanguagePair, string> = {
+    "en->th": "English to Thai",
+    "zh->en": "Chinese to English",
+    "zh->th": "Chinese to Thai",
+  };
+  return [
+    `You are a professional literary translator. Translate the chapter title from ${langs[normalizedPair]}.`,
+    "Output ONLY the translated title — no quotes, no explanation, no chapter numbers.",
+  ].join("\n");
+}
+
 export function buildSummaryPrompt(_pair: string): string {
   return [
     "You are an expert novel editor and summarizer.",

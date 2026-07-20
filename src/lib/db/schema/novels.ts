@@ -71,6 +71,7 @@ export const chapters = pgTable(
       .references(() => novels.id, { onDelete: "cascade" }),
     number: numeric("number", { precision: 8, scale: 2 }).notNull(),
     title: text("title").notNull(),
+    translatedTitle: text("translated_title"),
     rawContent: text("raw_content").notNull(),
     translatedContent: text("translated_content"),
     status: chapterStatusEnum("status").notNull().default("raw"),

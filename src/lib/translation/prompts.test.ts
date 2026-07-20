@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSystemPrompt, buildSummaryPrompt } from "./prompts";
+import { buildSystemPrompt, buildSummaryPrompt, buildTitlePrompt } from "./prompts";
 
 describe("prompts module", () => {
   it("builds correct system prompt for en->th pair", () => {
@@ -48,5 +48,11 @@ describe("prompts module", () => {
   it("buildSummaryPrompt returns English requirement instruction", () => {
     const summaryPrompt = buildSummaryPrompt("zh->th");
     expect(summaryPrompt).toContain("CRITICAL REQUIREMENT: Always write the summary in ENGLISH");
+  });
+
+  it("buildTitlePrompt names the language pair and demands title-only output", () => {
+    const prompt = buildTitlePrompt("zh->th");
+    expect(prompt).toContain("Chinese to Thai");
+    expect(prompt).toContain("ONLY the translated title");
   });
 });

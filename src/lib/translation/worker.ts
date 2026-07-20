@@ -6,6 +6,7 @@ import { novels, chapters, translationJobs, glossaryTerms } from "@/lib/db/schem
 import { nanoid } from "@/lib/utils";
 import { createProviderClient, ProviderNotConfiguredError } from "./provider-client";
 import { buildSystemPrompt, buildSummaryPrompt } from "./prompts";
+import { translateChapterTitle } from "./title";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "./glossary";
 import { buildTermSuggestionPrompt, parseTermSuggestions } from "./suggest-terms-prompt";
 import { createLog, type ChunkProgress, type LogEntry } from "./translation.functions";
@@ -293,6 +294,22 @@ export async function processJobOnce(jobId: string): Promise<{ status: string }>
         updatedAt: new Date(),
       })
       .where(eq(chapters.id, chapter.id));
+
+    // Translate chapter title (cheap, non-fatal)
+    const translatedTitle = await translateChapterTitle(
+      providerConfig,
+      `${novel.sourceLang}->${novel.targetLang}`,
+      chapter.title,
+    );
+    if (translatedTitle) {
+      await db
+        .update(chapters)
+        .set({ translatedTitle, updatedAt: new Date() })
+        .where(eq(chapters.id, chapter.id));
+      logs.push(createLog("success", `Title translated: "${translatedTitle}"`));
+    } else {
+      logs.push(createLog("warn", "Title translation skipped — keeping raw title."));
+    }
 
     // Generate chapter summary in English
     let summaryText: string | null = null;

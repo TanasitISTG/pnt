@@ -225,12 +225,14 @@ function ReaderPage() {
 
           <Select value={chapterId} onValueChange={(id) => goToChapter(id as string)}>
             <SelectTrigger className="max-w-56 sm:max-w-80">
-              <SelectValue />
+              <SelectValue>
+                {`Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {chapters.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
-                  {`Ch. ${Number(c.number)} — ${c.title}`}
+                  {`Ch. ${Number(c.number)} — ${c.translatedTitle ?? c.title}`}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -384,9 +386,14 @@ function ReaderPage() {
           <span className="text-caption text-muted-foreground font-mono">
             Ch. {Number(chapter.number)}
           </span>
-          <h1 className="text-card-title font-semibold text-foreground tracking-tight">
-            {chapter.title}
-          </h1>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <h1 className="text-card-title font-semibold text-foreground tracking-tight">
+              {chapter.translatedTitle ?? chapter.title}
+            </h1>
+            {chapter.translatedTitle && chapter.translatedTitle !== chapter.title && (
+              <span className="text-caption text-muted-foreground">{chapter.title}</span>
+            )}
+          </div>
           {chapter.editedAt && (
             <Badge variant="secondary" className="text-[10px]">
               Edited

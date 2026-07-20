@@ -57,6 +57,13 @@
       "when": 1784512402675,
       "tag": "0007_first_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784522013267,
+      "tag": "0008_lively_slapstick",
+      "breakpoints": true
     }
   ]
 }
