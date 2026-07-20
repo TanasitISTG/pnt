@@ -36,6 +36,10 @@ export async function createProviderClient(userId: string): Promise<ProviderClie
   const client = new OpenAI({
     baseURL: settings.baseUrl,
     apiKey,
+    // Vercel kills the function at 5 min — fail stalled calls sooner so the
+    // worker's own retry loop gets a chance within one run.
+    timeout: 4 * 60_000,
+    maxRetries: 0, // the worker retries (3 attempts) with its own backoff
   });
 
   return {

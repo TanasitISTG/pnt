@@ -64,7 +64,7 @@ export function PublishMenu({ publishedAt, onChange, pending = false }: PublishM
           title="Publishing options"
         >
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
-          <span className="max-w-40 truncate">{label}</span>
+          <span className="max-w-64 truncate">{label}</span>
           <ChevronDown className="size-3" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">

@@ -65,7 +65,9 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 ## Translation execution (P5.13)
 
 - The browser **never executes translation work** — the client hook only enqueues jobs and polls `getTranslationJobStatus` (read-only). Refreshing the page is always safe.
-- Work runs in `src/lib/translation/worker.ts`, invoked via `GET|POST /api/cron/translation-worker` with `Authorization: Bearer ${CRON_SECRET}`. One chunk (or finalization) per job per run.
-- **Local:** run `bun run worker` next to `bun dev` (pings every 5s). **Prod:** cron-job.org pings the endpoint every 1 min (Hobby plan — Vercel Cron is 1/day there); disable its failure alerts, a ping "timeout" during a long chunk is harmless.
+- Work runs in `src/lib/translation/worker.ts` (`processJobOnce` = one chunk or finalization per run), driven two ways: `startTranslationJob`/`retryTranslationJob` kick it in the background on enqueue (translation starts instantly), and `GET|POST /api/cron/translation-worker` (Bearer `CRON_SECRET`) drives continuation.
+- Background execution goes through `runInBackground` (`src/lib/background.ts` — `@vercel/functions` `waitUntil`; plain-promise fallback in local dev). The cron endpoint responds instantly and processes in the background: a slow response counts as a failed ping at cron-job.org, which **auto-disables the job** after repeated "failures".
+- **Local:** run `bun run worker` next to `bun dev` (pings every 5s). **Prod:** cron-job.org pings the endpoint every 1 min (Hobby plan — Vercel Cron is 1/day there).
 - Concurrency is serialized by the `translation_jobs.locked_until` lease (15 min, atomic conditional UPDATE). Crash → lease expires → next ping resumes. Never process a job outside this lease.
+- Vercel Hobby kills functions at 5 min — the provider client sets a 4-min request timeout with `maxRetries: 0` (the worker retries 3× itself) so a stalled LLM call doesn't burn the whole run.
 - `CRON_SECRET` (min 32 chars) is a required env var — must exist in `.env.local` and Vercel project env, or the server refuses to boot.

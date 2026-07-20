@@ -7,6 +7,8 @@ import { ensureSession } from "@/lib/auth.functions";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "@/lib/translation/provider-client";
 import { chunkText } from "@/lib/translation/chunker";
+import { processJobOnce } from "@/lib/translation/worker";
+import { runInBackground } from "@/lib/background";
 import {
   startTranslationJobSchema,
   cancelTranslationJobSchema,
@@ -118,6 +120,9 @@ export const startTranslationJob = createServerFn({ method: "POST" })
       .set({ status: "queued", updatedAt: new Date() })
       .where(eq(chapters.id, chapter.id));
 
+    // Start chunk 1 immediately instead of waiting for the next cron ping.
+    runInBackground(processJobOnce(jobId));
+
     return { jobId, totalChunks: chunkInfos.length, logs };
   });
 
@@ -201,6 +206,8 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
       .update(chapters)
       .set({ status: "queued", updatedAt: new Date() })
       .where(eq(chapters.id, row.chapter.id));
+
+    runInBackground(processJobOnce(row.job.id));
 
     return { success: true, jobId: row.job.id };
   });
