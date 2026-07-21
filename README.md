@@ -1,204 +1,122 @@
-Welcome to your new TanStack Start app!
+# Personal Novel Translator
 
-# Getting Started
+A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin and guest read-only access. Paste or scrape chapters, translate with any OpenAI-compatible provider, and read side-by-side with Thai font support.
 
-To run this application:
+## Features
+
+- **Novel library** — gallery grid with cover uploads (stored in Postgres), language pair display, and translation progress
+- **Chapter CRUD** — paste raw text or bulk-import from supported sites; decimal numbering for re-ordering
+- **Inngest-driven translation** — serverless-safe, chunked at paragraph boundaries, resumable, cancellable, per-chunk retry
+- **Consistency engine** — per-novel glossary (approved terms injected per chunk) + rolling chapter summaries for stable names/tone
+- **Reader** — side-by-side raw/translated, paragraph-aligned synced scroll, font size/typeface controls, inline edit, re-translate
+- **Guest access** — published content visible to anyone; scheduled publishing (`publishedAt` null/draft/future); rate-limited reads
+- **Dark mode** — app-wide via `next-themes`, warm charcoal surfaces
+- **Export** — chapter/novel to `.txt` or `.epub`
+- **Batch translate** — multi-select chapters, queued sequentially
+
+## Tech Stack
+
+TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`) · shadcn/ui on Base UI · Drizzle ORM + Neon (Postgres HTTP) · Better Auth · Inngest (durable translation steps) · `openai` SDK · oxlint/oxfmt · Vitest · Nitro (Vercel deploy)
+
+## Getting Started
+
+### Prerequisites
+
+- [Bun](https://bun.sh/)
+- A Neon Postgres database (free tier works)
+
+### Setup
 
 ```bash
+# Install dependencies
 bun install
-bun --bun run dev
+
+# Copy env template and fill in values
+cp .env.example .env.local
+
+# Generate secrets
+bun -e "console.log(crypto.getRandomValues(new Uint8Array(32)).toBase64())"  # BETTER_AUTH_SECRET + APP_ENCRYPTION_KEY
+
+# Run database migrations
+bun run db:migrate
+
+# Seed admin user (requires SEED_ADMIN_* in .env.local)
+bun run seed:user
+
+# Start dev server (port 3000)
+bun dev
+
+# Start Inngest dev server in another terminal (for translation)
+bun run inngest
 ```
 
-# Building For Production
+### Commands
 
-To build this application for production:
+| Task                   | Command                                      |
+| ---------------------- | -------------------------------------------- |
+| Dev server             | `bun dev`                                    |
+| Inngest dev            | `bun run inngest`                            |
+| Production build       | `bun run build`                              |
+| Lint / fix             | `bun run lint` / `bun run lint:fix`          |
+| Format / check         | `bun run format` / `bun run format:check`    |
+| Tests                  | `bun run test`                               |
+| DB generate / migrate  | `bun run db:generate` / `bun run db:migrate` |
+| Seed admin user        | `bun run seed:user`                          |
+| Regenerate route tree  | `bun run generate-routes`                    |
 
-```bash
-bun --bun run build
+## Environment Variables
+
+| Variable             | Required | Description                                                        |
+| -------------------- | -------- | ------------------------------------------------------------------ |
+| `DATABASE_URL`       | Yes      | Neon Postgres connection string (SSL required)                     |
+| `BETTER_AUTH_SECRET` | Yes      | 32-byte base64 random string                                       |
+| `BETTER_AUTH_URL`    | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`)     |
+| `APP_ENCRYPTION_KEY` | Yes      | 32-byte base64 random string for encrypting API keys at rest       |
+| `SEED_ADMIN_EMAIL`   | No       | Admin email for `bun run seed:user`                                |
+| `SEED_ADMIN_NAME`    | No       | Admin display name                                                 |
+| `SEED_ADMIN_PASSWORD`| No       | Admin password                                                     |
+| `INNGEST_DEV`        | No       | Set to `1` for local dev (SDK v4 defaults to cloud mode)           |
+| `INNGEST_EVENT_KEY`  | No       | Inngest Cloud event key (production only)                          |
+| `INNGEST_SIGNING_KEY`| No       | Inngest Cloud signing key (production only)                        |
+
+## Project Structure
+
+```
+src/
+  routes/
+    __root.tsx                  # App shell, theme provider, auth context
+    _public/                    # Guest-accessible routes
+      index.tsx                 # Library (novel grid)
+      novels/$novelId/          # Novel detail + chapter list
+      novels/$novelId/chapters/$chapterId.tsx  # Reader
+    _protected/                 # Admin-only (redirects to /login)
+      novels/new.tsx            # Create novel
+      novels/$novelId/edit.tsx  # Edit novel
+      novels/$novelId/glossary.tsx  # Glossary CRUD
+      settings.tsx              # Provider config + account
+    login.tsx                   # Login page
+  lib/
+    auth.ts / auth-client.ts    # Better Auth setup
+    translation/                # Chunker, prompts, glossary filter, worker
+    scrape.ts / scrape.worker.ts # Chapter parser + bulk import
+    inngest/functions.ts        # Inngest durable functions
+  components/ui/                # Restyled shadcn/Base UI primitives
+  styles/globals.css            # Design tokens (@theme)
 ```
 
-## Testing
+## Docs
 
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
+- [DESIGN.md](DESIGN.md) — Design system (colors, type, components, Do/Don'ts)
+- [AGENTS.md](AGENTS.md) — Developer guide (commands, conventions, architecture notes)
 
-```bash
-bun --bun run test
-```
+## Deploy
 
-## Styling
+### Vercel
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
+Push to your repo and connect in Vercel. Set all required env vars. The Nitro adapter produces a self-contained Node server.
 
-### Removing Tailwind CSS
+### Inngest (production)
 
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `bun install @tailwindcss/vite tailwindcss -D`
-
-## Deploy with Nitro
-
-This project uses Nitro as a generic server adapter, so it can run on any Node-compatible host.
-
-```bash
-npm run build
-node dist/server/index.mjs
-```
-
-The build output is a self-contained Node server. To deploy, push the `dist/` directory to your host (Render, Fly.io, your own VPS, etc.) and run the server command above.
-
-For host-specific presets (Vercel, Netlify, Cloudflare, AWS Lambda, etc.) and tuning, see https://v3.nitro.build/deploy.
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "My App" },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-});
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from "@tanstack/react-start";
-
-const getServerTime = createServerFn({
-  method: "GET",
-}).handler(async () => {
-  return new Date().toISOString();
-});
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState("");
-
-  useEffect(() => {
-    getServerTime().then(setTime);
-  }, []);
-
-  return <div>Server time: {time}</div>;
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from "@tanstack/react-router";
-import { json } from "@tanstack/react-start";
-
-export const Route = createFileRoute("/api/hello")({
-  server: {
-    handlers: {
-      GET: () => json({ message: "Hello, World!" }),
-    },
-  },
-});
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from "@tanstack/react-router";
-
-export const Route = createFileRoute("/people")({
-  loader: async () => {
-    const response = await fetch("https://swapi.dev/api/people");
-    return response.json();
-  },
-  component: PeopleComponent,
-});
-
-function PeopleComponent() {
-  const data = Route.useLoaderData();
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  );
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+1. Create an Inngest Cloud account and app in the dashboard
+2. Set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` in Vercel env
+3. Sync the app in the Inngest dashboard — the `/api/inngest` handler auto-registers the `translate-chapter` and `import-chapters` functions
