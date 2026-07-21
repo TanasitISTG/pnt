@@ -2,6 +2,11 @@
 
 A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin and guest read-only access. Paste or scrape chapters, translate with any OpenAI-compatible provider, and read side-by-side with Thai font support.
 
+<img width="1904" height="1016" alt="image" src="https://github.com/user-attachments/assets/e6773d64-f4ea-47ff-9d4c-01c389125374" />
+<img width="1904" height="1016" alt="image" src="https://github.com/user-attachments/assets/8f2373f9-d7b1-4d67-8eba-b010b09fa124" />
+<img width="1904" height="1016" alt="image" src="https://github.com/user-attachments/assets/5f93259b-5e6d-466c-9c63-397a5a13600c" />
+<img width="1904" height="1016" alt="image" src="https://github.com/user-attachments/assets/74e4942b-2db2-46c3-88e0-210be0843012" />
+
 ## Features
 
 - **Novel library** — gallery grid with cover uploads (stored in Postgres), language pair display, and translation progress
