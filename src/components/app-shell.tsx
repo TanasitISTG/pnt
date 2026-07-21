@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Menu, X, ChevronDown, LogIn, LogOut, Loader2, Moon, Settings, Sun } from "lucide-react";
@@ -25,13 +25,16 @@ export function AppShell({ user, children }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
+  const router = useRouter();
 
   const handleSignOut = async () => {
     setSigningOut(true);
     await signOut({
       fetchOptions: {
         onSuccess: () => {
-          navigate({ to: "/login" });
+          // Invalidate so the root beforeLoad re-checks the (now gone) session,
+          // then land on the public library.
+          router.invalidate().finally(() => navigate({ to: "/" }));
         },
         onError: () => {
           setSigningOut(false);

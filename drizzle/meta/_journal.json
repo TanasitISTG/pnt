@@ -78,6 +78,13 @@
       "when": 1784537304163,
       "tag": "0010_past_miss_america",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784598376239,
+      "tag": "0011_abnormal_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }

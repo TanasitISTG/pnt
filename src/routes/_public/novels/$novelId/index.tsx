@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   ArrowLeft,
   Edit,
@@ -33,7 +33,16 @@ import {
   updateChapterRaw,
   translateMissingTitles,
   setChapterPublished,
+  setAllChaptersPublished,
 } from "@/lib/novel.functions";
+import {
+  scrapeChapter,
+  importChapter,
+  startImportJob,
+  cancelImportJob,
+  getImportJobStatus,
+  getActiveImportJob,
+} from "@/lib/scrape.functions";
 import { getGlossaryStats } from "@/lib/glossary.functions";
 import { getNovelCosts } from "@/lib/translation/translation.functions";
 import { exportNovelEpub, exportNovelTxt } from "@/lib/export.functions";
@@ -199,6 +208,157 @@ function NovelDetailPage() {
   const [chapContent, setChapContent] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  // Scrape/import state
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [scrapeBusy, setScrapeBusy] = useState<"fetch" | "add" | null>(null);
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+
+  interface ImportJobState {
+    id: string;
+    status: string;
+    fromNumber: number;
+    toNumber: number;
+    nextNumber: number;
+    added: number;
+    skipped: number;
+    failed: number;
+    error: string | null;
+  }
+  const [importJob, setImportJob] = useState<ImportJobState | null>(null);
+  const importActive = importJob?.status === "pending" || importJob?.status === "running";
+
+  const invalidateChapters = () => {
+    queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["novels"] });
+  };
+
+  // Re-attach to a running import after refresh — the job lives server-side.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    getActiveImportJob({ data: { novelId } })
+      .then((job) => {
+        if (!cancelled && job) setImportJob(job);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [novelId, user]);
+
+  // Poll active import job (read-only, idempotent)
+  useEffect(() => {
+    if (!importJob || !importActive) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await getImportJobStatus({ data: { jobId: importJob.id } });
+        if (!res) {
+          setImportJob(null);
+          return;
+        }
+        setImportJob(res);
+        if (res.status === "done") {
+          invalidateChapters();
+          toast.success(
+            `Import done: added ${res.added}, skipped ${res.skipped}, failed ${res.failed}`,
+          );
+        } else if (res.status === "error") {
+          invalidateChapters();
+          toast.error(`Import failed: ${res.error || "Unknown error"}`);
+        } else if (res.status === "cancelled") {
+          invalidateChapters();
+          toast.info("Import cancelled");
+        }
+      } catch {
+        // Transient read failure — next poll retries.
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importJob?.id, importActive]);
+
+  const handleRangeImport = async () => {
+    const from = Number(rangeFrom);
+    const to = Number(rangeTo);
+    if (
+      !Number.isInteger(from) ||
+      !Number.isInteger(to) ||
+      from < 1 ||
+      from > to ||
+      to - from > 500
+    ) {
+      toast.error("Enter a valid range (from ≥ 1, from ≤ to, max 500 chapters)");
+      return;
+    }
+    try {
+      const { jobId } = await startImportJob({
+        data: { novelId, baseUrl: scrapeUrl, from, to },
+      });
+      setImportJob({
+        id: jobId,
+        status: "pending",
+        fromNumber: from,
+        toNumber: to,
+        nextNumber: from,
+        added: 0,
+        skipped: 0,
+        failed: 0,
+        error: null,
+      });
+      toast.info(`Import of chapters ${from}–${to} queued`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to start import");
+    }
+  };
+
+  const handleImportCancel = async () => {
+    if (!importJob) return;
+    try {
+      await cancelImportJob({ data: { jobId: importJob.id } });
+      setImportJob((j) => (j ? { ...j, status: "cancelled" } : j));
+      invalidateChapters();
+      toast.info("Import cancelled");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to cancel import");
+    }
+  };
+
+  const handleScrapeFetch = async () => {
+    setScrapeBusy("fetch");
+    try {
+      const r = await scrapeChapter({ data: { url: scrapeUrl } });
+      setChapNumber(String(r.number));
+      setChapTitle(r.title);
+      setChapContent(r.content);
+      setFormErrors({});
+      if (r.nextUrl) setScrapeUrl(r.nextUrl);
+      toast.success(`Fetched chapter ${r.number}: ${r.title}`);
+    } catch (e: any) {
+      toast.error(e.message || "Fetch failed");
+    } finally {
+      setScrapeBusy(null);
+    }
+  };
+
+  const handleScrapeAdd = async () => {
+    setScrapeBusy("add");
+    try {
+      const r = await importChapter({ data: { novelId, url: scrapeUrl } });
+      if (r.created) {
+        invalidateChapters();
+        toast.success(`Added chapter ${r.number}: ${r.title}`);
+      } else {
+        toast.info(`Chapter ${r.number} already exists — skipped`);
+      }
+      if (r.nextUrl) setScrapeUrl(r.nextUrl);
+    } catch (e: any) {
+      toast.error(e.message || "Import failed");
+    } finally {
+      setScrapeBusy(null);
+    }
+  };
+
   const { mutateAsync: removeNovel, isPending: deletingNovel } = useMutation({
     mutationFn: () => deleteNovel({ data: { novelId } }),
     onSuccess: () => {
@@ -253,6 +413,17 @@ function NovelDetailPage() {
     },
   });
 
+  const { mutate: publishAllChapters, isPending: publishingAll } = useMutation({
+    mutationFn: () => setAllChaptersPublished({ data: { novelId, publishedAt: new Date() } }),
+    onSuccess: ({ count }) => {
+      queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      toast.success(`Published ${count} chapter${count === 1 ? "" : "s"}`);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to publish all chapters");
+    },
+  });
+
   const { mutateAsync: saveChapterEdit, isPending: savingEdit } = useMutation({
     mutationFn: (vars: any) => updateChapterRaw({ data: vars }),
     onSuccess: () => {
@@ -268,6 +439,11 @@ function NovelDetailPage() {
 
   const missingTitleCount = useMemo(
     () => chapters.filter((c) => c.status === "translated" && !c.translatedTitle).length,
+    [chapters],
+  );
+
+  const unpublishedCount = useMemo(
+    () => chapters.filter((c) => !c.publishedAt || new Date(c.publishedAt) > new Date()).length,
     [chapters],
   );
 
@@ -561,6 +737,17 @@ function NovelDetailPage() {
                     <Play className="size-4" />
                   )}
                   {batchStarting ? "Queueing..." : `Translate selected (${selectedIds.size})`}
+                </Button>
+              )}
+              {unpublishedCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => publishAllChapters()}
+                  disabled={publishingAll}
+                >
+                  <Check className="size-4" />
+                  {publishingAll ? "Publishing..." : `Publish all (${unpublishedCount})`}
                 </Button>
               )}
               {missingTitleCount > 0 && (
@@ -908,6 +1095,79 @@ function NovelDetailPage() {
             <h2 className="text-sub font-semibold text-foreground tracking-tight">Add Chapter</h2>
             <Card className="max-w-3xl">
               <CardContent className="p-6">
+                <div className="flex flex-col gap-3 rounded-md border border-border bg-muted p-4 mb-6">
+                  <Label htmlFor="scrapeUrl">Import from source URL</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      id="scrapeUrl"
+                      placeholder="https://www.quanben.io/n/.../30.html"
+                      value={scrapeUrl}
+                      onChange={(e) => setScrapeUrl(e.target.value)}
+                      className="flex-1"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleScrapeFetch}
+                        disabled={!scrapeUrl || scrapeBusy !== null}
+                      >
+                        {scrapeBusy === "fetch" ? "Fetching..." : "Fetch"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleScrapeAdd}
+                        disabled={!scrapeUrl || scrapeBusy !== null}
+                      >
+                        {scrapeBusy === "add" ? "Adding..." : "Fetch & Add"}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-caption text-muted-foreground">Range</span>
+                    <Input
+                      type="number"
+                      min="1"
+                      className="w-24"
+                      placeholder="from"
+                      value={rangeFrom}
+                      onChange={(e) => setRangeFrom(e.target.value)}
+                    />
+                    <span className="text-caption text-muted-foreground">to</span>
+                    <Input
+                      type="number"
+                      min="1"
+                      className="w-24"
+                      placeholder="to"
+                      value={rangeTo}
+                      onChange={(e) => setRangeTo(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleRangeImport}
+                      disabled={!scrapeUrl || importActive}
+                    >
+                      {importActive ? "Importing..." : "Import Range"}
+                    </Button>
+                    {importActive && (
+                      <Button type="button" variant="ghost" onClick={handleImportCancel}>
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                  {importJob && (
+                    <p className="text-caption text-muted-foreground">
+                      {importJob.nextNumber - importJob.fromNumber}/
+                      {importJob.toNumber - importJob.fromNumber + 1} — added {importJob.added} ·
+                      skipped {importJob.skipped} · failed {importJob.failed}
+                      {importActive ? " (runs server-side — safe to close this tab)" : ""}
+                    </p>
+                  )}
+                  <p className="text-caption text-muted-foreground">Supported: quanben.io</p>
+                </div>
+
                 <form onSubmit={handleAddChapter} className="flex flex-col gap-4">
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="flex flex-col gap-1.5 sm:col-span-1">

@@ -494,3 +494,28 @@ export const setChapterPublished = createServerFn({ method: "POST" })
 
     return { id: data.chapterId };
   });
+
+// Bulk publish/unpublish every chapter of a novel (same value for all rows).
+export const setAllChaptersPublished = createServerFn({ method: "POST" })
+  .validator(setNovelPublishedSchema) // same shape: { novelId, publishedAt }
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+
+    const [novel] = await db
+      .select({ id: novels.id })
+      .from(novels)
+      .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+      .limit(1);
+
+    if (!novel) {
+      throw new Error("Novel not found or unauthorized");
+    }
+
+    const updated = await db
+      .update(chapters)
+      .set({ publishedAt: data.publishedAt, updatedAt: new Date() })
+      .where(eq(chapters.novelId, data.novelId))
+      .returning({ id: chapters.id });
+
+    return { id: data.novelId, count: updated.length };
+  });
