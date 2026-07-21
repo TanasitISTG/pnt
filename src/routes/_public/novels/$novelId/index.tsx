@@ -70,6 +70,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionPanel,
+} from "@/components/ui/accordion";
 import { ChapterStatusBadge } from "@/components/chapter-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { createChapterSchema, updateChapterSchema } from "@/lib/novel.schemas";
@@ -100,6 +106,8 @@ const costsQueryOptions = (novelId: string) =>
 
 const formatTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 const formatCost = (n: number) => `$${n.toFixed(n < 1 ? 3 : 2)}`;
+
+const CHAPTER_GROUP_SIZE = 50;
 
 export const Route = createFileRoute("/_public/novels/$novelId/")({
   loader: async ({ params, context }) => {
@@ -447,6 +455,14 @@ function NovelDetailPage() {
     [chapters],
   );
 
+  const chapterGroups = useMemo(() => {
+    const groups: (typeof chapters)[] = [];
+    for (let i = 0; i < chapters.length; i += CHAPTER_GROUP_SIZE) {
+      groups.push(chapters.slice(i, i + CHAPTER_GROUP_SIZE));
+    }
+    return groups;
+  }, [chapters]);
+
   const [exporting, setExporting] = useState<"txt" | "epub" | null>(null);
 
   const handleExportTxt = async () => {
@@ -576,6 +592,195 @@ function NovelDetailPage() {
   }
 
   const editingChapter = editState ? chapters.find((c) => c.id === editState.chapterId) : null;
+
+  const renderChapterRow = (chapter: (typeof chapters)[0]) => {
+    const activeJob = activeJobs.get(chapter.id);
+    const isTranslating = isRowTranslating(chapter.id, chapter.status);
+
+    return (
+      <TableRow
+        key={chapter.id}
+        data-editing={editState?.chapterId === chapter.id ? "true" : undefined}
+        className="data-[editing=true]:bg-muted/50"
+      >
+        {user && (
+          <TableCell className="w-10">
+            <input
+              type="checkbox"
+              checked={selectedIds.has(chapter.id)}
+              disabled={isTranslating}
+              onChange={(e) => toggleSelect(chapter.id, e.target.checked)}
+              aria-label={`Select chapter ${Number(chapter.number)}`}
+              className="size-4 accent-primary align-middle"
+            />
+          </TableCell>
+        )}
+        <TableCell className="font-medium">{Number(chapter.number)}</TableCell>
+        <TableCell className="font-medium">
+          <Link
+            to="/novels/$novelId/chapters/$chapterId"
+            params={{ novelId, chapterId: chapter.id }}
+            className="text-foreground hover:underline underline-offset-4"
+          >
+            {chapter.translatedTitle ?? chapter.title}
+          </Link>
+        </TableCell>
+        <TableCell className="text-muted-foreground">
+          {chapter.rawCharCount.toLocaleString()}
+          {costData?.costs[chapter.id] && (
+            <div className="text-caption font-mono text-muted-foreground">
+              {formatTokens(
+                costData.costs[chapter.id].promptTokens +
+                  costData.costs[chapter.id].completionTokens,
+              )}{" "}
+              tok
+              {costData.costs[chapter.id].cost != null &&
+                ` · ${formatCost(costData.costs[chapter.id].cost!)}`}
+            </div>
+          )}
+        </TableCell>
+        <TableCell>
+          {activeJob && (activeJob.status === "running" || activeJob.status === "pending") ? (
+            <div className="flex flex-col gap-1 min-w-28">
+              <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                <span>Translating...</span>
+                <span>
+                  {activeJob.doneChunks}/{activeJob.totalChunks}
+                </span>
+              </div>
+              <Progress
+                value={
+                  activeJob.totalChunks > 0
+                    ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
+                    : 0
+                }
+                className="h-1.5"
+              />
+            </div>
+          ) : (
+            <ChapterStatusBadge status={chapter.status} />
+          )}
+        </TableCell>
+        {user && (
+          <TableCell className="text-right">
+            <div className="flex justify-end items-center gap-1">
+              <PublishMenu
+                publishedAt={chapter.publishedAt}
+                pending={publishingChapter}
+                onChange={(publishedAt) => publishChapter({ chapterId: chapter.id, publishedAt })}
+              />
+              {isTranslating && activeJob ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-amber-500 hover:text-amber-600"
+                  onClick={() => cancelTranslate(activeJob.jobId, chapter.id)}
+                  aria-label="Cancel translation"
+                  title="Cancel translation"
+                >
+                  <Square className="size-4" />
+                </Button>
+              ) : chapter.status === "error" || activeJob?.status === "error" ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-destructive hover:text-destructive"
+                  onClick={() =>
+                    activeJob
+                      ? retryTranslate(activeJob.jobId, chapter.id)
+                      : startTranslate(chapter.id)
+                  }
+                  aria-label="Retry translation"
+                  title="Retry translation"
+                >
+                  <RotateCw className="size-4" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-primary hover:text-primary"
+                  onClick={() => startTranslate(chapter.id)}
+                  aria-label={
+                    chapter.status === "translated" ? "Re-translate chapter" : "Translate chapter"
+                  }
+                  title={
+                    chapter.status === "translated" ? "Re-translate chapter" : "Translate chapter"
+                  }
+                >
+                  <Play className="size-4" />
+                </Button>
+              )}
+              {(activeJob || chapter.status !== "raw") && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-foreground"
+                  onClick={() => setLogChapterId(chapter.id)}
+                  aria-label="View translation logs"
+                  title="View translation logs"
+                >
+                  <Terminal className="size-4" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() =>
+                  editState?.chapterId === chapter.id
+                    ? setEditState(null)
+                    : handleStartEdit(chapter)
+                }
+                aria-label={editState?.chapterId === chapter.id ? "Cancel edit" : "Edit chapter"}
+              >
+                {editState?.chapterId === chapter.id ? (
+                  <X className="size-4 text-muted-foreground" />
+                ) : (
+                  <Edit className="size-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setDeleteChapterId(chapter.id)}
+                aria-label="Delete chapter"
+              >
+                <Trash2 className="size-4 text-destructive" />
+              </Button>
+            </div>
+          </TableCell>
+        )}
+      </TableRow>
+    );
+  };
+
+  const renderChapterTable = (groupChapters: typeof chapters) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {user && (
+            <TableHead className="w-10">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={(e) => toggleSelectAll(e.target.checked)}
+                aria-label="Select all chapters"
+                className="size-4 accent-primary align-middle"
+              />
+            </TableHead>
+          )}
+          <TableHead className="w-16">#</TableHead>
+          <TableHead>Title</TableHead>
+          <TableHead className="w-32">Chars</TableHead>
+          <TableHead className="w-32">Status</TableHead>
+          {user && <TableHead className="w-24 text-right">Actions</TableHead>}
+        </TableRow>
+      </TableHeader>
+      <TableBody>{groupChapters.map(renderChapterRow)}</TableBody>
+    </Table>
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -778,201 +983,25 @@ function NovelDetailPage() {
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {user && (
-                    <TableHead className="w-10">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={(e) => toggleSelectAll(e.target.checked)}
-                        aria-label="Select all chapters"
-                        className="size-4 accent-primary align-middle"
-                      />
-                    </TableHead>
-                  )}
-                  <TableHead className="w-16">#</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead className="w-32">Chars</TableHead>
-                  <TableHead className="w-32">Status</TableHead>
-                  {user && <TableHead className="w-24 text-right">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {chapters.map((chapter) => {
-                  const activeJob = activeJobs.get(chapter.id);
-                  const isTranslating = isRowTranslating(chapter.id, chapter.status);
-
-                  return (
-                    <TableRow
-                      key={chapter.id}
-                      data-editing={editState?.chapterId === chapter.id ? "true" : undefined}
-                      className="data-[editing=true]:bg-muted/50"
-                    >
-                      {user && (
-                        <TableCell className="w-10">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.has(chapter.id)}
-                            disabled={isTranslating}
-                            onChange={(e) => toggleSelect(chapter.id, e.target.checked)}
-                            aria-label={`Select chapter ${Number(chapter.number)}`}
-                            className="size-4 accent-primary align-middle"
-                          />
-                        </TableCell>
-                      )}
-                      <TableCell className="font-medium">{Number(chapter.number)}</TableCell>
-                      <TableCell className="font-medium">
-                        <Link
-                          to="/novels/$novelId/chapters/$chapterId"
-                          params={{ novelId, chapterId: chapter.id }}
-                          className="text-foreground hover:underline underline-offset-4"
-                        >
-                          {chapter.translatedTitle ?? chapter.title}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {chapter.rawCharCount.toLocaleString()}
-                        {costData?.costs[chapter.id] && (
-                          <div className="text-caption font-mono text-muted-foreground">
-                            {formatTokens(
-                              costData.costs[chapter.id].promptTokens +
-                                costData.costs[chapter.id].completionTokens,
-                            )}{" "}
-                            tok
-                            {costData.costs[chapter.id].cost != null &&
-                              ` · ${formatCost(costData.costs[chapter.id].cost!)}`}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {activeJob &&
-                        (activeJob.status === "running" || activeJob.status === "pending") ? (
-                          <div className="flex flex-col gap-1 min-w-28">
-                            <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                              <span>Translating...</span>
-                              <span>
-                                {activeJob.doneChunks}/{activeJob.totalChunks}
-                              </span>
-                            </div>
-                            <Progress
-                              value={
-                                activeJob.totalChunks > 0
-                                  ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
-                                  : 0
-                              }
-                              className="h-1.5"
-                            />
-                          </div>
-                        ) : (
-                          <ChapterStatusBadge status={chapter.status} />
-                        )}
-                      </TableCell>
-                      {user && (
-                        <TableCell className="text-right">
-                          <div className="flex justify-end items-center gap-1">
-                            <PublishMenu
-                              publishedAt={chapter.publishedAt}
-                              pending={publishingChapter}
-                              onChange={(publishedAt) =>
-                                publishChapter({ chapterId: chapter.id, publishedAt })
-                              }
-                            />
-                            {isTranslating && activeJob ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 text-amber-500 hover:text-amber-600"
-                                onClick={() => cancelTranslate(activeJob.jobId, chapter.id)}
-                                aria-label="Cancel translation"
-                                title="Cancel translation"
-                              >
-                                <Square className="size-4" />
-                              </Button>
-                            ) : chapter.status === "error" || activeJob?.status === "error" ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 text-destructive hover:text-destructive"
-                                onClick={() =>
-                                  activeJob
-                                    ? retryTranslate(activeJob.jobId, chapter.id)
-                                    : startTranslate(chapter.id)
-                                }
-                                aria-label="Retry translation"
-                                title="Retry translation"
-                              >
-                                <RotateCw className="size-4" />
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 text-primary hover:text-primary"
-                                onClick={() => startTranslate(chapter.id)}
-                                aria-label={
-                                  chapter.status === "translated"
-                                    ? "Re-translate chapter"
-                                    : "Translate chapter"
-                                }
-                                title={
-                                  chapter.status === "translated"
-                                    ? "Re-translate chapter"
-                                    : "Translate chapter"
-                                }
-                              >
-                                <Play className="size-4" />
-                              </Button>
-                            )}
-                            {(activeJob || chapter.status !== "raw") && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 text-muted-foreground hover:text-foreground"
-                                onClick={() => setLogChapterId(chapter.id)}
-                                aria-label="View translation logs"
-                                title="View translation logs"
-                              >
-                                <Terminal className="size-4" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                              onClick={() =>
-                                editState?.chapterId === chapter.id
-                                  ? setEditState(null)
-                                  : handleStartEdit(chapter)
-                              }
-                              aria-label={
-                                editState?.chapterId === chapter.id ? "Cancel edit" : "Edit chapter"
-                              }
-                            >
-                              {editState?.chapterId === chapter.id ? (
-                                <X className="size-4 text-muted-foreground" />
-                              ) : (
-                                <Edit className="size-4" />
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8"
-                              onClick={() => setDeleteChapterId(chapter.id)}
-                              aria-label="Delete chapter"
-                            >
-                              <Trash2 className="size-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            {chapterGroups.length <= 1 ? (
+              renderChapterTable(chapters)
+            ) : (
+              <Accordion multiple defaultValue={[0]}>
+                {chapterGroups.map((group, gi) => (
+                  <AccordionItem key={gi} value={gi}>
+                    <AccordionTrigger>
+                      <span>
+                        Chapters {Number(group[0].number)}–{Number(group[group.length - 1].number)}
+                        <span className="ml-2 font-normal text-muted-foreground">
+                          ({group.length})
+                        </span>
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionPanel>{renderChapterTable(group)}</AccordionPanel>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
           </div>
         )}
 
