@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { novels, chapters, translationJobs, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "./provider-client";
-import { buildSystemPrompt, buildSummaryPrompt } from "./prompts";
+import { buildSystemPrompt, buildSummaryPrompt, findResidualSourceChars } from "./prompts";
 import { translateChapterTitle } from "./title";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "./glossary";
 import { buildTermSuggestionPrompt, parseTermSuggestions } from "./suggest-terms-prompt";
@@ -155,9 +155,61 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
   }
 
   const elapsedMs = Date.now() - startTime;
-  const translation = completion.choices[0]?.message?.content || "";
-  const promptTokens = completion.usage?.prompt_tokens || 0;
-  const completionTokens = completion.usage?.completion_tokens || 0;
+  let translation = completion.choices[0]?.message?.content || "";
+  let promptTokens = completion.usage?.prompt_tokens || 0;
+  let completionTokens = completion.usage?.completion_tokens || 0;
+
+  // Guard: fast models sometimes leave hanzi behind (gift/system lines, usernames).
+  // One corrective round-trip, then accept whatever comes back. >2 tolerates a
+  // stray deliberate glyph; a skipped line trips it easily.
+  const pair = `${novel.sourceLang}->${novel.targetLang}`;
+  const residual = findResidualSourceChars(pair, translation);
+  if (residual.length > 2) {
+    logs.push(
+      createLog(
+        "warn",
+        `Chunk ${i + 1}/${chunkList.length} has ${residual.length} untranslated hanzi — re-requesting.`,
+      ),
+    );
+    try {
+      const fix = await providerConfig.client.chat.completions.create({
+        model: providerConfig.model,
+        temperature: providerConfig.temperature,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: currentChunk.text },
+          { role: "assistant", content: translation },
+          {
+            role: "user",
+            content:
+              "Your translation still contains untranslated Chinese text. Re-output the COMPLETE translation with every Chinese word translated or transliterated — including bracketed lines, notifications, and all names. Output only the corrected translation.",
+          },
+        ],
+      });
+      promptTokens += fix.usage?.prompt_tokens || 0;
+      completionTokens += fix.usage?.completion_tokens || 0;
+      const fixed = fix.choices[0]?.message?.content || "";
+      if (fixed.trim()) {
+        translation = fixed;
+        const left = findResidualSourceChars(pair, fixed).length;
+        logs.push(
+          createLog(
+            left > 2 ? "warn" : "success",
+            left > 2
+              ? `Chunk ${i + 1}/${chunkList.length} still has ${left} hanzi after retry — keeping anyway.`
+              : `Chunk ${i + 1}/${chunkList.length} re-translated cleanly.`,
+          ),
+        );
+      }
+    } catch (fixErr: any) {
+      logs.push(
+        createLog(
+          "warn",
+          `Chunk ${i + 1}/${chunkList.length} re-translation failed (${fixErr?.message || "error"}) — keeping original.`,
+        ),
+      );
+    }
+  }
 
   currentChunk.translation = translation;
   currentChunk.promptTokens = promptTokens;

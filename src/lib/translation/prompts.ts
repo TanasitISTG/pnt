@@ -66,6 +66,20 @@ export function buildSummaryPrompt(_pair: string): string {
   ].join(" ");
 }
 
+// Fast models treat 【...】 gift/system lines and Chinese usernames as markup to
+// preserve verbatim — the rule below has to be explicit.
+const COMPLETENESS_RULE =
+  "Translate everything, including text inside brackets (【】[]), system/gift/notification lines, and all names and usernames — transliterate names into the target script. No source-language text may remain in the output.";
+
+// CJK ideographs (ext-A + unified + compat). Leftover hanzi in zh output = missed translation.
+const CJK_RE = /[㐀-䶿一-鿿豈-﫿]/g;
+
+/** Leftover source-script chars in a translation. zh pairs only — latin-in-Thai is too common to flag. */
+export function findResidualSourceChars(pair: string, text: string): string[] {
+  if (normalizePair(pair) === "en->th") return [];
+  return text.match(CJK_RE) || [];
+}
+
 function normalizePair(pair: string): LanguagePair {
   const clean = pair.toLowerCase().replace(/\s+/g, "").replace("→", "->");
   if (clean === "en->th" || clean === "enth") return "en->th";
@@ -82,6 +96,7 @@ function getBaseInstruction(pair: LanguagePair): string {
         "Translate the following English web novel excerpt into fluent, expressive, natural Thai appropriate for web novels.",
         "Maintain character voices, tone, emotional nuance, and honorific forms.",
         "Do not summarize or skip content. Translate accurately paragraph by paragraph.",
+        COMPLETENESS_RULE,
       ].join("\n");
     case "zh->en":
       return [
@@ -89,6 +104,7 @@ function getBaseInstruction(pair: LanguagePair): string {
         "Translate the following Chinese web novel excerpt into vivid, fluent, natural English.",
         "Properly localize cultivation ranks, techniques, and honorific idioms while preserving the genre's distinct atmosphere.",
         "Do not summarize or skip content. Translate accurately paragraph by paragraph.",
+        COMPLETENESS_RULE,
       ].join("\n");
     case "zh->th":
       return [
@@ -96,6 +112,7 @@ function getBaseInstruction(pair: LanguagePair): string {
         "Translate the following Chinese web novel excerpt into expressive, natural Thai tailored for novel readers.",
         "Maintain appropriate Thai honorifics and prose style suited for Chinese fantasy/romance web novels.",
         "Do not summarize or skip content. Translate accurately paragraph by paragraph.",
+        COMPLETENESS_RULE,
       ].join("\n");
   }
 }

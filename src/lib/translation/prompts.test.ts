@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildSystemPrompt, buildSummaryPrompt, buildTitlePrompt } from "./prompts";
+import {
+  buildSystemPrompt,
+  buildSummaryPrompt,
+  buildTitlePrompt,
+  findResidualSourceChars,
+} from "./prompts";
 
 describe("prompts module", () => {
   it("builds correct system prompt for en->th pair", () => {
@@ -43,6 +48,21 @@ describe("prompts module", () => {
     const prompt = buildSystemPrompt("en->th", null, null, "Use informal pronouns for Lin Fan.");
     expect(prompt).toContain("## Custom Instructions");
     expect(prompt).toContain("Use informal pronouns for Lin Fan");
+  });
+
+  it("demands complete translation including brackets and names", () => {
+    for (const pair of ["en->th", "zh->en", "zh->th"]) {
+      const prompt = buildSystemPrompt(pair);
+      expect(prompt).toContain("Translate everything");
+      expect(prompt).toContain("No source-language text may remain");
+    }
+  });
+
+  it("findResidualSourceChars flags hanzi in zh output only", () => {
+    expect(findResidualSourceChars("zh->th", "สวัสดี【虎哥送嘉年华】ครับ")).toHaveLength(6);
+    expect(findResidualSourceChars("zh->en", "clean English text")).toHaveLength(0);
+    expect(findResidualSourceChars("zh->th", "ข้อความไทยล้วน")).toHaveLength(0);
+    expect(findResidualSourceChars("en->th", "leftover English words")).toHaveLength(0);
   });
 
   it("buildSummaryPrompt returns English requirement instruction", () => {
