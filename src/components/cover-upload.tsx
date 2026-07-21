@@ -70,15 +70,27 @@ export function CoverUpload({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
+    // Downscale + re-encode once at upload so every guest fetch is a small WebP.
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.addEventListener("load", () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, 800 / img.naturalWidth);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const result = canvas.toDataURL("image/webp", 0.8);
+      // Old Safari silently falls back to PNG when it can't encode WebP.
+      const mime = result.startsWith("data:image/webp") ? "image/webp" : "image/png";
       setPreview(result);
-      const commaIndex = result.indexOf(",");
-      const base64Data = commaIndex !== -1 ? result.slice(commaIndex + 1) : result;
-      onChange(base64Data, file.type);
-    };
-    reader.readAsDataURL(file);
+      onChange(result.slice(result.indexOf(",") + 1), mime);
+    });
+    img.addEventListener("error", () => {
+      URL.revokeObjectURL(objectUrl);
+      toast.error("Could not read that image file");
+    });
+    img.src = objectUrl;
   };
 
   const handleRemove = (e: React.MouseEvent) => {

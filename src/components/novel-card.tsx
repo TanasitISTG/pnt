@@ -17,6 +17,7 @@ interface Novel {
   translatedCount: number;
   hasCover: number;
   publishedAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 }
 
 interface NovelCardProps {
@@ -39,6 +40,8 @@ export function NovelCard({ novel, showPublishState = false }: NovelCardProps) {
         <div className="relative aspect-3/4 w-full overflow-hidden bg-foreground/3 border-b border-border flex items-center justify-center">
           <NovelCover
             novelId={novel.hasCover ? novel.id : null}
+            coverVersion={novel.updatedAt}
+            lazy
             alt={novel.title}
             className="h-full w-full object-cover transition-transform duration-300 group-hover/card-link:scale-[1.02]"
             fallbackSize={12}

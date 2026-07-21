@@ -484,6 +484,7 @@ function NovelDetailPage() {
             <NovelCover
               novelId={novel.id}
               cover={novel.cover}
+              coverVersion={novel.updatedAt}
               alt={novel.title}
               className="h-full w-full object-cover"
               fallbackSize={16}

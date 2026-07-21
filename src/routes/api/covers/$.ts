@@ -48,7 +48,11 @@ export const Route = createFileRoute("/api/covers/$")({
           return new Response(buffer, {
             headers: {
               "Content-Type": novel.coverMime || "image/jpeg",
-              "Cache-Control": session ? "private, max-age=3600" : "public, max-age=3600",
+              // Guest URLs carry ?v=<updatedAt> (bumps on any novel edit), so a
+              // changed cover gets a new URL and the old one can be cached forever.
+              "Cache-Control": session
+                ? "private, max-age=3600"
+                : "public, max-age=31536000, immutable",
             },
           });
         } catch (err: any) {
