@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, or, ilike, sql, count } from "drizzle-orm";
+import { eq, and, or, ilike, sql, count, desc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
@@ -60,7 +60,7 @@ export const listGlossaryTerms = createServerFn({ method: "GET" })
       .from(glossaryTerms)
       .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
       .where(and(...conditions))
-      .orderBy(glossaryTerms.source);
+      .orderBy(desc(glossaryTerms.createdAt));
   });
 
 export const createGlossaryTerm = createServerFn({ method: "POST" })
