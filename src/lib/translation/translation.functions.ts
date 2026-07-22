@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, desc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels, chapters, translationJobs, providerSettings } from "@/lib/db/schema";
@@ -150,7 +150,7 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
     const chapterRows = await db
       .select()
       .from(chapters)
-      .where(and(eq(chapters.novelId, novel.id), sql`${chapters.id} = ANY(${data.chapterIds})`));
+      .where(and(eq(chapters.novelId, novel.id), inArray(chapters.id, data.chapterIds)));
 
     const chapterMap = new Map(chapterRows.map((c) => [c.id, c]));
 
@@ -160,7 +160,7 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
       .from(translationJobs)
       .where(
         and(
-          sql`${translationJobs.chapterId} = ANY(${data.chapterIds})`,
+          inArray(translationJobs.chapterId, data.chapterIds),
           sql`${translationJobs.status} IN ('pending', 'running')`,
         ),
       );
@@ -251,12 +251,12 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
         await db
           .update(chapters)
           .set({ status: "queued", updatedAt: new Date() })
-          .where(sql`${chapters.id} = ANY(${chapterIdsToQueue})`);
+          .where(inArray(chapters.id, chapterIdsToQueue));
       } catch (dbErr) {
         // Best-effort cleanup: delete any jobs that were inserted before the
         // failure. If the insert itself failed this is a harmless no-op.
         try {
-          await db.delete(translationJobs).where(sql`${translationJobs.id} = ANY(${jobIds})`);
+          await db.delete(translationJobs).where(inArray(translationJobs.id, jobIds));
         } catch {
           // Cleanup failed — throw original error so the caller sees it.
         }
@@ -281,14 +281,14 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
             logsJson: errorLog,
             updatedAt: new Date(),
           })
-          .where(sql`${translationJobs.id} = ANY(${jobIds})`);
+          .where(inArray(translationJobs.id, jobIds));
         await db
           .update(chapters)
           .set({
             status: sql`CASE WHEN ${chapters.translatedContent} IS NOT NULL THEN 'translated' ELSE 'raw' END`,
             updatedAt: new Date(),
           })
-          .where(sql`${chapters.id} = ANY(${chapterIdsToQueue})`);
+          .where(inArray(chapters.id, chapterIdsToQueue));
       }
     }
 
@@ -564,9 +564,7 @@ export const getTranslationJobsTerminalStatus = createServerFn({ method: "GET" }
       .from(translationJobs)
       .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
       .innerJoin(novels, eq(chapters.novelId, novels.id))
-      .where(
-        and(sql`${translationJobs.id} = ANY(${data.jobIds})`, eq(novels.userId, session.user.id)),
-      );
+      .where(and(inArray(translationJobs.id, data.jobIds), eq(novels.userId, session.user.id)));
 
     return rows.map((r) => ({
       id: r.id,
