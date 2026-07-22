@@ -88,6 +88,7 @@
 }
 
 :root {
+  color-scheme: light;
   --background: #f7f4ed;
   --foreground: #1c1c1c;
   --muted: rgba(28, 28, 28, 0.04);
@@ -103,6 +104,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #1c1c1c;
   --foreground: #f7f4ed;
   --muted: rgba(247, 244, 237, 0.06);

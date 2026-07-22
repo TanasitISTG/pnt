@@ -204,7 +204,7 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
                             {chunk.translation ? (
                               <Badge
                                 variant="outline"
-                                className="text-xs text-emerald-600 border-emerald-500/30 bg-emerald-500/10 font-medium"
+                                className="text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 font-medium"
                               >
                                 Completed
                               </Badge>

@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { NovelCover } from "@/components/novel-cover";
 import { useTranslationJob } from "@/lib/translation/use-translation-job";
 import { JobLogsDialog } from "@/components/job-logs-dialog";
+import { getReaderProgress, type ReaderProgress } from "@/lib/reader-progress";
 
 import {
   getNovel,
@@ -79,6 +80,7 @@ import {
 import { ChapterStatusBadge } from "@/components/chapter-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { createChapterSchema, updateChapterSchema } from "@/lib/novel.schemas";
+import { cn } from "#/lib/utils";
 
 const novelQueryOptions = (novelId: string) =>
   queryOptions({
@@ -148,6 +150,22 @@ function NovelDetailPage() {
     enabled: !!user,
   });
   const { data: costData } = useQuery({ ...costsQueryOptions(novelId), enabled: !!user });
+
+  const [readerProgress, setReaderProgress] = useState<ReaderProgress>({
+    lastChapterId: null,
+    readChapterIds: [],
+  });
+
+  useEffect(() => {
+    setReaderProgress(getReaderProgress(novelId));
+  }, [novelId]);
+
+  const lastReadChapter = useMemo(() => {
+    if (!readerProgress.lastChapterId) return null;
+    return chapters.find((c) => c.id === readerProgress.lastChapterId) ?? null;
+  }, [chapters, readerProgress.lastChapterId]);
+
+  const firstChapter = chapters[0] ?? null;
 
   const {
     start: startTranslate,
@@ -621,6 +639,7 @@ function NovelDetailPage() {
   const renderChapterRow = (chapter: (typeof chapters)[0]) => {
     const activeJob = activeJobs.get(chapter.id);
     const isTranslating = isRowTranslating(chapter.id, chapter.status);
+    const isRead = readerProgress.readChapterIds.includes(chapter.id);
 
     return (
       <TableRow
@@ -642,13 +661,28 @@ function NovelDetailPage() {
         )}
         <TableCell className="font-medium">{Number(chapter.number)}</TableCell>
         <TableCell className="font-medium">
-          <Link
-            to="/novels/$novelId/chapters/$chapterId"
-            params={{ novelId, chapterId: chapter.id }}
-            className="text-foreground hover:underline underline-offset-4"
-          >
-            {chapter.translatedTitle ?? chapter.title}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/novels/$novelId/chapters/$chapterId"
+              params={{ novelId, chapterId: chapter.id }}
+              className={cn(
+                "text-foreground hover:underline underline-offset-4",
+                isRead && "text-muted-foreground/80 font-normal",
+              )}
+            >
+              {chapter.translatedTitle ?? chapter.title}
+            </Link>
+            {isRead && (
+              <span
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+                title="Read"
+                aria-label="Read"
+              >
+                <Check className="size-3.5" aria-hidden="true" />
+                <span className="text-[11px] font-normal">Read</span>
+              </span>
+            )}
+          </div>
         </TableCell>
         <TableCell className="text-muted-foreground">
           {chapter.rawCharCount.toLocaleString()}
@@ -886,7 +920,7 @@ function NovelDetailPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-start">
-          <div className="relative aspect-3/4 w-full max-w-[200px] overflow-hidden rounded-xl border border-border bg-foreground/3 flex items-center justify-center self-start">
+          <div className="relative aspect-3/4 w-full max-w-50 overflow-hidden rounded-xl border border-border bg-foreground/3 flex items-center justify-center self-start">
             <NovelCover
               novelId={novel.id}
               cover={novel.cover}
@@ -924,6 +958,59 @@ function NovelDetailPage() {
               <p className="text-sm text-muted-foreground max-w-3xl leading-relaxed whitespace-pre-wrap">
                 {novel.description}
               </p>
+            )}
+
+            {chapters.length > 0 && (
+              <div className="pt-2 flex flex-wrap items-center gap-2">
+                {lastReadChapter ? (
+                  <Button
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    render={
+                      <Link
+                        to="/novels/$novelId/chapters/$chapterId"
+                        params={{ novelId, chapterId: lastReadChapter.id }}
+                      />
+                    }
+                  >
+                    <BookOpen className="size-4" />
+                    <span>Continue Reading</span>
+                    <span className="text-xs opacity-75 font-normal truncate max-w-50">
+                      ({lastReadChapter.translatedTitle ?? lastReadChapter.title})
+                    </span>
+                  </Button>
+                ) : firstChapter ? (
+                  <Button
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    render={
+                      <Link
+                        to="/novels/$novelId/chapters/$chapterId"
+                        params={{ novelId, chapterId: firstChapter.id }}
+                      />
+                    }
+                  >
+                    <BookOpen className="size-4" />
+                    <span>Read First Chapter</span>
+                  </Button>
+                ) : null}
+
+                {lastReadChapter && firstChapter && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    render={
+                      <Link
+                        to="/novels/$novelId/chapters/$chapterId"
+                        params={{ novelId, chapterId: firstChapter.id }}
+                      />
+                    }
+                  >
+                    Read First Chapter
+                  </Button>
+                )}
+              </div>
             )}
 
             <div className="max-w-md pt-2 flex flex-col gap-1.5">
@@ -1184,18 +1271,19 @@ function NovelDetailPage() {
               <CardContent className="p-6">
                 <div className="flex flex-col gap-3 rounded-md border border-border bg-muted p-4 mb-6">
                   <Label htmlFor="scrapeUrl">Import from source URL</Label>
-                  <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2 w-full">
                     <Input
                       id="scrapeUrl"
                       placeholder="https://www.quanben.io/n/.../30.html"
                       value={scrapeUrl}
                       onChange={(e) => setScrapeUrl(e.target.value)}
-                      className="flex-1"
+                      className="w-full min-w-0 flex-1"
                     />
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-2 sm:flex sm:shrink-0 gap-2">
                       <Button
                         type="button"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={handleScrapeFetch}
                         disabled={!scrapeUrl || scrapeBusy !== null}
                       >
@@ -1204,6 +1292,7 @@ function NovelDetailPage() {
                       <Button
                         type="button"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={handleScrapeAdd}
                         disabled={!scrapeUrl || scrapeBusy !== null}
                       >
@@ -1211,41 +1300,55 @@ function NovelDetailPage() {
                       </Button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-caption text-muted-foreground">Range</span>
-                    <Input
-                      type="number"
-                      min="1"
-                      className="w-24"
-                      placeholder="from"
-                      value={rangeFrom}
-                      onChange={(e) => setRangeFrom(e.target.value)}
-                    />
-                    <span className="text-caption text-muted-foreground">to</span>
-                    <Input
-                      type="number"
-                      min="1"
-                      className="w-24"
-                      placeholder="to"
-                      value={rangeTo}
-                      onChange={(e) => setRangeTo(e.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleRangeImport}
-                      disabled={!scrapeUrl || importActive}
-                    >
-                      {importActive ? "Importing..." : "Import Range"}
-                    </Button>
-                    {importActive && (
-                      <Button type="button" variant="ghost" onClick={handleImportCancel}>
-                        Cancel
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 pt-1">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <span className="text-caption text-muted-foreground shrink-0">Range</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        id="importRangeFrom"
+                        aria-label="Start chapter number"
+                        className="w-full sm:w-24 min-w-0"
+                        placeholder="from"
+                        value={rangeFrom}
+                        onChange={(e) => setRangeFrom(e.target.value)}
+                      />
+                      <span className="text-caption text-muted-foreground shrink-0">to</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        id="importRangeTo"
+                        aria-label="End chapter number"
+                        className="w-full sm:w-24 min-w-0"
+                        placeholder="to"
+                        value={rangeTo}
+                        onChange={(e) => setRangeTo(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full sm:w-auto"
+                        onClick={handleRangeImport}
+                        disabled={!scrapeUrl || importActive}
+                      >
+                        {importActive ? "Importing..." : "Import Range"}
                       </Button>
-                    )}
+                      {importActive && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="shrink-0"
+                          onClick={handleImportCancel}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {importJob && (
-                    <p className="text-caption text-muted-foreground">
+                    <p className="text-caption text-muted-foreground wrap-break-word">
                       {importJob.nextNumber - importJob.fromNumber}/
                       {importJob.toNumber - importJob.fromNumber + 1} — added {importJob.added} ·
                       skipped {importJob.skipped} · failed {importJob.failed}

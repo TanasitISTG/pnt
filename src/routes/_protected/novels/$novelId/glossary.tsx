@@ -366,14 +366,14 @@ function NovelGlossaryPage() {
             </Badge>
             <Badge
               variant="outline"
-              className="px-3 py-1 text-xs font-mono text-emerald-600 border-emerald-500/30"
+              className="px-3 py-1 text-xs font-mono text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
             >
               Approved: {stats?.approved ?? 0}
             </Badge>
             {(stats?.pending ?? 0) > 0 && (
               <Badge
                 variant="outline"
-                className="px-3 py-1 text-xs font-mono text-amber-600 border-amber-500/40 bg-amber-500/10 animate-pulse"
+                className="px-3 py-1 text-xs font-mono text-amber-600 dark:text-amber-400 border-amber-500/40 bg-amber-500/10 animate-pulse"
               >
                 Pending: {stats?.pending}
               </Badge>
@@ -438,7 +438,7 @@ function NovelGlossaryPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="size-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                            className="size-8 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-500/10"
                             onClick={() => approveTerm(term.id)}
                             disabled={approvingTerm}
                             aria-label="Approve suggestion"
@@ -606,7 +606,7 @@ function NovelGlossaryPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="size-8 text-emerald-600"
+                              className="size-8 text-emerald-600 dark:text-emerald-400"
                               onClick={handleSaveEdit}
                               disabled={savingEdit}
                               aria-label="Save edit"

@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 
 import { getChapter, listChapters, updateChapterTranslation } from "@/lib/novel.functions";
+import { markChapterRead } from "@/lib/reader-progress";
 import { useTranslationJob } from "@/lib/translation/use-translation-job";
 import { alignParagraphs, splitParagraphs } from "@/lib/translation/paragraphs";
 import {
@@ -89,6 +90,12 @@ function ReaderPage() {
 
   const { data: chapter } = useQuery(chapterQueryOptions(chapterId));
   const { data: chapters = [] } = useQuery(chaptersQueryOptions(novelId));
+
+  useEffect(() => {
+    if (chapter?.id === chapterId) {
+      markChapterRead(novelId, chapterId);
+    }
+  }, [novelId, chapterId, chapter?.id]);
 
   const { settings, update, hydrated } = useReaderSettings();
   const { theme, setTheme } = useTheme();
