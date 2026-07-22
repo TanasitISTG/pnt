@@ -25,6 +25,16 @@ interface NovelFormProps {
   pending?: boolean;
 }
 
+const SOURCE_LANG_ITEMS: Record<string, string> = {
+  en: "English (EN)",
+  zh: "Chinese (ZH)",
+};
+
+const TARGET_LANG_ITEMS: Record<string, string> = {
+  th: "Thai (TH)",
+  en: "English (EN)",
+};
+
 export function NovelForm({
   defaultValues,
   onSubmit,
@@ -148,6 +158,7 @@ export function NovelForm({
           <Select
             value={form.sourceLang}
             onValueChange={(value) => handleSelectChange("sourceLang", value)}
+            items={SOURCE_LANG_ITEMS}
           >
             <SelectTrigger id="sourceLang" className="w-full h-10 px-3">
               <SelectValue placeholder="Select source language" />
@@ -164,6 +175,7 @@ export function NovelForm({
           <Select
             value={form.targetLang}
             onValueChange={(value) => handleSelectChange("targetLang", value)}
+            items={TARGET_LANG_ITEMS}
           >
             <SelectTrigger id="targetLang" className="w-full h-10 px-3">
               <SelectValue placeholder="Select target language" />

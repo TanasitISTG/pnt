@@ -115,6 +115,29 @@ const CATEGORY_COLORS: Record<string, string> = {
   other: "bg-muted text-muted-foreground border-border",
 };
 
+const CATEGORY_ITEMS: Record<string, string> = {
+  all: "All Categories",
+  character: "Character",
+  place: "Place",
+  skill: "Skill",
+  item: "Item",
+  other: "Other",
+};
+
+const STATUS_ITEMS: Record<string, string> = {
+  approved: "Approved",
+  pending: "Pending",
+  all: "All Status",
+};
+
+const EDIT_CATEGORY_ITEMS: Record<string, string> = {
+  character: "Character",
+  place: "Place",
+  skill: "Skill",
+  item: "Item",
+  other: "Other",
+};
+
 function CategoryBadge({ category }: { category: string }) {
   const colorClass = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
   return (
@@ -480,10 +503,14 @@ function NovelGlossaryPage() {
           />
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-36">
-            <Select value={categoryFilter} onValueChange={(val: any) => setCategoryFilter(val)}>
-              <SelectTrigger>
+        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+          <div className="w-full sm:w-44">
+            <Select
+              value={categoryFilter}
+              onValueChange={(val: any) => setCategoryFilter(val)}
+              items={CATEGORY_ITEMS}
+            >
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
@@ -497,9 +524,13 @@ function NovelGlossaryPage() {
             </Select>
           </div>
 
-          <div className="w-32">
-            <Select value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
-              <SelectTrigger>
+          <div className="w-full sm:w-36">
+            <Select
+              value={statusFilter}
+              onValueChange={(val: any) => setStatusFilter(val)}
+              items={STATUS_ITEMS}
+            >
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -578,6 +609,7 @@ function NovelGlossaryPage() {
                             onValueChange={(val: any) =>
                               setEditState((s) => s && { ...s, category: val })
                             }
+                            items={EDIT_CATEGORY_ITEMS}
                           >
                             <SelectTrigger className="h-9">
                               <SelectValue />
@@ -727,7 +759,11 @@ function NovelGlossaryPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="category">Category</Label>
-                  <Select value={newCategory} onValueChange={(val: any) => setNewCategory(val)}>
+                  <Select
+                    value={newCategory}
+                    onValueChange={(val: any) => setNewCategory(val)}
+                    items={EDIT_CATEGORY_ITEMS}
+                  >
                     <SelectTrigger id="category">
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
