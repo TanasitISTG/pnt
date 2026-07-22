@@ -34,6 +34,20 @@ describe("glossary module", () => {
     expect(filterGlossaryForChunk(sampleTerms, "")).toEqual([]);
   });
 
+  it("normalizes Unicode and smart quotes for matching", () => {
+    const terms = [{ source: "Lin\u2019s Fan", target: "หลินฟาน", category: "character" }];
+    const text = "Lin's Fan arrived.";
+    const result = filterGlossaryForChunk(terms, text);
+    expect(result).toHaveLength(1);
+  });
+
+  it("normalizes excess whitespace in source terms", () => {
+    const terms = [{ source: "Solar  Flare   Slash", target: "เพลงดาบสุริยะ", category: "skill" }];
+    const text = "He used Solar Flare Slash.";
+    const result = filterGlossaryForChunk(terms, text);
+    expect(result).toHaveLength(1);
+  });
+
   it("formats glossary terms correctly", () => {
     const terms = [
       { source: "Lin Fan", target: "หลินฟาน", category: "character" },

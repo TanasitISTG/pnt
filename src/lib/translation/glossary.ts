@@ -4,6 +4,16 @@ export interface GlossaryTermInput {
   category?: string | null;
 }
 
+const CJK_RE = /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/;
+
+function normalizeForMatch(text: string): string {
+  return text
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .replace(/[\u2018\u2019\u201C\u201D]/g, (c) => (c === "\u2018" || c === "\u2019" ? "'" : '"'))
+    .trim();
+}
+
 export function filterGlossaryForChunk(
   terms: GlossaryTermInput[],
   chunkText: string,
@@ -12,20 +22,21 @@ export function filterGlossaryForChunk(
     return [];
   }
 
-  const lowerChunkText = chunkText.toLowerCase();
+  const normalizedChunk = normalizeForMatch(chunkText);
+  const lowerChunk = normalizedChunk.toLowerCase();
 
   const matched = terms.filter((term) => {
     if (!term.source || term.source.trim().length === 0) {
       return false;
     }
 
-    const source = term.source.trim();
-    const isCJK = /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/.test(source);
+    const source = normalizeForMatch(term.source);
+    const isCJK = CJK_RE.test(source);
 
     if (isCJK) {
-      return chunkText.includes(source);
+      return normalizedChunk.includes(source);
     } else {
-      return lowerChunkText.includes(source.toLowerCase());
+      return lowerChunk.includes(source.toLowerCase());
     }
   });
 

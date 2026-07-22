@@ -8,7 +8,19 @@ import { createProviderClient } from "./provider-client";
 import { buildSystemPrompt, buildSummaryPrompt, findResidualSourceChars } from "./prompts";
 import { translateChapterTitle } from "./title";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "./glossary";
-import { buildTermSuggestionPrompt, parseTermSuggestions } from "./suggest-terms-prompt";
+import {
+  buildTermSuggestionPrompt,
+  buildTermSuggestionUserMessage,
+  parseTermSuggestions,
+  buildGlossaryReviewPrompt,
+  parseGlossaryReviewResponse,
+} from "./suggest-terms-prompt";
+import {
+  injectParagraphMarkers,
+  restoreParagraphMarkers,
+  countParagraphMarkers,
+  normalizeTranslationOutput,
+} from "./paragraphs";
 import { createLog, type ChunkProgress, type LogEntry } from "./translation.functions";
 
 // Execution is driven by Inngest (see src/lib/inngest/functions.ts): one event
@@ -131,13 +143,15 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
 
   const startTime = Date.now();
   let completion;
+  const markedText = injectParagraphMarkers(currentChunk.text);
+  const expectedMarkers = countParagraphMarkers(markedText);
   try {
     completion = await providerConfig.client.chat.completions.create({
       model: providerConfig.model,
       temperature: providerConfig.temperature,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: currentChunk.text },
+        { role: "user", content: markedText },
       ],
     });
   } catch (err: any) {
@@ -159,6 +173,51 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
   let promptTokens = completion.usage?.prompt_tokens || 0;
   let completionTokens = completion.usage?.completion_tokens || 0;
 
+  // Restore paragraph markers and check count
+  const receivedMarkers = countParagraphMarkers(translation);
+  if (receivedMarkers !== expectedMarkers && expectedMarkers > 0) {
+    // One corrective request for marker count mismatch
+    try {
+      const markerFix = await providerConfig.client.chat.completions.create({
+        model: providerConfig.model,
+        temperature: providerConfig.temperature,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: markedText },
+          { role: "assistant", content: translation },
+          {
+            role: "user",
+            content: `Your translation has ${receivedMarkers} ||¶|| markers but the source has ${expectedMarkers}. Re-output the COMPLETE translation preserving every ||¶|| marker exactly as-is in the correct positions. Output only the corrected translation.`,
+          },
+        ],
+      });
+      promptTokens += markerFix.usage?.prompt_tokens || 0;
+      completionTokens += markerFix.usage?.completion_tokens || 0;
+      const fixed = markerFix.choices[0]?.message?.content || "";
+      if (fixed.trim()) {
+        translation = fixed;
+        const fixedMarkers = countParagraphMarkers(fixed);
+        logs.push(
+          createLog(
+            fixedMarkers === expectedMarkers ? "success" : "warn",
+            fixedMarkers === expectedMarkers
+              ? `Chunk ${i + 1}/${chunkList.length} marker count corrected.`
+              : `Chunk ${i + 1}/${chunkList.length} marker count still mismatched (${fixedMarkers}/${expectedMarkers}) — keeping anyway.`,
+          ),
+        );
+      }
+    } catch (markerFixErr: any) {
+      logs.push(
+        createLog(
+          "warn",
+          `Chunk ${i + 1}/${chunkList.length} marker fix failed (${markerFixErr?.message || "error"}) — keeping original.`,
+        ),
+      );
+    }
+  }
+
+  translation = restoreParagraphMarkers(translation);
+
   // Guard: fast models sometimes leave hanzi behind (gift/system lines, usernames).
   // One corrective round-trip, then accept whatever comes back. >2 tolerates a
   // stray deliberate glyph; a skipped line trips it easily.
@@ -177,12 +236,12 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
         temperature: providerConfig.temperature,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: currentChunk.text },
+          { role: "user", content: markedText },
           { role: "assistant", content: translation },
           {
             role: "user",
             content:
-              "Your translation still contains untranslated Chinese text. Re-output the COMPLETE translation with every Chinese word translated or transliterated — including bracketed lines, notifications, and all names. Output only the corrected translation.",
+              "Your translation still contains untranslated Chinese text. Re-output the COMPLETE translation with every Chinese word translated or transliterated — including bracketed lines, notifications, and all names. Preserve every ||¶|| marker exactly. Output only the corrected translation.",
           },
         ],
       });
@@ -190,7 +249,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
       completionTokens += fix.usage?.completion_tokens || 0;
       const fixed = fix.choices[0]?.message?.content || "";
       if (fixed.trim()) {
-        translation = fixed;
+        translation = restoreParagraphMarkers(fixed);
         const left = findResidualSourceChars(pair, fixed).length;
         logs.push(
           createLog(
@@ -252,7 +311,9 @@ export async function finalizeJob(jobId: string): Promise<void> {
 
   logs.push(createLog("info", "All chunks translated. Assembling chapter..."));
 
-  const fullTranslation = chunkList.map((c) => c.translation || "").join("\n\n");
+  const fullTranslation = normalizeTranslationOutput(
+    chunkList.map((c) => c.translation || "").join("\n\n"),
+  );
   const totalPromptTokens = chunkList.reduce((acc, c) => acc + (c.promptTokens || 0), 0);
   const totalCompletionTokens = chunkList.reduce((acc, c) => acc + (c.completionTokens || 0), 0);
 
@@ -287,6 +348,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
   await saveJob(job.id, { logsJson: JSON.stringify(logs) });
   const summaryStartTime = Date.now();
 
+  let freshSummary: string | null = null;
   try {
     const summarySystemPrompt = buildSummaryPrompt(`${novel.sourceLang}->${novel.targetLang}`);
     const summaryCompletion = await providerConfig.client.chat.completions.create({
@@ -300,32 +362,50 @@ export async function finalizeJob(jobId: string): Promise<void> {
         },
       ],
     });
-    const summaryText = summaryCompletion.choices[0]?.message?.content || null;
+    freshSummary = summaryCompletion.choices[0]?.message?.content || null;
     const summaryTime = ((Date.now() - summaryStartTime) / 1000).toFixed(1);
     logs.push(createLog("success", `Summary generated in ${summaryTime}s.`));
 
-    if (summaryText) {
+    if (freshSummary) {
       await db
         .update(chapters)
-        .set({ summary: summaryText, updatedAt: new Date() })
+        .set({ summary: freshSummary, updatedAt: new Date() })
         .where(eq(chapters.id, chapter.id));
     }
   } catch (sumErr: any) {
     logs.push(createLog("warn", `Summary generation skipped: ${sumErr.message || "Failed"}`));
   }
 
-  // Auto-suggest glossary terms
+  // Auto-suggest glossary terms with AI review
   logs.push(createLog("info", "Extracting new glossary term suggestions..."));
   await saveJob(job.id, { logsJson: JSON.stringify(logs) });
   try {
     const approvedTerms = await db
-      .select({ source: glossaryTerms.source })
+      .select({ source: glossaryTerms.source, target: glossaryTerms.target })
       .from(glossaryTerms)
       .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved")));
+
+    const rawSourceExcerpt = chunkList
+      .map((c) => c.text || "")
+      .join("\n\n")
+      .slice(0, 4000);
+    const translatedExcerpt = fullTranslation.slice(0, 8000);
+
+    const effectiveSummary = freshSummary || chapter.summary || undefined;
     const suggestPrompt = buildTermSuggestionPrompt(
       `${novel.sourceLang}->${novel.targetLang}`,
       approvedTerms.map((t) => t.source),
+      {
+        rawSourceExcerpt,
+        chapterSummary: effectiveSummary,
+        approvedMappings: approvedTerms.map((t) => ({ source: t.source, target: t.target })),
+      },
     );
+
+    const userMessage = buildTermSuggestionUserMessage(translatedExcerpt, {
+      rawSourceExcerpt,
+      chapterSummary: effectiveSummary,
+    });
 
     let suggestionContent = "";
     try {
@@ -334,10 +414,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
         temperature: 0.3,
         messages: [
           { role: "system", content: suggestPrompt },
-          {
-            role: "user",
-            content: `Extract glossary terms from this chapter excerpt:\n\n${fullTranslation.slice(0, 8000)}`,
-          },
+          { role: "user", content: userMessage },
         ],
         response_format: { type: "json_object" },
       });
@@ -348,43 +425,156 @@ export async function finalizeJob(jobId: string): Promise<void> {
         temperature: 0.3,
         messages: [
           { role: "system", content: suggestPrompt },
-          {
-            role: "user",
-            content: `Extract glossary terms from this chapter excerpt:\n\n${fullTranslation.slice(0, 8000)}`,
-          },
+          { role: "user", content: userMessage },
         ],
       });
       suggestionContent = suggestCompletion.choices[0]?.message?.content || "";
     }
 
     const suggestedTerms = parseTermSuggestions(suggestionContent);
-    let addedCount = 0;
+
+    // AI review of extracted terms
+    let reviewResults: Awaited<ReturnType<typeof parseGlossaryReviewResponse>> = [];
+    if (suggestedTerms.length > 0) {
+      logs.push(
+        createLog("info", `Reviewing ${suggestedTerms.length} suggested term(s) with AI...`),
+      );
+      await saveJob(job.id, { logsJson: JSON.stringify(logs) });
+
+      try {
+        const reviewPrompt = buildGlossaryReviewPrompt(
+          `${novel.sourceLang}->${novel.targetLang}`,
+          approvedTerms.map((t) => ({ source: t.source, target: t.target })),
+        );
+
+        const reviewUserMessage = [
+          "Review these suggested glossary terms:",
+          JSON.stringify({ terms: suggestedTerms }, null, 2),
+          "",
+          "Source text excerpt:",
+          rawSourceExcerpt.slice(0, 3000),
+          "",
+          "Translated excerpt:",
+          translatedExcerpt.slice(0, 3000),
+        ].join("\n");
+
+        let reviewContent = "";
+        try {
+          const reviewCompletion = await providerConfig.client.chat.completions.create({
+            model: providerConfig.model,
+            temperature: 0.1,
+            messages: [
+              { role: "system", content: reviewPrompt },
+              { role: "user", content: reviewUserMessage },
+            ],
+            response_format: { type: "json_object" },
+          });
+          reviewContent = reviewCompletion.choices[0]?.message?.content || "";
+        } catch {
+          const reviewCompletion = await providerConfig.client.chat.completions.create({
+            model: providerConfig.model,
+            temperature: 0.1,
+            messages: [
+              { role: "system", content: reviewPrompt },
+              { role: "user", content: reviewUserMessage },
+            ],
+          });
+          reviewContent = reviewCompletion.choices[0]?.message?.content || "";
+        }
+
+        reviewResults = parseGlossaryReviewResponse(reviewContent);
+      } catch (reviewErr: any) {
+        logs.push(
+          createLog(
+            "warn",
+            `AI review failed (${reviewErr?.message || "error"}) — all terms stored as pending.`,
+          ),
+        );
+      }
+    }
+
+    const reviewBySource = new Map(reviewResults.map((r) => [r.source, r]));
+    let approvedCount = 0;
+    let pendingCount = 0;
+    let rejectedCount = 0;
+    let conflictCount = 0;
 
     for (const st of suggestedTerms) {
+      const review = reviewBySource.get(st.source);
+
+      // Check for existing term (duplicate)
       const [dup] = await db
-        .select({ id: glossaryTerms.id })
+        .select({ id: glossaryTerms.id, status: glossaryTerms.status })
         .from(glossaryTerms)
         .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.source, st.source)))
         .limit(1);
 
-      if (!dup) {
+      if (dup) {
+        // Never modify existing approved terms
+        if (dup.status === "approved") {
+          conflictCount++;
+          continue;
+        }
+        // Duplicate pending term — skip
+        conflictCount++;
+        continue;
+      }
+
+      // High-confidence reject → skip insertion
+      if (review?.action === "reject" && review.confidence === "high") {
+        rejectedCount++;
+        continue;
+      }
+
+      // High-confidence approve with valid evidence → insert as approved
+      // Use the review's corrected target if available, otherwise the original suggestion
+      const finalTarget =
+        review?.target && review.target.trim().length > 0 ? review.target : st.target;
+      // Deterministic validation: source must appear in raw text, target in translation
+      const sourceInRaw = rawSourceExcerpt.includes(st.source);
+      const targetInTranslation = translatedExcerpt.includes(finalTarget);
+      if (
+        review?.action === "approve" &&
+        review.confidence === "high" &&
+        st.source.trim().length > 0 &&
+        finalTarget.trim().length > 0 &&
+        finalTarget !== st.source &&
+        sourceInRaw &&
+        targetInTranslation
+      ) {
         await db.insert(glossaryTerms).values({
           id: nanoid(),
           novelId: novel.id,
           source: st.source,
-          target: st.target,
+          target: finalTarget,
+          category: st.category,
+          note: st.note || null,
+          status: "approved",
+        });
+        approvedCount++;
+      } else {
+        // Uncertain or no review → store as pending
+        await db.insert(glossaryTerms).values({
+          id: nanoid(),
+          novelId: novel.id,
+          source: st.source,
+          target: finalTarget,
           category: st.category,
           note: st.note || null,
           status: "pending",
         });
-        addedCount++;
+        pendingCount++;
       }
     }
 
-    if (addedCount > 0) {
-      logs.push(
-        createLog("success", `Extracted ${addedCount} pending term suggestion(s) for user review.`),
-      );
+    const summary: string[] = [];
+    if (approvedCount > 0) summary.push(`${approvedCount} approved`);
+    if (pendingCount > 0) summary.push(`${pendingCount} pending`);
+    if (rejectedCount > 0) summary.push(`${rejectedCount} rejected`);
+    if (conflictCount > 0) summary.push(`${conflictCount} conflicts`);
+
+    if (summary.length > 0) {
+      logs.push(createLog("success", `Glossary review: ${summary.join(", ")}.`));
     } else {
       logs.push(createLog("info", "No new term suggestions extracted."));
     }

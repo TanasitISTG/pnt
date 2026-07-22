@@ -3,10 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   startTranslationJob,
+  startTranslationJobs,
   cancelTranslationJob,
   retryTranslationJob,
   listActiveTranslationJobs,
-  getTranslationJobStatus,
+  getTranslationJobsTerminalStatus,
 } from "./translation.functions";
 
 export interface ActiveJobState {
@@ -78,7 +79,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     };
   }, [novelId, enabled]);
 
-  // Poll status for active jobs (read-only, idempotent)
+  // Poll status for active jobs using a single listActiveTranslationJobs call per interval
   useEffect(() => {
     const activeList = Array.from(activeJobs.values()).filter(
       (j) => j.status === "pending" || j.status === "running",
@@ -87,51 +88,99 @@ export function useTranslationJob(novelId: string, enabled = true) {
     if (activeList.length === 0) return;
 
     const interval = setInterval(async () => {
-      for (const j of activeList) {
-        try {
-          const res = await getTranslationJobStatus({ data: { jobId: j.jobId } });
-          if (!res) {
-            removeJob(j.chapterId);
-            continue;
+      try {
+        const dbJobs = await listActiveTranslationJobs({ data: { novelId } });
+        const dbJobMap = new Map(dbJobs.map((j) => [j.chapterId, j]));
+
+        // Collect jobs that disappeared from the active list
+        const disappeared: { jobId: string; chapterId: string }[] = [];
+
+        for (const localJob of activeList) {
+          const dbJob = dbJobMap.get(localJob.chapterId);
+
+          if (!dbJob) {
+            disappeared.push({ jobId: localJob.jobId, chapterId: localJob.chapterId });
+          } else {
+            // Still active — update progress
+            updateJob(localJob.chapterId, {
+              jobId: dbJob.id,
+              chapterId: dbJob.chapterId,
+              status: dbJob.status as ActiveJobState["status"],
+              doneChunks: dbJob.doneChunks,
+              totalChunks: dbJob.totalChunks,
+              error: dbJob.error,
+            });
+          }
+        }
+
+        // Batch fetch terminal statuses for disappeared jobs
+        if (disappeared.length > 0) {
+          let doneCount = 0;
+          let errorCount = 0;
+          let cancelledCount = 0;
+          let unresolvedCount = 0;
+
+          try {
+            const terminal = await getTranslationJobsTerminalStatus({
+              data: { jobIds: disappeared.map((d) => d.jobId) },
+            });
+            const terminalMap = new Map(terminal.map((t) => [t.id, t]));
+
+            for (const d of disappeared) {
+              const t = terminalMap.get(d.jobId);
+              if (t?.status === "done") {
+                doneCount++;
+                removeJob(d.chapterId);
+              } else if (t?.status === "error") {
+                errorCount++;
+                updateJob(d.chapterId, {
+                  jobId: d.jobId,
+                  chapterId: d.chapterId,
+                  status: "error",
+                  doneChunks: 0,
+                  totalChunks: 1,
+                  error: t.error,
+                });
+              } else if (t?.status === "cancelled") {
+                cancelledCount++;
+                removeJob(d.chapterId);
+              } else {
+                // Not found or unknown status — keep in state, retry next poll
+                unresolvedCount++;
+              }
+            }
+          } catch {
+            // Batch fetch failed — keep all jobs, retry next poll
+            unresolvedCount = disappeared.length;
           }
 
-          if (res.status === "done") {
-            toast.success("Translation completed successfully!");
+          // Only invalidate and toast when at least one job was resolved
+          if (doneCount + errorCount + cancelledCount > 0) {
             invalidate();
-            removeJob(j.chapterId);
-          } else if (res.status === "error") {
-            toast.error(`Translation failed: ${res.error || "Unknown error"}`);
-            invalidate();
-            updateJob(j.chapterId, {
-              jobId: j.jobId,
-              chapterId: j.chapterId,
-              status: "error",
-              doneChunks: res.doneChunks,
-              totalChunks: res.totalChunks,
-              error: res.error,
-            });
-          } else if (res.status === "cancelled") {
-            toast.info("Translation job cancelled");
-            invalidate();
-            removeJob(j.chapterId);
-          } else {
-            updateJob(j.chapterId, {
-              jobId: j.jobId,
-              chapterId: j.chapterId,
-              status: res.status as ActiveJobState["status"],
-              doneChunks: res.doneChunks,
-              totalChunks: res.totalChunks,
-              error: res.error,
-            });
+
+            const parts: string[] = [];
+            if (doneCount > 0) parts.push(`${doneCount} completed`);
+            if (errorCount > 0) parts.push(`${errorCount} failed`);
+            if (cancelledCount > 0) parts.push(`${cancelledCount} cancelled`);
+
+            if (parts.length > 0) {
+              if (errorCount > 0 && doneCount === 0 && cancelledCount === 0) {
+                toast.error(`Translation: ${parts.join(", ")}`);
+              } else if (doneCount > 0) {
+                toast.success(`Translation: ${parts.join(", ")}`);
+              } else {
+                toast.info(`Translation: ${parts.join(", ")}`);
+              }
+            }
           }
-        } catch {
-          // Transient read failure — next poll retries.
         }
+      } catch {
+        // Transient read failure — next poll retries.
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [activeJobs, invalidate, removeJob, updateJob]);
+  }, [activeJobs, invalidate, removeJob, updateJob, novelId]);
 
   const start = useCallback(
     async (chapterId: string) => {
@@ -155,29 +204,36 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
   const startMany = useCallback(
     async (chapterIds: string[]) => {
-      let queued = 0;
-      let failed = 0;
-      for (const chapterId of chapterIds) {
-        try {
-          const res = await startTranslationJob({ data: { chapterId } });
-          updateJob(chapterId, {
-            jobId: res.jobId,
-            chapterId,
+      try {
+        const res = await startTranslationJobs({ data: { novelId, chapterIds } });
+
+        for (const q of res.queued) {
+          updateJob(q.chapterId, {
+            jobId: q.jobId,
+            chapterId: q.chapterId,
             status: "pending",
             doneChunks: 0,
-            totalChunks: res.totalChunks,
+            totalChunks: q.totalChunks,
           });
-          queued++;
-        } catch {
-          failed++;
         }
+
+        if (res.queued.length > 0) {
+          toast.info(`Queued ${res.queued.length} chapter${res.queued.length === 1 ? "" : "s"}`);
+        }
+        if (res.skipped.length > 0) {
+          toast.warning(
+            `Skipped ${res.skipped.length} chapter${res.skipped.length === 1 ? "" : "s"}`,
+          );
+        }
+
+        invalidate();
+        return res.queued.length;
+      } catch (err: any) {
+        toast.error(err.message || "Failed to queue translations");
+        return 0;
       }
-      if (queued > 0) toast.info(`Queued ${queued} chapter${queued === 1 ? "" : "s"}`);
-      if (failed > 0) toast.error(`Failed to queue ${failed} chapter${failed === 1 ? "" : "s"}`);
-      invalidate();
-      return queued;
     },
-    [invalidate, updateJob],
+    [novelId, invalidate, updateJob],
   );
 
   const cancel = useCallback(

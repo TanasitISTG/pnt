@@ -26,11 +26,19 @@ describe("prompts module", () => {
     expect(prompt).toContain("Thai");
   });
 
-  it("includes glossary block when provided", () => {
+  it("includes glossary block with canonical wording instruction", () => {
     const glossary = "- Lin Fan -> หลินฟาน (character)\n- Sun Peak -> ยอดเขาอาทิตย์ (place)";
     const prompt = buildSystemPrompt("en->th", glossary);
     expect(prompt).toContain("## Terminology & Glossary");
     expect(prompt).toContain("Lin Fan -> หลินฟาน");
+    expect(prompt).toContain("exact target wording");
+  });
+
+  it("includes paragraph marker instructions", () => {
+    const prompt = buildSystemPrompt("en->th");
+    expect(prompt).toContain("## Paragraph Formatting");
+    expect(prompt).toContain("||¶||");
+    expect(prompt).toContain("preserve every");
   });
 
   it("includes context block when summary or tail provided", () => {

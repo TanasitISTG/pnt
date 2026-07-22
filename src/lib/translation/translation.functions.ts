@@ -10,10 +10,12 @@ import { chunkText } from "@/lib/translation/chunker";
 import { inngest } from "@/lib/inngest/client";
 import {
   startTranslationJobSchema,
+  startTranslationJobsSchema,
   cancelTranslationJobSchema,
   retryTranslationJobSchema,
   getJobStatusSchema,
   listActiveJobsSchema,
+  getJobsTerminalStatusSchema,
 } from "@/lib/translation/translation.schemas";
 
 export interface ChunkProgress {
@@ -123,6 +125,174 @@ export const startTranslationJob = createServerFn({ method: "POST" })
     await inngest.send({ name: "translation/job.requested", data: { jobId, runKey: nanoid() } });
 
     return { jobId, totalChunks: chunkInfos.length, logs };
+  });
+
+export const startTranslationJobs = createServerFn({ method: "POST" })
+  .validator(startTranslationJobsSchema)
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+
+    // Verify provider is configured (single check for the batch)
+    const providerConfig = await createProviderClient(session.user.id);
+
+    // Verify novel ownership
+    const [novel] = await db
+      .select()
+      .from(novels)
+      .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+      .limit(1);
+
+    if (!novel) {
+      throw new Error("Novel not found or unauthorized");
+    }
+
+    // Load all requested chapters belonging to this novel (single query)
+    const chapterRows = await db
+      .select()
+      .from(chapters)
+      .where(and(eq(chapters.novelId, novel.id), sql`${chapters.id} = ANY(${data.chapterIds})`));
+
+    const chapterMap = new Map(chapterRows.map((c) => [c.id, c]));
+
+    // Batch check for existing active jobs across all requested chapters (single query)
+    const activeJobRows = await db
+      .select({ chapterId: translationJobs.chapterId })
+      .from(translationJobs)
+      .where(
+        and(
+          sql`${translationJobs.chapterId} = ANY(${data.chapterIds})`,
+          sql`${translationJobs.status} IN ('pending', 'running')`,
+        ),
+      );
+    const chaptersWithActiveJobs = new Set(activeJobRows.map((r) => r.chapterId));
+
+    const queued: { chapterId: string; jobId: string; totalChunks: number }[] = [];
+    const skipped: { chapterId: string; reason: string }[] = [];
+    const jobInserts: Array<{
+      id: string;
+      chapterId: string;
+      status: "pending";
+      totalChunks: number;
+      doneChunks: number;
+      chunksJson: string;
+      logsJson: string;
+    }> = [];
+    const chapterIdsToQueue: string[] = [];
+    const inngestEvents: Array<{ name: string; data: { jobId: string; runKey: string } }> = [];
+
+    for (const chapterId of data.chapterIds) {
+      const chapter = chapterMap.get(chapterId);
+      if (!chapter) {
+        skipped.push({ chapterId, reason: "Chapter not found" });
+        continue;
+      }
+
+      if (!chapter.rawContent || chapter.rawContent.trim().length === 0) {
+        skipped.push({ chapterId, reason: "Chapter content is empty" });
+        continue;
+      }
+
+      if (chaptersWithActiveJobs.has(chapterId)) {
+        skipped.push({ chapterId, reason: "Translation already in progress" });
+        continue;
+      }
+
+      const chunkInfos = chunkText(chapter.rawContent, novel.chunkSize || 2000);
+      if (chunkInfos.length === 0) {
+        skipped.push({ chapterId, reason: "Chapter content could not be chunked" });
+        continue;
+      }
+
+      const initialChunks: ChunkProgress[] = chunkInfos.map((c) => ({
+        index: c.index,
+        text: c.text,
+      }));
+
+      const logs: LogEntry[] = [
+        createLog(
+          "info",
+          `Job initialized for Chapter "${chapter.title}" (${chapter.rawCharCount.toLocaleString()} chars).`,
+        ),
+        createLog(
+          "info",
+          `Split into ${chunkInfos.length} chunk(s) (target size: ${(novel.chunkSize || 2000).toLocaleString()} chars). Model: ${providerConfig.model}`,
+        ),
+      ];
+
+      const jobId = nanoid();
+
+      jobInserts.push({
+        id: jobId,
+        chapterId: chapter.id,
+        status: "pending",
+        totalChunks: chunkInfos.length,
+        doneChunks: 0,
+        chunksJson: JSON.stringify(initialChunks),
+        logsJson: JSON.stringify(logs),
+      });
+
+      chapterIdsToQueue.push(chapter.id);
+
+      inngestEvents.push({
+        name: "translation/job.requested",
+        data: { jobId, runKey: nanoid() },
+      });
+
+      queued.push({ chapterId, jobId, totalChunks: chunkInfos.length });
+    }
+
+    // DB-first: insert jobs and update chapters before dispatching events.
+    // Wrapped in try/catch so a partial failure (insert ok, update fail)
+    // cleans up the inserted jobs instead of stranding them as pending.
+    const jobIds = jobInserts.map((j) => j.id);
+    if (jobInserts.length > 0) {
+      try {
+        await db.insert(translationJobs).values(jobInserts);
+        await db
+          .update(chapters)
+          .set({ status: "queued", updatedAt: new Date() })
+          .where(sql`${chapters.id} = ANY(${chapterIdsToQueue})`);
+      } catch (dbErr) {
+        // Best-effort cleanup: delete any jobs that were inserted before the
+        // failure. If the insert itself failed this is a harmless no-op.
+        try {
+          await db.delete(translationJobs).where(sql`${translationJobs.id} = ANY(${jobIds})`);
+        } catch {
+          // Cleanup failed — throw original error so the caller sees it.
+        }
+        throw dbErr;
+      }
+    }
+
+    // Dispatch Inngest events. On failure, mark new jobs error so the UI can
+    // retry them; chapters revert to their pre-queue status.
+    if (inngestEvents.length > 0) {
+      try {
+        await inngest.send(inngestEvents);
+      } catch {
+        const errorLog = JSON.stringify([
+          createLog("error", "Inngest dispatch failed — retry this job to re-trigger."),
+        ]);
+        await db
+          .update(translationJobs)
+          .set({
+            status: "error",
+            error: "Inngest dispatch failed",
+            logsJson: errorLog,
+            updatedAt: new Date(),
+          })
+          .where(sql`${translationJobs.id} = ANY(${jobIds})`);
+        await db
+          .update(chapters)
+          .set({
+            status: sql`CASE WHEN ${chapters.translatedContent} IS NOT NULL THEN 'translated' ELSE 'raw' END`,
+            updatedAt: new Date(),
+          })
+          .where(sql`${chapters.id} = ANY(${chapterIdsToQueue})`);
+      }
+    }
+
+    return { queued, skipped };
   });
 
 export const cancelTranslationJob = createServerFn({ method: "POST" })
@@ -377,4 +547,31 @@ export const getTranslationJobStatus = createServerFn({ method: "GET" })
       usageJson: row.job.usageJson,
       model: providerConfig?.model || "AI Provider",
     };
+  });
+
+export const getTranslationJobsTerminalStatus = createServerFn({ method: "GET" })
+  .validator(getJobsTerminalStatusSchema)
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+
+    const rows = await db
+      .select({
+        id: translationJobs.id,
+        chapterId: translationJobs.chapterId,
+        status: translationJobs.status,
+        error: translationJobs.error,
+      })
+      .from(translationJobs)
+      .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+      .innerJoin(novels, eq(chapters.novelId, novels.id))
+      .where(
+        and(sql`${translationJobs.id} = ANY(${data.jobIds})`, eq(novels.userId, session.user.id)),
+      );
+
+    return rows.map((r) => ({
+      id: r.id,
+      chapterId: r.chapterId,
+      status: r.status,
+      error: r.error,
+    }));
   });

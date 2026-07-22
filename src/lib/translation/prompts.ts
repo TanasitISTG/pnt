@@ -18,7 +18,7 @@ export function buildSystemPrompt(
 
   if (glossaryBlock && glossaryBlock.trim().length > 0) {
     sections.push(
-      `## Terminology & Glossary\nUse the following official translations for names, terms, and places:\n${glossaryBlock.trim()}`,
+      `## Terminology & Glossary\nUse the following official translations for names, terms, and places. You MUST use the exact target wording shown — including spacing, punctuation, and capitalization — every time the source term appears:\n${glossaryBlock.trim()}`,
     );
   }
 
@@ -36,6 +36,10 @@ export function buildSystemPrompt(
       sections.push(`## Story Context\n${contextParts.join("\n\n")}`);
     }
   }
+
+  sections.push(
+    `## Paragraph Formatting\nThe text contains paragraph-break markers in the form: ||¶||\nYou MUST preserve every ||¶|| marker exactly as-is in your translation output, in the same position relative to the surrounding paragraphs. Do not add, remove, or reorder markers. Do not replace them with blank lines or any other separator. Output only the translation.`,
+  );
 
   if (customPrompt && customPrompt.trim().length > 0) {
     sections.push(`## Custom Instructions\n${customPrompt.trim()}`);

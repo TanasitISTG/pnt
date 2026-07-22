@@ -62,32 +62,32 @@ bun run inngest
 
 ### Commands
 
-| Task                   | Command                                      |
-| ---------------------- | -------------------------------------------- |
-| Dev server             | `bun dev`                                    |
-| Inngest dev            | `bun run inngest`                            |
-| Production build       | `bun run build`                              |
-| Lint / fix             | `bun run lint` / `bun run lint:fix`          |
-| Format / check         | `bun run format` / `bun run format:check`    |
-| Tests                  | `bun run test`                               |
-| DB generate / migrate  | `bun run db:generate` / `bun run db:migrate` |
-| Seed admin user        | `bun run seed:user`                          |
-| Regenerate route tree  | `bun run generate-routes`                    |
+| Task                  | Command                                      |
+| --------------------- | -------------------------------------------- |
+| Dev server            | `bun dev`                                    |
+| Inngest dev           | `bun run inngest`                            |
+| Production build      | `bun run build`                              |
+| Lint / fix            | `bun run lint` / `bun run lint:fix`          |
+| Format / check        | `bun run format` / `bun run format:check`    |
+| Tests                 | `bun run test`                               |
+| DB generate / migrate | `bun run db:generate` / `bun run db:migrate` |
+| Seed admin user       | `bun run seed:user`                          |
+| Regenerate route tree | `bun run generate-routes`                    |
 
 ## Environment Variables
 
-| Variable             | Required | Description                                                        |
-| -------------------- | -------- | ------------------------------------------------------------------ |
-| `DATABASE_URL`       | Yes      | Neon Postgres connection string (SSL required)                     |
-| `BETTER_AUTH_SECRET` | Yes      | 32-byte base64 random string                                       |
-| `BETTER_AUTH_URL`    | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`)     |
-| `APP_ENCRYPTION_KEY` | Yes      | 32-byte base64 random string for encrypting API keys at rest       |
-| `SEED_ADMIN_EMAIL`   | No       | Admin email for `bun run seed:user`                                |
-| `SEED_ADMIN_NAME`    | No       | Admin display name                                                 |
-| `SEED_ADMIN_PASSWORD`| No       | Admin password                                                     |
-| `INNGEST_DEV`        | No       | Set to `1` for local dev (SDK v4 defaults to cloud mode)           |
-| `INNGEST_EVENT_KEY`  | No       | Inngest Cloud event key (production only)                          |
-| `INNGEST_SIGNING_KEY`| No       | Inngest Cloud signing key (production only)                        |
+| Variable              | Required | Description                                                    |
+| --------------------- | -------- | -------------------------------------------------------------- |
+| `DATABASE_URL`        | Yes      | Neon Postgres connection string (SSL required)                 |
+| `BETTER_AUTH_SECRET`  | Yes      | 32-byte base64 random string                                   |
+| `BETTER_AUTH_URL`     | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`) |
+| `APP_ENCRYPTION_KEY`  | Yes      | 32-byte base64 random string for encrypting API keys at rest   |
+| `SEED_ADMIN_EMAIL`    | No       | Admin email for `bun run seed:user`                            |
+| `SEED_ADMIN_NAME`     | No       | Admin display name                                             |
+| `SEED_ADMIN_PASSWORD` | No       | Admin password                                                 |
+| `INNGEST_DEV`         | No       | Set to `1` for local dev (SDK v4 defaults to cloud mode)       |
+| `INNGEST_EVENT_KEY`   | No       | Inngest Cloud event key (production only)                      |
+| `INNGEST_SIGNING_KEY` | No       | Inngest Cloud signing key (production only)                    |
 
 ## Project Structure
 

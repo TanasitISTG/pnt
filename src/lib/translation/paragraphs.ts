@@ -32,3 +32,36 @@ export function alignParagraphs(rawText: string, translatedText: string): Aligne
   }
   return out;
 }
+
+export const PARAGRAPH_MARKER = "||¶||";
+
+/** Replace blank-line paragraph breaks with a unique marker the LLM must preserve. */
+export function injectParagraphMarkers(text: string): string {
+  return text.replace(/\n\s*\n+/g, `\n${PARAGRAPH_MARKER}\n`);
+}
+
+/** Restore markers back to blank-line breaks and normalize output. */
+export function restoreParagraphMarkers(text: string): string {
+  return normalizeTranslationOutput(text.replaceAll(PARAGRAPH_MARKER, "\n\n"));
+}
+
+/** Count how many paragraph markers appear in the text. */
+export function countParagraphMarkers(text: string): number {
+  let count = 0;
+  let pos = 0;
+  while ((pos = text.indexOf(PARAGRAPH_MARKER, pos)) !== -1) {
+    count++;
+    pos += PARAGRAPH_MARKER.length;
+  }
+  return count;
+}
+
+/** Normalize CRLF, duplicate blank lines, leading/trailing whitespace, chunk boundaries. */
+export function normalizeTranslationOutput(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .trim();
+}
