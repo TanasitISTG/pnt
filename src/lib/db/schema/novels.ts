@@ -7,6 +7,7 @@ import {
   integer,
   numeric,
   unique,
+  index,
   customType,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
@@ -42,27 +43,34 @@ const bytea = customType<{ data: Buffer; driverData: unknown }>({
   },
 });
 
-export const novels = pgTable("novels", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  originalTitle: text("original_title"),
-  author: text("author"),
-  description: text("description"),
-  cover: bytea("cover"),
-  coverMime: text("cover_mime"),
-  sourceLang: text("source_lang").notNull(),
-  targetLang: text("target_lang").notNull(),
-  customPrompt: text("custom_prompt"),
-  chunkSize: integer("chunk_size").notNull().default(2000),
-  contextTailLength: integer("context_tail_length").notNull().default(500),
-  // null = draft (admin-only); <= now = live for guests; > now = scheduled
-  publishedAt: timestamp("published_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const novels = pgTable(
+  "novels",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    originalTitle: text("original_title"),
+    author: text("author"),
+    description: text("description"),
+    cover: bytea("cover"),
+    coverMime: text("cover_mime"),
+    sourceLang: text("source_lang").notNull(),
+    targetLang: text("target_lang").notNull(),
+    customPrompt: text("custom_prompt"),
+    chunkSize: integer("chunk_size").notNull().default(2000),
+    contextTailLength: integer("context_tail_length").notNull().default(500),
+    // null = draft (admin-only); <= now = live for guests; > now = scheduled
+    publishedAt: timestamp("published_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("novels_published_at_idx").on(table.publishedAt),
+    index("novels_user_id_idx").on(table.userId),
+  ],
+);
 
 export const chapters = pgTable(
   "chapters",
@@ -85,7 +93,10 @@ export const chapters = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [unique("unique_novel_chapter_number").on(table.novelId, table.number)],
+  (table) => [
+    unique("unique_novel_chapter_number").on(table.novelId, table.number),
+    index("chapters_published_at_idx").on(table.publishedAt),
+  ],
 );
 
 export const novelsRelations = relations(novels, ({ one, many }) => ({

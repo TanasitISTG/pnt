@@ -12,7 +12,7 @@ const config = defineConfig({
   plugins: [
     devtools(),
     nitro({
-      rollupConfig: { external: [/^@sentry\//] },
+      preset: "vercel",
       routeRules: {
         "/**": {
           headers: {

@@ -1,0 +1,9 @@
+{
+  "buildCommand": "bun run predeploy && bun run build",
+  "installCommand": "bun install",
+  "functions": {
+    "api/inngest": {
+      "maxDuration": 300
+    }
+  }
+}
