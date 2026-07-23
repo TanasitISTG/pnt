@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
@@ -9,6 +10,7 @@ import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import appCss from "../styles/globals.css?url";
 
 import { getSession } from "../lib/auth.functions";
+import { initPostHog } from "../lib/posthog";
 import { NotFoundPage } from "@/components/not-found-page";
 
 import type { QueryClient } from "@tanstack/react-query";
@@ -84,6 +86,10 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    initPostHog();
+  }, []);
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
