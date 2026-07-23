@@ -15,6 +15,8 @@ const FIXTURE = `<!DOCTYPE html>
 <p>“？？？”</p><p>中年男人直接满脸的问号。</p>
 <!--PAGE 2-->
 <p>秦夜则是说道：&quot;办法不是没有。&quot;</p>
+<p>“请记住我的名字！”</p>
+<p>请记住本书首发域名：quanben.io</p>
 <p>  </p>
 </div>
 </div>
@@ -31,7 +33,7 @@ describe("parseChapter (quanben)", () => {
     expect(r.number).toBe(30);
     expect(r.title).toBe("秦大师真相了");
     expect(r.content).toBe(
-      '“？？？”\n\n中年男人直接满脸的问号。\n\n秦夜则是说道："办法不是没有。"',
+      '“？？？”\n\n中年男人直接满脸的问号。\n\n秦夜则是说道："办法不是没有。"\n\n“请记住我的名字！”',
     );
     expect(r.nextUrl).toBe("https://www.quanben.io/n/some-novel/31.html");
   });

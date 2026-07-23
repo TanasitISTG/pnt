@@ -42,6 +42,8 @@ function decodeEntities(text: string): string {
 
 const stripTags = (html: string) => html.replace(/<[^>]*>/g, "");
 
+const BOILERPLATE_RE = /(请记住.{0,12}(域名|网址|本站|本书)|全本小说|手机阅读|quanben)/i;
+
 // quanben.io: server-rendered, title in h1.headline ("第030章 <title>"),
 // paragraphs as plain <p> between div#content and div.list_page (multi-page
 // chapters are inlined, separated by <!--PAGE N--> comments).
@@ -62,7 +64,7 @@ function parseQuanben(html: string, url: string): ScrapedChapter {
 
   const paragraphs = [...html.slice(start, end).matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)]
     .map((m) => decodeEntities(stripTags(m[1])).trim())
-    .filter((p) => p.length > 0);
+    .filter((p) => p.length > 0 && !BOILERPLATE_RE.test(p));
   if (paragraphs.length === 0) throw new Error("Chapter content is empty");
 
   const next = /href="([^"]+)"[^>]*>\s*下一页\s*</.exec(html);

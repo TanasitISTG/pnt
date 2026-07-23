@@ -37,13 +37,13 @@ export function buildSystemPrompt(
     }
   }
 
-  sections.push(
-    `## Paragraph Formatting\nThe text contains paragraph-break markers in the form: ||¶||\nYou MUST preserve every ||¶|| marker exactly as-is in your translation output, in the same position relative to the surrounding paragraphs. Do not add, remove, or reorder markers. Do not replace them with blank lines or any other separator. Output only the translation.`,
-  );
-
   if (customPrompt && customPrompt.trim().length > 0) {
     sections.push(`## Custom Instructions\n${customPrompt.trim()}`);
   }
+
+  sections.push(
+    `## Paragraph Formatting\nThe text contains paragraph-break markers in the form: ||¶||\nYou MUST preserve every ||¶|| marker exactly as-is in your translation output, in the same position relative to the surrounding paragraphs. Do not add, remove, or reorder markers. Do not replace them with blank lines or any other separator. Output only the translation.`,
+  );
 
   return sections.join("\n\n");
 }
@@ -99,6 +99,7 @@ function getBaseInstruction(pair: LanguagePair): string {
         "You are a professional literary translator specializing in English to Thai novel translations.",
         "Translate the following English web novel excerpt into fluent, expressive, natural Thai appropriate for web novels.",
         "Maintain character voices, tone, emotional nuance, and honorific forms.",
+        "Keep each named character's Thai pronoun and speech level consistent with the Story Context and preceding translation.",
         "Do not summarize or skip content. Translate accurately paragraph by paragraph.",
         COMPLETENESS_RULE,
       ].join("\n");
@@ -115,6 +116,7 @@ function getBaseInstruction(pair: LanguagePair): string {
         "You are a professional literary translator specializing in Chinese web novel to Thai translations.",
         "Translate the following Chinese web novel excerpt into expressive, natural Thai tailored for novel readers.",
         "Maintain appropriate Thai honorifics and prose style suited for Chinese fantasy/romance web novels.",
+        "Keep each named character's Thai pronoun and speech level consistent with the Story Context and preceding translation.",
         "Do not summarize or skip content. Translate accurately paragraph by paragraph.",
         COMPLETENESS_RULE,
       ].join("\n");

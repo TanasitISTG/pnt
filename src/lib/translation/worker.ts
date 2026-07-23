@@ -208,15 +208,17 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
       promptTokens += markerFix.usage?.prompt_tokens || 0;
       completionTokens += markerFix.usage?.completion_tokens || 0;
       const fixed = markerFix.choices[0]?.message?.content || "";
-      if (fixed.trim()) {
+      const fixedMarkers = countParagraphMarkers(fixed);
+      if (fixed.trim() && fixedMarkers === expectedMarkers) {
         translation = fixed;
-        const fixedMarkers = countParagraphMarkers(fixed);
+        logs.push(
+          createLog("success", `Chunk ${i + 1}/${chunkList.length} marker count corrected.`),
+        );
+      } else if (fixed.trim()) {
         logs.push(
           createLog(
-            fixedMarkers === expectedMarkers ? "success" : "warn",
-            fixedMarkers === expectedMarkers
-              ? `Chunk ${i + 1}/${chunkList.length} marker count corrected.`
-              : `Chunk ${i + 1}/${chunkList.length} marker count still mismatched (${fixedMarkers}/${expectedMarkers}) — keeping anyway.`,
+            "warn",
+            `Chunk ${i + 1}/${chunkList.length} marker fix didn't match (${fixedMarkers}/${expectedMarkers}) — keeping original.`,
           ),
         );
       }
@@ -328,8 +330,8 @@ export async function finalizeJob(jobId: string): Promise<void> {
   const fullTranslation = normalizeTranslationOutput(
     chunkList.map((c) => c.translation || "").join("\n\n"),
   );
-  const totalPromptTokens = chunkList.reduce((acc, c) => acc + (c.promptTokens || 0), 0);
-  const totalCompletionTokens = chunkList.reduce((acc, c) => acc + (c.completionTokens || 0), 0);
+  let totalPromptTokens = chunkList.reduce((acc, c) => acc + (c.promptTokens || 0), 0);
+  let totalCompletionTokens = chunkList.reduce((acc, c) => acc + (c.completionTokens || 0), 0);
 
   await db
     .update(chapters)
@@ -342,17 +344,19 @@ export async function finalizeJob(jobId: string): Promise<void> {
     .where(eq(chapters.id, chapter.id));
 
   // Translate chapter title (cheap, non-fatal)
-  const translatedTitle = await translateChapterTitle(
+  const titleRes = await translateChapterTitle(
     providerConfig,
     `${novel.sourceLang}->${novel.targetLang}`,
     chapter.title,
   );
-  if (translatedTitle) {
+  totalPromptTokens += titleRes.promptTokens;
+  totalCompletionTokens += titleRes.completionTokens;
+  if (titleRes.translated) {
     await db
       .update(chapters)
-      .set({ translatedTitle, updatedAt: new Date() })
+      .set({ translatedTitle: titleRes.translated, updatedAt: new Date() })
       .where(eq(chapters.id, chapter.id));
-    logs.push(createLog("success", `Title translated: "${translatedTitle}"`));
+    logs.push(createLog("success", `Title translated: "${titleRes.translated}"`));
   } else {
     logs.push(createLog("warn", "Title translation skipped — keeping raw title."));
   }
@@ -372,10 +376,16 @@ export async function finalizeJob(jobId: string): Promise<void> {
         { role: "system", content: summarySystemPrompt },
         {
           role: "user",
-          content: `Please summarize this chapter:\n\n${fullTranslation.slice(0, 10000)}`,
+          content: `Please summarize this chapter:\n\n${
+            fullTranslation.length > 10000
+              ? `${fullTranslation.slice(0, 6000)}\n[...]\n${fullTranslation.slice(-4000)}`
+              : fullTranslation
+          }`,
         },
       ],
     });
+    totalPromptTokens += summaryCompletion.usage?.prompt_tokens || 0;
+    totalCompletionTokens += summaryCompletion.usage?.completion_tokens || 0;
     freshSummary = summaryCompletion.choices[0]?.message?.content || null;
     const summaryTime = ((Date.now() - summaryStartTime) / 1000).toFixed(1);
     logs.push(createLog("success", `Summary generated in ${summaryTime}s.`));
@@ -399,10 +409,8 @@ export async function finalizeJob(jobId: string): Promise<void> {
       .from(glossaryTerms)
       .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved")));
 
-    const rawSourceExcerpt = chunkList
-      .map((c) => c.text || "")
-      .join("\n\n")
-      .slice(0, 4000);
+    const fullRawSource = chunkList.map((c) => c.text || "").join("\n\n");
+    const rawSourceExcerpt = fullRawSource.slice(0, 4000);
     const translatedExcerpt = fullTranslation.slice(0, 8000);
 
     const effectiveSummary = freshSummary || chapter.summary || undefined;
@@ -432,6 +440,8 @@ export async function finalizeJob(jobId: string): Promise<void> {
         ],
         response_format: { type: "json_object" },
       });
+      totalPromptTokens += suggestCompletion.usage?.prompt_tokens || 0;
+      totalCompletionTokens += suggestCompletion.usage?.completion_tokens || 0;
       suggestionContent = suggestCompletion.choices[0]?.message?.content || "";
     } catch {
       const suggestCompletion = await providerConfig.client.chat.completions.create({
@@ -442,6 +452,8 @@ export async function finalizeJob(jobId: string): Promise<void> {
           { role: "user", content: userMessage },
         ],
       });
+      totalPromptTokens += suggestCompletion.usage?.prompt_tokens || 0;
+      totalCompletionTokens += suggestCompletion.usage?.completion_tokens || 0;
       suggestionContent = suggestCompletion.choices[0]?.message?.content || "";
     }
 
@@ -483,6 +495,8 @@ export async function finalizeJob(jobId: string): Promise<void> {
             ],
             response_format: { type: "json_object" },
           });
+          totalPromptTokens += reviewCompletion.usage?.prompt_tokens || 0;
+          totalCompletionTokens += reviewCompletion.usage?.completion_tokens || 0;
           reviewContent = reviewCompletion.choices[0]?.message?.content || "";
         } catch {
           const reviewCompletion = await providerConfig.client.chat.completions.create({
@@ -493,6 +507,8 @@ export async function finalizeJob(jobId: string): Promise<void> {
               { role: "user", content: reviewUserMessage },
             ],
           });
+          totalPromptTokens += reviewCompletion.usage?.prompt_tokens || 0;
+          totalCompletionTokens += reviewCompletion.usage?.completion_tokens || 0;
           reviewContent = reviewCompletion.choices[0]?.message?.content || "";
         }
 
@@ -515,12 +531,29 @@ export async function finalizeJob(jobId: string): Promise<void> {
 
     for (const st of suggestedTerms) {
       const review = reviewBySource.get(st.source);
+      const finalTarget =
+        review?.target && review.target.trim().length > 0 ? review.target : st.target;
 
-      // Check for existing term (duplicate)
+      // Validity guard: non-empty source, non-empty target, source !== target (case/whitespace-insensitive)
+      if (
+        !st.source.trim().length ||
+        !finalTarget.trim().length ||
+        finalTarget.trim().toLowerCase() === st.source.trim().toLowerCase()
+      ) {
+        rejectedCount++;
+        continue;
+      }
+
+      // Check for existing term (duplicate case/whitespace-insensitive)
       const [dup] = await db
         .select({ id: glossaryTerms.id, status: glossaryTerms.status })
         .from(glossaryTerms)
-        .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.source, st.source)))
+        .where(
+          and(
+            eq(glossaryTerms.novelId, novel.id),
+            sql`lower(trim(${glossaryTerms.source})) = lower(trim(${st.source}))`,
+          ),
+        )
         .limit(1);
 
       if (dup) {
@@ -541,18 +574,12 @@ export async function finalizeJob(jobId: string): Promise<void> {
       }
 
       // High-confidence approve with valid evidence → insert as approved
-      // Use the review's corrected target if available, otherwise the original suggestion
-      const finalTarget =
-        review?.target && review.target.trim().length > 0 ? review.target : st.target;
       // Deterministic validation: source must appear in raw text, target in translation
-      const sourceInRaw = rawSourceExcerpt.includes(st.source);
-      const targetInTranslation = translatedExcerpt.includes(finalTarget);
+      const sourceInRaw = fullRawSource.includes(st.source);
+      const targetInTranslation = fullTranslation.includes(finalTarget);
       if (
         review?.action === "approve" &&
         review.confidence === "high" &&
-        st.source.trim().length > 0 &&
-        finalTarget.trim().length > 0 &&
-        finalTarget !== st.source &&
         sourceInRaw &&
         targetInTranslation
       ) {

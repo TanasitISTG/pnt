@@ -52,10 +52,13 @@ describe("prompts module", () => {
     expect(prompt).toContain("He looked up at the main hall");
   });
 
-  it("includes custom instructions when provided", () => {
+  it("includes custom instructions when provided and places them before Paragraph Formatting", () => {
     const prompt = buildSystemPrompt("en->th", null, null, "Use informal pronouns for Lin Fan.");
     expect(prompt).toContain("## Custom Instructions");
     expect(prompt).toContain("Use informal pronouns for Lin Fan");
+    expect(prompt.indexOf("## Custom Instructions")).toBeLessThan(
+      prompt.indexOf("## Paragraph Formatting"),
+    );
   });
 
   it("demands complete translation including brackets and names", () => {

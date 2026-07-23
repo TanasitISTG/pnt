@@ -4,14 +4,14 @@ import type { ProviderClientConfig } from "./provider-client";
 import { buildTitlePrompt } from "./prompts";
 
 /**
- * Translates a single chapter title. Returns null on any failure or empty
- * output — callers treat null as "keep the raw title".
+ * Translates a single chapter title. Returns { translated, promptTokens, completionTokens },
+ * where translated is null on any failure or empty output.
  */
 export async function translateChapterTitle(
   providerConfig: ProviderClientConfig,
   pair: string,
   title: string,
-): Promise<string | null> {
+): Promise<{ translated: string | null; promptTokens: number; completionTokens: number }> {
   try {
     const completion = await providerConfig.client.chat.completions.create({
       model: providerConfig.model,
@@ -21,9 +21,11 @@ export async function translateChapterTitle(
         { role: "user", content: title },
       ],
     });
-    const translated = completion.choices[0]?.message?.content?.trim();
-    return translated || null;
+    const promptTokens = completion.usage?.prompt_tokens || 0;
+    const completionTokens = completion.usage?.completion_tokens || 0;
+    const translated = completion.choices[0]?.message?.content?.trim() || null;
+    return { translated, promptTokens, completionTokens };
   } catch {
-    return null;
+    return { translated: null, promptTokens: 0, completionTokens: 0 };
   }
 }

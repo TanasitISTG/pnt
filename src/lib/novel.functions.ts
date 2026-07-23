@@ -414,7 +414,7 @@ export const translateMissingTitles = createServerFn({ method: "POST" })
 
     let translated = 0;
     for (const ch of missing) {
-      const title = await translateChapterTitle(providerConfig, pair, ch.title);
+      const { translated: title } = await translateChapterTitle(providerConfig, pair, ch.title);
       if (title) {
         await db
           .update(chapters)
