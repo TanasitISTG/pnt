@@ -30,11 +30,12 @@ export function initPostHog() {
     capture_exceptions: consent === "granted",
     opt_out_capturing_by_default: consent !== "granted",
     persistence: consent === "granted" ? "localStorage+cookie" : "memory",
-    // Disable features that lazy-load sub-scripts from us-assets.i.posthog.com —
-    // a single-admin translation app doesn't need them, and the sub-scripts trip
-    // CORS errors on networks blocking that CDN (Firefox tracking protection).
-    autocapture: false,
-    disable_session_recording: true,
+    // PostHog Cloud project has autocapture + session recording enabled in the
+    // dashboard; leaving them on per user request. The sub-scripts the SDK
+    // lazily loads from us-assets.i.posthog.com may trip CORS errors on networks
+    // with third-party tracker blocking (Firefox ETP) — out of app control.
+    autocapture: true,
+    disable_session_recording: false,
   });
 
   if (consent === "denied") {
