@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 
-import { parseChapter, chapterUrlFor, findSource } from "@/lib/scrape";
+import {
+  parseChapter,
+  chapterUrlFor,
+  findSource,
+  isPrivateIp,
+  assertPublicHost,
+} from "@/lib/scrape";
 
 const URL = "https://www.quanben.io/n/some-novel/30.html";
 
@@ -14,7 +20,7 @@ const FIXTURE = `<!DOCTYPE html>
 <span id="ad"></span>
 <p>“？？？”</p><p>中年男人直接满脸的问号。</p>
 <!--PAGE 2-->
-<p>秦夜则是说道：&quot;办法不是没有。&quot;</p>
+<p>秦夜则是说道："办法不是没有。"</p>
 <p>“请记住我的名字！”</p>
 <p>请记住本书首发域名：quanben.io</p>
 <p>  </p>
@@ -56,5 +62,35 @@ describe("findSource", () => {
 describe("chapterUrlFor", () => {
   it("swaps the chapter number", () => {
     expect(chapterUrlFor(URL, 31)).toBe("https://www.quanben.io/n/some-novel/31.html");
+  });
+});
+
+describe("isPrivateIp", () => {
+  it("identifies private and loopback addresses", () => {
+    expect(isPrivateIp("127.0.0.1")).toBe(true);
+    expect(isPrivateIp("localhost")).toBe(true);
+    expect(isPrivateIp("::1")).toBe(true);
+    expect(isPrivateIp("169.254.169.254")).toBe(true);
+    expect(isPrivateIp("10.0.0.1")).toBe(true);
+    expect(isPrivateIp("192.168.1.1")).toBe(true);
+    expect(isPrivateIp("172.16.0.1")).toBe(true);
+    expect(isPrivateIp("172.31.255.255")).toBe(true);
+
+    expect(isPrivateIp("8.8.8.8")).toBe(false);
+    expect(isPrivateIp("1.1.1.1")).toBe(false);
+  });
+});
+
+describe("assertPublicHost", () => {
+  it("rejects private hostnames, unsupported sites, and non-https URLs", async () => {
+    await expect(assertPublicHost("https://localhost/n/x/1.html")).rejects.toThrow(
+      "Unsupported site",
+    );
+    await expect(assertPublicHost("http://www.quanben.io/n/some-novel/1.html")).rejects.toThrow(
+      "https",
+    );
+    await expect(
+      assertPublicHost("https://www.quanben.io/n/some-novel/1.html"),
+    ).resolves.toBeUndefined();
   });
 });

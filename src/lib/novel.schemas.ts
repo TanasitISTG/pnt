@@ -4,7 +4,7 @@ export const sourceLangSchema = z.enum(["en", "zh"]);
 export const targetLangSchema = z.enum(["en", "th"]);
 export const coverMimeSchema = z.enum(["image/jpeg", "image/png", "image/webp"]);
 
-export const createNovelSchema = z.object({
+const baseNovelFields = {
   title: z.string().min(1, "Title is required").max(500),
   originalTitle: z.string().max(500).optional().nullable(),
   author: z.string().max(200).optional().nullable(),
@@ -14,14 +14,28 @@ export const createNovelSchema = z.object({
   customPrompt: z.string().max(10000).optional().nullable(),
   chunkSize: z.number().int().min(500).max(10000).optional().default(2000),
   contextTailLength: z.number().int().min(100).max(2000).optional().default(500),
-  cover: z.string().max(4_000_000).optional().nullable(), // base64 (~2.7MB file max)
+  cover: z.string().max(1_400_000).optional().nullable(), // base64 (~1MB file max)
   coverMime: coverMimeSchema.optional().nullable(),
-});
+};
 
-export const updateNovelSchema = createNovelSchema.partial().extend({
-  novelId: z.string().min(1),
-  removeCover: z.boolean().optional(),
-});
+export const createNovelSchema = z
+  .object(baseNovelFields)
+  .refine((data) => !data.cover || !!data.coverMime, {
+    message: "Cover MIME type is required when cover image is provided",
+    path: ["coverMime"],
+  });
+
+export const updateNovelSchema = z
+  .object(baseNovelFields)
+  .partial()
+  .extend({
+    novelId: z.string().min(1),
+    removeCover: z.boolean().optional(),
+  })
+  .refine((data) => !data.cover || !!data.coverMime, {
+    message: "Cover MIME type is required when cover image is provided",
+    path: ["coverMime"],
+  });
 
 export const createChapterSchema = z.object({
   novelId: z.string().min(1),

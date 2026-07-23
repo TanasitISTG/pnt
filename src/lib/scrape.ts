@@ -1,6 +1,5 @@
 // Chapter scraping: parse raw chapter pages from supported source sites.
 // One entry per supported site — add a new site by adding one entry to SOURCES.
-// Pure module (no server-only imports): safe to import from client components.
 
 export interface ScrapedChapter {
   number: number;
@@ -42,7 +41,7 @@ function decodeEntities(text: string): string {
 
 const stripTags = (html: string) => html.replace(/<[^>]*>/g, "");
 
-const BOILERPLATE_RE = /(请记住.{0,12}(域名|网址|本站|本书)|全本小说|手机阅读|quanben)/i;
+const BOILERPLATE_RE = /(请记住.{0,12}(域名|网址|本书|本站)|全本小说|手机阅读|quanben)/i;
 
 // quanben.io: server-rendered, title in h1.headline ("第030章 <title>"),
 // paragraphs as plain <p> between div#content and div.list_page (multi-page
@@ -98,6 +97,66 @@ export function findSource(url: string): Source {
     throw new Error(`Unsupported site: ${host}. Supported: ${supported}`);
   }
   return source;
+}
+
+// ponytail: host whitelist + redirect:error makes this defense-in-depth; required when adding a SOURCE on a DNS-rebinddable host.
+export function isPrivateIp(ip: string): boolean {
+  const normalized = ip.trim().toLowerCase();
+  if (
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "::" ||
+    normalized === "0.0.0.0"
+  ) {
+    return true;
+  }
+  if (
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    normalized.startsWith("fe8") ||
+    normalized.startsWith("fe9") ||
+    normalized.startsWith("fea") ||
+    normalized.startsWith("feb")
+  ) {
+    return true;
+  }
+
+  const parts = normalized.split(".").map(Number);
+  if (parts.length === 4 && parts.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
+    const [a, b] = parts;
+    if (a === 127 || a === 10 || a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+  }
+  return false;
+}
+
+export async function assertPublicHost(url: string): Promise<void> {
+  findSource(url); // checks https: and host whitelist
+  const hostname = new URL(url).hostname;
+  if (isPrivateIp(hostname)) {
+    throw new Error(`Private or local host access blocked: ${hostname}`);
+  }
+
+  if (typeof window === "undefined") {
+    try {
+      const dns = await import("node:dns/promises");
+      const res = await dns.lookup(hostname, { all: true });
+      for (const entry of res) {
+        if (isPrivateIp(entry.address)) {
+          throw new Error(`Private IP address blocked: ${entry.address}`);
+        }
+      }
+    } catch (err: any) {
+      // Fail-closed for SSRF defense-in-depth: any DNS failure rejects the fetch
+      // (mitigated by upstream host whitelist, but strict mode is safer).
+      if (err.message?.includes("blocked")) throw err;
+      throw new Error(`DNS resolution failed for ${hostname}: ${err.message ?? err}`, {
+        cause: err,
+      });
+    }
+  }
 }
 
 export function parseChapter(html: string, url: string): ScrapedChapter {
