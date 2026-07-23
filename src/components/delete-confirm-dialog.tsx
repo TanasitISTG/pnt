@@ -1,13 +1,4 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface DeleteConfirmDialogProps {
   title: string;
@@ -27,26 +18,16 @@ export function DeleteConfirmDialog({
   pending = false,
 }: DeleteConfirmDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="text-destructive font-semibold">{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" disabled={pending} />}>Cancel</DialogClose>
-          <Button
-            variant="destructive"
-            onClick={(e) => {
-              e.preventDefault();
-              onConfirm();
-            }}
-            disabled={pending}
-          >
-            {pending ? "Deleting..." : "Delete"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      title={title}
+      description={description}
+      titleClassName="text-destructive font-semibold"
+      confirmText={pending ? "Deleting..." : "Delete"}
+      variant="destructive"
+      open={open}
+      onOpenChange={onOpenChange}
+      onConfirm={onConfirm}
+      pending={pending}
+    />
   );
 }

@@ -2,6 +2,7 @@ import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/reac
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { ThemeProvider } from "next-themes";
+import { Toaster } from "@/components/ui/sonner";
 
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
@@ -70,6 +71,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
         <TanStackDevtools
           config={{

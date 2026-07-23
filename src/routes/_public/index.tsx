@@ -4,6 +4,7 @@ import { BookOpen, Plus } from "lucide-react";
 
 import { listNovels } from "@/lib/novel.functions";
 import { NovelCard } from "@/components/novel-card";
+import { QueryErrorState } from "@/components/query-error-state";
 import { Button } from "@/components/ui/button";
 
 const novelsQueryOptions = queryOptions({
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/_public/")({
 
 function LibraryPage() {
   const { user } = Route.useRouteContext();
-  const { data: novels = [] } = useQuery(novelsQueryOptions);
+  const { data: novels = [], isError, error, refetch } = useQuery(novelsQueryOptions);
 
   return (
     <div className="flex flex-col gap-8">
@@ -41,7 +42,14 @@ function LibraryPage() {
         )}
       </div>
 
-      {novels.length === 0 ? (
+      {isError ? (
+        <QueryErrorState
+          title="Failed to load library"
+          error={error}
+          onRetry={() => refetch()}
+          className="min-h-[45vh]"
+        />
+      ) : novels.length === 0 ? (
         <div className="flex min-h-[45vh] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
           <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
             <BookOpen className="size-6 text-muted-foreground" />

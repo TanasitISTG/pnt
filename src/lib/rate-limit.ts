@@ -16,7 +16,7 @@ export class RateLimitError extends Error {
 export async function checkRateLimit(bucket: string, limit: number, windowMs = 60_000) {
   try {
     const headers = getRequestHeaders();
-    const ip = headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const ip = headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
     const key = `${bucket}:${ip}`;
 
     const result = await db.execute(sql`

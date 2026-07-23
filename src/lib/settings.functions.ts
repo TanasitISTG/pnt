@@ -34,7 +34,7 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
       isConfigured: false,
       baseUrl: "https://api.openai.com/v1",
       model: "gpt-4o",
-      temperature: 0.7,
+      temperature: 0.3,
       apiKeyMasked: "",
       hasApiKey: false,
       inputPricePer1M: null,

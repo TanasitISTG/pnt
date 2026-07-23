@@ -1,6 +1,7 @@
 export interface ReaderProgress {
   lastChapterId: string | null;
   readChapterIds: string[];
+  scrollFraction?: number;
 }
 
 const STORAGE_KEY = "pnt-reader-progress";
@@ -46,7 +47,14 @@ export function getReaderProgress(novelId: string): ReaderProgress {
       ? novelProgress.readChapterIds.filter((id: unknown): id is string => typeof id === "string")
       : [];
 
-    return { lastChapterId, readChapterIds };
+    const scrollFraction =
+      typeof novelProgress.scrollFraction === "number" &&
+      !isNaN(novelProgress.scrollFraction) &&
+      novelProgress.scrollFraction > 0
+        ? novelProgress.scrollFraction
+        : undefined;
+
+    return { lastChapterId, readChapterIds, scrollFraction };
   } catch {
     return { lastChapterId: null, readChapterIds: [] };
   }
@@ -66,6 +74,9 @@ export function markChapterRead(novelId: string, chapterId: string): ReaderProgr
     const updated: ReaderProgress = {
       lastChapterId: chapterId,
       readChapterIds: Array.from(readSet),
+      ...(current.lastChapterId === chapterId && current.scrollFraction !== undefined
+        ? { scrollFraction: current.scrollFraction }
+        : {}),
     };
 
     const raw = storage.getItem(STORAGE_KEY);
@@ -86,5 +97,36 @@ export function markChapterRead(novelId: string, chapterId: string): ReaderProgr
     return updated;
   } catch {
     return { lastChapterId: chapterId, readChapterIds: [chapterId] };
+  }
+}
+
+export function saveScrollPosition(novelId: string, fraction: number): void {
+  const storage = getStorage();
+  if (!storage) return;
+
+  try {
+    const current = getReaderProgress(novelId);
+    const updated: ReaderProgress = {
+      ...current,
+      scrollFraction: Math.max(0, Math.min(1, fraction)),
+    };
+
+    const raw = storage.getItem(STORAGE_KEY);
+    let allData: Record<string, unknown> = {};
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === "object" && parsed !== null) {
+          allData = parsed;
+        }
+      } catch {
+        allData = {};
+      }
+    }
+
+    allData[novelId] = updated;
+    storage.setItem(STORAGE_KEY, JSON.stringify(allData));
+  } catch {
+    // Ignore storage write errors
   }
 }

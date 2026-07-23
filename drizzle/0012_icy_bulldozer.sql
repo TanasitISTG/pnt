@@ -1,0 +1,1 @@
+ALTER TABLE "provider_settings" ALTER COLUMN "temperature" SET DEFAULT 0.3;

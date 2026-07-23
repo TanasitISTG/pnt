@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import { NovelCover } from "@/components/novel-cover";
 import { useTranslationJob } from "@/lib/translation/use-translation-job";
 import { JobLogsDialog } from "@/components/job-logs-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { QueryErrorState } from "@/components/query-error-state";
 import { getReaderProgress, type ReaderProgress } from "@/lib/reader-progress";
 
 import {
@@ -143,8 +145,18 @@ function NovelDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: novel } = useQuery(novelQueryOptions(novelId));
-  const { data: chapters = [] } = useQuery(chaptersQueryOptions(novelId));
+  const {
+    data: novel,
+    isError: isNovelError,
+    error: novelError,
+    refetch: refetchNovel,
+  } = useQuery(novelQueryOptions(novelId));
+  const {
+    data: chapters = [],
+    isError: isChaptersError,
+    error: chaptersError,
+    refetch: refetchChapters,
+  } = useQuery(chaptersQueryOptions(novelId));
   const { data: glossaryStats } = useQuery({
     ...glossaryStatsQueryOptions(novelId),
     enabled: !!user,
@@ -155,6 +167,7 @@ function NovelDetailPage() {
     lastChapterId: null,
     readChapterIds: [],
   });
+  const [retranslateChapterId, setRetranslateChapterId] = useState<string | null>(null);
 
   useEffect(() => {
     setReaderProgress(getReaderProgress(novelId));
@@ -622,6 +635,20 @@ function NovelDetailPage() {
     return Math.round((translatedCount / chapters.length) * 100);
   }, [chapters]);
 
+  if (isNovelError || isChaptersError) {
+    return (
+      <QueryErrorState
+        title="Failed to load novel"
+        error={novelError || chaptersError}
+        onRetry={() => {
+          refetchNovel();
+          refetchChapters();
+        }}
+        className="min-h-[40vh] my-12"
+      />
+    );
+  }
+
   if (!novel) {
     return (
       <div className="text-center py-12">
@@ -759,7 +786,13 @@ function NovelDetailPage() {
                   variant="ghost"
                   size="icon"
                   className="size-8 text-primary hover:text-primary"
-                  onClick={() => startTranslate(chapter.id)}
+                  onClick={() => {
+                    if (chapter.editedAt) {
+                      setRetranslateChapterId(chapter.id);
+                    } else {
+                      startTranslate(chapter.id);
+                    }
+                  }}
                   aria-label={
                     chapter.status === "translated" ? "Re-translate chapter" : "Translate chapter"
                   }
@@ -1456,6 +1489,20 @@ function NovelDetailPage() {
         chapterId={logChapterId}
         open={logChapterId !== null}
         onOpenChange={(open) => !open && setLogChapterId(null)}
+      />
+
+      <ConfirmDialog
+        title="Overwrite Edited Translation?"
+        description="This chapter was manually edited. Re-translating will overwrite your manual changes with a new machine translation."
+        confirmText="Overwrite & Translate"
+        open={retranslateChapterId !== null}
+        onOpenChange={(open) => !open && setRetranslateChapterId(null)}
+        onConfirm={() => {
+          if (retranslateChapterId) {
+            startTranslate(retranslateChapterId);
+            setRetranslateChapterId(null);
+          }
+        }}
       />
     </div>
   );

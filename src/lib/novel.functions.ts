@@ -230,6 +230,7 @@ export const listChapters = createServerFn({ method: "GET" })
         status: chapters.status,
         publishedAt: chapters.publishedAt,
         translatedAt: chapters.translatedAt,
+        editedAt: chapters.editedAt,
         createdAt: chapters.createdAt,
         updatedAt: chapters.updatedAt,
       })

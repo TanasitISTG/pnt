@@ -122,7 +122,30 @@ export const startTranslationJob = createServerFn({ method: "POST" })
       .where(eq(chapters.id, chapter.id));
 
     // Kick off the Inngest run — chunk 1 starts within seconds.
-    await inngest.send({ name: "translation/job.requested", data: { jobId, runKey: nanoid() } });
+    try {
+      await inngest.send({ name: "translation/job.requested", data: { jobId, runKey: nanoid() } });
+    } catch {
+      const errorLogs = JSON.stringify([
+        ...logs,
+        createLog("error", "Inngest dispatch failed — retry this job to re-trigger."),
+      ]);
+      await db
+        .update(translationJobs)
+        .set({
+          status: "error",
+          error: "Inngest dispatch failed",
+          logsJson: errorLogs,
+          updatedAt: new Date(),
+        })
+        .where(eq(translationJobs.id, jobId));
+      await db
+        .update(chapters)
+        .set({
+          status: sql`CASE WHEN ${chapters.translatedContent} IS NOT NULL THEN 'translated' ELSE 'raw' END`,
+          updatedAt: new Date(),
+        })
+        .where(eq(chapters.id, chapter.id));
+    }
 
     return { jobId, totalChunks: chunkInfos.length, logs };
   });
@@ -368,7 +391,7 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
     const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
     logs.push(createLog("info", "Job retry initiated. Resuming from last completed chunk..."));
 
-    await db
+    const updated = await db
       .update(translationJobs)
       .set({
         status: "pending",
@@ -377,7 +400,17 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
         lockedUntil: null,
         updatedAt: new Date(),
       })
-      .where(eq(translationJobs.id, row.job.id));
+      .where(
+        and(
+          eq(translationJobs.id, row.job.id),
+          sql`${translationJobs.status} IN ('error', 'cancelled')`,
+        ),
+      )
+      .returning({ id: translationJobs.id });
+
+    if (updated.length === 0) {
+      throw new Error("Job is not retryable");
+    }
 
     await db
       .update(chapters)

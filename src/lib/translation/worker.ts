@@ -170,6 +170,20 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
 
   const elapsedMs = Date.now() - startTime;
   let translation = completion.choices[0]?.message?.content || "";
+
+  if (!translation.trim()) {
+    currentChunk.error = "Empty completion";
+    chunkList[i] = currentChunk;
+    logs.push(
+      createLog("warn", `Chunk ${i + 1}/${chunkList.length} failed: ${currentChunk.error}`),
+    );
+    await saveJob(job.id, {
+      chunksJson: JSON.stringify(chunkList),
+      logsJson: JSON.stringify(logs),
+    });
+    throw new Error("Empty completion");
+  }
+
   let promptTokens = completion.usage?.prompt_tokens || 0;
   let completionTokens = completion.usage?.completion_tokens || 0;
 

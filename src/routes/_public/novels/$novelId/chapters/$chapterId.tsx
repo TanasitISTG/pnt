@@ -20,7 +20,9 @@ import {
 import { toast } from "sonner";
 
 import { getChapter, listChapters, updateChapterTranslation } from "@/lib/novel.functions";
-import { markChapterRead } from "@/lib/reader-progress";
+import { getReaderProgress, markChapterRead, saveScrollPosition } from "@/lib/reader-progress";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { QueryErrorState } from "@/components/query-error-state";
 import { useTranslationJob } from "@/lib/translation/use-translation-job";
 import { alignParagraphs, splitParagraphs } from "@/lib/translation/paragraphs";
 import {
@@ -88,8 +90,21 @@ function ReaderPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: chapter } = useQuery(chapterQueryOptions(chapterId));
-  const { data: chapters = [] } = useQuery(chaptersQueryOptions(novelId));
+  const {
+    data: chapter,
+    isError: isChapterError,
+    error: chapterError,
+    refetch: refetchChapter,
+  } = useQuery(chapterQueryOptions(chapterId));
+  const {
+    data: chapters = [],
+    isError: isChaptersError,
+    error: chaptersError,
+    refetch: refetchChapters,
+  } = useQuery(chaptersQueryOptions(novelId));
+
+  const restoredChapterRef = useRef<string | null>(null);
+  const isRestoringRef = useRef(false);
 
   useEffect(() => {
     if (chapter?.id === chapterId) {
@@ -97,11 +112,107 @@ function ReaderPage() {
     }
   }, [novelId, chapterId, chapter?.id]);
 
+  useEffect(() => {
+    if (!chapter) return;
+    if (restoredChapterRef.current === chapterId) return;
+
+    const progress = getReaderProgress(novelId);
+    if (
+      progress.lastChapterId === chapterId &&
+      typeof progress.scrollFraction === "number" &&
+      progress.scrollFraction > 0.01
+    ) {
+      const fraction = progress.scrollFraction;
+      isRestoringRef.current = true;
+
+      // The router's scrollRestoration scrolls to top on push navigation and can
+      // land AFTER our first scrollTo, wiping it out. Re-assert the target until
+      // it survives a few consecutive frames; bail early if the user takes over.
+      let frames = 0;
+      let stableFrames = 0;
+      let lastWritten = -1;
+
+      const tryScroll = () => {
+        frames++;
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+
+        if (maxScroll > 50) {
+          const target = maxScroll * fraction;
+          const y = window.scrollY;
+
+          if (lastWritten >= 0 && Math.abs(y - lastWritten) > 2 && y !== 0) {
+            // User grabbed the scroll position — stop fighting.
+            restoredChapterRef.current = chapterId;
+            setTimeout(() => {
+              isRestoringRef.current = false;
+            }, 150);
+            return;
+          }
+
+          if (lastWritten >= 0 && Math.abs(y - target) <= 2) {
+            stableFrames++;
+            if (stableFrames >= 3) {
+              restoredChapterRef.current = chapterId;
+              setTimeout(() => {
+                isRestoringRef.current = false;
+              }, 150);
+              return;
+            }
+          } else {
+            stableFrames = 0;
+            window.scrollTo({ top: target, behavior: "instant" as ScrollBehavior });
+            lastWritten = target;
+          }
+        }
+
+        if (frames < 90) {
+          requestAnimationFrame(tryScroll);
+        } else {
+          restoredChapterRef.current = chapterId;
+          isRestoringRef.current = false;
+        }
+      };
+
+      requestAnimationFrame(tryScroll);
+    } else {
+      restoredChapterRef.current = chapterId;
+      isRestoringRef.current = false;
+    }
+  }, [chapterId, novelId, chapter]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const handleScroll = () => {
+      if (isRestoringRef.current || restoredChapterRef.current !== chapterId) return;
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        if (isRestoringRef.current || restoredChapterRef.current !== chapterId) return;
+        const docHeight = document.documentElement.scrollHeight;
+        const viewportHeight = window.innerHeight;
+        const maxScroll = docHeight - viewportHeight;
+        if (maxScroll > 50) {
+          const fraction = window.scrollY / maxScroll;
+          if (fraction > 0.005) {
+            saveScrollPosition(novelId, fraction);
+          }
+        }
+      }, 300);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, [novelId, chapterId]);
+
   const { settings, update, hydrated } = useReaderSettings();
   const { theme, setTheme } = useTheme();
   const viewMode = settings.viewMode;
   const [editValue, setEditValue] = useState<string | null>(null);
   const editing = editValue !== null;
+  const [retranslateConfirmOpen, setRetranslateConfirmOpen] = useState(false);
 
   const { start: startTranslate, activeJobs } = useTranslationJob(novelId, !!user);
   const activeJob = activeJobs.get(chapterId);
@@ -184,6 +295,20 @@ function ReaderPage() {
     () => (chapter?.translatedContent ? splitParagraphs(chapter.translatedContent) : []),
     [chapter],
   );
+
+  if (isChapterError || isChaptersError) {
+    return (
+      <QueryErrorState
+        title="Failed to load chapter"
+        error={chapterError || chaptersError}
+        onRetry={() => {
+          refetchChapter();
+          refetchChapters();
+        }}
+        className="min-h-[40vh] my-12"
+      />
+    );
+  }
 
   if (!chapter) {
     return (
@@ -395,7 +520,13 @@ function ReaderPage() {
                 <Button
                   variant={hasTranslation ? "outline" : "default"}
                   size="sm"
-                  onClick={() => startTranslate(chapterId)}
+                  onClick={() => {
+                    if (chapter.editedAt) {
+                      setRetranslateConfirmOpen(true);
+                    } else {
+                      startTranslate(chapterId);
+                    }
+                  }}
                   aria-label={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
                   title={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
                 >
@@ -546,6 +677,18 @@ function ReaderPage() {
           <span />
         )}
       </div>
+
+      <ConfirmDialog
+        open={retranslateConfirmOpen}
+        onOpenChange={setRetranslateConfirmOpen}
+        title="Overwrite Edited Translation?"
+        description="This chapter was manually edited. Re-translating will overwrite your manual changes with a new machine translation."
+        confirmText="Overwrite & Translate"
+        onConfirm={() => {
+          setRetranslateConfirmOpen(false);
+          startTranslate(chapterId);
+        }}
+      />
     </div>
   );
 }
