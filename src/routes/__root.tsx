@@ -8,9 +8,13 @@ import { Toaster } from "@/components/ui/sonner";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
 import appCss from "../styles/globals.css?url";
+import sofiaSansWoff2 from "@fontsource-variable/sofia-sans/files/sofia-sans-latin-wght-normal.woff2?url";
+import notoSansThaiWoff2 from "@fontsource/noto-sans-thai/files/noto-sans-thai-thai-400-normal.woff2?url";
 
 import { getSession } from "../lib/auth.functions";
-import { initPostHog } from "../lib/posthog";
+import { getConsent, useConsent } from "@/lib/consent";
+import { posthog, initPostHog, updatePostHogConsent } from "../lib/posthog";
+import { ConsentBanner } from "@/components/consent-banner";
 import { NotFoundPage } from "@/components/not-found-page";
 
 import type { QueryClient } from "@tanstack/react-query";
@@ -77,6 +81,20 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         href: "/manifest.json",
       },
       {
+        rel: "preload",
+        href: sofiaSansWoff2,
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "preload",
+        href: notoSansThaiWoff2,
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      },
+      {
         rel: "stylesheet",
         href: appCss,
       },
@@ -86,9 +104,39 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const { consent } = useConsent();
+
   useEffect(() => {
     initPostHog();
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (getConsent() === "granted" && event.reason) {
+        posthog.captureException(
+          event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
+        );
+      }
+    };
+
+    const handleError = (event: ErrorEvent) => {
+      if (getConsent() === "granted" && event.error) {
+        posthog.captureException(
+          event.error instanceof Error ? event.error : new Error(event.message),
+        );
+      }
+    };
+
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+    window.addEventListener("error", handleError);
+
+    return () => {
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+      window.removeEventListener("error", handleError);
+    };
   }, []);
+
+  useEffect(() => {
+    updatePostHogConsent(consent);
+  }, [consent]);
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -104,6 +152,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         >
           {children}
           <Toaster />
+          <ConsentBanner />
         </ThemeProvider>
         <TanStackDevtools
           config={{

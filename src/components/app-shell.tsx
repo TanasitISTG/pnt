@@ -1,23 +1,25 @@
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { ChevronDown, LogIn, LogOut, Menu, Moon, Settings, Sun, X, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Menu, X, ChevronDown, LogIn, LogOut, Loader2, Moon, Settings, Sun } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "@/lib/auth-client";
-import type { User } from "@/lib/auth";
+import type { User as AuthUser } from "@/lib/auth";
+import { useConsent } from "@/lib/consent";
+import { cn } from "@/lib/utils";
 
 interface AppShellProps {
-  user: User | null;
+  user: AuthUser | null;
   children: React.ReactNode;
 }
 
@@ -26,6 +28,7 @@ export function AppShell({ user, children }: AppShellProps) {
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
   const router = useRouter();
+  const { consent } = useConsent();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -41,8 +44,6 @@ export function AppShell({ user, children }: AppShellProps) {
     await signOut({
       fetchOptions: {
         onSuccess: () => {
-          // Invalidate so the root beforeLoad re-checks the (now gone) session,
-          // then land on the public library.
           router.invalidate().finally(() => navigate({ to: "/" }));
         },
         onError: () => {
@@ -53,8 +54,13 @@ export function AppShell({ user, children }: AppShellProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-border bg-background">
+    <div
+      className={cn(
+        "flex min-h-screen flex-col bg-background transition-all",
+        consent === "pending" && "pb-28 md:pb-20",
+      )}
+    >
+      <header className="sticky top-0 z-40 border-b border-border bg-background">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-6">
           <div className="flex items-center gap-8">
             <Link
@@ -159,7 +165,23 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
         )}
       </header>
-      <main className="mx-auto max-w-[1200px] px-6 py-8">{children}</main>
+      <main className="mx-auto w-full max-w-[1200px] flex-1 px-6 py-8">{children}</main>
+      <footer className="mt-12 border-t border-border bg-background py-6">
+        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 px-6 sm:flex-row text-caption text-muted-foreground">
+          <p>© {new Date().getFullYear()} Pnt — Personal Novel Translator</p>
+          <div className="flex items-center gap-6">
+            <Link to="/privacy" className="hover:text-foreground no-underline">
+              Privacy Policy
+            </Link>
+            <Link to="/terms" className="hover:text-foreground no-underline">
+              Terms of Service
+            </Link>
+            <Link to="/cookie-policy" className="hover:text-foreground no-underline">
+              Cookie Policy
+            </Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -189,7 +211,7 @@ function UserDropdown({
   signingOut,
   onSignOut,
 }: {
-  user: User;
+  user: AuthUser;
   signingOut: boolean;
   onSignOut: () => void;
 }) {

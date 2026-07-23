@@ -131,10 +131,12 @@ function renderParagraph(
   fontSizePx: number,
   readerFontClass?: string,
   dimmed = false,
+  lang?: string,
 ) {
   return (
     <p
       key={key}
+      lang={lang}
       className={cn(
         "whitespace-pre-wrap",
         dimmed ? "text-muted-foreground" : "text-foreground",
@@ -150,13 +152,21 @@ function renderParagraph(
 interface ReaderContentProps {
   hasTranslation: boolean;
   viewMode: "side" | "translated" | "raw";
-  aligned: { raw: string | null; translated: string | null }[];
+  aligned: { raw?: string | null; translated?: string | null }[];
   rawParagraphs: string[];
   translatedParagraphs: string[];
   fontSizePx: number;
   readerFontClass?: string;
   hydrated: boolean;
+  sourceLang?: string;
+  targetLang?: string;
 }
+
+const LANG_NAMES: Record<string, string> = {
+  zh: "Chinese",
+  en: "English",
+  th: "Thai",
+};
 
 const ReaderContent = memo(function ReaderContent({
   hasTranslation,
@@ -167,16 +177,29 @@ const ReaderContent = memo(function ReaderContent({
   fontSizePx,
   readerFontClass,
   hydrated,
+  sourceLang = "zh",
+  targetLang = "th",
 }: ReaderContentProps) {
+  const sourceName = LANG_NAMES[sourceLang];
+
   return (
     <div style={hydrated ? undefined : { visibility: "hidden" }}>
+      {viewMode !== "raw" && hasTranslation && (
+        <p className="text-caption text-muted-foreground mb-4">
+          {sourceName
+            ? `Machine-translated from ${sourceName}. May contain inaccuracies.`
+            : "Machine-translated. May contain inaccuracies."}
+        </p>
+      )}
       {!hasTranslation ? (
         <div className="flex flex-col gap-8">
           <p className="text-caption text-muted-foreground italic">
             Not translated yet — showing raw text.
           </p>
           <div className="mx-auto flex max-w-prose flex-col gap-5">
-            {rawParagraphs.map((p, i) => renderParagraph(p, i, fontSizePx, readerFontClass))}
+            {rawParagraphs.map((p, i) =>
+              renderParagraph(p, i, fontSizePx, readerFontClass, false, sourceLang),
+            )}
           </div>
         </div>
       ) : viewMode === "side" ? (
@@ -185,12 +208,26 @@ const ReaderContent = memo(function ReaderContent({
             <div key={i} className="contents">
               <div>
                 {pair.raw
-                  ? renderParagraph(pair.raw, `r-${i}`, fontSizePx, readerFontClass, true)
+                  ? renderParagraph(
+                      pair.raw,
+                      `r-${i}`,
+                      fontSizePx,
+                      readerFontClass,
+                      true,
+                      sourceLang,
+                    )
                   : null}
               </div>
               <div className="border-b border-border pb-5 md:border-b-0 md:pb-0">
                 {pair.translated
-                  ? renderParagraph(pair.translated, `t-${i}`, fontSizePx, readerFontClass)
+                  ? renderParagraph(
+                      pair.translated,
+                      `t-${i}`,
+                      fontSizePx,
+                      readerFontClass,
+                      false,
+                      targetLang,
+                    )
                   : null}
               </div>
             </div>
@@ -199,7 +236,14 @@ const ReaderContent = memo(function ReaderContent({
       ) : (
         <div className="mx-auto flex max-w-prose flex-col gap-5">
           {(viewMode === "translated" ? translatedParagraphs : rawParagraphs).map((p, i) =>
-            renderParagraph(p, i, fontSizePx, readerFontClass),
+            renderParagraph(
+              p,
+              i,
+              fontSizePx,
+              readerFontClass,
+              false,
+              viewMode === "raw" ? sourceLang : targetLang,
+            ),
           )}
         </div>
       )}
@@ -225,6 +269,7 @@ function ReaderPage() {
     error: chaptersError,
     refetch: refetchChapters,
   } = useQuery(chaptersQueryOptions(novelId));
+  const { data: novel } = useQuery(novelQueryOptions(novelId));
 
   const restoredChapterRef = useRef<string | null>(null);
   const isRestoringRef = useRef(false);
@@ -715,6 +760,8 @@ function ReaderPage() {
           fontSizePx={fontSizePx}
           readerFontClass={readerFontClass}
           hydrated={hydrated}
+          sourceLang={novel?.sourceLang}
+          targetLang={novel?.targetLang}
         />
       )}
 
