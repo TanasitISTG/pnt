@@ -315,6 +315,7 @@ function NovelDetailPage() {
   useEffect(() => {
     if (!importJob || !importActive) return;
     const interval = setInterval(async () => {
+      if (document.hidden) return;
       try {
         const res = await getImportJobStatus({ data: { jobId: importJob.id } });
         if (!res) {
@@ -956,7 +957,6 @@ function NovelDetailPage() {
           <div className="relative aspect-3/4 w-full max-w-50 overflow-hidden rounded-xl border border-border bg-foreground/3 flex items-center justify-center self-start">
             <NovelCover
               novelId={novel.id}
-              cover={novel.cover}
               coverVersion={novel.updatedAt}
               alt={novel.title}
               className="h-full w-full object-cover"

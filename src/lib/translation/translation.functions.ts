@@ -18,6 +18,16 @@ import {
   getJobsTerminalStatusSchema,
 } from "@/lib/translation/translation.schemas";
 
+export interface SlimChunkProgress {
+  index: number;
+  textLength: number;
+  hasTranslation: boolean;
+  promptTokens?: number;
+  completionTokens?: number;
+  latencyMs?: number;
+  error?: string;
+}
+
 export interface ChunkProgress {
   index: number;
   text: string;
@@ -565,7 +575,16 @@ export const getTranslationJobStatus = createServerFn({ method: "GET" })
     }
 
     const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
-    const chunks: ChunkProgress[] = JSON.parse(row.job.chunksJson || "[]");
+    const rawChunks: ChunkProgress[] = JSON.parse(row.job.chunksJson || "[]");
+    const chunks: SlimChunkProgress[] = rawChunks.map((c) => ({
+      index: c.index,
+      textLength: c.text?.length ?? 0,
+      hasTranslation: !!c.translation,
+      promptTokens: c.promptTokens,
+      completionTokens: c.completionTokens,
+      latencyMs: c.latencyMs,
+      error: c.error,
+    }));
 
     return {
       id: row.job.id,

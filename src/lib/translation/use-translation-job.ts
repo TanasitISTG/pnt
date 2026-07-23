@@ -29,6 +29,17 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
   const updateJob = useCallback((chapterId: string, state: ActiveJobState) => {
     setActiveJobs((prev) => {
+      const existing = prev.get(chapterId);
+      if (
+        existing &&
+        existing.jobId === state.jobId &&
+        existing.status === state.status &&
+        existing.doneChunks === state.doneChunks &&
+        existing.totalChunks === state.totalChunks &&
+        (existing.error ?? null) === (state.error ?? null)
+      ) {
+        return prev;
+      }
       const next = new Map(prev);
       next.set(chapterId, state);
       return next;
@@ -88,6 +99,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     if (activeList.length === 0) return;
 
     const interval = setInterval(async () => {
+      if (document.hidden) return;
       try {
         const dbJobs = await listActiveTranslationJobs({ data: { novelId } });
         const dbJobMap = new Map(dbJobs.map((j) => [j.chapterId, j]));

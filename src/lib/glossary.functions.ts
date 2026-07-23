@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, or, ilike, sql, count, desc } from "drizzle-orm";
+import { eq, and, or, ilike, sql, count, desc, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
@@ -197,9 +197,17 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
       .filter((l) => l.length > 0);
 
     const validCategories = termCategoryEnum.enumValues;
-    let imported = 0;
-    let updated = 0;
     const errors: string[] = [];
+
+    const parsedMap = new Map<
+      string,
+      {
+        source: string;
+        target: string;
+        category: (typeof validCategories)[number];
+        note: string | null;
+      }
+    >();
 
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index];
@@ -231,36 +239,59 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
         note = parts[3];
       }
 
-      const [existing] = await db
-        .select({ id: glossaryTerms.id })
-        .from(glossaryTerms)
-        .where(and(eq(glossaryTerms.novelId, data.novelId), eq(glossaryTerms.source, source)))
-        .limit(1);
+      parsedMap.set(source, { source, target, category, note });
+    }
 
-      if (existing) {
-        await db
-          .update(glossaryTerms)
-          .set({
-            target,
-            category,
-            note: note || undefined,
-            status: "approved",
-            updatedAt: new Date(),
-          })
-          .where(eq(glossaryTerms.id, existing.id));
+    const uniqueSources = Array.from(parsedMap.keys());
+    if (uniqueSources.length === 0) {
+      return { imported: 0, updated: 0, totalProcessed: 0, errors };
+    }
+
+    const existingTerms = await db
+      .select({ source: glossaryTerms.source })
+      .from(glossaryTerms)
+      .where(
+        and(eq(glossaryTerms.novelId, data.novelId), inArray(glossaryTerms.source, uniqueSources)),
+      );
+
+    const existingSourceSet = new Set(existingTerms.map((t) => t.source));
+    let updated = 0;
+    let imported = 0;
+    for (const src of uniqueSources) {
+      if (existingSourceSet.has(src)) {
         updated++;
       } else {
-        await db.insert(glossaryTerms).values({
-          id: nanoid(),
-          novelId: data.novelId,
-          source,
-          target,
-          category,
-          note,
-          status: "approved",
-        });
         imported++;
       }
+    }
+
+    const rowsToInsert = Array.from(parsedMap.values()).map((row) => ({
+      id: nanoid(),
+      novelId: data.novelId,
+      source: row.source,
+      target: row.target,
+      category: row.category,
+      note: row.note,
+      status: "approved" as const,
+      updatedAt: new Date(),
+    }));
+
+    const CHUNK_SIZE = 500;
+    for (let i = 0; i < rowsToInsert.length; i += CHUNK_SIZE) {
+      const chunk = rowsToInsert.slice(i, i + CHUNK_SIZE);
+      await db
+        .insert(glossaryTerms)
+        .values(chunk)
+        .onConflictDoUpdate({
+          target: [glossaryTerms.novelId, glossaryTerms.source],
+          set: {
+            target: sql`excluded.target`,
+            category: sql`excluded.category`,
+            note: sql`coalesce(excluded.note, ${glossaryTerms.note})`,
+            status: "approved",
+            updatedAt: new Date(),
+          },
+        });
     }
 
     return { imported, updated, totalProcessed: imported + updated, errors };

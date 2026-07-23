@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { useTheme } from "next-themes";
 import {
   ArrowLeft,
@@ -83,6 +83,88 @@ const VIEW_MODES: { value: ReaderViewMode; label: string; icon: typeof Columns2 
   { value: "translated", label: "Translated", icon: BookOpen },
   { value: "raw", label: "Raw", icon: FileText },
 ];
+
+function renderParagraph(
+  text: string,
+  key: React.Key,
+  fontSizePx: number,
+  readerFontClass?: string,
+  dimmed = false,
+) {
+  return (
+    <p
+      key={key}
+      className={cn(
+        "whitespace-pre-wrap",
+        dimmed ? "text-muted-foreground" : "text-foreground",
+        readerFontClass,
+      )}
+      style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
+    >
+      {text}
+    </p>
+  );
+}
+
+interface ReaderContentProps {
+  hasTranslation: boolean;
+  viewMode: "side" | "translated" | "raw";
+  aligned: { raw: string | null; translated: string | null }[];
+  rawParagraphs: string[];
+  translatedParagraphs: string[];
+  fontSizePx: number;
+  readerFontClass?: string;
+  hydrated: boolean;
+}
+
+const ReaderContent = memo(function ReaderContent({
+  hasTranslation,
+  viewMode,
+  aligned,
+  rawParagraphs,
+  translatedParagraphs,
+  fontSizePx,
+  readerFontClass,
+  hydrated,
+}: ReaderContentProps) {
+  return (
+    <div style={hydrated ? undefined : { visibility: "hidden" }}>
+      {!hasTranslation ? (
+        <div className="flex flex-col gap-8">
+          <p className="text-caption text-muted-foreground italic">
+            Not translated yet — showing raw text.
+          </p>
+          <div className="mx-auto flex max-w-prose flex-col gap-5">
+            {rawParagraphs.map((p, i) => renderParagraph(p, i, fontSizePx, readerFontClass))}
+          </div>
+        </div>
+      ) : viewMode === "side" ? (
+        <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
+          {aligned.map((pair, i) => (
+            <div key={i} className="contents">
+              <div>
+                {pair.raw
+                  ? renderParagraph(pair.raw, `r-${i}`, fontSizePx, readerFontClass, true)
+                  : null}
+              </div>
+              <div className="border-b border-border pb-5 md:border-b-0 md:pb-0">
+                {pair.translated
+                  ? renderParagraph(pair.translated, `t-${i}`, fontSizePx, readerFontClass)
+                  : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mx-auto flex max-w-prose flex-col gap-5">
+          {(viewMode === "translated" ? translatedParagraphs : rawParagraphs).map((p, i) =>
+            renderParagraph(p, i, fontSizePx, readerFontClass),
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
 
 function ReaderPage() {
   const { novelId, chapterId } = Route.useParams();
@@ -325,20 +407,6 @@ function ReaderPage() {
   const fontSizePx = READER_FONT_SIZE_PX[settings.fontSize];
   const readerFontClass = settings.typeface === "reader" ? "font-reader" : undefined;
 
-  const renderParagraph = (text: string, key: React.Key, dimmed = false) => (
-    <p
-      key={key}
-      className={cn(
-        "whitespace-pre-wrap",
-        dimmed ? "text-muted-foreground" : "text-foreground",
-        readerFontClass,
-      )}
-      style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
-    >
-      {text}
-    </p>
-  );
-
   return (
     <div className="flex flex-col gap-5">
       {/* Toolbar */}
@@ -568,7 +636,9 @@ function ReaderPage() {
               <span className="text-caption font-semibold text-muted-foreground uppercase">
                 Raw
               </span>
-              {rawParagraphs.map((p, i) => renderParagraph(p, i, true))}
+              {rawParagraphs.map((p, i) =>
+                renderParagraph(p, i, fontSizePx, readerFontClass, true),
+              )}
             </div>
             <div className="flex flex-col gap-2">
               <span className="text-caption font-semibold text-muted-foreground uppercase">
@@ -598,37 +668,16 @@ function ReaderPage() {
           </div>
         </div>
       ) : (
-        // Hidden until reader settings hydrate from localStorage, so a direct
-        // load never flashes the default view/font before the stored one applies.
-        <div style={hydrated ? undefined : { visibility: "hidden" }}>
-          {!hasTranslation ? (
-            <div className="flex flex-col gap-8">
-              <p className="text-caption text-muted-foreground italic">
-                Not translated yet — showing raw text.
-              </p>
-              <div className="mx-auto flex max-w-prose flex-col gap-5">
-                {rawParagraphs.map((p, i) => renderParagraph(p, i))}
-              </div>
-            </div>
-          ) : viewMode === "side" ? (
-            <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
-              {aligned.map((pair, i) => (
-                <div key={i} className="contents">
-                  <div>{pair.raw ? renderParagraph(pair.raw, `r-${i}`, true) : null}</div>
-                  <div className="border-b border-border pb-5 md:border-b-0 md:pb-0">
-                    {pair.translated ? renderParagraph(pair.translated, `t-${i}`) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mx-auto flex max-w-prose flex-col gap-5">
-              {(viewMode === "translated" ? translatedParagraphs : rawParagraphs).map((p, i) =>
-                renderParagraph(p, i),
-              )}
-            </div>
-          )}
-        </div>
+        <ReaderContent
+          hasTranslation={hasTranslation}
+          viewMode={viewMode}
+          aligned={aligned}
+          rawParagraphs={rawParagraphs}
+          translatedParagraphs={translatedParagraphs}
+          fontSizePx={fontSizePx}
+          readerFontClass={readerFontClass}
+          hydrated={hydrated}
+        />
       )}
 
       {/* Bottom navigation */}

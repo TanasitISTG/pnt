@@ -1,0 +1,2 @@
+CREATE INDEX "translation_jobs_chapter_id_idx" ON "translation_jobs" USING btree ("chapter_id");--> statement-breakpoint
+CREATE INDEX "import_jobs_novel_id_idx" ON "import_jobs" USING btree ("novel_id");

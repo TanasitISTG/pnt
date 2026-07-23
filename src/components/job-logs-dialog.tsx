@@ -12,7 +12,7 @@ import {
 import {
   getTranslationJobStatus,
   type LogEntry,
-  type ChunkProgress,
+  type SlimChunkProgress,
 } from "@/lib/translation/translation.functions";
 import { ChapterStatusBadge } from "./chapter-status-badge";
 import { Loader2, Terminal, Cpu, Zap, XCircle } from "lucide-react";
@@ -43,7 +43,7 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
   if (!open || (!jobId && !chapterId)) return null;
 
   const logs: LogEntry[] = jobData?.logs || [];
-  const chunks: ChunkProgress[] = jobData?.chunks || [];
+  const chunks: SlimChunkProgress[] = jobData?.chunks || [];
   const usage = jobData?.usageJson ? JSON.parse(jobData.usageJson) : null;
 
   // Calculate live token counts from completed chunks if aggregate usage not finalized yet
@@ -198,10 +198,10 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
                         <TableRow key={idx} className="h-11">
                           <TableCell className="font-mono font-medium">{chunk.index + 1}</TableCell>
                           <TableCell className="font-mono text-muted-foreground">
-                            {chunk.text.length.toLocaleString()} chars
+                            {chunk.textLength.toLocaleString()} chars
                           </TableCell>
                           <TableCell>
-                            {chunk.translation ? (
+                            {chunk.hasTranslation ? (
                               <Badge
                                 variant="outline"
                                 className="text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 font-medium"

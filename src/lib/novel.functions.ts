@@ -84,8 +84,7 @@ export const getNovel = createServerFn({ method: "GET" })
         chunkSize: novels.chunkSize,
         contextTailLength: novels.contextTailLength,
         publishedAt: novels.publishedAt,
-        cover: novels.cover,
-        coverMime: novels.coverMime,
+        hasCover: sql<boolean>`${novels.cover} is not null`,
         createdAt: novels.createdAt,
         updatedAt: novels.updatedAt,
       })
@@ -103,14 +102,8 @@ export const getNovel = createServerFn({ method: "GET" })
       ...novel,
       sourceLang: novel.sourceLang as "en" | "zh",
       targetLang: novel.targetLang as "en" | "th",
-      coverMime: (novel.coverMime as "image/jpeg" | "image/png" | "image/webp" | null) || null,
-      // Guests don't get admin-only settings or the inline cover payload —
-      // their NovelCover fetches it from the public /api/covers route instead.
+      // Guests don't get admin-only settings — NovelCover fetches covers from the public /api/covers route.
       customPrompt: session ? novel.customPrompt : null,
-      cover:
-        session && novel.cover
-          ? `data:${novel.coverMime || "image/jpeg"};base64,${novel.cover.toString("base64")}`
-          : null,
     };
   });
 

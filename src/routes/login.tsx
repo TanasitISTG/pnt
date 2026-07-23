@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signIn } from "@/lib/auth-client";
-import { getSession } from "@/lib/auth.functions";
 
 const loginSearchSchema = z.object({
   redirect: z.string().optional(),
@@ -15,9 +14,8 @@ const loginSearchSchema = z.object({
 
 export const Route = createFileRoute("/login")({
   validateSearch: loginSearchSchema,
-  beforeLoad: async () => {
-    const session = await getSession();
-    if (session) {
+  beforeLoad: ({ context }) => {
+    if (context.user) {
       throw redirect({ to: "/" });
     }
   },

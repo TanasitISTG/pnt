@@ -14,7 +14,7 @@ export const createNovelSchema = z.object({
   customPrompt: z.string().max(10000).optional().nullable(),
   chunkSize: z.number().int().min(500).max(10000).optional().default(2000),
   contextTailLength: z.number().int().min(100).max(2000).optional().default(500),
-  cover: z.string().optional().nullable(), // base64
+  cover: z.string().max(4_000_000).optional().nullable(), // base64 (~2.7MB file max)
   coverMime: coverMimeSchema.optional().nullable(),
 });
 

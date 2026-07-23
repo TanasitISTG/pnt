@@ -53,27 +53,24 @@ export const importChapter = createServerFn({ method: "POST" })
 
     const scraped = await fetchAndParse(data.url);
 
-    const [existing] = await db
-      .select({ id: chapters.id })
-      .from(chapters)
-      .where(
-        and(eq(chapters.novelId, data.novelId), eq(chapters.number, scraped.number.toString())),
-      )
-      .limit(1);
-    if (existing) return { created: false as const, ...scraped };
-
     const id = nanoid();
-    await db.insert(chapters).values({
-      id,
-      novelId: data.novelId,
-      number: scraped.number.toString(),
-      title: scraped.title,
-      rawContent: scraped.content,
-      rawCharCount: scraped.content.length,
-      status: "raw",
-    });
+    const [inserted] = await db
+      .insert(chapters)
+      .values({
+        id,
+        novelId: data.novelId,
+        number: scraped.number.toString(),
+        title: scraped.title,
+        rawContent: scraped.content,
+        rawCharCount: scraped.content.length,
+        status: "raw",
+      })
+      .onConflictDoNothing({ target: [chapters.novelId, chapters.number] })
+      .returning({ id: chapters.id });
 
-    return { created: true as const, id, ...scraped };
+    if (!inserted) return { created: false as const, ...scraped };
+
+    return { created: true as const, id: inserted.id, ...scraped };
   });
 
 const startImportJobSchema = z.object({
