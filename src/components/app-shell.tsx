@@ -27,6 +27,15 @@ export function AppShell({ user, children }: AppShellProps) {
   const navigate = useNavigate();
   const router = useRouter();
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
   const handleSignOut = async () => {
     setSigningOut(true);
     await signOut({
@@ -93,13 +102,15 @@ export function AppShell({ user, children }: AppShellProps) {
               className="md:hidden"
               onClick={() => setMenuOpen((o) => !o)}
               aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav"
             >
               {menuOpen ? <X /> : <Menu />}
             </Button>
           </div>
         </div>
         {menuOpen && (
-          <div className="border-t border-border bg-background px-6 py-4 md:hidden">
+          <div id="mobile-nav" className="border-t border-border bg-background px-6 py-4 md:hidden">
             <nav className="flex flex-col gap-4">
               <Link
                 to="/"

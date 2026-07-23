@@ -468,11 +468,12 @@ export const getNovelCosts = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const session = await ensureSession();
 
+    // One row per chapter (latest done job) — DISTINCT ON pushes the dedupe to
+    // Postgres instead of scanning the whole done-job history and deduping in JS.
     const rows = await db
-      .select({
+      .selectDistinctOn([translationJobs.chapterId], {
         chapterId: translationJobs.chapterId,
         usageJson: translationJobs.usageJson,
-        updatedAt: translationJobs.updatedAt,
       })
       .from(translationJobs)
       .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
@@ -484,12 +485,11 @@ export const getNovelCosts = createServerFn({ method: "GET" })
           eq(translationJobs.status, "done"),
         ),
       )
-      .orderBy(desc(translationJobs.updatedAt));
+      .orderBy(translationJobs.chapterId, desc(translationJobs.updatedAt));
 
-    // Rows are newest-first — first occurrence per chapter is the latest done job.
     const perChapter: Record<string, { promptTokens: number; completionTokens: number }> = {};
     for (const row of rows) {
-      if (perChapter[row.chapterId] || !row.usageJson) continue;
+      if (!row.usageJson) continue;
       try {
         const usage = JSON.parse(row.usageJson) as {
           totalPromptTokens?: number;

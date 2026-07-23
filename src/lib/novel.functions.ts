@@ -396,7 +396,10 @@ export const translateMissingTitles = createServerFn({ method: "POST" })
           isNull(chapters.translatedTitle),
         ),
       )
-      .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
+      .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`))
+      // ponytail: one serverless request can't hold a big backlog of sequential
+      // LLM calls — cap per click; the UI re-clicks for the next batch.
+      .limit(20);
 
     if (missing.length === 0) {
       return { translated: 0 };
