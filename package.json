@@ -18,6 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "predeploy": "bun scripts/predeploy.ts",
+    "postbuild": "bun scripts/postbuild.ts",
     "seed:user": "bun scripts/seed-user.ts",
     "inngest": "bunx inngest-cli dev"
   },
