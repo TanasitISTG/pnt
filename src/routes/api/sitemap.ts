@@ -3,6 +3,7 @@ import { eq, and, lte } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels, chapters } from "@/lib/db/schema";
+import { checkRateLimit, RateLimitError } from "@/lib/rate-limit";
 
 const escapeXml = (str: string) =>
   str
@@ -17,6 +18,8 @@ export const Route = createFileRoute("/api/sitemap")({
     handlers: {
       GET: async ({ request }) => {
         try {
+          await checkRateLimit("sitemap", 30);
+
           const now = new Date();
           const baseUrl =
             process.env.APP_URL || import.meta.env.VITE_APP_URL || new URL(request.url).origin;
@@ -82,7 +85,10 @@ ${urls.join("\n")}
               "Cache-Control": "public, max-age=3600",
             },
           });
-        } catch {
+        } catch (err) {
+          if (err instanceof RateLimitError) {
+            return new Response("Too Many Requests", { status: 429 });
+          }
           return new Response("Internal Server Error", { status: 500 });
         }
       },
