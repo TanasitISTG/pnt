@@ -2,8 +2,18 @@ import posthog from "posthog-js";
 
 import { getConsent, type ConsentState } from "@/lib/consent";
 
+// ponytail: module flag makes initPostHog idempotent — PostHog throws a no-op
+// warning when posthog.init() is called twice, and TanStack Start hydration can
+// run RootDocument effects more than once per mount. Guarding init is safer
+// than re-init attempts: persistence can't upgrade mid-session once PostHog is
+// alive (would need reset+reload). Acceptance mid-session uses opt_in instead;
+// cross-session identity for the first post-accept session is lost but cheap
+// (single admin, analytics noise only).
+let initialized = false;
+
 export function initPostHog() {
   if (typeof window === "undefined" || !import.meta.env.PROD) return;
+  if (initialized) return;
   const key = import.meta.env.VITE_PUBLIC_POSTHOG_KEY ?? import.meta.env.VITE_POSTHOG_PROJECT_TOKEN;
   if (!key) return;
 
@@ -20,30 +30,25 @@ export function initPostHog() {
     capture_exceptions: consent === "granted",
     opt_out_capturing_by_default: consent !== "granted",
     persistence: consent === "granted" ? "localStorage+cookie" : "memory",
+    // Disable features that lazy-load sub-scripts from us-assets.i.posthog.com —
+    // a single-admin translation app doesn't need them, and the sub-scripts trip
+    // CORS errors on networks blocking that CDN (Firefox tracking protection).
+    autocapture: false,
+    disable_session_recording: true,
   });
 
   if (consent === "denied") {
     posthog.opt_out_capturing();
   }
+  initialized = true;
 }
-
-// ponytail: module flag skips the first updatePostHogConsent call — initPostHog()
-// already inits with the right config on mount; only mid-session changes need reset+re-init.
-let consentInitialized = false;
 
 export function updatePostHogConsent(consent: ConsentState) {
   if (typeof window === "undefined" || !import.meta.env.PROD) return;
-
-  if (!consentInitialized) {
-    consentInitialized = true;
-    return;
-  }
+  if (!initialized) return;
 
   if (consent === "granted") {
-    // opt_in_capturing alone doesn't flip persistence post-init; reset + re-init
-    // upgrades from "memory" to "localStorage+cookie" for cross-session distinct_id.
-    posthog.reset();
-    initPostHog();
+    posthog.opt_in_capturing();
   } else if (consent === "denied") {
     posthog.opt_out_capturing();
   }

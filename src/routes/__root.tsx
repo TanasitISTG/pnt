@@ -8,8 +8,6 @@ import { Toaster } from "@/components/ui/sonner";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
 import appCss from "../styles/globals.css?url";
-import sofiaSansWoff2 from "@fontsource-variable/sofia-sans/files/sofia-sans-latin-wght-normal.woff2?url";
-import notoSansThaiWoff2 from "@fontsource/noto-sans-thai/files/noto-sans-thai-thai-400-normal.woff2?url";
 
 import { getSession } from "../lib/auth.functions";
 import { getConsent, useConsent } from "@/lib/consent";
@@ -79,20 +77,6 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       {
         rel: "manifest",
         href: "/manifest.json",
-      },
-      {
-        rel: "preload",
-        href: sofiaSansWoff2,
-        as: "font",
-        type: "font/woff2",
-        crossOrigin: "anonymous",
-      },
-      {
-        rel: "preload",
-        href: notoSansThaiWoff2,
-        as: "font",
-        type: "font/woff2",
-        crossOrigin: "anonymous",
       },
       {
         rel: "stylesheet",
