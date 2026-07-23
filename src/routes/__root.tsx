@@ -9,6 +9,7 @@ import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import appCss from "../styles/globals.css?url";
 
 import { getSession } from "../lib/auth.functions";
+import { NotFoundPage } from "@/components/not-found-page";
 
 import type { QueryClient } from "@tanstack/react-query";
 
@@ -17,6 +18,7 @@ interface MyRouterContext {
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
+  notFoundComponent: NotFoundPage,
   beforeLoad: async () => {
     const session = await getSession();
     return { user: session?.user ?? null };
@@ -32,6 +34,30 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
       {
         title: "Pnt - Personal Novel Translator",
+      },
+      {
+        name: "description",
+        content: "Personal web novel translation app with side-by-side reader.",
+      },
+      {
+        property: "og:site_name",
+        content: "Pnt - Personal Novel Translator",
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
+      {
+        name: "twitter:card",
+        content: "summary",
+      },
+      {
+        name: "twitter:title",
+        content: "Pnt - Personal Novel Translator",
+      },
+      {
+        name: "twitter:description",
+        content: "Personal web novel translation app with side-by-side reader.",
       },
     ],
     links: [

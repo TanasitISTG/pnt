@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useEffect } from "react";
 import {
@@ -115,18 +115,47 @@ const CHAPTER_GROUP_SIZE = 50;
 
 export const Route = createFileRoute("/_public/novels/$novelId/")({
   loader: async ({ params, context }) => {
+    const novelPromise = context.queryClient.ensureQueryData(novelQueryOptions(params.novelId));
     const tasks: Promise<unknown>[] = [
-      context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
+      ...(context.user
+        ? [
+            context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
+            context.queryClient.ensureQueryData(costsQueryOptions(params.novelId)),
+          ]
+        : []),
     ];
-    // Admin-only data — these endpoints require a session, skip for guests.
-    if (context.user) {
-      tasks.push(
-        context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
-        context.queryClient.ensureQueryData(costsQueryOptions(params.novelId)),
-      );
+    const [novel] = await Promise.all([novelPromise, ...tasks]);
+    if (!novel) {
+      throw notFound();
     }
-    await Promise.all(tasks);
+    return { novel };
+  },
+  head: ({ loaderData }) => {
+    const novel = loaderData?.novel;
+    const title = novel
+      ? `${novel.title} | Pnt - Personal Novel Translator`
+      : "Novel Detail | Pnt - Personal Novel Translator";
+    const description = novel?.description
+      ? novel.description.length > 160
+        ? `${novel.description.slice(0, 157)}...`
+        : novel.description
+      : "Read translated web novel chapters.";
+    const appUrl = import.meta.env.VITE_APP_URL;
+    const coverUrl = novel?.hasCover ? `${appUrl ?? ""}/api/covers/${novel.id}` : undefined;
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        ...(coverUrl ? [{ property: "og:image", content: coverUrl }] : []),
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+        ...(coverUrl ? [{ name: "twitter:image", content: coverUrl }] : []),
+      ],
+    };
   },
   component: NovelDetailPage,
 });
@@ -695,26 +724,52 @@ function NovelDetailPage() {
               params={{ novelId, chapterId: chapter.id }}
               className={cn(
                 "text-foreground hover:underline underline-offset-4",
-                isRead && "text-muted-foreground/80 font-normal",
+                isRead && "text-muted-foreground font-normal",
               )}
             >
               {chapter.translatedTitle ?? chapter.title}
             </Link>
-            {isRead && (
-              <span
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
-                title="Read"
-                aria-label="Read"
-              >
-                <Check className="size-3.5" aria-hidden="true" />
-                <span className="text-[11px] font-normal">Read</span>
-              </span>
+          </div>
+          <div className="sm:hidden mt-1.5 flex flex-col gap-1 text-caption text-muted-foreground">
+            <div className="flex items-center gap-2">
+              {activeJob && (activeJob.status === "running" || activeJob.status === "pending") ? (
+                <div className="flex flex-col gap-1 min-w-28 flex-1">
+                  <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                    <span>Translating...</span>
+                    <span>
+                      {activeJob.doneChunks}/{activeJob.totalChunks}
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      activeJob.totalChunks > 0
+                        ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
+                        : 0
+                    }
+                    className="h-1.5"
+                  />
+                </div>
+              ) : (
+                <ChapterStatusBadge status={chapter.status} />
+              )}
+              <span>· {chapter.rawCharCount.toLocaleString()} chars</span>
+            </div>
+            {user && costData?.costs[chapter.id] && (
+              <div className="font-mono text-muted-foreground">
+                {formatTokens(
+                  costData.costs[chapter.id].promptTokens +
+                    costData.costs[chapter.id].completionTokens,
+                )}{" "}
+                tok
+                {costData.costs[chapter.id].cost != null &&
+                  ` · ${formatCost(costData.costs[chapter.id].cost!)}`}
+              </div>
             )}
           </div>
         </TableCell>
-        <TableCell className="text-muted-foreground">
+        <TableCell className="text-muted-foreground hidden sm:table-cell">
           {chapter.rawCharCount.toLocaleString()}
-          {costData?.costs[chapter.id] && (
+          {user && costData?.costs[chapter.id] && (
             <div className="text-caption font-mono text-muted-foreground">
               {formatTokens(
                 costData.costs[chapter.id].promptTokens +
@@ -726,7 +781,7 @@ function NovelDetailPage() {
             </div>
           )}
         </TableCell>
-        <TableCell>
+        <TableCell className="hidden sm:table-cell">
           {activeJob && (activeJob.status === "running" || activeJob.status === "pending") ? (
             <div className="flex flex-col gap-1 min-w-28">
               <div className="flex justify-between text-xs text-muted-foreground font-mono">
@@ -866,8 +921,8 @@ function NovelDetailPage() {
           )}
           <TableHead className="w-16">#</TableHead>
           <TableHead>Title</TableHead>
-          <TableHead className="w-32">Chars</TableHead>
-          <TableHead className="w-32">Status</TableHead>
+          <TableHead className="w-32 hidden sm:table-cell">Chars</TableHead>
+          <TableHead className="w-32 hidden sm:table-cell">Status</TableHead>
           {user && <TableHead className="w-24 text-right">Actions</TableHead>}
         </TableRow>
       </TableHeader>

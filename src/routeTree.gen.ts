@@ -12,9 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as PublicRouteImport } from './routes/_public'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
+import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
@@ -36,6 +38,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
+  id: '/robots.txt',
+  path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -49,6 +56,11 @@ const PublicIndexRoute = PublicIndexRouteImport.update({
 const ApiInngestRoute = ApiInngestRouteImport.update({
   id: '/api/inngest',
   path: '/api/inngest',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSitemapRoute = ApiSitemapRouteImport.update({
+  id: '/api/sitemap',
+  path: '/api/sitemap',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProtectedNovelsNewRoute = ProtectedNovelsNewRouteImport.update({
@@ -94,8 +106,10 @@ const PublicNovelsNovelIdChaptersChapterIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/login': typeof LoginRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
+  '/api/sitemap': typeof ApiSitemapRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
@@ -107,8 +121,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/login': typeof LoginRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
+  '/api/sitemap': typeof ApiSitemapRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
@@ -122,8 +138,10 @@ export interface FileRoutesById {
   '/_protected': typeof ProtectedRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
   '/login': typeof LoginRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
+  '/api/sitemap': typeof ApiSitemapRoute
   '/_public/': typeof PublicIndexRoute
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -138,8 +156,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/robots.txt'
     | '/settings'
     | '/api/inngest'
+    | '/api/sitemap'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
@@ -151,8 +171,10 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/robots.txt'
     | '/settings'
     | '/api/inngest'
+    | '/api/sitemap'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
@@ -165,8 +187,10 @@ export interface FileRouteTypes {
     | '/_protected'
     | '/_public'
     | '/login'
+    | '/robots.txt'
     | '/_protected/settings'
     | '/api/inngest'
+    | '/api/sitemap'
     | '/_public/'
     | '/_protected/novels/new'
     | '/api/auth/$'
@@ -181,7 +205,9 @@ export interface RootRouteChildren {
   ProtectedRoute: typeof ProtectedRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
   LoginRoute: typeof LoginRoute
+  RobotsDottxtRoute: typeof RobotsDottxtRoute
   ApiInngestRoute: typeof ApiInngestRoute
+  ApiSitemapRoute: typeof ApiSitemapRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCoversSplatRoute: typeof ApiCoversSplatRoute
 }
@@ -209,6 +235,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/robots.txt': {
+      id: '/robots.txt'
+      path: '/robots.txt'
+      fullPath: '/robots.txt'
+      preLoaderRoute: typeof RobotsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_protected/settings': {
       id: '/_protected/settings'
       path: '/settings'
@@ -228,6 +261,13 @@ declare module '@tanstack/react-router' {
       path: '/api/inngest'
       fullPath: '/api/inngest'
       preLoaderRoute: typeof ApiInngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sitemap': {
+      id: '/api/sitemap'
+      path: '/api/sitemap'
+      fullPath: '/api/sitemap'
+      preLoaderRoute: typeof ApiSitemapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_protected/novels/new': {
@@ -320,7 +360,9 @@ const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
   LoginRoute: LoginRoute,
+  RobotsDottxtRoute: RobotsDottxtRoute,
   ApiInngestRoute: ApiInngestRoute,
+  ApiSitemapRoute: ApiSitemapRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCoversSplatRoute: ApiCoversSplatRoute,
 }

@@ -19,6 +19,17 @@ export const Route = createFileRoute("/login")({
       throw redirect({ to: "/" });
     }
   },
+  head: () => ({
+    meta: [
+      {
+        title: "Login | Pnt - Personal Novel Translator",
+      },
+      {
+        name: "robots",
+        content: "noindex, nofollow",
+      },
+    ],
+  }),
   component: LoginPage,
 });
 

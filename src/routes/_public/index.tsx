@@ -14,6 +14,17 @@ const novelsQueryOptions = queryOptions({
 
 export const Route = createFileRoute("/_public/")({
   loader: ({ context }) => context.queryClient.ensureQueryData(novelsQueryOptions),
+  head: () => ({
+    meta: [
+      {
+        title: "Library | Pnt - Personal Novel Translator",
+      },
+      {
+        name: "description",
+        content: "Browse the translated web novel collection.",
+      },
+    ],
+  }),
   component: LibraryPage,
 });
 

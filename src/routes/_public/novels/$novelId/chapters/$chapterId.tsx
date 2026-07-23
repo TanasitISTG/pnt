@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { useTheme } from "next-themes";
@@ -19,7 +19,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { getChapter, listChapters, updateChapterTranslation } from "@/lib/novel.functions";
+import {
+  getChapter,
+  getNovel,
+  listChapters,
+  updateChapterTranslation,
+} from "@/lib/novel.functions";
 import { getReaderProgress, markChapterRead, saveScrollPosition } from "@/lib/reader-progress";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { QueryErrorState } from "@/components/query-error-state";
@@ -68,12 +73,48 @@ const chaptersQueryOptions = (novelId: string) =>
     queryFn: () => listChapters({ data: { novelId } }),
   });
 
+const novelQueryOptions = (novelId: string) =>
+  queryOptions({
+    queryKey: ["novel", novelId],
+    queryFn: () => getNovel({ data: { novelId } }),
+  });
+
 export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapterId")({
   loader: async ({ params, context }) => {
-    await Promise.all([
+    const [chapter, _chapters, novel] = await Promise.all([
       context.queryClient.ensureQueryData(chapterQueryOptions(params.chapterId)),
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
+      context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
     ]);
+    if (!chapter) {
+      throw notFound();
+    }
+    return { chapter, novel };
+  },
+  head: ({ loaderData }) => {
+    const chapter = loaderData?.chapter;
+    const novel = loaderData?.novel;
+    const chTitle = chapter
+      ? `Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`
+      : "Chapter";
+    const novelTitle = novel?.title ?? "Novel";
+    const pageTitle = `${chTitle} | ${novelTitle} | Pnt - Personal Novel Translator`;
+    const description = novel?.description
+      ? novel.description.length > 160
+        ? `${novel.description.slice(0, 157)}...`
+        : novel.description
+      : "Read translated web novel chapter.";
+
+    return {
+      meta: [
+        { title: pageTitle },
+        { name: "description", content: description },
+        { property: "og:title", content: pageTitle },
+        { property: "og:description", content: description },
+        { name: "twitter:title", content: pageTitle },
+        { name: "twitter:description", content: description },
+      ],
+    };
   },
   component: ReaderPage,
 });
@@ -393,14 +434,7 @@ function ReaderPage() {
   }
 
   if (!chapter) {
-    return (
-      <div className="py-12 text-center">
-        <h2 className="text-card-title font-semibold text-foreground">Chapter not found</h2>
-        <Button className="mt-4" render={<Link to="/novels/$novelId" params={{ novelId }} />}>
-          Back to Novel
-        </Button>
-      </div>
-    );
+    throw notFound();
   }
 
   const hasTranslation = !!chapter.translatedContent;
@@ -410,58 +444,62 @@ function ReaderPage() {
   return (
     <div className="flex flex-col gap-5">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          render={<Link to="/novels/$novelId" params={{ novelId }} />}
-          aria-label="Back to chapter list"
-        >
-          <ArrowLeft className="size-4" />
-        </Button>
-
-        <Select value={chapterId} onValueChange={(id) => goToChapter(id as string)}>
-          <SelectTrigger className="min-w-0 flex-1 sm:max-w-80 sm:flex-none">
-            <SelectValue>
-              {`Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {chapters.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {`Ch. ${Number(c.number)} — ${c.translatedTitle ?? c.title}`}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="flex items-center">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        {/* Navigation Group */}
+        <div className="flex items-center gap-1.5 w-full sm:w-auto sm:flex-1 sm:max-w-xl">
           <Button
             variant="ghost"
             size="icon"
-            className="size-8"
-            disabled={!prevChapter}
-            onClick={() => prevChapter && goToChapter(prevChapter.id)}
-            aria-label="Previous chapter"
-            title="Previous chapter (←)"
+            className="size-8 shrink-0"
+            render={<Link to="/novels/$novelId" params={{ novelId }} />}
+            aria-label="Back to chapter list"
           >
-            <ChevronLeft className="size-4" />
+            <ArrowLeft className="size-4" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            disabled={!nextChapter}
-            onClick={() => nextChapter && goToChapter(nextChapter.id)}
-            aria-label="Next chapter"
-            title="Next chapter (→)"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
+
+          <Select value={chapterId} onValueChange={(id) => goToChapter(id as string)}>
+            <SelectTrigger className="min-w-0 flex-1 sm:max-w-md">
+              <SelectValue>
+                {`Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {chapters.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {`Ch. ${Number(c.number)} — ${c.translatedTitle ?? c.title}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              disabled={!prevChapter}
+              onClick={() => prevChapter && goToChapter(prevChapter.id)}
+              aria-label="Previous chapter"
+              title="Previous chapter (←)"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              disabled={!nextChapter}
+              onClick={() => nextChapter && goToChapter(nextChapter.id)}
+              aria-label="Next chapter"
+              title="Next chapter (→)"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        {/* Reader Controls Group */}
+        <div className="flex items-center justify-end gap-2 w-full sm:w-auto sm:ml-auto shrink-0">
           {hasTranslation && !editing && (
             <div
               className="inline-flex items-center gap-0.5 rounded-lg border border-border p-0.5"

@@ -12,6 +12,14 @@ export const Route = createFileRoute("/_protected")({
     }
     return { user: context.user };
   },
+  head: () => ({
+    meta: [
+      {
+        name: "robots",
+        content: "noindex, nofollow",
+      },
+    ],
+  }),
   component: ProtectedLayout,
 });
 
