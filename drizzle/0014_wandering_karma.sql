@@ -1,0 +1,1 @@
+ALTER TABLE "translation_jobs" DROP COLUMN "locked_until";

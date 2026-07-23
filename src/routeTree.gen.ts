@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as PublicRouteImport } from './routes/_public'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as ProtectedDesignScratchRouteImport } from './routes/_protected/design-scratch'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
@@ -36,11 +35,6 @@ const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
-} as any)
-const ProtectedDesignScratchRoute = ProtectedDesignScratchRouteImport.update({
-  id: '/design-scratch',
-  path: '/design-scratch',
-  getParentRoute: () => ProtectedRoute,
 } as any)
 const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
   id: '/settings',
@@ -100,7 +94,6 @@ const PublicNovelsNovelIdChaptersChapterIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/login': typeof LoginRoute
-  '/design-scratch': typeof ProtectedDesignScratchRoute
   '/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
@@ -114,7 +107,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/login': typeof LoginRoute
-  '/design-scratch': typeof ProtectedDesignScratchRoute
   '/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
@@ -130,7 +122,6 @@ export interface FileRoutesById {
   '/_protected': typeof ProtectedRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
   '/login': typeof LoginRoute
-  '/_protected/design-scratch': typeof ProtectedDesignScratchRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/_public/': typeof PublicIndexRoute
@@ -147,7 +138,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
-    | '/design-scratch'
     | '/settings'
     | '/api/inngest'
     | '/novels/new'
@@ -161,7 +151,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
-    | '/design-scratch'
     | '/settings'
     | '/api/inngest'
     | '/novels/new'
@@ -176,7 +165,6 @@ export interface FileRouteTypes {
     | '/_protected'
     | '/_public'
     | '/login'
-    | '/_protected/design-scratch'
     | '/_protected/settings'
     | '/api/inngest'
     | '/_public/'
@@ -220,13 +208,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_protected/design-scratch': {
-      id: '/_protected/design-scratch'
-      path: '/design-scratch'
-      fullPath: '/design-scratch'
-      preLoaderRoute: typeof ProtectedDesignScratchRouteImport
-      parentRoute: typeof ProtectedRoute
     }
     '/_protected/settings': {
       id: '/_protected/settings'
@@ -302,7 +283,6 @@ declare module '@tanstack/react-router' {
 }
 
 interface ProtectedRouteChildren {
-  ProtectedDesignScratchRoute: typeof ProtectedDesignScratchRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
   ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
   ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
@@ -310,7 +290,6 @@ interface ProtectedRouteChildren {
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
-  ProtectedDesignScratchRoute: ProtectedDesignScratchRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,
   ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
   ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,

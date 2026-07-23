@@ -94,7 +94,7 @@ export const startTranslationJob = createServerFn({ method: "POST" })
     for (const j of existingJobs) {
       await db
         .update(translationJobs)
-        .set({ status: "cancelled", lockedUntil: null, updatedAt: new Date() })
+        .set({ status: "cancelled", updatedAt: new Date() })
         .where(eq(translationJobs.id, j.id));
     }
 
@@ -356,7 +356,6 @@ export const cancelTranslationJob = createServerFn({ method: "POST" })
       .set({
         status: "cancelled",
         logsJson: JSON.stringify(logs),
-        lockedUntil: null,
         updatedAt: new Date(),
       })
       .where(eq(translationJobs.id, row.job.id));
@@ -407,7 +406,6 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
         status: "pending",
         error: null,
         logsJson: JSON.stringify(logs),
-        lockedUntil: null,
         updatedAt: new Date(),
       })
       .where(

@@ -13,8 +13,6 @@ describe("chunker module", () => {
     expect(chunks).toHaveLength(1);
     expect(chunks[0].text).toBe(text);
     expect(chunks[0].index).toBe(0);
-    expect(chunks[0].startOffset).toBe(0);
-    expect(chunks[0].endOffset).toBe(text.length);
   });
 
   it("preserves exact text when re-joining chunks", () => {

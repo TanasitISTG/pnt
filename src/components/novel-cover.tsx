@@ -3,7 +3,6 @@ import { BookOpen } from "lucide-react";
 
 interface NovelCoverProps {
   novelId?: string | null;
-  cover?: string | null;
   coverVersion?: string | number | Date | null;
   alt: string;
   className?: string;
@@ -13,7 +12,6 @@ interface NovelCoverProps {
 
 export function NovelCover({
   novelId,
-  cover,
   coverVersion,
   alt,
   className,
@@ -75,17 +73,6 @@ export function NovelCover({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [url, visible]);
-
-  // If inline cover is pre-loaded on the server, render it instantly in the DOM.
-  if (cover) {
-    return (
-      <img
-        src={cover}
-        alt={alt}
-        className={`w-full h-full object-cover rounded-[inherit] ${className}`}
-      />
-    );
-  }
 
   // Error / No cover state: Render BookOpen icon fallback immediately
   if (!url || error) {
