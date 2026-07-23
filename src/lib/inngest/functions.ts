@@ -8,6 +8,7 @@ import {
   finishImportJob,
   failImportJob,
 } from "@/lib/scrape.worker";
+import { log } from "@/lib/log";
 
 // One run per translation job. Each chunk is a memoized step = its own HTTP
 // invocation (fresh 5-min Vercel budget) with automatic retries; a crash
@@ -22,8 +23,13 @@ export const translateChapterFn = inngest.createFunction(
     idempotency: "event.data.runKey",
     cancelOn: [{ event: "translation/job.cancelled", match: "data.jobId" }],
     onFailure: async ({ event, error }) => {
-      const { jobId } = (event.data as any).event?.data ?? {};
-      if (jobId) await failJob(jobId, error.message);
+      const jobId = (event.data as any).event?.data?.jobId;
+      if (!jobId) {
+        log("error", "Translation onFailure fired without jobId", { event, error: error.message });
+        return;
+      }
+      log("error", "Translation job failed", { jobId, error: error.message });
+      await failJob(jobId, error.message);
     },
   },
   async ({ event, step }) => {
@@ -52,8 +58,13 @@ export const importChaptersFn = inngest.createFunction(
     idempotency: "event.data.runKey",
     cancelOn: [{ event: "scrape/import.cancelled", match: "data.jobId" }],
     onFailure: async ({ event, error }) => {
-      const { jobId } = (event.data as any).event?.data ?? {};
-      if (jobId) await failImportJob(jobId, error.message);
+      const jobId = (event.data as any).event?.data?.jobId;
+      if (!jobId) {
+        log("error", "Import onFailure fired without jobId", { event, error: error.message });
+        return;
+      }
+      log("error", "Import job failed", { jobId, error: error.message });
+      await failImportJob(jobId, error.message);
     },
   },
   async ({ event, step }) => {

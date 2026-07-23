@@ -18,9 +18,9 @@ export const testProviderConnectionSchema = z.object({
 
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, "Current password is required"),
-    newPassword: z.string().min(8, "New password must be at least 8 characters"),
-    confirmPassword: z.string().min(8, "Confirm password must be at least 8 characters"),
+    currentPassword: z.string().min(1, "Current password is required").max(1024),
+    newPassword: z.string().min(8, "New password must be at least 8 characters").max(1024),
+    confirmPassword: z.string().min(8, "Confirm password must be at least 8 characters").max(1024),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: "New passwords do not match",

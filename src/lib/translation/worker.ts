@@ -22,6 +22,7 @@ import {
   normalizeTranslationOutput,
 } from "./paragraphs";
 import { createLog, type ChunkProgress, type LogEntry } from "./translation.functions";
+import { log } from "@/lib/log";
 
 // Execution is driven by Inngest (see src/lib/inngest/functions.ts): one event
 // per job, each chunk a memoized step with its own invocation + retries — so no
@@ -46,6 +47,7 @@ async function saveJob(jobId: string, patch: Record<string, unknown>) {
 }
 
 export async function initJob(jobId: string) {
+  log("info", "step transition", { jobId, step: "init" });
   const row = await loadJob(jobId);
   if (!row) throw new Error(`Job ${jobId} not found`);
   const { job, chapter } = row;
@@ -68,6 +70,7 @@ export async function initJob(jobId: string) {
 }
 
 export async function translateChunk(jobId: string, i: number): Promise<void> {
+  log("info", "step transition", { jobId, step: "translateChunk", chunk: i });
   const row = await loadJob(jobId);
   if (!row) throw new Error(`Job ${jobId} not found`);
   const { job, chapter, novel } = row;
@@ -308,6 +311,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
 }
 
 export async function finalizeJob(jobId: string): Promise<void> {
+  log("info", "step transition", { jobId, step: "finalize" });
   const row = await loadJob(jobId);
   if (!row) throw new Error(`Job ${jobId} not found`);
   const { job, chapter, novel } = row;
@@ -640,6 +644,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
 
 /** Called from the function's onFailure — marks the job/chapter errored for the UI. */
 export async function failJob(jobId: string, message: string): Promise<void> {
+  log("error", "step transition", { jobId, step: "fail", message });
   const row = await loadJob(jobId);
   if (!row) return;
   const { job, chapter } = row;

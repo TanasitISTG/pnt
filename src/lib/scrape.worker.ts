@@ -7,12 +7,14 @@ import { chapters, importJobs } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
 import { chapterUrlFor } from "@/lib/scrape";
 import { fetchAndParse } from "@/lib/scrape.functions";
+import { log } from "@/lib/log";
 
 // Step logic for the "import-chapters" Inngest function. One step per chapter:
 // fetch/parse failures count as `failed` and the run continues; DB errors
 // propagate so Inngest retries the step instead of failing every chapter.
 
 export async function initImportJob(jobId: string) {
+  log("info", "Scrape worker step init", { jobId });
   const [job] = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).limit(1);
   if (!job || job.status === "cancelled" || job.status === "done" || job.status === "error") {
     return { skip: true as const };
@@ -27,6 +29,7 @@ export async function initImportJob(jobId: string) {
 }
 
 export async function importOneChapter(jobId: string, n: number) {
+  log("info", "Scrape worker step importOneChapter", { jobId, chapterNumber: n });
   const [job] = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).limit(1);
   if (!job || job.status !== "running") return { stop: true as const };
 
@@ -43,9 +46,15 @@ export async function importOneChapter(jobId: string, n: number) {
   try {
     scraped = await fetchAndParse(chapterUrlFor(job.baseUrl, n));
   } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : String(e);
+    log("warn", "Scrape worker chapter import failed", {
+      jobId,
+      chapterNumber: n,
+      error: errorMsg,
+    });
     await bump({
       failed: job.failed + 1,
-      error: e instanceof Error ? e.message : String(e),
+      error: errorMsg,
     });
     return { stop: false as const, created: false };
   }
@@ -75,6 +84,7 @@ export async function importOneChapter(jobId: string, n: number) {
 }
 
 export async function finishImportJob(jobId: string) {
+  log("info", "Scrape worker step finish", { jobId });
   await db
     .update(importJobs)
     .set({ status: "done", updatedAt: new Date() })
@@ -82,6 +92,7 @@ export async function finishImportJob(jobId: string) {
 }
 
 export async function failImportJob(jobId: string, message: string) {
+  log("error", "Scrape worker step fail", { jobId, error: message });
   await db
     .update(importJobs)
     .set({ status: "error", error: message, updatedAt: new Date() })
