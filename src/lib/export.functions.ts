@@ -7,6 +7,7 @@ import { chapters, novels } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { buildEpub } from "@/lib/export/epub";
 import { splitParagraphs } from "@/lib/translation/paragraphs";
+import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 
 const exportSchema = z.object({ novelId: z.string().min(1) });
 
@@ -23,7 +24,7 @@ async function loadTranslatedChapters(novelId: string, userId: string) {
     .limit(1);
 
   if (!novel) {
-    throw new Error("Novel not found or unauthorized");
+    throw new SafeServerError("Novel not found or unauthorized");
   }
 
   // Untranslated chapters are skipped — exports contain translated content only.
@@ -39,7 +40,7 @@ async function loadTranslatedChapters(novelId: string, userId: string) {
     .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
 
   if (translated.length === 0) {
-    throw new Error("No translated chapters to export yet");
+    throw new SafeServerError("No translated chapters to export yet");
   }
 
   return { novel, translated };
@@ -47,43 +48,47 @@ async function loadTranslatedChapters(novelId: string, userId: string) {
 
 export const exportNovelTxt = createServerFn({ method: "GET" })
   .validator(exportSchema)
-  .handler(async ({ data }) => {
-    const session = await ensureSession();
-    const { novel, translated } = await loadTranslatedChapters(data.novelId, session.user.id);
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+      const { novel, translated } = await loadTranslatedChapters(data.novelId, session.user.id);
 
-    const parts = translated.map(
-      (c) =>
-        `Chapter ${Number(c.number)} — ${c.translatedTitle ?? c.title}\n\n${c.translatedContent}`,
-    );
-    const content = `${novel.title}\n${novel.author ? `by ${novel.author}\n` : ""}\n\n${parts.join("\n\n\n")}`;
+      const parts = translated.map(
+        (c) =>
+          `Chapter ${Number(c.number)} — ${c.translatedTitle ?? c.title}\n\n${c.translatedContent}`,
+      );
+      const content = `${novel.title}\n${novel.author ? `by ${novel.author}\n` : ""}\n\n${parts.join("\n\n\n")}`;
 
-    return {
-      filename: `${sanitizeFilename(novel.title)}.txt`,
-      content,
-    };
-  });
+      return {
+        filename: `${sanitizeFilename(novel.title)}.txt`,
+        content,
+      };
+    }),
+  );
 
 export const exportNovelEpub = createServerFn({ method: "GET" })
   .validator(exportSchema)
-  .handler(async ({ data }) => {
-    const session = await ensureSession();
-    const { novel, translated } = await loadTranslatedChapters(data.novelId, session.user.id);
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+      const { novel, translated } = await loadTranslatedChapters(data.novelId, session.user.id);
 
-    const bytes = buildEpub(
-      {
-        title: novel.title,
-        author: novel.author || "Unknown",
-        language: novel.targetLang || "en",
-        identifier: `urn:pnt:${novel.id}`,
-      },
-      translated.map((c) => ({
-        title: `Chapter ${Number(c.number)} — ${c.translatedTitle ?? c.title}`,
-        paragraphs: splitParagraphs(c.translatedContent!),
-      })),
-    );
+      const bytes = buildEpub(
+        {
+          title: novel.title,
+          author: novel.author || "Unknown",
+          language: novel.targetLang || "en",
+          identifier: `urn:pnt:${novel.id}`,
+        },
+        translated.map((c) => ({
+          title: `Chapter ${Number(c.number)} — ${c.translatedTitle ?? c.title}`,
+          paragraphs: splitParagraphs(c.translatedContent!),
+        })),
+      );
 
-    return {
-      filename: `${sanitizeFilename(novel.title)}.epub`,
-      dataBase64: Buffer.from(bytes).toString("base64"),
-    };
-  });
+      return {
+        filename: `${sanitizeFilename(novel.title)}.epub`,
+        dataBase64: Buffer.from(bytes).toString("base64"),
+      };
+    }),
+  );
