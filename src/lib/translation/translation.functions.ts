@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, desc, asc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels, chapters, translationJobs, providerSettings } from "@/lib/db/schema";
@@ -153,7 +153,7 @@ export const startTranslationJob = createServerFn({ method: "POST" })
           .where(eq(chapters.id, chapter.id));
       }
 
-      return { jobId };
+      return { jobId, totalChunks: chunkInfos.length };
     }),
   );
 
@@ -165,21 +165,43 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
       await createProviderClient(session.user.id);
 
       const targetChapters = await db
-        .select({ id: chapters.id })
+        .select({ id: chapters.id, number: chapters.number })
         .from(chapters)
         .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(and(inArray(chapters.id, data.chapterIds), eq(novels.userId, session.user.id)));
+        .where(and(inArray(chapters.id, data.chapterIds), eq(novels.userId, session.user.id)))
+        .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
 
-      const jobIds: string[] = [];
+      const queued: { chapterId: string; jobId: string; totalChunks: number }[] = [];
+      const skipped: { chapterId: string; reason?: string }[] = [];
 
-      for (const ch of targetChapters) {
-        const res = await startTranslationJob({ data: { chapterId: ch.id } });
-        if (res?.jobId) {
-          jobIds.push(res.jobId);
+      const foundIds = new Set(targetChapters.map((ch) => ch.id));
+      for (const id of data.chapterIds) {
+        if (!foundIds.has(id)) {
+          skipped.push({ chapterId: id, reason: "Chapter not found or unauthorized" });
         }
       }
 
-      return { jobIds, total: jobIds.length };
+      for (const ch of targetChapters) {
+        try {
+          const res = await startTranslationJob({ data: { chapterId: ch.id } });
+          if (res?.jobId && typeof res.totalChunks === "number") {
+            queued.push({
+              chapterId: ch.id,
+              jobId: res.jobId,
+              totalChunks: res.totalChunks,
+            });
+          } else {
+            skipped.push({ chapterId: ch.id, reason: "No job created" });
+          }
+        } catch (err: any) {
+          skipped.push({
+            chapterId: ch.id,
+            reason: err?.message || "Failed to start translation",
+          });
+        }
+      }
+
+      return { queued, skipped };
     }),
   );
 

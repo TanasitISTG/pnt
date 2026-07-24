@@ -11,4 +11,16 @@ describe("translation batch query predicates", () => {
   it("does not interpolate arrays into raw ANY predicates", () => {
     expect(source).not.toContain("ANY(${");
   });
+
+  it("sorts selected chapters in numeric ascending order with COALESCE(number::numeric, 0)", () => {
+    expect(source).toContain("asc(sql`COALESCE(${chapters.number}::numeric, 0)`)");
+  });
+
+  it("returns totalChunks from startTranslationJob", () => {
+    expect(source).toContain("return { jobId, totalChunks: chunkInfos.length };");
+  });
+
+  it("returns queued and skipped arrays from startTranslationJobs", () => {
+    expect(source).toContain("return { queued, skipped };");
+  });
 });
