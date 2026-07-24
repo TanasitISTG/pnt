@@ -8,6 +8,18 @@ const baseEnvSchema = z.object({
   APP_ENCRYPTION_KEY: z.string().min(32),
   // Local dev only: puts the SDK in dev mode (v4 defaults to cloud mode).
   INNGEST_DEV: z.string().optional(),
+
+  // ZenRows scraper configuration (optional, app boots keyless).
+  SCRAPER_API_KEY: z.string().optional(),
+  SCRAPER_BASE: z
+    .string()
+    .url()
+    .optional()
+    .refine((v) => !v || v.startsWith("https://api.zenrows.com"), {
+      message: "must start with https://api.zenrows.com",
+    }),
+  SCRAPER_RENDER_JS: z.string().optional(),
+  SCRAPER_PREMIUM_PROXY: z.string().optional(),
 });
 
 const prodEnvSchema = baseEnvSchema.extend({

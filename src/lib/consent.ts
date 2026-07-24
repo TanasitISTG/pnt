@@ -19,9 +19,10 @@ export function setConsent(value: ConsentState) {
 }
 
 export function useConsent() {
-  const [consent, setConsentState] = useState<ConsentState>(getConsent);
+  const [consent, setConsentState] = useState<ConsentState>("pending");
 
   useEffect(() => {
+    setConsentState(getConsent());
     const handleCustomEvent = (e: Event) => {
       const custom = e as CustomEvent<ConsentState>;
       if (custom.detail) {

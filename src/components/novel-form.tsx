@@ -62,7 +62,7 @@ export function NovelForm({
     e.preventDefault();
     setErrors({});
 
-    const result = createNovelSchema.partial().safeParse(form);
+    const result = createNovelSchema.safeParse(form);
     if (!result.success) {
       const fieldErrors: Partial<Record<keyof NovelFormData, string>> = {};
       result.error.issues.forEach((issue) => {

@@ -5,8 +5,15 @@ import { eq, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { chapters, importJobs } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
-import { chapterUrlFor } from "@/lib/scrape";
-import { fetchAndParse } from "@/lib/scrape.functions";
+import {
+  findSource,
+  chapterUrlFor,
+  twkanTocUrlFromReader,
+  parseTwkanToc,
+  biqugeTocUrlFromReader,
+  parseBiqugeToc,
+} from "@/lib/scrape";
+import { fetchAndParse, fetchHtml } from "@/lib/scrape.server";
 import { log } from "@/lib/log";
 
 // Step logic for the "import-chapters" Inngest function. One step per chapter:
@@ -25,16 +32,37 @@ export async function initImportJob(jobId: string) {
       .set({ status: "running", updatedAt: new Date() })
       .where(eq(importJobs.id, jobId));
   }
-  return { skip: false as const, to: job.toNumber, next: job.nextNumber };
+
+  const source = findSource(job.baseUrl);
+  let chapterUrls: Record<number, string> | undefined;
+
+  if (source.name === "twkan") {
+    const tocUrl = twkanTocUrlFromReader(job.baseUrl);
+    const tocHtml = await fetchHtml(tocUrl);
+    chapterUrls = parseTwkanToc(tocHtml, tocUrl);
+  } else if (source.name === "biquge") {
+    const tocUrl = biqugeTocUrlFromReader(job.baseUrl);
+    const tocHtml = await fetchHtml(tocUrl);
+    chapterUrls = parseBiqugeToc(tocHtml, tocUrl);
+  }
+
+  return { skip: false as const, to: job.toNumber, next: job.nextNumber, chapterUrls };
 }
 
-export async function importOneChapter(jobId: string, n: number) {
+export async function importOneChapter(
+  jobId: string,
+  n: number,
+  chapterUrls?: Record<number, string>,
+) {
   log("info", "Scrape worker step importOneChapter", { jobId, chapterNumber: n });
   const [job] = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).limit(1);
   if (!job || job.status !== "running") return { stop: true as const };
 
-  // ponytail: fixed polite delay; escalate to host-adaptive backoff if quanben rate-limits.
-  await new Promise((r) => setTimeout(r, 400));
+  const source = findSource(job.baseUrl);
+
+  // ponytail: fixed polite delay; twkan uses 1500ms to respect rate limit, others use 400ms.
+  const delayMs = source.name === "twkan" ? 1500 : 400;
+  await new Promise((r) => setTimeout(r, delayMs));
 
   const bump = (patch: Partial<typeof importJobs.$inferInsert>) =>
     db
@@ -42,9 +70,28 @@ export async function importOneChapter(jobId: string, n: number) {
       .set({ ...patch, nextNumber: n + 1, updatedAt: new Date() })
       .where(eq(importJobs.id, jobId));
 
+  let targetUrl: string;
+  if (source.name === "twkan" || source.name === "biquge") {
+    const foundUrl = chapterUrls ? chapterUrls[n] : undefined;
+    if (!foundUrl) {
+      log("warn", "Scrape worker chapter import failed: missing URL in TOC", {
+        jobId,
+        chapterNumber: n,
+      });
+      await bump({
+        failed: job.failed + 1,
+        error: `Chapter ${n} URL missing in TOC`,
+      });
+      return { stop: false as const, created: false };
+    }
+    targetUrl = foundUrl;
+  } else {
+    targetUrl = chapterUrlFor(job.baseUrl, n);
+  }
+
   let scraped;
   try {
-    scraped = await fetchAndParse(chapterUrlFor(job.baseUrl, n));
+    scraped = await fetchAndParse(targetUrl);
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : String(e);
     log("warn", "Scrape worker chapter import failed", {

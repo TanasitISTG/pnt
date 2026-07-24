@@ -7,38 +7,10 @@ import { novels, chapters, importJobs } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { nanoid } from "@/lib/utils";
 import { inngest } from "@/lib/inngest/client";
-import { findSource, parseChapter, assertPublicHost, type ScrapedChapter } from "@/lib/scrape";
+import { findSource } from "@/lib/scrape";
+import { fetchAndParse } from "@/lib/scrape.server";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
-
-const FETCH_TIMEOUT_MS = 10_000;
-const MAX_HTML_CHARS = 2_000_000;
-
-export async function fetchAndParse(url: string): Promise<ScrapedChapter> {
-  await assertPublicHost(url); // host whitelist + private IP check before any network I/O
-
-  const res = await fetch(url, {
-    redirect: "error",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-      Accept: "text/html",
-    },
-  });
-  if (!res.ok) {
-    log("error", "Scrape fetch failed", { url, status: res.status });
-    throw new SafeServerError(`Source site returned HTTP ${res.status}`);
-  }
-
-  const html = await res.text();
-  if (html.length > MAX_HTML_CHARS) {
-    log("error", "Scrape page size limit exceeded", { url, length: html.length });
-    throw new SafeServerError("Page too large");
-  }
-
-  return parseChapter(html, url);
-}
 
 export const scrapeChapter = createServerFn({ method: "POST" })
   .validator(z.object({ url: z.string().min(1) }))
@@ -139,7 +111,24 @@ export const startImportJob = createServerFn({ method: "POST" })
         nextNumber: data.from,
       });
 
-      await inngest.send({ name: "scrape/import.requested", data: { jobId, runKey: nanoid() } });
+      try {
+        await inngest.send({ name: "scrape/import.requested", data: { jobId, runKey: nanoid() } });
+      } catch (err: any) {
+        log("error", "Failed to send Inngest event in startImportJob", {
+          jobId,
+          error: err?.message || err,
+        });
+        if (
+          err?.message?.includes("fetch failed") ||
+          err?.cause?.code === "ECONNREFUSED" ||
+          err?.code === "ECONNREFUSED"
+        ) {
+          throw new SafeServerError(
+            "Inngest dev server is not running. Please run 'bun run inngest' in a separate terminal alongside 'bun dev'.",
+          );
+        }
+        throw new SafeServerError(`Failed to enqueue import job: ${err?.message || err}`);
+      }
 
       return { jobId };
     }),
@@ -184,7 +173,7 @@ const importJobStatusSelect = {
   skipped: importJobs.skipped,
   failed: importJobs.failed,
   error: importJobs.error,
-} as const;
+};
 
 export const getImportJobStatus = createServerFn({ method: "GET" })
   .validator(z.object({ jobId: z.string().min(1) }))
@@ -199,7 +188,7 @@ export const getImportJobStatus = createServerFn({ method: "GET" })
         .where(and(eq(importJobs.id, data.jobId), eq(novels.userId, session.user.id)))
         .limit(1);
 
-      return row || null;
+      return row ?? null;
     }),
   );
 
@@ -223,6 +212,6 @@ export const getActiveImportJob = createServerFn({ method: "GET" })
         .orderBy(desc(importJobs.createdAt))
         .limit(1);
 
-      return row || null;
+      return row ?? null;
     }),
   );

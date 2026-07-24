@@ -15,7 +15,7 @@ A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin 
 ## Features
 
 - **Novel library** — gallery grid with cover uploads (stored in Postgres), language pair display, and translation progress
-- **Chapter CRUD** — paste raw text or bulk-import from supported sites; decimal numbering for re-ordering
+- **Chapter CRUD** — paste raw text or bulk-import from supported sites (`quanben.io`, `twkan.com`, `biquge.tw`); decimal numbering for re-ordering
 - **Inngest-driven translation** — serverless-safe, chunked at paragraph boundaries, resumable, cancellable, per-chunk retry
 - **Consistency engine** — per-novel glossary (approved terms injected per chunk) + rolling chapter summaries for stable names/tone
 - **Reader** — side-by-side raw/translated, paragraph-aligned synced scroll, font size/typeface controls, inline edit, re-translate
@@ -56,7 +56,7 @@ bun run seed:user
 # Start dev server (port 3000)
 bun dev
 
-# Start Inngest dev server in another terminal (for translation)
+# Start Inngest dev server in another terminal (for translation & bulk import)
 bun run inngest
 ```
 
@@ -76,18 +76,24 @@ bun run inngest
 
 ## Environment Variables
 
-| Variable              | Required | Description                                                    |
-| --------------------- | -------- | -------------------------------------------------------------- |
-| `DATABASE_URL`        | Yes      | Neon Postgres connection string (SSL required)                 |
-| `BETTER_AUTH_SECRET`  | Yes      | 32-byte base64 random string                                   |
-| `BETTER_AUTH_URL`     | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`) |
-| `APP_ENCRYPTION_KEY`  | Yes      | 32-byte base64 random string for encrypting API keys at rest   |
-| `SEED_ADMIN_EMAIL`    | No       | Admin email for `bun run seed:user`                            |
-| `SEED_ADMIN_NAME`     | No       | Admin display name                                             |
-| `SEED_ADMIN_PASSWORD` | No       | Admin password                                                 |
-| `INNGEST_DEV`         | No       | Set to `1` for local dev (SDK v4 defaults to cloud mode)       |
-| `INNGEST_EVENT_KEY`   | No       | Inngest Cloud event key (production only)                      |
-| `INNGEST_SIGNING_KEY` | No       | Inngest Cloud signing key (production only)                    |
+| Variable                   | Required | Description                                                    |
+| -------------------------- | -------- | -------------------------------------------------------------- |
+| `DATABASE_URL`             | Yes      | Neon Postgres connection string (SSL required)                 |
+| `BETTER_AUTH_SECRET`       | Yes      | 32-byte base64 random string                                   |
+| `BETTER_AUTH_URL`          | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`) |
+| `APP_ENCRYPTION_KEY`       | Yes      | 32-byte base64 random string for encrypting API keys at rest   |
+| `SEED_ADMIN_EMAIL`         | No       | Admin email for `bun run seed:user`                            |
+| `SEED_ADMIN_NAME`          | No       | Admin display name                                             |
+| `SEED_ADMIN_PASSWORD`      | No       | Admin password                                                 |
+| `INNGEST_DEV`              | No       | Set to `1` for local dev (SDK v4 defaults to cloud mode)       |
+| `INNGEST_EVENT_KEY`        | No       | Inngest Cloud event key (production only)                      |
+| `INNGEST_SIGNING_KEY`      | No       | Inngest Cloud signing key (production only)                    |
+| `SCRAPER_API_KEY`          | No       | ZenRows API key for bypassing Cloudflare anti-bot              |
+| `SCRAPER_BASE`             | No       | ZenRows API base URL (default `https://api.zenrows.com/v1/`)   |
+| `SCRAPER_RENDER_JS`        | No       | Set `"true"`/`"false"` for headless browser rendering          |
+| `SCRAPER_PREMIUM_PROXY`    | No       | Set `"true"`/`"false"` for residential proxy routing           |
+| `VITE_PUBLIC_POSTHOG_KEY`  | No       | PostHog project API key for frontend analytics                 |
+| `VITE_PUBLIC_POSTHOG_HOST` | No       | PostHog API host (default `https://us.i.posthog.com`)          |
 
 ## Project Structure
 
@@ -108,7 +114,8 @@ src/
   lib/
     auth.ts / auth-client.ts    # Better Auth setup
     translation/                # Chunker, prompts, glossary filter, worker
-    scrape.ts / scrape.worker.ts # Chapter parser + bulk import
+    scrape.ts / scrape.server.ts # Chapter parser + scraper fetch engine
+    scrape.worker.ts            # Inngest bulk chapter import worker
     inngest/functions.ts        # Inngest durable functions
   components/ui/                # Restyled shadcn/Base UI primitives
   styles/globals.css            # Design tokens (@theme)

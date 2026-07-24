@@ -74,7 +74,7 @@ export const importChaptersFn = inngest.createFunction(
     if (init.skip) return { skipped: true };
 
     for (let n = init.next; n <= init.to; n++) {
-      const r = await step.run(`chapter-${n}`, () => importOneChapter(jobId, n));
+      const r = await step.run(`chapter-${n}`, () => importOneChapter(jobId, n, init.chapterUrls));
       if (r.stop) return { stopped: true };
     }
 
