@@ -12,6 +12,7 @@ import {
   parseTwkanToc,
   biqugeTocUrlFromReader,
   parseBiqugeToc,
+  type ScrapeProvider,
 } from "@/lib/scrape";
 import { fetchAndParse, fetchHtml } from "@/lib/scrape.server";
 import { log } from "@/lib/log";
@@ -35,14 +36,15 @@ export async function initImportJob(jobId: string) {
 
   const source = findSource(job.baseUrl);
   let chapterUrls: Record<number, string> | undefined;
+  const provider = (job.scrapeProvider as ScrapeProvider) ?? "auto";
 
   if (source.name === "twkan") {
     const tocUrl = twkanTocUrlFromReader(job.baseUrl);
-    const tocHtml = await fetchHtml(tocUrl);
+    const tocHtml = await fetchHtml(tocUrl, provider);
     chapterUrls = parseTwkanToc(tocHtml, tocUrl);
   } else if (source.name === "biquge") {
     const tocUrl = biqugeTocUrlFromReader(job.baseUrl);
-    const tocHtml = await fetchHtml(tocUrl);
+    const tocHtml = await fetchHtml(tocUrl, provider);
     chapterUrls = parseBiqugeToc(tocHtml, tocUrl);
   }
 
@@ -91,7 +93,8 @@ export async function importOneChapter(
 
   let scraped;
   try {
-    scraped = await fetchAndParse(targetUrl);
+    const provider = (job.scrapeProvider as ScrapeProvider) ?? "auto";
+    scraped = await fetchAndParse(targetUrl, provider);
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : String(e);
     log("warn", "Scrape worker chapter import failed", {

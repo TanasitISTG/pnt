@@ -92,6 +92,8 @@ bun run inngest
 | `SCRAPER_BASE`             | No       | ZenRows API base URL (default `https://api.zenrows.com/v1/`)   |
 | `SCRAPER_RENDER_JS`        | No       | Set `"true"`/`"false"` for headless browser rendering          |
 | `SCRAPER_PREMIUM_PROXY`    | No       | Set `"true"`/`"false"` for residential proxy routing           |
+| `SCRAPINGBEE_API_KEY`      | No       | ScrapingBee API key for HTML scraping provider                 |
+| `FIRECRAWL_API_KEY`        | No       | Firecrawl API key for scrape endpoint                          |
 | `VITE_PUBLIC_POSTHOG_KEY`  | No       | PostHog project API key for frontend analytics                 |
 | `VITE_PUBLIC_POSTHOG_HOST` | No       | PostHog API host (default `https://us.i.posthog.com`)          |
 

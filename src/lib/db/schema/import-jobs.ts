@@ -23,6 +23,7 @@ export const importJobs = pgTable(
     fromNumber: integer("from_number").notNull(),
     toNumber: integer("to_number").notNull(),
     nextNumber: integer("next_number").notNull(),
+    scrapeProvider: text("scrape_provider").notNull().default("auto"),
     added: integer("added").notNull().default(0),
     skipped: integer("skipped").notNull().default(0),
     failed: integer("failed").notNull().default(0),

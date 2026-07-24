@@ -766,50 +766,52 @@ function ReaderPage() {
       )}
 
       {/* Bottom navigation */}
-      <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
-        {prevChapter ? (
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border pt-4">
+        <div className="flex justify-start min-w-0">
+          {prevChapter && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-w-0 max-w-full sm:max-w-64"
+              onClick={() => goToChapter(prevChapter.id)}
+              title={`Ch. ${Number(prevChapter.number)} — ${prevChapter.translatedTitle ?? prevChapter.title}`}
+            >
+              <ChevronLeft className="size-4 shrink-0" />
+              <span className="truncate">
+                {`Ch. ${Number(prevChapter.number)} — ${prevChapter.translatedTitle ?? prevChapter.title}`}
+              </span>
+            </Button>
+          )}
+        </div>
+        <div className="flex justify-center">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className="min-w-0 max-w-32 sm:max-w-64"
-            onClick={() => goToChapter(prevChapter.id)}
-            title={`Ch. ${Number(prevChapter.number)} — ${prevChapter.translatedTitle ?? prevChapter.title}`}
+            className="shrink-0"
+            render={<Link to="/novels/$novelId" params={{ novelId }} />}
+            aria-label="All chapters"
+            title="All chapters"
           >
-            <ChevronLeft className="size-4 shrink-0" />
-            <span className="truncate">
-              {`Ch. ${Number(prevChapter.number)} — ${prevChapter.translatedTitle ?? prevChapter.title}`}
-            </span>
+            <List className="size-4 sm:hidden" />
+            <span className="hidden sm:inline">All chapters</span>
           </Button>
-        ) : (
-          <span />
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="shrink-0"
-          render={<Link to="/novels/$novelId" params={{ novelId }} />}
-          aria-label="All chapters"
-          title="All chapters"
-        >
-          <List className="size-4 sm:hidden" />
-          <span className="hidden sm:inline">All chapters</span>
-        </Button>
-        {nextChapter ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-w-0 max-w-32 sm:max-w-64"
-            onClick={() => goToChapter(nextChapter.id)}
-            title={`Ch. ${Number(nextChapter.number)} — ${nextChapter.translatedTitle ?? nextChapter.title}`}
-          >
-            <span className="truncate">
-              {`Ch. ${Number(nextChapter.number)} — ${nextChapter.translatedTitle ?? nextChapter.title}`}
-            </span>
-            <ChevronRight className="size-4 shrink-0" />
-          </Button>
-        ) : (
-          <span />
-        )}
+        </div>
+        <div className="flex justify-end min-w-0">
+          {nextChapter && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-w-0 max-w-full sm:max-w-64"
+              onClick={() => goToChapter(nextChapter.id)}
+              title={`Ch. ${Number(nextChapter.number)} — ${nextChapter.translatedTitle ?? nextChapter.title}`}
+            >
+              <span className="truncate">
+                {`Ch. ${Number(nextChapter.number)} — ${nextChapter.translatedTitle ?? nextChapter.title}`}
+              </span>
+              <ChevronRight className="size-4 shrink-0" />
+            </Button>
+          )}
+        </div>
       </div>
 
       <ConfirmDialog

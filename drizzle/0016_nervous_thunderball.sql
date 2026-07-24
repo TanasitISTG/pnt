@@ -1,0 +1,1 @@
+ALTER TABLE "import_jobs" ADD COLUMN "scrape_provider" text DEFAULT 'auto' NOT NULL;

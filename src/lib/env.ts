@@ -20,6 +20,10 @@ const baseEnvSchema = z.object({
     }),
   SCRAPER_RENDER_JS: z.string().optional(),
   SCRAPER_PREMIUM_PROXY: z.string().optional(),
+
+  // ScrapingBee & Firecrawl scraper configuration (optional, app boots keyless).
+  SCRAPINGBEE_API_KEY: z.string().optional(),
+  FIRECRAWL_API_KEY: z.string().optional(),
 });
 
 const prodEnvSchema = baseEnvSchema.extend({

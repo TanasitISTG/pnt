@@ -256,3 +256,20 @@ describe("assertPublicHost", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe("SCRAPE_PROVIDERS & SUPPORTED_SITES_LABEL", () => {
+  it("exports provider metadata for auto, direct, zenrows, scrapingbee, and firecrawl", async () => {
+    const { SCRAPE_PROVIDERS, SUPPORTED_SITES_LABEL } = await import("@/lib/scrape");
+    expect(SCRAPE_PROVIDERS).toHaveLength(5);
+    expect(SCRAPE_PROVIDERS.map((p) => p.id)).toEqual([
+      "auto",
+      "direct",
+      "zenrows",
+      "scrapingbee",
+      "firecrawl",
+    ]);
+    expect(SUPPORTED_SITES_LABEL).toContain("quanben.io");
+    expect(SUPPORTED_SITES_LABEL).toContain("twkan.com");
+    expect(SUPPORTED_SITES_LABEL).toContain("biquge.tw");
+  });
+});

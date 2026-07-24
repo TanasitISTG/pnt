@@ -12,17 +12,27 @@ import { fetchAndParse } from "@/lib/scrape.server";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
 
+const providerEnum = z
+  .enum(["auto", "direct", "zenrows", "scrapingbee", "firecrawl"])
+  .default("auto");
+
 export const scrapeChapter = createServerFn({ method: "POST" })
-  .validator(z.object({ url: z.string().min(1) }))
+  .validator(z.object({ url: z.string().min(1), provider: providerEnum }))
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       await ensureSession();
-      return fetchAndParse(data.url);
+      return fetchAndParse(data.url, data.provider);
     }),
   );
 
 export const importChapter = createServerFn({ method: "POST" })
-  .validator(z.object({ novelId: z.string().min(1), url: z.string().min(1) }))
+  .validator(
+    z.object({
+      novelId: z.string().min(1),
+      url: z.string().min(1),
+      provider: providerEnum,
+    }),
+  )
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
@@ -34,7 +44,7 @@ export const importChapter = createServerFn({ method: "POST" })
         .limit(1);
       if (!novel) throw new SafeServerError("Novel not found or unauthorized");
 
-      const scraped = await fetchAndParse(data.url);
+      const scraped = await fetchAndParse(data.url, data.provider);
 
       const id = nanoid();
       const [inserted] = await db
@@ -62,6 +72,7 @@ const startImportJobSchema = z.object({
   baseUrl: z.string().min(1),
   from: z.number().int().min(1),
   to: z.number().int().min(1),
+  provider: providerEnum,
 });
 
 export const startImportJob = createServerFn({ method: "POST" })
@@ -109,6 +120,7 @@ export const startImportJob = createServerFn({ method: "POST" })
         fromNumber: data.from,
         toNumber: data.to,
         nextNumber: data.from,
+        scrapeProvider: data.provider,
       });
 
       try {
@@ -169,6 +181,7 @@ const importJobStatusSelect = {
   fromNumber: importJobs.fromNumber,
   toNumber: importJobs.toNumber,
   nextNumber: importJobs.nextNumber,
+  scrapeProvider: importJobs.scrapeProvider,
   added: importJobs.added,
   skipped: importJobs.skipped,
   failed: importJobs.failed,

@@ -4,6 +4,22 @@
 import { SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
 
+export type ScrapeProvider = "auto" | "direct" | "zenrows" | "scrapingbee" | "firecrawl";
+
+export interface ScrapeProviderMeta {
+  id: ScrapeProvider;
+  label: string;
+  description: string;
+}
+
+export const SCRAPE_PROVIDERS: ScrapeProviderMeta[] = [
+  { id: "auto", label: "Automatic", description: "Default per-site proxy behavior" },
+  { id: "direct", label: "Direct", description: "Direct HTTP fetch without proxy" },
+  { id: "zenrows", label: "ZenRows", description: "ZenRows scraping API" },
+  { id: "scrapingbee", label: "ScrapingBee", description: "ScrapingBee HTML API" },
+  { id: "firecrawl", label: "Firecrawl", description: "Firecrawl scrape endpoint" },
+];
+
 export interface ScrapedChapter {
   number: number;
   title: string;
@@ -636,6 +652,10 @@ export const SOURCES: Source[] = [
   { name: "twkan", hosts: ["twkan.com", "www.twkan.com"], parse: parseTwkan },
   { name: "biquge", hosts: ["www.biquge.tw", "biquge.tw"], parse: parseBiquge },
 ];
+
+export const SUPPORTED_SITES_LABEL = SOURCES.map((s) => s.hosts[0].replace(/^www\./, "")).join(
+  ", ",
+);
 
 export function findSource(url: string): Source {
   let host: string;
