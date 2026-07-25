@@ -13,17 +13,16 @@ export async function translateChapterTitle(
   title: string,
 ): Promise<{ translated: string | null; promptTokens: number; completionTokens: number }> {
   try {
-    const completion = await providerConfig.client.chat.completions.create({
-      model: providerConfig.model,
+    const completion = await providerConfig.generateChatCompletion({
       temperature: 0.3,
       messages: [
         { role: "system", content: buildTitlePrompt(pair) },
         { role: "user", content: title },
       ],
     });
-    const promptTokens = completion.usage?.prompt_tokens || 0;
-    const completionTokens = completion.usage?.completion_tokens || 0;
-    const translated = completion.choices[0]?.message?.content?.trim() || null;
+    const promptTokens = completion.usage?.promptTokens || 0;
+    const completionTokens = completion.usage?.completionTokens || 0;
+    const translated = completion.content.trim() || null;
     return { translated, promptTokens, completionTokens };
   } catch {
     return { translated: null, promptTokens: 0, completionTokens: 0 };

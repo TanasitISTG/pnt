@@ -11,6 +11,7 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
 } from "lucide-react";
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -23,6 +24,7 @@ import {
   testProviderConnection,
   changePassword,
 } from "@/lib/settings.functions";
+import type { ProviderType } from "@/lib/translation/provider-client";
 
 export const Route = createFileRoute("/_protected/settings")({
   loader: async () => {
@@ -35,6 +37,7 @@ function SettingsPage() {
   const initialSettings = Route.useLoaderData();
 
   // Provider state
+  const [provider, setProvider] = useState<ProviderType>(initialSettings.provider || "openai");
   const [baseUrl, setBaseUrl] = useState(initialSettings.baseUrl);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initialSettings.model);
@@ -64,6 +67,24 @@ function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
 
+  const handleProviderChange = (newProvider: ProviderType) => {
+    setProvider(newProvider);
+    setTestResult(null);
+    if (newProvider === "gemini") {
+      setBaseUrl("https://generativelanguage.googleapis.com");
+      if (model === "gpt-4o" || model === "deepseek/deepseek-r1" || model === "deepseek-chat") {
+        setModel("gemini-2.5-flash");
+      }
+    } else if (newProvider === "openai") {
+      if (baseUrl === "https://generativelanguage.googleapis.com" || !baseUrl) {
+        setBaseUrl("https://api.openai.com/v1");
+      }
+      if (model.startsWith("gemini")) {
+        setModel("gpt-4o");
+      }
+    }
+  };
+
   const handleSaveProvider = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingProvider(true);
@@ -72,6 +93,7 @@ function SettingsPage() {
     try {
       await saveProviderSettings({
         data: {
+          provider,
           baseUrl,
           apiKey: apiKey ? apiKey.trim() : undefined,
           model,
@@ -105,6 +127,7 @@ function SettingsPage() {
     try {
       const result = await testProviderConnection({
         data: {
+          provider,
           baseUrl,
           apiKey: apiKey ? apiKey.trim() : undefined,
           model,
@@ -159,7 +182,12 @@ function SettingsPage() {
     }
   };
 
-  const applyPreset = (presetBaseUrl: string, presetModel: string) => {
+  const applyPreset = (
+    presetProvider: ProviderType,
+    presetBaseUrl: string,
+    presetModel: string,
+  ) => {
+    setProvider(presetProvider);
     setBaseUrl(presetBaseUrl);
     setModel(presetModel);
   };
@@ -179,7 +207,8 @@ function SettingsPage() {
           <div className="text-body">
             <p className="font-semibold">AI Provider Not Configured</p>
             <p className="mt-1 text-caption opacity-90">
-              You must set up an OpenAI-compatible provider and API key before translating chapters.
+              You must set up an AI provider (OpenAI-compatible or Google AI Studio) and API key
+              before translating chapters.
             </p>
           </div>
         </div>
@@ -193,42 +222,132 @@ function SettingsPage() {
             <CardTitle>AI Provider Settings</CardTitle>
           </div>
           <CardDescription>
-            Connect any OpenAI-compatible API (OpenAI, OpenRouter, DeepSeek, local LLM). API keys
-            are encrypted at rest using AES-256-GCM.
+            Connect an OpenAI-compatible API or Google AI Studio (Gemini API key). API keys are
+            encrypted at rest using AES-256-GCM.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSaveProvider} className="space-y-6">
+            {/* Provider Selector */}
+            <div className="space-y-2">
+              <Label>Provider Type</Label>
+              <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+                <button
+                  type="button"
+                  onClick={() => handleProviderChange("openai")}
+                  className={`flex flex-col items-start rounded-lg border p-3 text-left transition-colors ${
+                    provider === "openai"
+                      ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  <span className="font-medium text-foreground">OpenAI-Compatible</span>
+                  <span className="text-caption text-muted-foreground">
+                    OpenAI, OpenRouter, DeepSeek, Local LLM
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleProviderChange("gemini")}
+                  className={`flex flex-col items-start rounded-lg border p-3 text-left transition-colors ${
+                    provider === "gemini"
+                      ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  <span className="font-medium text-foreground">Google AI Studio</span>
+                  <span className="text-caption text-muted-foreground">
+                    Gemini 2.5 Flash / Pro, 1.5 Flash
+                  </span>
+                </button>
+              </div>
+            </div>
+
             {/* Presets */}
             <div className="space-y-2">
               <Label className="text-caption text-muted-foreground">Quick Presets</Label>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => applyPreset("https://api.openai.com/v1", "gpt-4o")}
-                >
-                  OpenAI (gpt-4o)
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    applyPreset("https://openrouter.ai/api/v1", "deepseek/deepseek-r1")
-                  }
-                >
-                  OpenRouter (DeepSeek R1)
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => applyPreset("https://api.deepseek.com/v1", "deepseek-chat")}
-                >
-                  DeepSeek Direct
-                </Button>
+                {provider === "gemini" ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        applyPreset(
+                          "gemini",
+                          "https://generativelanguage.googleapis.com",
+                          "gemini-2.5-flash",
+                        )
+                      }
+                    >
+                      Gemini 2.5 Flash
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        applyPreset(
+                          "gemini",
+                          "https://generativelanguage.googleapis.com",
+                          "gemini-2.5-pro",
+                        )
+                      }
+                    >
+                      Gemini 2.5 Pro
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        applyPreset(
+                          "gemini",
+                          "https://generativelanguage.googleapis.com",
+                          "gemini-1.5-flash",
+                        )
+                      }
+                    >
+                      Gemini 1.5 Flash
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyPreset("openai", "https://api.openai.com/v1", "gpt-4o")}
+                    >
+                      OpenAI (gpt-4o)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        applyPreset(
+                          "openai",
+                          "https://openrouter.ai/api/v1",
+                          "deepseek/deepseek-r1",
+                        )
+                      }
+                    >
+                      OpenRouter (DeepSeek R1)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        applyPreset("openai", "https://api.deepseek.com/v1", "deepseek-chat")
+                      }
+                    >
+                      DeepSeek Direct
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -241,14 +360,33 @@ function SettingsPage() {
                 required
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="https://api.openai.com/v1"
+                placeholder={
+                  provider === "gemini"
+                    ? "https://generativelanguage.googleapis.com"
+                    : "https://api.openai.com/v1"
+                }
               />
             </div>
 
             {/* API Key */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="apiKey">API Key</Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="apiKey">
+                    {provider === "gemini" ? "Google AI Studio API Key" : "API Key"}
+                  </Label>
+                  {provider === "gemini" && (
+                    <a
+                      href="https://aistudio.google.com/app/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 text-caption text-primary hover:underline"
+                    >
+                      Get Key
+                      <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                </div>
                 {hasApiKey && (
                   <span className="flex items-center gap-1 text-caption text-emerald-600 dark:text-emerald-400">
                     <ShieldCheck className="size-3.5" />
@@ -262,7 +400,11 @@ function SettingsPage() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder={
-                  hasApiKey ? `Leave blank to keep saved key (${apiKeyMasked})` : "sk-proj-…"
+                  hasApiKey
+                    ? `Leave blank to keep saved key (${apiKeyMasked})`
+                    : provider === "gemini"
+                      ? "AIzaSy…"
+                      : "sk-proj-…"
                 }
               />
               <p className="text-caption text-muted-foreground">
@@ -279,7 +421,7 @@ function SettingsPage() {
                 required
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder="gpt-4o"
+                placeholder={provider === "gemini" ? "gemini-2.5-flash" : "gpt-4o"}
               />
             </div>
 
@@ -321,7 +463,7 @@ function SettingsPage() {
                     step="any"
                     value={inputPrice}
                     onChange={(e) => setInputPrice(e.target.value)}
-                    placeholder="Input, e.g. 2.50"
+                    placeholder="Input, e.g. 0.075"
                   />
                   <p className="text-caption text-muted-foreground">Input / prompt</p>
                 </div>
@@ -333,7 +475,7 @@ function SettingsPage() {
                     step="any"
                     value={outputPrice}
                     onChange={(e) => setOutputPrice(e.target.value)}
-                    placeholder="Output, e.g. 10.00"
+                    placeholder="Output, e.g. 0.30"
                   />
                   <p className="text-caption text-muted-foreground">Output / completion</p>
                 </div>

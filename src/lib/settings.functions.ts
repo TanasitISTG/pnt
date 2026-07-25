@@ -1,13 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { eq } from "drizzle-orm";
-import OpenAI from "openai";
 
 import { db } from "@/lib/db";
 import { providerSettings } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { auth } from "@/lib/auth";
 import { encrypt, decrypt } from "@/lib/translation/crypto";
+import {
+  OpenAIProviderClient,
+  GeminiProviderClient,
+  type ProviderType,
+} from "@/lib/translation/provider-client";
 import {
   saveProviderSettingsSchema,
   testProviderConnectionSchema,
@@ -34,6 +38,7 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
     if (!row) {
       return {
         isConfigured: false,
+        provider: "openai" as ProviderType,
         baseUrl: "https://api.openai.com/v1",
         model: "gpt-4o",
         temperature: 0.3,
@@ -58,6 +63,7 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
 
     return {
       isConfigured: true,
+      provider: (row.provider as ProviderType) || "openai",
       baseUrl: row.baseUrl,
       model: row.model,
       temperature: row.temperature,
@@ -95,6 +101,7 @@ export const saveProviderSettings = createServerFn({ method: "POST" })
         .insert(providerSettings)
         .values({
           userId: session.user.id,
+          provider: data.provider,
           baseUrl: data.baseUrl,
           apiKeyEnc,
           model: data.model,
@@ -106,6 +113,7 @@ export const saveProviderSettings = createServerFn({ method: "POST" })
         .onConflictDoUpdate({
           target: providerSettings.userId,
           set: {
+            provider: data.provider,
             baseUrl: data.baseUrl,
             apiKeyEnc,
             model: data.model,
@@ -148,22 +156,30 @@ export const testProviderConnection = createServerFn({ method: "POST" })
       }
 
       try {
-        const client = new OpenAI({
-          baseURL: data.baseUrl,
-          apiKey,
-        });
+        const client =
+          data.provider === "gemini"
+            ? new GeminiProviderClient({
+                apiKey,
+                baseUrl: data.baseUrl,
+                model: data.model,
+                temperature: data.temperature,
+              })
+            : new OpenAIProviderClient({
+                apiKey,
+                baseUrl: data.baseUrl,
+                model: data.model,
+                temperature: data.temperature,
+              });
 
         const startTime = Date.now();
 
-        const response = await client.chat.completions.create({
-          model: data.model,
-          temperature: data.temperature,
-          max_tokens: 10,
+        const response = await client.generateChatCompletion({
           messages: [{ role: "user", content: "Say hello." }],
+          maxTokens: 10,
         });
 
         const latencyMs = Date.now() - startTime;
-        const sample = response.choices[0]?.message?.content?.trim() || "OK";
+        const sample = response.content.trim() || "OK";
 
         return {
           success: true as const,

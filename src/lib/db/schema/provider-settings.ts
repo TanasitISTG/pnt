@@ -6,6 +6,7 @@ export const providerSettings = pgTable("provider_settings", {
   userId: text("user_id")
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("openai"),
   baseUrl: text("base_url").notNull(),
   apiKeyEnc: text("api_key_enc").notNull(),
   model: text("model").notNull(),

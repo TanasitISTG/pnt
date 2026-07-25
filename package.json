@@ -28,6 +28,7 @@
     "@fontsource-variable/sofia-sans": "^5.2.8",
     "@fontsource/noto-sans-thai": "^5.2.8",
     "@fontsource/sarabun": "^5.2.8",
+    "@google/genai": "^2.13.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-query": "latest",

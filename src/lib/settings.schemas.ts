@@ -1,7 +1,12 @@
 import { z } from "zod";
 
 export const saveProviderSettingsSchema = z.object({
-  baseUrl: z.string().url("Base URL must be a valid URL (e.g. https://api.openai.com/v1)"),
+  provider: z.enum(["openai", "gemini"]).default("openai"),
+  baseUrl: z
+    .string()
+    .url("Base URL must be a valid URL")
+    .or(z.literal(""))
+    .default("https://api.openai.com/v1"),
   apiKey: z.string().optional().nullable(),
   model: z.string().min(1, "Model name is required"),
   temperature: z.number().min(0, "Min temperature is 0").max(2, "Max temperature is 2"),
@@ -10,7 +15,12 @@ export const saveProviderSettingsSchema = z.object({
 });
 
 export const testProviderConnectionSchema = z.object({
-  baseUrl: z.string().url("Base URL must be a valid URL (e.g. https://api.openai.com/v1)"),
+  provider: z.enum(["openai", "gemini"]).default("openai"),
+  baseUrl: z
+    .string()
+    .url("Base URL must be a valid URL")
+    .or(z.literal(""))
+    .default("https://api.openai.com/v1"),
   apiKey: z.string().optional().nullable(),
   model: z.string().min(1, "Model name is required"),
   temperature: z.number().min(0, "Min temperature is 0").max(2, "Max temperature is 2"),

@@ -1,0 +1,1 @@
+ALTER TABLE "provider_settings" ADD COLUMN "provider" text DEFAULT 'openai' NOT NULL;

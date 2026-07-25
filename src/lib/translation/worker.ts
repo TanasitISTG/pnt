@@ -149,9 +149,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
   const markedText = injectParagraphMarkers(currentChunk.text);
   const expectedMarkers = countParagraphMarkers(markedText);
   try {
-    completion = await providerConfig.client.chat.completions.create({
-      model: providerConfig.model,
-      temperature: providerConfig.temperature,
+    completion = await providerConfig.generateChatCompletion({
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: markedText },
@@ -172,7 +170,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
   }
 
   const elapsedMs = Date.now() - startTime;
-  let translation = completion.choices[0]?.message?.content || "";
+  let translation = completion.content || "";
 
   if (!translation.trim()) {
     currentChunk.error = "Empty completion";
@@ -187,17 +185,15 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
     throw new Error("Empty completion");
   }
 
-  let promptTokens = completion.usage?.prompt_tokens || 0;
-  let completionTokens = completion.usage?.completion_tokens || 0;
+  let promptTokens = completion.usage?.promptTokens || 0;
+  let completionTokens = completion.usage?.completionTokens || 0;
 
   // Restore paragraph markers and check count
   const receivedMarkers = countParagraphMarkers(translation);
   if (receivedMarkers !== expectedMarkers && expectedMarkers > 0) {
     // One corrective request for marker count mismatch
     try {
-      const markerFix = await providerConfig.client.chat.completions.create({
-        model: providerConfig.model,
-        temperature: providerConfig.temperature,
+      const markerFix = await providerConfig.generateChatCompletion({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: markedText },
@@ -208,9 +204,9 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
           },
         ],
       });
-      promptTokens += markerFix.usage?.prompt_tokens || 0;
-      completionTokens += markerFix.usage?.completion_tokens || 0;
-      const fixed = markerFix.choices[0]?.message?.content || "";
+      promptTokens += markerFix.usage?.promptTokens || 0;
+      completionTokens += markerFix.usage?.completionTokens || 0;
+      const fixed = markerFix.content || "";
       const fixedMarkers = countParagraphMarkers(fixed);
       if (fixed.trim() && fixedMarkers === expectedMarkers) {
         translation = fixed;
@@ -250,9 +246,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
       ),
     );
     try {
-      const fix = await providerConfig.client.chat.completions.create({
-        model: providerConfig.model,
-        temperature: providerConfig.temperature,
+      const fix = await providerConfig.generateChatCompletion({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: markedText },
@@ -264,9 +258,9 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
           },
         ],
       });
-      promptTokens += fix.usage?.prompt_tokens || 0;
-      completionTokens += fix.usage?.completion_tokens || 0;
-      const fixed = fix.choices[0]?.message?.content || "";
+      promptTokens += fix.usage?.promptTokens || 0;
+      completionTokens += fix.usage?.completionTokens || 0;
+      const fixed = fix.content || "";
       if (fixed.trim()) {
         translation = restoreParagraphMarkers(fixed);
         const left = findResidualSourceChars(pair, fixed).length;
@@ -373,9 +367,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
   let freshSummary: string | null = null;
   try {
     const summarySystemPrompt = buildSummaryPrompt(`${novel.sourceLang}->${novel.targetLang}`);
-    const summaryCompletion = await providerConfig.client.chat.completions.create({
-      model: providerConfig.model,
-      temperature: providerConfig.temperature,
+    const summaryCompletion = await providerConfig.generateChatCompletion({
       messages: [
         { role: "system", content: summarySystemPrompt },
         {
@@ -388,9 +380,9 @@ export async function finalizeJob(jobId: string): Promise<void> {
         },
       ],
     });
-    totalPromptTokens += summaryCompletion.usage?.prompt_tokens || 0;
-    totalCompletionTokens += summaryCompletion.usage?.completion_tokens || 0;
-    freshSummary = summaryCompletion.choices[0]?.message?.content || null;
+    totalPromptTokens += summaryCompletion.usage?.promptTokens || 0;
+    totalCompletionTokens += summaryCompletion.usage?.completionTokens || 0;
+    freshSummary = summaryCompletion.content || null;
     const summaryTime = ((Date.now() - summaryStartTime) / 1000).toFixed(1);
     logs.push(createLog("success", `Summary generated in ${summaryTime}s.`));
 
@@ -435,30 +427,28 @@ export async function finalizeJob(jobId: string): Promise<void> {
 
     let suggestionContent = "";
     try {
-      const suggestCompletion = await providerConfig.client.chat.completions.create({
-        model: providerConfig.model,
+      const suggestCompletion = await providerConfig.generateChatCompletion({
         temperature: 0.3,
         messages: [
           { role: "system", content: suggestPrompt },
           { role: "user", content: userMessage },
         ],
-        response_format: { type: "json_object" },
+        responseFormat: { type: "json_object" },
       });
-      totalPromptTokens += suggestCompletion.usage?.prompt_tokens || 0;
-      totalCompletionTokens += suggestCompletion.usage?.completion_tokens || 0;
-      suggestionContent = suggestCompletion.choices[0]?.message?.content || "";
+      totalPromptTokens += suggestCompletion.usage?.promptTokens || 0;
+      totalCompletionTokens += suggestCompletion.usage?.completionTokens || 0;
+      suggestionContent = suggestCompletion.content || "";
     } catch {
-      const suggestCompletion = await providerConfig.client.chat.completions.create({
-        model: providerConfig.model,
+      const suggestCompletion = await providerConfig.generateChatCompletion({
         temperature: 0.3,
         messages: [
           { role: "system", content: suggestPrompt },
           { role: "user", content: userMessage },
         ],
       });
-      totalPromptTokens += suggestCompletion.usage?.prompt_tokens || 0;
-      totalCompletionTokens += suggestCompletion.usage?.completion_tokens || 0;
-      suggestionContent = suggestCompletion.choices[0]?.message?.content || "";
+      totalPromptTokens += suggestCompletion.usage?.promptTokens || 0;
+      totalCompletionTokens += suggestCompletion.usage?.completionTokens || 0;
+      suggestionContent = suggestCompletion.content || "";
     }
 
     const suggestedTerms = parseTermSuggestions(suggestionContent);
@@ -490,30 +480,28 @@ export async function finalizeJob(jobId: string): Promise<void> {
 
         let reviewContent = "";
         try {
-          const reviewCompletion = await providerConfig.client.chat.completions.create({
-            model: providerConfig.model,
+          const reviewCompletion = await providerConfig.generateChatCompletion({
             temperature: 0.1,
             messages: [
               { role: "system", content: reviewPrompt },
               { role: "user", content: reviewUserMessage },
             ],
-            response_format: { type: "json_object" },
+            responseFormat: { type: "json_object" },
           });
-          totalPromptTokens += reviewCompletion.usage?.prompt_tokens || 0;
-          totalCompletionTokens += reviewCompletion.usage?.completion_tokens || 0;
-          reviewContent = reviewCompletion.choices[0]?.message?.content || "";
+          totalPromptTokens += reviewCompletion.usage?.promptTokens || 0;
+          totalCompletionTokens += reviewCompletion.usage?.completionTokens || 0;
+          reviewContent = reviewCompletion.content || "";
         } catch {
-          const reviewCompletion = await providerConfig.client.chat.completions.create({
-            model: providerConfig.model,
+          const reviewCompletion = await providerConfig.generateChatCompletion({
             temperature: 0.1,
             messages: [
               { role: "system", content: reviewPrompt },
               { role: "user", content: reviewUserMessage },
             ],
           });
-          totalPromptTokens += reviewCompletion.usage?.prompt_tokens || 0;
-          totalCompletionTokens += reviewCompletion.usage?.completion_tokens || 0;
-          reviewContent = reviewCompletion.choices[0]?.message?.content || "";
+          totalPromptTokens += reviewCompletion.usage?.promptTokens || 0;
+          totalCompletionTokens += reviewCompletion.usage?.completionTokens || 0;
+          reviewContent = reviewCompletion.content || "";
         }
 
         reviewResults = parseGlossaryReviewResponse(reviewContent);
