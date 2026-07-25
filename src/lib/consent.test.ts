@@ -1,6 +1,8 @@
+// @vitest-environment jsdom
+import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { getConsent, setConsent } from "./consent";
+import { getConsent, setConsent, useConsent } from "./consent";
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -57,5 +59,13 @@ describe("consent module", () => {
   it("saves consent via setConsent", () => {
     setConsent("granted");
     expect(localStorage.getItem("pnt-consent-v1")).toBe("granted");
+  });
+
+  it("useConsent hook hydrates cleanly with stored preference after mount", () => {
+    localStorage.setItem("pnt-consent-v1", "granted");
+    const { result } = renderHook(() => useConsent());
+
+    expect(result.current.hydrated).toBe(true);
+    expect(result.current.consent).toBe("granted");
   });
 });

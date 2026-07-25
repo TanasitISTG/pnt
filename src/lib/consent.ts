@@ -18,31 +18,23 @@ export function setConsent(value: ConsentState) {
   window.dispatchEvent(new CustomEvent(CONSENT_EVENT, { detail: value }));
 }
 
-let cachedConsent: ConsentState | null = null;
-
 export function useConsent() {
-  const [consent, setConsentState] = useState<ConsentState>(() => cachedConsent ?? "pending");
-  const [hydrated, setHydrated] = useState(cachedConsent !== null);
+  const [consent, setConsentState] = useState<ConsentState>("pending");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (cachedConsent === null) {
-      cachedConsent = getConsent();
-    }
-    setConsentState(cachedConsent);
+    setConsentState(getConsent());
     setHydrated(true);
 
     const handleCustomEvent = (e: Event) => {
       const custom = e as CustomEvent<ConsentState>;
       if (custom.detail) {
-        cachedConsent = custom.detail;
         setConsentState(custom.detail);
       }
     };
     const handleStorageEvent = (e: StorageEvent) => {
       if (e.key === CONSENT_KEY) {
-        const next = getConsent();
-        cachedConsent = next;
-        setConsentState(next);
+        setConsentState(getConsent());
       }
     };
 
@@ -56,7 +48,6 @@ export function useConsent() {
   }, []);
 
   const handleSetConsent = (value: ConsentState) => {
-    cachedConsent = value;
     setConsent(value);
   };
 
