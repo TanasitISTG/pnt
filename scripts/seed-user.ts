@@ -36,7 +36,7 @@ if (password.length < 8) {
 }
 
 const { db } = await import("../src/lib/db/index.ts");
-const { user, account } = await import("../src/lib/db/schema.ts");
+const { user, account } = await import("../src/lib/db/schema/index.ts");
 
 const existing = await db.select().from(user).where(eq(user.email, email)).limit(1);
 
@@ -70,3 +70,4 @@ await db.insert(account).values({
 });
 
 console.log(`Admin user created: ${email}`);
+process.exit(0);

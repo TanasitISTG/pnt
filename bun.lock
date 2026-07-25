@@ -10,7 +10,6 @@
         "@fontsource-variable/sofia-sans": "^5.2.8",
         "@fontsource/noto-sans-thai": "^5.2.8",
         "@fontsource/sarabun": "^5.2.8",
-        "@neondatabase/serverless": "^1.1.0",
         "@tailwindcss/vite": "^4.1.18",
         "@tanstack/react-devtools": "latest",
         "@tanstack/react-query": "latest",
@@ -30,8 +29,9 @@
         "lucide-react": "^0.545.0",
         "nanoid": "^6.0.0",
         "next-themes": "^0.4.6",
-        "nitro": "npm:nitro-nightly@latest",
+        "nitro": "npm:nitro-nightly@3.0.1-20260717-080150-bfc2f5ef",
         "openai": "^6.48.0",
+        "postgres": "^3.4.9",
         "posthog-js": "^1.407.1",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
@@ -1150,6 +1150,8 @@
     "postcss": ["postcss@8.5.19", "", { "dependencies": { "nanoid": "^3.3.12", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-Mz8SaolMd8nB+G13WkORcxQKHZ/NE4xXevtkJHVuG+guo9/wYKlIMTKAqGdEmYOXR2ijPjTYNHssizdaVSUNdQ=="],
 
     "postcss-selector-parser": ["postcss-selector-parser@6.0.10", "", { "dependencies": { "cssesc": "^3.0.0", "util-deprecate": "^1.0.2" } }, "sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w=="],
+
+    "postgres": ["postgres@3.4.9", "", {}, "sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw=="],
 
     "postgres-array": ["postgres-array@2.0.0", "", {}, "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA=="],
 

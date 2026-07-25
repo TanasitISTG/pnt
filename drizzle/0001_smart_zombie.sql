@@ -1,3 +1,4 @@
+CREATE TYPE IF NOT EXISTS "public"."chapter_status" AS ENUM('raw', 'queued', 'translating', 'translated', 'error');--> statement-breakpoint
 CREATE TABLE "chapters" (
 	"id" text PRIMARY KEY NOT NULL,
 	"novel_id" text NOT NULL,
@@ -5,7 +6,7 @@ CREATE TABLE "chapters" (
 	"title" text NOT NULL,
 	"raw_content" text NOT NULL,
 	"translated_content" text,
-	"status" text DEFAULT 'raw' NOT NULL,
+	"status" "public"."chapter_status" DEFAULT 'raw' NOT NULL,
 	"summary" text,
 	"raw_char_count" integer NOT NULL,
 	"translated_at" timestamp,

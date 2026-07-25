@@ -34,11 +34,11 @@ export async function checkRateLimit(bucket: string, limit: number, windowMs = 6
 
     const result = await db.execute(sql`
       INSERT INTO rate_limits (key, count, reset_at)
-      VALUES (${key}, 1, now() + (${windowMs}::text || ' milliseconds')::interval)
+      VALUES (${key}, 1, now() + (${windowMs} * INTERVAL '1 millisecond'))
       ON CONFLICT (key) DO UPDATE SET
         count = CASE WHEN rate_limits.reset_at <= now() THEN 1 ELSE rate_limits.count + 1 END,
         reset_at = CASE WHEN rate_limits.reset_at <= now()
-          THEN now() + (${windowMs}::text || ' milliseconds')::interval
+          THEN now() + (${windowMs} * INTERVAL '1 millisecond')
           ELSE rate_limits.reset_at END
       RETURNING count
     `);

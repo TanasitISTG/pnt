@@ -1,10 +1,10 @@
 import "@tanstack/react-start/server-only";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 
 import { env } from "@/lib/env";
 import * as schema from "./schema";
 
-const sql = neon(env.DATABASE_URL);
+const queryClient = postgres(env.DATABASE_URL);
 
-export const db = drizzle(sql, { schema });
+export const db = drizzle(queryClient, { schema });

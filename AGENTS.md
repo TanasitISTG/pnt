@@ -42,7 +42,7 @@ Package manager + script runner: **Bun**. Quality gate: `lint` + `format:check` 
 
 ## Stack
 
-TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`, no config file) · shadcn/ui on **Base UI** primitives · zod · oxlint/oxfmt (no ESLint/Prettier/Biome) · drizzle-orm + `@neondatabase/serverless` (HTTP) · better-auth · `openai` SDK against user-configured base URL · next-themes (app-wide dark mode) · fflate (EPUB zip) · nitro (Vercel deploy target)
+TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`, no config file) · shadcn/ui on **Base UI** primitives · zod · oxlint/oxfmt (no ESLint/Prettier/Biome) · drizzle-orm + `postgres` (CockroachDB / PostgreSQL) · better-auth · `openai` SDK against user-configured base URL · next-themes (app-wide dark mode) · fflate (EPUB zip) · nitro (Vercel deploy target)
 
 ## Conventions
 

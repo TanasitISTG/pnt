@@ -1,4 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("@tanstack/react-start/server-only", () => ({}));
+vi.mock("@tanstack/react-start/server", () => ({
+  getRequestHeaders: () => new Headers(),
+}));
+vi.mock("@/lib/db", () => ({
+  db: {},
+}));
 
 import { extractIp, isOverLimit } from "@/lib/rate-limit";
 

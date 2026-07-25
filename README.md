@@ -26,14 +26,14 @@ A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin 
 
 ## Tech Stack
 
-TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`) · shadcn/ui on Base UI · Drizzle ORM + Neon (Postgres HTTP) · Better Auth · Inngest (durable translation steps) · `openai` SDK · oxlint/oxfmt · Vitest · Nitro (Vercel deploy)
+TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`) · shadcn/ui on Base UI · Drizzle ORM + CockroachDB / PostgreSQL (`postgres` driver) · Better Auth · Inngest (durable translation steps) · `openai` SDK · oxlint/oxfmt · Vitest · Nitro (Vercel deploy)
 
 ## Getting Started
 
 ### Prerequisites
 
 - [Bun](https://bun.sh/)
-- A Neon Postgres database (free tier works)
+- A CockroachDB or PostgreSQL database
 
 ### Setup
 
@@ -78,7 +78,7 @@ bun run inngest
 
 | Variable                   | Required | Description                                                    |
 | -------------------------- | -------- | -------------------------------------------------------------- |
-| `DATABASE_URL`             | Yes      | Neon Postgres connection string (SSL required)                 |
+| `DATABASE_URL`             | Yes      | CockroachDB / PostgreSQL connection string (SSL required)      |
 | `BETTER_AUTH_SECRET`       | Yes      | 32-byte base64 random string                                   |
 | `BETTER_AUTH_URL`          | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`) |
 | `APP_ENCRYPTION_KEY`       | Yes      | 32-byte base64 random string for encrypting API keys at rest   |
