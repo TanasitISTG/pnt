@@ -28,7 +28,7 @@ export function AppShell({ user, children }: AppShellProps) {
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
   const router = useRouter();
-  const { consent } = useConsent();
+  const { consent, hydrated } = useConsent();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -57,7 +57,7 @@ export function AppShell({ user, children }: AppShellProps) {
     <div
       className={cn(
         "flex min-h-screen flex-col bg-background transition-all",
-        consent === "pending" && "pb-28 md:pb-20",
+        hydrated && consent === "pending" && "pb-28 md:pb-20",
       )}
     >
       <header className="sticky top-0 z-40 border-b border-border bg-background">

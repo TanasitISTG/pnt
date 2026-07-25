@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { useConsent } from "@/lib/consent";
 
 export function ConsentBanner() {
-  const { consent, setConsent } = useConsent();
+  const { consent, setConsent, hydrated } = useConsent();
 
-  if (consent !== "pending") return null;
+  if (!hydrated || consent !== "pending") return null;
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-surface shadow-lg transition-all p-4 md:p-5">
