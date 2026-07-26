@@ -2,8 +2,11 @@ export type LanguagePair = "en->th" | "zh->en" | "zh->th";
 
 export interface ContextOptions {
   previousSummary?: string | null;
-  previousChunkTail?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Public builders
+// ---------------------------------------------------------------------------
 
 export function buildSystemPrompt(
   pair: string,
@@ -11,41 +14,53 @@ export function buildSystemPrompt(
   context?: ContextOptions | null,
   customPrompt?: string | null,
 ): string {
-  const normalizedPair = normalizePair(pair);
-  const baseInstruction = getBaseInstruction(normalizedPair);
+  const p = normalizePair(pair);
 
-  const sections: string[] = [baseInstruction];
+  const sections: string[] = [
+    getRoleLine(p),
+    getPriorityOrder(),
+    getHardRules(),
+    getStyleGuidelines(p),
+    getFewShotExample(p),
+  ];
 
   if (glossaryBlock && glossaryBlock.trim().length > 0) {
     sections.push(
-      `## Terminology & Glossary\nUse the following official translations for names, terms, and places. You MUST use the exact target wording shown — including spacing, punctuation, and capitalization — every time the source term appears:\n${glossaryBlock.trim()}`,
+      `## Terminology & Glossary\nThe glossary below is authoritative.\nALWAYS use the exact glossary translation — including spacing, punctuation, and capitalization — every time the source term appears.\nNever invent alternative spellings or wordings for glossary entries.\n${glossaryBlock.trim()}`,
     );
   }
 
-  if (context) {
-    const contextParts: string[] = [];
-    if (context.previousSummary && context.previousSummary.trim().length > 0) {
-      contextParts.push(`### Summary of Previous Chapter:\n${context.previousSummary.trim()}`);
-    }
-    if (context.previousChunkTail && context.previousChunkTail.trim().length > 0) {
-      contextParts.push(
-        `### Translation of Preceding Text:\n...${context.previousChunkTail.trim()}`,
-      );
-    }
-    if (contextParts.length > 0) {
-      sections.push(`## Story Context\n${contextParts.join("\n\n")}`);
-    }
+  if (context?.previousSummary && context.previousSummary.trim().length > 0) {
+    sections.push(
+      `## Story Context\n### Summary of Previous Chapter:\n${context.previousSummary.trim()}`,
+    );
   }
 
   if (customPrompt && customPrompt.trim().length > 0) {
     sections.push(`## Custom Instructions\n${customPrompt.trim()}`);
   }
 
-  sections.push(
-    `## Paragraph Formatting\nThe text contains paragraph-break markers in the form: ||¶||\nYou MUST preserve every ||¶|| marker exactly as-is in your translation output, in the same position relative to the surrounding paragraphs. Do not add, remove, or reorder markers. Do not replace them with blank lines or any other separator. Output only the translation.`,
-  );
+  sections.push(getOutputContract());
 
   return sections.join("\n\n");
+}
+
+/**
+ * Builds the user message with optional preceding-translation context and
+ * <<<BEGIN_TEXT>>> / <<<END_TEXT>>> delimiters around the translatable chunk.
+ */
+export function buildUserMessage(markedText: string, previousChunkTail?: string | null): string {
+  const parts: string[] = [];
+
+  if (previousChunkTail && previousChunkTail.trim().length > 0) {
+    parts.push(
+      `[Preceding translation for continuity — do not translate this]\n...${previousChunkTail.trim()}`,
+    );
+  }
+
+  parts.push(`<<<BEGIN_TEXT>>>\n${markedText}\n<<<END_TEXT>>>`);
+
+  return parts.join("\n\n");
 }
 
 export function buildTitlePrompt(pair: string): string {
@@ -64,25 +79,33 @@ export function buildTitlePrompt(pair: string): string {
 export function buildSummaryPrompt(_pair: string): string {
   return [
     "You are an expert novel editor and summarizer.",
-    "Provide a concise summary (~150-250 words) of the key plot developments, character movements, and important reveals in the chapter.",
+    "Provide a concise summary (~150-250 words) of the chapter.",
     "CRITICAL REQUIREMENT: Always write the summary in ENGLISH, regardless of the source or target language of the novel.",
-    "Focus on key facts and names that will serve as context for translating subsequent chapters.",
-  ].join(" ");
+    "",
+    "Structure your summary with these sections:",
+    "PLOT: Key events and developments (2-3 sentences).",
+    "CHARACTERS: Named characters active in this chapter, their current state, and relationships shown.",
+    "SETTING: Current location(s) and any setting changes.",
+    "CONTEXT: Key facts, unresolved tensions, or foreshadowing that would help translate the next chapter.",
+  ].join("\n");
 }
 
-// Fast models treat 【...】 gift/system lines and Chinese usernames as markup to
-// preserve verbatim — the rule below has to be explicit.
-const COMPLETENESS_RULE =
-  "Translate everything, including text inside brackets (【】[]), system/gift/notification lines, and all names and usernames — transliterate names into the target script. No source-language text may remain in the output.";
+// ---------------------------------------------------------------------------
+// Residual source-script detection
+// ---------------------------------------------------------------------------
 
 // CJK ideographs (ext-A + unified + compat). Leftover hanzi in zh output = missed translation.
-const CJK_RE = /[㐀-䶿一-鿿豈-﫿]/g;
+const CJK_RE = /[㐀-䶿一-鿿豈-﫿]/g;
 
 /** Leftover source-script chars in a translation. zh pairs only — latin-in-Thai is too common to flag. */
 export function findResidualSourceChars(pair: string, text: string): string[] {
   if (normalizePair(pair) === "en->th") return [];
   return text.match(CJK_RE) || [];
 }
+
+// ---------------------------------------------------------------------------
+// Internals
+// ---------------------------------------------------------------------------
 
 function normalizePair(pair: string): LanguagePair {
   const clean = pair.toLowerCase().replace(/\s+/g, "").replace("→", "->");
@@ -92,33 +115,93 @@ function normalizePair(pair: string): LanguagePair {
   return "en->th";
 }
 
-function getBaseInstruction(pair: LanguagePair): string {
-  switch (pair) {
-    case "en->th":
-      return [
-        "You are a professional literary translator specializing in English to Thai novel translations.",
-        "Translate the following English web novel excerpt into fluent, expressive, natural Thai appropriate for web novels.",
-        "Maintain character voices, tone, emotional nuance, and honorific forms.",
-        "Keep each named character's Thai pronoun and speech level consistent with the Story Context and preceding translation.",
-        "Do not summarize or skip content. Translate accurately paragraph by paragraph.",
-        COMPLETENESS_RULE,
-      ].join("\n");
-    case "zh->en":
-      return [
-        "You are a professional literary translator specializing in Chinese (xianxia/xuanhuan/web novel) to English translations.",
-        "Translate the following Chinese web novel excerpt into vivid, fluent, natural English.",
-        "Properly localize cultivation ranks, techniques, and honorific idioms while preserving the genre's distinct atmosphere.",
-        "Do not summarize or skip content. Translate accurately paragraph by paragraph.",
-        COMPLETENESS_RULE,
-      ].join("\n");
-    case "zh->th":
-      return [
-        "You are a professional literary translator specializing in Chinese web novel to Thai translations.",
-        "Translate the following Chinese web novel excerpt into expressive, natural Thai tailored for novel readers.",
-        "Maintain appropriate Thai honorifics and prose style suited for Chinese fantasy/romance web novels.",
-        "Keep each named character's Thai pronoun and speech level consistent with the Story Context and preceding translation.",
-        "Do not summarize or skip content. Translate accurately paragraph by paragraph.",
-        COMPLETENESS_RULE,
-      ].join("\n");
+const LANG_LABELS: Record<LanguagePair, { source: string; target: string }> = {
+  "en->th": { source: "English", target: "Thai" },
+  "zh->en": { source: "Chinese", target: "English" },
+  "zh->th": { source: "Chinese", target: "Thai" },
+};
+
+function getRoleLine(pair: LanguagePair): string {
+  const { source, target } = LANG_LABELS[pair];
+  return `You translate ${source} web novels into ${target}.`;
+}
+
+function getPriorityOrder(): string {
+  return [
+    "## Translation Priorities (highest first)",
+    "1. Glossary accuracy — use exact glossary translations",
+    "2. Completeness — translate every word, line, and element",
+    "3. Meaning fidelity — convey the author's intent accurately",
+    "4. Natural target language — restructure for natural target-language syntax",
+    "5. Style preservation — maintain tone, pacing, and voice",
+  ].join("\n");
+}
+
+function getHardRules(): string {
+  return [
+    "## Hard Rules",
+    "- Translate everything: narration, dialogue, system messages, internal thoughts, status windows, sound effects, bracketed text (【】[]), notifications, names, and usernames. Transliterate names into the target script. No source-language text may remain.",
+    "- Do not add information absent from the source. Do not explain terms. Do not infer omitted context.",
+    "- Do not rewrite for literary improvement. Preserve pacing, repetition, and stylistic quirks when intentional.",
+    "- Do not summarize or skip content.",
+    "- If HTML/XML-like tags appear in the source, preserve them verbatim. Translate only visible text content.",
+    "- Preserve every ||¶|| paragraph marker exactly as-is in your translation output, in the same position relative to the surrounding paragraphs. Do not add, remove, or reorder markers.",
+  ].join("\n");
+}
+
+function getStyleGuidelines(pair: LanguagePair): string {
+  const { target } = LANG_LABELS[pair];
+  const lines = [
+    "## Style Guidelines",
+    `- Translate the meaning of each sentence. Restructure for natural ${target} syntax — do not mirror source sentence structure.`,
+    "- When the source is intentionally ambiguous, preserve the ambiguity. Do not resolve uncertain pronouns unless the original does.",
+    "- Preserve ellipses (…), emphasis markers, repeated punctuation for dramatic effect, and scene separators. Adapt quotation marks to target language convention.",
+    "- For names not in the glossary, transliterate consistently. If a proper noun appears multiple times, use the same translation every time.",
+  ];
+
+  if (pair === "en->th" || pair === "zh->th") {
+    lines.push(
+      "- Dialogue should sound as if originally written in Thai. Each character must have a consistent speech level, vocabulary, pronoun choice, and honorific usage. Do not make different characters sound alike.",
+      "- Keep each named character's Thai pronoun and speech level consistent with the Story Context and preceding translation.",
+    );
   }
+
+  if (pair === "zh->en") {
+    lines.push(
+      "- Properly localize cultivation ranks, techniques, and honorific idioms while preserving the genre's distinct atmosphere.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function getFewShotExample(pair: LanguagePair): string {
+  const examples: Record<LanguagePair, { source: string; translation: string }> = {
+    "en->th": {
+      source: `"I told you to stay away," he said coldly, turning his back to her. She clenched her fists but said nothing.`,
+      translation: `"บอกแล้วไงว่าอย่าเข้ามาใกล้" เขาพูดเสียงเย็นชาพลางหันหลังให้เธอ เธอกำหมัดแน่นแต่ไม่ได้เอ่ยอะไร`,
+    },
+    "zh->en": {
+      source: `"你以为你是谁？"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
+      translation: `"Who do you think you are?" he sneered. Behind him, the girl trembled yet said nothing.`,
+    },
+    "zh->th": {
+      source: `"你以为你是谁？"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
+      translation: `"แกคิดว่าแกเป็นใคร?" เขายิ้มเยาะ สาวน้อยด้านหลังตัวสั่นแต่ไม่เอ่ยสักคำ`,
+    },
+  };
+
+  const ex = examples[pair];
+  return ["## Example", `Source: ${ex.source}`, `Good translation: ${ex.translation}`].join("\n");
+}
+
+function getOutputContract(): string {
+  return [
+    "## Output Requirements",
+    "- Translate ONLY the text between the <<<BEGIN_TEXT>>> and <<<END_TEXT>>> markers.",
+    "- Output only the translated text.",
+    "- Do not wrap output in Markdown code fences.",
+    "- Do not include explanations, notes, or commentary.",
+    "- This text is a segment of a longer chapter. It may begin or end mid-sentence. Translate it completely without adding introductory or concluding remarks.",
+  ].join("\n");
 }

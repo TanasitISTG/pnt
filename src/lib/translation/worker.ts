@@ -5,7 +5,12 @@ import { db } from "@/lib/db";
 import { novels, chapters, translationJobs, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "./provider-client";
-import { buildSystemPrompt, buildSummaryPrompt, findResidualSourceChars } from "./prompts";
+import {
+  buildSystemPrompt,
+  buildUserMessage,
+  buildSummaryPrompt,
+  findResidualSourceChars,
+} from "./prompts";
 import { translateChapterTitle } from "./title";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "./glossary";
 import {
@@ -140,7 +145,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
   const systemPrompt = buildSystemPrompt(
     `${novel.sourceLang}->${novel.targetLang}`,
     glossaryBlock,
-    { previousSummary, previousChunkTail },
+    { previousSummary },
     novel.customPrompt,
   );
 
@@ -148,11 +153,12 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
   let completion;
   const markedText = injectParagraphMarkers(currentChunk.text);
   const expectedMarkers = countParagraphMarkers(markedText);
+  const userMessage = buildUserMessage(markedText, previousChunkTail);
   try {
     completion = await providerConfig.generateChatCompletion({
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: markedText },
+        { role: "user", content: userMessage },
       ],
     });
   } catch (err: any) {
@@ -196,7 +202,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
       const markerFix = await providerConfig.generateChatCompletion({
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: markedText },
+          { role: "user", content: userMessage },
           { role: "assistant", content: translation },
           {
             role: "user",
@@ -249,7 +255,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
       const fix = await providerConfig.generateChatCompletion({
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: markedText },
+          { role: "user", content: userMessage },
           { role: "assistant", content: translation },
           {
             role: "user",
