@@ -27,6 +27,7 @@ import {
   countParagraphMarkers,
   normalizeTranslationOutput,
 } from "./paragraphs";
+import { extractHanziSpans, spliceSpans } from "./residual-repair";
 import { createLog, type ChunkProgress, type LogEntry } from "./translation.functions";
 import { log } from "@/lib/log";
 
@@ -150,20 +151,60 @@ async function translatePiece(
     }
   }
 
-  translation = restoreParagraphMarkers(translation);
+  // Residual-hanzi repair runs on the MARKED text, so the "preserve ||¶|| markers"
+  // instruction in the retry prompt stays truthful; restore once at the end.
+  const repaired = await repairResidualHanzi(
+    translation,
+    providerConfig,
+    systemPrompt,
+    userMessage,
+    langPair,
+    logs,
+    chunkLabel,
+  );
+  promptTokens += repaired.promptTokens;
+  completionTokens += repaired.completionTokens;
+  translation = restoreParagraphMarkers(repaired.translation);
 
-  // Guard: fast models sometimes leave hanzi behind (gift/system lines, usernames).
-  const residual = findResidualSourceChars(langPair, translation);
-  if (residual.length > 2) {
-    logs.push(
-      createLog("warn", `${chunkLabel} has ${residual.length} untranslated hanzi — re-requesting.`),
-    );
+  return { translation, promptTokens, completionTokens };
+}
+
+// ---------------------------------------------------------------------------
+// Residual hanzi repair
+// ---------------------------------------------------------------------------
+
+// Surgical splice first (cheap, precise — the common case is short spans like
+// bracketed system lines and names). Whole-chunk retry only when a long span
+// signals a passage-level failure: spliced prose would have incoherent seams.
+// Never loops — whatever survives is kept and surfaced via the admin badge.
+const LONG_SPAN_LIMIT = 200;
+
+async function repairResidualHanzi(
+  translation: string,
+  providerConfig: AIProviderClient,
+  systemPrompt: string,
+  userMessage: string,
+  langPair: string,
+  logs: LogEntry[],
+  chunkLabel: string,
+): Promise<TranslatePieceResult> {
+  let text = translation;
+  let promptTokens = 0;
+  let completionTokens = 0;
+
+  const initial = findResidualSourceChars(langPair, text);
+  if (initial.length <= 2) return { translation: text, promptTokens, completionTokens };
+  logs.push(
+    createLog("warn", `${chunkLabel} has ${initial.length} untranslated hanzi — repairing.`),
+  );
+
+  if (extractHanziSpans(text).some((s) => s.text.length > LONG_SPAN_LIMIT)) {
     try {
       const fix = await providerConfig.generateChatCompletion({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
-          { role: "assistant", content: translation },
+          { role: "assistant", content: text },
           {
             role: "user",
             content:
@@ -173,18 +214,9 @@ async function translatePiece(
       });
       promptTokens += fix.usage?.promptTokens || 0;
       completionTokens += fix.usage?.completionTokens || 0;
-      const fixed = fix.content || "";
-      if (fixed.trim()) {
-        translation = restoreParagraphMarkers(fixed);
-        const left = findResidualSourceChars(langPair, fixed).length;
-        logs.push(
-          createLog(
-            left > 2 ? "warn" : "success",
-            left > 2
-              ? `${chunkLabel} still has ${left} hanzi after retry — keeping anyway.`
-              : `${chunkLabel} re-translated cleanly.`,
-          ),
-        );
+      if ((fix.content || "").trim()) {
+        text = fix.content;
+        logs.push(createLog("info", `${chunkLabel} re-requested for untranslated passage.`));
       }
     } catch (fixErr: any) {
       logs.push(
@@ -196,7 +228,70 @@ async function translatePiece(
     }
   }
 
-  return { translation, promptTokens, completionTokens };
+  // Surgical splice for what remains (primary path, or stragglers after retry).
+  const spans = extractHanziSpans(text);
+  const stillDirty = findResidualSourceChars(langPair, text).length > 2;
+  if (stillDirty && spans.length > 0 && spans.every((s) => s.text.length <= LONG_SPAN_LIMIT)) {
+    try {
+      const targetLang = langPair.toLowerCase().endsWith("th") ? "Thai" : "English";
+      const repair = await providerConfig.generateChatCompletion({
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content: `You translate Chinese web-novel fragments into ${targetLang}. Translate or transliterate every Chinese word, including names — no Chinese characters in the output. Reply with JSON: {"translations": [...]} — one translated string per input segment, same order and count.`,
+          },
+          { role: "user", content: JSON.stringify({ segments: spans.map((s) => s.text) }) },
+        ],
+        responseFormat: { type: "json_object" },
+      });
+      promptTokens += repair.usage?.promptTokens || 0;
+      completionTokens += repair.usage?.completionTokens || 0;
+
+      const parsed = JSON.parse(repair.content || "{}");
+      const replacements: unknown = Array.isArray(parsed) ? parsed : parsed?.translations;
+      const spliced =
+        Array.isArray(replacements) && replacements.every((r): r is string => typeof r === "string")
+          ? spliceSpans(text, spans, replacements)
+          : null;
+
+      if (spliced) {
+        const left = findResidualSourceChars(langPair, spliced).length;
+        text = spliced;
+        logs.push(
+          createLog(
+            left > 2 ? "warn" : "success",
+            left > 2
+              ? `${chunkLabel} still has ${left} hanzi after span repair — keeping anyway.`
+              : `${chunkLabel} hanzi spans repaired.`,
+          ),
+        );
+      } else {
+        logs.push(
+          createLog(
+            "warn",
+            `${chunkLabel} span repair returned mismatched segments — keeping original.`,
+          ),
+        );
+      }
+    } catch (spanErr: any) {
+      logs.push(
+        createLog(
+          "warn",
+          `${chunkLabel} span repair failed (${spanErr?.message || "error"}) — keeping original.`,
+        ),
+      );
+    }
+  } else if (stillDirty) {
+    logs.push(
+      createLog(
+        "warn",
+        `${chunkLabel} still has ${findResidualSourceChars(langPair, text).length} hanzi after retry — keeping anyway.`,
+      ),
+    );
+  }
+
+  return { translation: text, promptTokens, completionTokens };
 }
 
 export async function translateChunk(jobId: string, i: number): Promise<void> {
