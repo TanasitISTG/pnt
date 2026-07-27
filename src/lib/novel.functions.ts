@@ -9,6 +9,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "@/lib/translation/provider-client";
 import { translateChapterTitle } from "@/lib/translation/title";
+import { findResidualSourceChars } from "@/lib/translation/prompts";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { normalizePunctuation } from "@/lib/translation/paragraphs";
 import {
@@ -594,5 +595,54 @@ export const setAllChaptersPublished = createServerFn({ method: "POST" })
         .returning({ id: chapters.id });
 
       return { id: data.novelId, count: updated.length };
+    });
+  });
+
+export const getResidualHanziChapters = createServerFn({ method: "GET" })
+  .validator(z.object({ novelId: z.string() }))
+  .handler(async ({ data }) => {
+    return withSafeHandler(async () => {
+      const session = await ensureSession();
+
+      const [novel] = await db
+        .select({
+          id: novels.id,
+          sourceLang: novels.sourceLang,
+          targetLang: novels.targetLang,
+        })
+        .from(novels)
+        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+        .limit(1);
+
+      if (!novel) {
+        throw new SafeServerError("Novel not found or unauthorized");
+      }
+
+      const chapterRows = await db
+        .select({
+          id: chapters.id,
+          number: chapters.number,
+          translatedContent: chapters.translatedContent,
+        })
+        .from(chapters)
+        .where(and(eq(chapters.novelId, data.novelId), eq(chapters.status, "translated")));
+
+      const pair = `${novel.sourceLang}->${novel.targetLang}`;
+      const flagged: Array<{ chapterId: string; number: string; count: number }> = [];
+
+      for (const ch of chapterRows) {
+        if (ch.translatedContent) {
+          const count = findResidualSourceChars(pair, ch.translatedContent).length;
+          if (count > 2) {
+            flagged.push({
+              chapterId: ch.id,
+              number: ch.number,
+              count,
+            });
+          }
+        }
+      }
+
+      return flagged;
     });
   });

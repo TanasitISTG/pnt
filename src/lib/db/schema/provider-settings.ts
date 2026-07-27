@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, real, integer } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 export const providerSettings = pgTable("provider_settings", {
@@ -12,6 +12,7 @@ export const providerSettings = pgTable("provider_settings", {
   model: text("model").notNull(),
   fastModel: text("fast_model"),
   temperature: real("temperature").notNull().default(0.3),
+  requestTimeoutSec: integer("request_timeout_sec"),
   // Optional USD prices per 1M tokens, used for per-chapter cost display (P8.3).
   inputPricePer1M: real("input_price_per_1m"),
   outputPricePer1M: real("output_price_per_1m"),

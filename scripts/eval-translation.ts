@@ -22,16 +22,18 @@ import { createProviderClient } from "@/lib/translation/provider-client";
 interface ChapterEvalResult {
   chapterNumber: string;
   chapterTitle: string;
-  chunkCount: number;
-  totalLatencyMs: number;
-  promptTokens: number;
-  completionTokens: number;
-  residualHanzi: number;
-  markerMismatches: number;
-  dotArtifactsCaught: number;
-  matchedGlossaryTerms: number;
-  adheredGlossaryTerms: number;
-  glossaryAdherencePercent: number;
+  chunkCount?: number;
+  totalLatencyMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  residualHanzi?: number;
+  markerMismatches?: number;
+  dotArtifactsCaught?: number;
+  matchedGlossaryTerms?: number;
+  adheredGlossaryTerms?: number;
+  glossaryAdherencePercent?: number;
+  error?: string;
+  chunksCompleted?: number;
 }
 
 function parseChapterNumbers(input?: string): number[] {
@@ -122,126 +124,151 @@ async function runEval() {
       `Evaluating Chapter ${chapter.number}: "${chapter.title}" (${chapter.rawContent.length} chars)...`,
     );
 
-    const chunkTexts = chunkText(chapter.rawContent, novel.chunkSize);
+    let completedChunksCount = 0;
+    let totalChunkCount = 0;
 
-    // Get previous chapter summary & tail fallback (matching worker.ts)
-    const [prevChapter] = await db
-      .select({
-        summary: chapters.summary,
-        translatedContent: chapters.translatedContent,
-      })
-      .from(chapters)
-      .where(
-        and(
-          eq(chapters.novelId, novel.id),
-          lt(sql`COALESCE(${chapters.number}::numeric, 0)`, sql`${chapter.number}::numeric`),
-          eq(chapters.status, "translated"),
-        ),
-      )
-      .orderBy(desc(sql`COALESCE(${chapters.number}::numeric, 0)`))
-      .limit(1);
+    try {
+      const chunkTexts = chunkText(chapter.rawContent, novel.chunkSize);
+      totalChunkCount = chunkTexts.length;
 
-    const previousSummary = novel.storySummary || prevChapter?.summary || null;
-    const tailLen = novel.contextTailLength || 500;
-    let previousChunkTail: string | null = prevChapter?.translatedContent
-      ? prevChapter.translatedContent.slice(-tailLen)
-      : null;
+      // Get previous chapter summary & tail fallback (matching worker.ts)
+      const [prevChapter] = await db
+        .select({
+          summary: chapters.summary,
+          translatedContent: chapters.translatedContent,
+        })
+        .from(chapters)
+        .where(
+          and(
+            eq(chapters.novelId, novel.id),
+            lt(sql`COALESCE(${chapters.number}::numeric, 0)`, sql`${chapter.number}::numeric`),
+            eq(chapters.status, "translated"),
+          ),
+        )
+        .orderBy(desc(sql`COALESCE(${chapters.number}::numeric, 0)`))
+        .limit(1);
 
-    let totalLatencyMs = 0;
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let residualHanzi = 0;
-    let markerMismatches = 0;
-    let dotArtifactsCaught = 0;
-    let matchedGlossaryTerms = 0;
-    let adheredGlossaryTerms = 0;
+      const previousSummary = novel.storySummary || prevChapter?.summary || null;
+      const tailLen = novel.contextTailLength || 500;
+      let previousChunkTail: string | null = prevChapter?.translatedContent
+        ? prevChapter.translatedContent.slice(-tailLen)
+        : null;
 
-    for (let i = 0; i < chunkTexts.length; i++) {
-      const chunk = chunkTexts[i];
-      const matchedTerms = filterGlossaryForChunk(allApprovedTerms, chunk.text);
-      const glossaryBlock = formatGlossaryBlock(matchedTerms);
+      let totalLatencyMs = 0;
+      let promptTokens = 0;
+      let completionTokens = 0;
+      let residualHanzi = 0;
+      let markerMismatches = 0;
+      let dotArtifactsCaught = 0;
+      let matchedGlossaryTerms = 0;
+      let adheredGlossaryTerms = 0;
 
-      const systemPrompt = buildSystemPrompt(
-        pair,
-        glossaryBlock,
-        { previousSummary },
-        novel.customPrompt,
-      );
+      for (let i = 0; i < chunkTexts.length; i++) {
+        const chunk = chunkTexts[i];
+        const matchedTerms = filterGlossaryForChunk(allApprovedTerms, chunk.text);
+        const glossaryBlock = formatGlossaryBlock(matchedTerms);
 
-      const markedText = injectParagraphMarkers(chunk.text);
-      const expectedMarkers = countParagraphMarkers(markedText);
-      const userMessage = buildUserMessage(markedText, previousChunkTail);
+        const systemPrompt = buildSystemPrompt(
+          pair,
+          glossaryBlock,
+          { previousSummary },
+          novel.customPrompt,
+        );
 
-      const startTime = Date.now();
-      const completion = await providerConfig.generateChatCompletion({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-      });
-      const latency = Date.now() - startTime;
-      totalLatencyMs += latency;
+        const markedText = injectParagraphMarkers(chunk.text);
+        const expectedMarkers = countParagraphMarkers(markedText);
+        const userMessage = buildUserMessage(markedText, previousChunkTail);
 
-      promptTokens += completion.usage?.promptTokens || 0;
-      completionTokens += completion.usage?.completionTokens || 0;
+        const startTime = Date.now();
+        const completion = await providerConfig.generateChatCompletion({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+        });
+        const latency = Date.now() - startTime;
+        totalLatencyMs += latency;
 
-      const rawCompletion = completion.content || "";
-      const restored = restoreParagraphMarkers(rawCompletion);
-      const actualMarkers = countParagraphMarkers(rawCompletion);
-      markerMismatches += Math.abs(expectedMarkers - actualMarkers);
+        promptTokens += completion.usage?.promptTokens || 0;
+        completionTokens += completion.usage?.completionTokens || 0;
 
-      const hanzi = findResidualSourceChars(pair, restored);
-      residualHanzi += hanzi.length;
+        const rawCompletion = completion.content || "";
+        const restored = restoreParagraphMarkers(rawCompletion);
+        const actualMarkers = countParagraphMarkers(rawCompletion);
+        markerMismatches += Math.abs(expectedMarkers - actualMarkers);
 
-      const dotMatches = (rawCompletion.match(/[.·‥…⋯⋅・⸰．‧]{2,}/g) || []).length;
-      dotArtifactsCaught += dotMatches;
+        const hanzi = findResidualSourceChars(pair, restored);
+        residualHanzi += hanzi.length;
 
-      const normalizedChunkOutput = normalizeTranslationOutput(restored);
+        const dotMatches = (rawCompletion.match(/[.·‥…⋯⋅・⸰．‧]{2,}/g) || []).length;
+        dotArtifactsCaught += dotMatches;
 
-      for (const term of matchedTerms) {
-        matchedGlossaryTerms++;
-        if (normalizedChunkOutput.includes(term.target.trim())) {
-          adheredGlossaryTerms++;
+        const normalizedChunkOutput = normalizeTranslationOutput(restored);
+
+        for (const term of matchedTerms) {
+          matchedGlossaryTerms++;
+          if (normalizedChunkOutput.includes(term.target.trim())) {
+            adheredGlossaryTerms++;
+          }
         }
+
+        previousChunkTail = normalizedChunkOutput.slice(-tailLen);
+        completedChunksCount++;
       }
 
-      previousChunkTail = normalizedChunkOutput.slice(-tailLen);
+      const glossaryAdherencePercent =
+        matchedGlossaryTerms > 0
+          ? Number(((adheredGlossaryTerms / matchedGlossaryTerms) * 100).toFixed(1))
+          : 100;
+
+      evalResults.push({
+        chapterNumber: String(chapter.number),
+        chapterTitle: chapter.title,
+        chunkCount: chunkTexts.length,
+        totalLatencyMs,
+        promptTokens,
+        completionTokens,
+        residualHanzi,
+        markerMismatches,
+        dotArtifactsCaught,
+        matchedGlossaryTerms,
+        adheredGlossaryTerms,
+        glossaryAdherencePercent,
+      });
+    } catch (err: any) {
+      const errorMsg = err?.message || String(err);
+      console.error(`Error evaluating Chapter ${chapter.number}: ${errorMsg}`);
+      evalResults.push({
+        chapterNumber: String(chapter.number),
+        chapterTitle: chapter.title,
+        chunkCount: totalChunkCount,
+        chunksCompleted: completedChunksCount,
+        error: errorMsg,
+      });
     }
-
-    const glossaryAdherencePercent =
-      matchedGlossaryTerms > 0
-        ? Number(((adheredGlossaryTerms / matchedGlossaryTerms) * 100).toFixed(1))
-        : 100;
-
-    evalResults.push({
-      chapterNumber: String(chapter.number),
-      chapterTitle: chapter.title,
-      chunkCount: chunkTexts.length,
-      totalLatencyMs,
-      promptTokens,
-      completionTokens,
-      residualHanzi,
-      markerMismatches,
-      dotArtifactsCaught,
-      matchedGlossaryTerms,
-      adheredGlossaryTerms,
-      glossaryAdherencePercent,
-    });
   }
 
   console.log("\n=================== EVALUATION RESULTS ===================");
   console.table(
     evalResults.map((r) => ({
       Ch: r.chapterNumber,
-      Chunks: r.chunkCount,
-      "Latency (s)": (r.totalLatencyMs / 1000).toFixed(1),
-      "Prompt Tok": r.promptTokens,
-      "Comp Tok": r.completionTokens,
-      "Residual Hanzi": r.residualHanzi,
-      "Marker Misses": r.markerMismatches,
-      "Dot Artifacts": r.dotArtifactsCaught,
-      "Glossary Match/Adhered": `${r.adheredGlossaryTerms}/${r.matchedGlossaryTerms}`,
-      "Glossary %": `${r.glossaryAdherencePercent}%`,
+      Status: r.error ? `ERR: ${r.error.slice(0, 25)}` : "OK",
+      Chunks: r.error
+        ? `${r.chunksCompleted ?? 0}/${r.chunkCount ?? 0}`
+        : String(r.chunkCount ?? 0),
+      "Latency (s)": r.totalLatencyMs !== undefined ? (r.totalLatencyMs / 1000).toFixed(1) : "-",
+      "Latency (s)": r.totalLatencyMs !== undefined ? (r.totalLatencyMs / 1000).toFixed(1) : "-",
+      "Prompt Tok": r.promptTokens ?? "-",
+      "Comp Tok": r.completionTokens ?? "-",
+      "Residual Hanzi": r.residualHanzi ?? "-",
+      "Marker Misses": r.markerMismatches ?? "-",
+      "Dot Artifacts": r.dotArtifactsCaught ?? "-",
+      "Glossary Match/Adhered":
+        r.matchedGlossaryTerms !== undefined
+          ? `${r.adheredGlossaryTerms}/${r.matchedGlossaryTerms}`
+          : "-",
+      "Glossary %":
+        r.glossaryAdherencePercent !== undefined ? `${r.glossaryAdherencePercent}%` : "-",
     })),
   );
 

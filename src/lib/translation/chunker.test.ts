@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { chunkText } from "./chunker";
+import { chunkText, splitAtParagraphBoundary } from "./chunker";
 
 describe("chunker module", () => {
   it("returns empty array for empty or whitespace text", () => {
@@ -56,5 +56,46 @@ describe("chunker module", () => {
     const chunks = chunkText(thaiText, 25);
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.map((c) => c.text).join("")).toBe(thaiText);
+  });
+});
+
+describe("splitAtParagraphBoundary", () => {
+  it("splits text at paragraph boundary closest to midpoint", () => {
+    const p1 = "First paragraph content here.";
+    const p2 = "Second paragraph content here.";
+    const p3 = "Third paragraph content here.";
+    const text = `${p1}\n\n${p2}\n\n${p3}`;
+
+    const [left, right] = splitAtParagraphBoundary(text);
+    expect(left + right).toBe(text);
+    expect(left).toContain(p1);
+    expect(right).toContain(p3);
+  });
+
+  it("falls back to single newline if no double newlines exist", () => {
+    const line1 = "Line one of the chunk.";
+    const line2 = "Line two of the chunk.";
+    const text = `${line1}\n${line2}`;
+
+    const [left, right] = splitAtParagraphBoundary(text);
+    expect(left + right).toBe(text);
+    expect(left).toBe(`${line1}\n`);
+    expect(right).toBe(line2);
+  });
+
+  it("falls back to sentence boundary if no newlines exist", () => {
+    const text = "First sentence here. Second sentence here.";
+    const [left, right] = splitAtParagraphBoundary(text);
+    expect(left + right).toBe(text);
+    expect(left).toBe("First sentence here. ");
+    expect(right).toBe("Second sentence here.");
+  });
+
+  it("falls back to exact midpoint if no boundaries exist", () => {
+    const text = "abcdefghij";
+    const [left, right] = splitAtParagraphBoundary(text);
+    expect(left).toBe("abcde");
+    expect(right).toBe("fghij");
+    expect(left + right).toBe(text);
   });
 });

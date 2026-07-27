@@ -52,6 +52,7 @@ export class OpenAIProviderClient implements AIProviderClient {
   fastModel?: string | null;
   temperature: number;
   baseUrl: string;
+  requestTimeoutSec?: number | null;
   private client: OpenAI;
 
   constructor(config: {
@@ -60,15 +61,17 @@ export class OpenAIProviderClient implements AIProviderClient {
     model: string;
     fastModel?: string | null;
     temperature: number;
+    requestTimeoutSec?: number | null;
   }) {
     this.model = config.model;
     this.fastModel = config.fastModel;
     this.temperature = config.temperature;
     this.baseUrl = config.baseUrl;
+    this.requestTimeoutSec = config.requestTimeoutSec;
     this.client = new OpenAI({
       baseURL: config.baseUrl,
       apiKey: config.apiKey,
-      timeout: 4 * 60_000,
+      timeout: (config.requestTimeoutSec ?? 240) * 1000,
       maxRetries: 0,
     });
   }
@@ -98,6 +101,7 @@ export class GeminiProviderClient implements AIProviderClient {
   fastModel?: string | null;
   temperature: number;
   baseUrl: string;
+  requestTimeoutSec?: number | null;
   private ai: GoogleGenAI;
 
   constructor(config: {
@@ -106,16 +110,21 @@ export class GeminiProviderClient implements AIProviderClient {
     model: string;
     fastModel?: string | null;
     temperature: number;
+    requestTimeoutSec?: number | null;
   }) {
     this.model = config.model;
     this.fastModel = config.fastModel;
     this.temperature = config.temperature;
     this.baseUrl = config.baseUrl || "https://generativelanguage.googleapis.com";
+    this.requestTimeoutSec = config.requestTimeoutSec;
     this.ai = new GoogleGenAI({
       apiKey: config.apiKey,
-      ...(config.baseUrl && config.baseUrl !== "https://generativelanguage.googleapis.com"
-        ? { httpOptions: { baseUrl: config.baseUrl } }
-        : {}),
+      httpOptions: {
+        ...(config.baseUrl && config.baseUrl !== "https://generativelanguage.googleapis.com"
+          ? { baseUrl: config.baseUrl }
+          : {}),
+        timeout: (config.requestTimeoutSec ?? 240) * 1000,
+      },
     });
   }
 
@@ -180,6 +189,7 @@ export async function createProviderClient(userId: string): Promise<AIProviderCl
       model: settings.model,
       fastModel: settings.fastModel,
       temperature: settings.temperature,
+      requestTimeoutSec: settings.requestTimeoutSec,
     });
   }
 
@@ -189,5 +199,6 @@ export async function createProviderClient(userId: string): Promise<AIProviderCl
     model: settings.model,
     fastModel: settings.fastModel,
     temperature: settings.temperature,
+    requestTimeoutSec: settings.requestTimeoutSec,
   });
 }

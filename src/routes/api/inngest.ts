@@ -4,7 +4,7 @@ import { serve } from "inngest/edge";
 import { inngest } from "@/lib/inngest/client";
 import { functions } from "@/lib/inngest/functions";
 
-const handler = serve({ client: inngest, functions });
+const handler = serve({ client: inngest, functions, streaming: process.env.NODE_ENV === "production" });
 
 export const Route = createFileRoute("/api/inngest")({
   server: {

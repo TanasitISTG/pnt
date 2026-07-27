@@ -37,6 +37,7 @@ import {
   translateMissingTitles,
   setChapterPublished,
   setAllChaptersPublished,
+  getResidualHanziChapters,
 } from "@/lib/novel.functions";
 import {
   scrapeChapter,
@@ -114,6 +115,12 @@ const costsQueryOptions = (novelId: string) =>
   queryOptions({
     queryKey: ["costs", novelId],
     queryFn: () => getNovelCosts({ data: { novelId } }),
+  });
+
+const residualHanziQueryOptions = (novelId: string) =>
+  queryOptions({
+    queryKey: ["residualHanzi", novelId],
+    queryFn: () => getResidualHanziChapters({ data: { novelId } }),
   });
 
 const formatTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
@@ -199,6 +206,18 @@ function NovelDetailPage() {
     enabled: !!user,
   });
   const { data: costData } = useQuery({ ...costsQueryOptions(novelId), enabled: !!user });
+  const { data: residualHanziChapters = [] } = useQuery({
+    ...residualHanziQueryOptions(novelId),
+    enabled: !!user,
+  });
+
+  const residualHanziMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of residualHanziChapters) {
+      map.set(item.chapterId, item.count);
+    }
+    return map;
+  }, [residualHanziChapters]);
 
   const [readerProgress, setReaderProgress] = useState<ReaderProgress>({
     lastChapterId: null,
@@ -507,6 +526,7 @@ function NovelDetailPage() {
     const activeJob = activeJobs.get(chapter.id);
     const isTranslating = isRowTranslating(chapter.id, chapter.status);
     const isRead = readerProgress.readChapterIds.includes(chapter.id);
+    const residualCount = residualHanziMap.get(chapter.id);
 
     return (
       <TableRow
@@ -539,6 +559,14 @@ function NovelDetailPage() {
             >
               {chapter.translatedTitle ?? chapter.title}
             </Link>
+            {residualCount ? (
+              <Badge
+                variant="outline"
+                className="border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-xs"
+              >
+                {residualCount} hanzi
+              </Badge>
+            ) : null}
           </div>
           <div className="sm:hidden mt-1.5 flex flex-col gap-1 text-caption text-muted-foreground">
             <div className="flex items-center gap-2">

@@ -43,6 +43,9 @@ function SettingsPage() {
   const [model, setModel] = useState(initialSettings.model);
   const [fastModel, setFastModel] = useState(initialSettings.fastModel || "");
   const [temperature, setTemperature] = useState(initialSettings.temperature);
+  const [requestTimeoutSec, setRequestTimeoutSec] = useState(
+    initialSettings.requestTimeoutSec?.toString() ?? "",
+  );
   const [inputPrice, setInputPrice] = useState(initialSettings.inputPricePer1M?.toString() ?? "");
   const [outputPrice, setOutputPrice] = useState(
     initialSettings.outputPricePer1M?.toString() ?? "",
@@ -100,6 +103,7 @@ function SettingsPage() {
           model,
           fastModel: fastModel ? fastModel.trim() : null,
           temperature,
+          requestTimeoutSec: requestTimeoutSec === "" ? null : Number(requestTimeoutSec),
           inputPricePer1M: inputPrice === "" ? null : Number(inputPrice),
           outputPricePer1M: outputPrice === "" ? null : Number(outputPrice),
         },
@@ -134,6 +138,7 @@ function SettingsPage() {
           apiKey: apiKey ? apiKey.trim() : undefined,
           model,
           temperature,
+          requestTimeoutSec: requestTimeoutSec === "" ? null : Number(requestTimeoutSec),
         },
       });
       setTestResult(result);
@@ -466,6 +471,23 @@ function SettingsPage() {
               <p className="text-caption text-muted-foreground">
                 Lower values (0.2–0.5) produce more accurate translations; higher values (0.7–1.0)
                 allow more creative flair.
+              </p>
+            </div>
+
+            {/* Request Timeout */}
+            <div className="space-y-2">
+              <Label htmlFor="requestTimeoutSec">Request Timeout (seconds)</Label>
+              <Input
+                id="requestTimeoutSec"
+                type="number"
+                min="10"
+                max="600"
+                value={requestTimeoutSec}
+                onChange={(e) => setRequestTimeoutSec(e.target.value)}
+                placeholder="240"
+              />
+              <p className="text-caption text-muted-foreground">
+                Request timeout (seconds) — raise for slow/free APIs; keep ≤270 on Vercel Hobby
               </p>
             </div>
 

@@ -43,6 +43,7 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
         model: "gpt-4o",
         fastModel: null,
         temperature: 0.3,
+        requestTimeoutSec: null,
         apiKeyMasked: "",
         hasApiKey: false,
         inputPricePer1M: null,
@@ -69,6 +70,7 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
       model: row.model,
       fastModel: row.fastModel ?? null,
       temperature: row.temperature,
+      requestTimeoutSec: row.requestTimeoutSec ?? null,
       apiKeyMasked,
       hasApiKey,
       inputPricePer1M: row.inputPricePer1M,
@@ -109,6 +111,7 @@ export const saveProviderSettings = createServerFn({ method: "POST" })
           model: data.model,
           fastModel: data.fastModel ?? null,
           temperature: data.temperature,
+          requestTimeoutSec: data.requestTimeoutSec ?? null,
           inputPricePer1M: data.inputPricePer1M ?? null,
           outputPricePer1M: data.outputPricePer1M ?? null,
           updatedAt: new Date(),
@@ -122,6 +125,7 @@ export const saveProviderSettings = createServerFn({ method: "POST" })
             model: data.model,
             fastModel: data.fastModel ?? null,
             temperature: data.temperature,
+            requestTimeoutSec: data.requestTimeoutSec ?? null,
             inputPricePer1M: data.inputPricePer1M ?? null,
             outputPricePer1M: data.outputPricePer1M ?? null,
             updatedAt: new Date(),
@@ -167,12 +171,14 @@ export const testProviderConnection = createServerFn({ method: "POST" })
                 baseUrl: data.baseUrl,
                 model: data.model,
                 temperature: data.temperature,
+                requestTimeoutSec: data.requestTimeoutSec,
               })
             : new OpenAIProviderClient({
                 apiKey,
                 baseUrl: data.baseUrl,
                 model: data.model,
                 temperature: data.temperature,
+                requestTimeoutSec: data.requestTimeoutSec,
               });
 
         const startTime = Date.now();

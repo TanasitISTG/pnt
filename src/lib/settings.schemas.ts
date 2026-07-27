@@ -11,6 +11,7 @@ export const saveProviderSettingsSchema = z.object({
   model: z.string().min(1, "Model name is required"),
   fastModel: z.string().optional().nullable(),
   temperature: z.number().min(0, "Min temperature is 0").max(2, "Max temperature is 2"),
+  requestTimeoutSec: z.number().int().min(10).max(600).optional().nullable(),
   inputPricePer1M: z.number().min(0).optional().nullable(),
   outputPricePer1M: z.number().min(0).optional().nullable(),
 });
@@ -26,6 +27,7 @@ export const testProviderConnectionSchema = z.object({
   model: z.string().min(1, "Model name is required"),
   fastModel: z.string().optional().nullable(),
   temperature: z.number().min(0, "Min temperature is 0").max(2, "Max temperature is 2"),
+  requestTimeoutSec: z.number().int().min(10).max(600).optional().nullable(),
 });
 
 export const changePasswordSchema = z

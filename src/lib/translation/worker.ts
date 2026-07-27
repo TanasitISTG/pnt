@@ -4,7 +4,8 @@ import { eq, and, sql, lt, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { novels, chapters, translationJobs, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
-import { createProviderClient } from "./provider-client";
+import { createProviderClient, type AIProviderClient } from "./provider-client";
+import { splitAtParagraphBoundary } from "./chunker";
 import {
   buildSystemPrompt,
   buildUserMessage,
@@ -72,6 +73,133 @@ export async function initJob(jobId: string) {
 
   const chunkList: ChunkProgress[] = JSON.parse(job.chunksJson || "[]");
   return { skip: false as const, doneChunks: job.doneChunks, totalChunks: chunkList.length };
+}
+
+interface TranslatePieceResult {
+  translation: string;
+  promptTokens: number;
+  completionTokens: number;
+}
+
+async function translatePiece(
+  text: string,
+  previousTail: string | null,
+  providerConfig: AIProviderClient,
+  systemPrompt: string,
+  langPair: string,
+  logs: LogEntry[],
+  chunkLabel: string,
+): Promise<TranslatePieceResult> {
+  const markedText = injectParagraphMarkers(text);
+  const expectedMarkers = countParagraphMarkers(markedText);
+  const userMessage = buildUserMessage(markedText, previousTail);
+
+  const completion = await providerConfig.generateChatCompletion({
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage },
+    ],
+  });
+
+  let translation = completion.content || "";
+
+  if (!translation.trim()) {
+    throw new Error("Empty completion");
+  }
+
+  let promptTokens = completion.usage?.promptTokens || 0;
+  let completionTokens = completion.usage?.completionTokens || 0;
+
+  // Restore paragraph markers and check count
+  const receivedMarkers = countParagraphMarkers(translation);
+  if (receivedMarkers !== expectedMarkers && expectedMarkers > 0) {
+    try {
+      const markerFix = await providerConfig.generateChatCompletion({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+          { role: "assistant", content: translation },
+          {
+            role: "user",
+            content: `Your translation has ${receivedMarkers} ||¶|| markers but the source has ${expectedMarkers}. Re-output the COMPLETE translation preserving every ||¶|| marker exactly as-is in the correct positions. Output only the corrected translation.`,
+          },
+        ],
+      });
+      promptTokens += markerFix.usage?.promptTokens || 0;
+      completionTokens += markerFix.usage?.completionTokens || 0;
+      const fixed = markerFix.content || "";
+      const fixedMarkers = countParagraphMarkers(fixed);
+      if (fixed.trim() && fixedMarkers === expectedMarkers) {
+        translation = fixed;
+        logs.push(createLog("success", `${chunkLabel} marker count corrected.`));
+      } else if (fixed.trim()) {
+        logs.push(
+          createLog(
+            "warn",
+            `${chunkLabel} marker fix didn't match (${fixedMarkers}/${expectedMarkers}) — keeping original.`,
+          ),
+        );
+      }
+    } catch (markerFixErr: any) {
+      logs.push(
+        createLog(
+          "warn",
+          `${chunkLabel} marker fix failed (${markerFixErr?.message || "error"}) — keeping original.`,
+        ),
+      );
+    }
+  }
+
+  translation = restoreParagraphMarkers(translation);
+
+  // Guard: fast models sometimes leave hanzi behind (gift/system lines, usernames).
+  const residual = findResidualSourceChars(langPair, translation);
+  if (residual.length > 2) {
+    logs.push(
+      createLog(
+        "warn",
+        `${chunkLabel} has ${residual.length} untranslated hanzi — re-requesting.`,
+      ),
+    );
+    try {
+      const fix = await providerConfig.generateChatCompletion({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+          { role: "assistant", content: translation },
+          {
+            role: "user",
+            content:
+              "Your translation still contains untranslated Chinese text. Re-output the COMPLETE translation with every Chinese word translated or transliterated — including bracketed lines, notifications, and all names. Preserve every ||¶|| marker exactly. Output only the corrected translation.",
+          },
+        ],
+      });
+      promptTokens += fix.usage?.promptTokens || 0;
+      completionTokens += fix.usage?.completionTokens || 0;
+      const fixed = fix.content || "";
+      if (fixed.trim()) {
+        translation = restoreParagraphMarkers(fixed);
+        const left = findResidualSourceChars(langPair, fixed).length;
+        logs.push(
+          createLog(
+            left > 2 ? "warn" : "success",
+            left > 2
+              ? `${chunkLabel} still has ${left} hanzi after retry — keeping anyway.`
+              : `${chunkLabel} re-translated cleanly.`,
+          ),
+        );
+      }
+    } catch (fixErr: any) {
+      logs.push(
+        createLog(
+          "warn",
+          `${chunkLabel} re-translation failed (${fixErr?.message || "error"}) — keeping original.`,
+        ),
+      );
+    }
+  }
+
+  return { translation, promptTokens, completionTokens };
 }
 
 export async function translateChunk(jobId: string, i: number): Promise<void> {
@@ -150,18 +278,57 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
     novel.customPrompt,
   );
 
+  const langPair = `${novel.sourceLang}->${novel.targetLang}`;
+  const chunkLabel = `Chunk ${i + 1}/${chunkList.length}`;
+
+  async function translatePieceWithAutoSplit(
+    text: string,
+    prevTail: string | null,
+    depth = 0,
+  ): Promise<TranslatePieceResult> {
+    try {
+      return await translatePiece(
+        text,
+        prevTail,
+        providerConfig,
+        systemPrompt,
+        langPair,
+        logs,
+        chunkLabel,
+      );
+    } catch (err: any) {
+      const isTimeout =
+        err?.message?.toLowerCase().includes("timed out") ||
+        err?.name === "APIConnectionTimeoutError";
+      if (isTimeout && text.length > 1200 && depth < 2) {
+        logs.push(
+          createLog(
+            "warn",
+            `${chunkLabel} timed out (${text.length} chars, depth ${depth}). Auto-splitting into halves...`,
+          ),
+        );
+        // ponytail: upgrade path — if 5-min budget per half is needed in future, split into separate Inngest steps.
+        const [half1, half2] = splitAtParagraphBoundary(text);
+        if (half1.length > 0 && half2.length > 0) {
+          const res1 = await translatePieceWithAutoSplit(half1, prevTail, depth + 1);
+          const tail1 = res1.translation.slice(-tailLen);
+          const res2 = await translatePieceWithAutoSplit(half2, tail1, depth + 1);
+          return {
+            translation: `${res1.translation}\n\n${res2.translation}`,
+            promptTokens: res1.promptTokens + res2.promptTokens,
+            completionTokens: res1.completionTokens + res2.completionTokens,
+          };
+        }
+      }
+      throw err;
+    }
+  }
+
   const startTime = Date.now();
-  let completion;
-  const markedText = injectParagraphMarkers(currentChunk.text);
-  const expectedMarkers = countParagraphMarkers(markedText);
-  const userMessage = buildUserMessage(markedText, previousChunkTail);
+  let result: TranslatePieceResult;
+
   try {
-    completion = await providerConfig.generateChatCompletion({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-    });
+    result = await translatePieceWithAutoSplit(currentChunk.text, previousChunkTail, 0);
   } catch (err: any) {
     // Record which chunk failed for the UI, then rethrow — Inngest owns retries.
     currentChunk.error = err?.message || "API Error";
@@ -177,118 +344,9 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
   }
 
   const elapsedMs = Date.now() - startTime;
-  let translation = completion.content || "";
-
-  if (!translation.trim()) {
-    currentChunk.error = "Empty completion";
-    chunkList[i] = currentChunk;
-    logs.push(
-      createLog("warn", `Chunk ${i + 1}/${chunkList.length} failed: ${currentChunk.error}`),
-    );
-    await saveJob(job.id, {
-      chunksJson: JSON.stringify(chunkList),
-      logsJson: JSON.stringify(logs),
-    });
-    throw new Error("Empty completion");
-  }
-
-  let promptTokens = completion.usage?.promptTokens || 0;
-  let completionTokens = completion.usage?.completionTokens || 0;
-
-  // Restore paragraph markers and check count
-  const receivedMarkers = countParagraphMarkers(translation);
-  if (receivedMarkers !== expectedMarkers && expectedMarkers > 0) {
-    // One corrective request for marker count mismatch
-    try {
-      const markerFix = await providerConfig.generateChatCompletion({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-          { role: "assistant", content: translation },
-          {
-            role: "user",
-            content: `Your translation has ${receivedMarkers} ||¶|| markers but the source has ${expectedMarkers}. Re-output the COMPLETE translation preserving every ||¶|| marker exactly as-is in the correct positions. Output only the corrected translation.`,
-          },
-        ],
-      });
-      promptTokens += markerFix.usage?.promptTokens || 0;
-      completionTokens += markerFix.usage?.completionTokens || 0;
-      const fixed = markerFix.content || "";
-      const fixedMarkers = countParagraphMarkers(fixed);
-      if (fixed.trim() && fixedMarkers === expectedMarkers) {
-        translation = fixed;
-        logs.push(
-          createLog("success", `Chunk ${i + 1}/${chunkList.length} marker count corrected.`),
-        );
-      } else if (fixed.trim()) {
-        logs.push(
-          createLog(
-            "warn",
-            `Chunk ${i + 1}/${chunkList.length} marker fix didn't match (${fixedMarkers}/${expectedMarkers}) — keeping original.`,
-          ),
-        );
-      }
-    } catch (markerFixErr: any) {
-      logs.push(
-        createLog(
-          "warn",
-          `Chunk ${i + 1}/${chunkList.length} marker fix failed (${markerFixErr?.message || "error"}) — keeping original.`,
-        ),
-      );
-    }
-  }
-
-  translation = restoreParagraphMarkers(translation);
-
-  // Guard: fast models sometimes leave hanzi behind (gift/system lines, usernames).
-  // One corrective round-trip, then accept whatever comes back. >2 tolerates a
-  // stray deliberate glyph; a skipped line trips it easily.
-  const pair = `${novel.sourceLang}->${novel.targetLang}`;
-  const residual = findResidualSourceChars(pair, translation);
-  if (residual.length > 2) {
-    logs.push(
-      createLog(
-        "warn",
-        `Chunk ${i + 1}/${chunkList.length} has ${residual.length} untranslated hanzi — re-requesting.`,
-      ),
-    );
-    try {
-      const fix = await providerConfig.generateChatCompletion({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-          { role: "assistant", content: translation },
-          {
-            role: "user",
-            content:
-              "Your translation still contains untranslated Chinese text. Re-output the COMPLETE translation with every Chinese word translated or transliterated — including bracketed lines, notifications, and all names. Preserve every ||¶|| marker exactly. Output only the corrected translation.",
-          },
-        ],
-      });
-      promptTokens += fix.usage?.promptTokens || 0;
-      completionTokens += fix.usage?.completionTokens || 0;
-      const fixed = fix.content || "";
-      if (fixed.trim()) {
-        translation = restoreParagraphMarkers(fixed);
-        const left = findResidualSourceChars(pair, fixed).length;
-        logs.push(
-          createLog(
-            left > 2 ? "warn" : "success",
-            left > 2
-              ? `Chunk ${i + 1}/${chunkList.length} still has ${left} hanzi after retry — keeping anyway.`
-              : `Chunk ${i + 1}/${chunkList.length} re-translated cleanly.`,
-          ),
-        );
-      }
-    } catch (fixErr: any) {
-      logs.push(
-        createLog(
-          "warn",
-          `Chunk ${i + 1}/${chunkList.length} re-translation failed (${fixErr?.message || "error"}) — keeping original.`,
-        ),
-      );
-    }
-  }
+  const translation = result.translation;
+  const promptTokens = result.promptTokens;
+  const completionTokens = result.completionTokens;
 
   currentChunk.translation = translation;
   currentChunk.promptTokens = promptTokens;

@@ -121,3 +121,80 @@ function splitBySentences(text: string): string[] {
 
   return blocks;
 }
+
+export function splitAtParagraphBoundary(text: string): [string, string] {
+  if (!text || text.length <= 1) {
+    return [text, ""];
+  }
+
+  const targetMid = Math.floor(text.length / 2);
+
+  // 1. Double newlines (paragraph boundaries)
+  const paraMatches = Array.from(text.matchAll(/(\r?\n\s*\r?\n)/g));
+  if (paraMatches.length > 0) {
+    let bestMatch = paraMatches[0];
+    let bestDist = Math.abs(bestMatch.index + bestMatch[0].length - targetMid);
+
+    for (let i = 1; i < paraMatches.length; i++) {
+      const match = paraMatches[i];
+      const splitPos = match.index + match[0].length;
+      const dist = Math.abs(splitPos - targetMid);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestMatch = match;
+      }
+    }
+
+    const splitPos = bestMatch.index + bestMatch[0].length;
+    if (splitPos > 0 && splitPos < text.length) {
+      return [text.slice(0, splitPos), text.slice(splitPos)];
+    }
+  }
+
+  // 2. Fall back to single newlines
+  const lineMatches = Array.from(text.matchAll(/(\r?\n)/g));
+  if (lineMatches.length > 0) {
+    let bestMatch = lineMatches[0];
+    let bestDist = Math.abs(bestMatch.index + bestMatch[0].length - targetMid);
+
+    for (let i = 1; i < lineMatches.length; i++) {
+      const match = lineMatches[i];
+      const splitPos = match.index + match[0].length;
+      const dist = Math.abs(splitPos - targetMid);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestMatch = match;
+      }
+    }
+
+    const splitPos = bestMatch.index + bestMatch[0].length;
+    if (splitPos > 0 && splitPos < text.length) {
+      return [text.slice(0, splitPos), text.slice(splitPos)];
+    }
+  }
+
+  // 3. Fall back to sentence boundaries (. ! ? 。 ！？)
+  const sentenceMatches = Array.from(text.matchAll(/([.!?。！？]\s*)/g));
+  if (sentenceMatches.length > 0) {
+    let bestMatch = sentenceMatches[0];
+    let bestDist = Math.abs(bestMatch.index + bestMatch[0].length - targetMid);
+
+    for (let i = 1; i < sentenceMatches.length; i++) {
+      const match = sentenceMatches[i];
+      const splitPos = match.index + match[0].length;
+      const dist = Math.abs(splitPos - targetMid);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestMatch = match;
+      }
+    }
+
+    const splitPos = bestMatch.index + bestMatch[0].length;
+    if (splitPos > 0 && splitPos < text.length) {
+      return [text.slice(0, splitPos), text.slice(splitPos)];
+    }
+  }
+
+  // 4. Fall back to exact midpoint
+  return [text.slice(0, targetMid), text.slice(targetMid)];
+}

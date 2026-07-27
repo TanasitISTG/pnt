@@ -141,6 +141,13 @@
       "when": 1785127620590,
       "tag": "0019_wild_tigra",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785130000000,
+      "tag": "0020_request_timeout_sec",
+      "breakpoints": true
     }
   ]
 }
