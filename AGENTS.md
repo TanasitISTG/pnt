@@ -37,6 +37,7 @@ Single-admin novel translation app (EN→TH default, ZH→EN, ZH→TH) with gues
 | Seed admin user        | `bun run seed:user`                          |
 | Regenerate route tree  | `bun run generate-routes`                    |
 | Inngest dev server     | `bun run inngest` (run alongside `bun dev`)  |
+| Translation eval       | `bun run eval:translation <novelId> [ch]`    |
 
 Package manager + script runner: **Bun**. Quality gate: `lint` + `format:check` + `typecheck` + `test` must stay green.
 
@@ -70,6 +71,8 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 - Duplicate protection: Inngest `idempotency: "event.data.runKey"` (fresh nanoid per enqueue) — no DB lease; `locked_until` column is unused. Steps also re-check job status so cancel/error mid-run exits cleanly; `onFailure` marks job+chapter `error` for the UI.
 - **Local:** `bun run inngest` (dev dashboard `localhost:8288`) next to `bun dev`, with `INNGEST_DEV=1` in `.env.local` (SDK v4 defaults to cloud mode) — no keys needed. **Prod:** Inngest Cloud — `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` in Vercel env (optional in the zod schema so local boots keyless), then sync the app in the Inngest dashboard. No cron pinger anywhere.
 - The provider client sets a 4-min request timeout with `maxRetries: 0` (Inngest owns retries at the step level) so a stalled LLM call fails fast instead of burning the step's budget.
+- **Rolling story summary & fast-model routing:** `novels.story_summary` maintains a running novel synopsis (≤400 words) updated during `finalizeJob` and injected into `## Story Context`. Optional `provider_settings.fast_model` routes cheaper non-prose tasks (title, summary, term suggestion/review, story summary) to a cheaper model.
+- **Offline evaluation script:** `bun run eval:translation <novelId> [chapterNumbers]` (`scripts/eval-translation.ts`) evaluates quality metrics (residual CJK, marker mismatches, dot artifacts, glossary adherence %, token usage, latency) without writing to DB, outputting a summary table and saving a report to `evals/results/<timestamp>.json`.
 
 ## Chapter scraping & bulk import
 
