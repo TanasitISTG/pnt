@@ -257,7 +257,6 @@ async function runEval() {
         ? `${r.chunksCompleted ?? 0}/${r.chunkCount ?? 0}`
         : String(r.chunkCount ?? 0),
       "Latency (s)": r.totalLatencyMs !== undefined ? (r.totalLatencyMs / 1000).toFixed(1) : "-",
-      "Latency (s)": r.totalLatencyMs !== undefined ? (r.totalLatencyMs / 1000).toFixed(1) : "-",
       "Prompt Tok": r.promptTokens ?? "-",
       "Comp Tok": r.completionTokens ?? "-",
       "Residual Hanzi": r.residualHanzi ?? "-",

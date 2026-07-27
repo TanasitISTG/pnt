@@ -156,10 +156,7 @@ async function translatePiece(
   const residual = findResidualSourceChars(langPair, translation);
   if (residual.length > 2) {
     logs.push(
-      createLog(
-        "warn",
-        `${chunkLabel} has ${residual.length} untranslated hanzi — re-requesting.`,
-      ),
+      createLog("warn", `${chunkLabel} has ${residual.length} untranslated hanzi — re-requesting.`),
     );
     try {
       const fix = await providerConfig.generateChatCompletion({
