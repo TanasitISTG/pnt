@@ -15,6 +15,7 @@ export async function translateChapterTitle(
   try {
     const completion = await providerConfig.generateChatCompletion({
       temperature: 0.3,
+      model: providerConfig.fastModel ?? undefined,
       messages: [
         { role: "system", content: buildTitlePrompt(pair) },
         { role: "user", content: title },

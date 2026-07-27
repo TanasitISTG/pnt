@@ -10,6 +10,7 @@ export const providerSettings = pgTable("provider_settings", {
   baseUrl: text("base_url").notNull(),
   apiKeyEnc: text("api_key_enc").notNull(),
   model: text("model").notNull(),
+  fastModel: text("fast_model"),
   temperature: real("temperature").notNull().default(0.3),
   // Optional USD prices per 1M tokens, used for per-chapter cost display (P8.3).
   inputPricePer1M: real("input_price_per_1m"),

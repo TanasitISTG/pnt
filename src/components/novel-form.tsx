@@ -49,7 +49,7 @@ export function NovelForm({
     sourceLang: defaultValues?.sourceLang || "en",
     targetLang: defaultValues?.targetLang || "th",
     customPrompt: defaultValues?.customPrompt || "",
-    chunkSize: defaultValues?.chunkSize ?? 2000,
+    chunkSize: defaultValues?.chunkSize ?? 4000,
     contextTailLength: defaultValues?.contextTailLength ?? 500,
     cover: null,
     coverMime: null,
@@ -219,11 +219,11 @@ export function NovelForm({
             min={500}
             max={10000}
             step={100}
-            value={form.chunkSize ?? 2000}
+            value={form.chunkSize ?? 4000}
             onChange={(e) => setForm((prev) => ({ ...prev, chunkSize: Number(e.target.value) }))}
           />
           <span className="text-caption text-muted-foreground">
-            Target char count per chunk (default: 2,000)
+            Target char count per chunk (default: 4,000)
           </span>
         </div>
 

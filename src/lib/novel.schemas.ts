@@ -12,7 +12,7 @@ const baseNovelFields = {
   sourceLang: sourceLangSchema,
   targetLang: targetLangSchema,
   customPrompt: z.string().max(10000).optional().nullable(),
-  chunkSize: z.number().int().min(500).max(10000).optional().default(2000),
+  chunkSize: z.number().int().min(500).max(10000).optional().default(4000),
   contextTailLength: z.number().int().min(100).max(2000).optional().default(500),
   cover: z.string().max(1_400_000).optional().nullable(), // base64 (~1MB file max)
   coverMime: coverMimeSchema.optional().nullable(),

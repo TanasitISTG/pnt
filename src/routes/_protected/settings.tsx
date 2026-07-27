@@ -41,6 +41,7 @@ function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState(initialSettings.baseUrl);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initialSettings.model);
+  const [fastModel, setFastModel] = useState(initialSettings.fastModel || "");
   const [temperature, setTemperature] = useState(initialSettings.temperature);
   const [inputPrice, setInputPrice] = useState(initialSettings.inputPricePer1M?.toString() ?? "");
   const [outputPrice, setOutputPrice] = useState(
@@ -97,6 +98,7 @@ function SettingsPage() {
           baseUrl,
           apiKey: apiKey ? apiKey.trim() : undefined,
           model,
+          fastModel: fastModel ? fastModel.trim() : null,
           temperature,
           inputPricePer1M: inputPrice === "" ? null : Number(inputPrice),
           outputPricePer1M: outputPrice === "" ? null : Number(outputPrice),
@@ -423,6 +425,22 @@ function SettingsPage() {
                 onChange={(e) => setModel(e.target.value)}
                 placeholder={provider === "gemini" ? "gemini-2.5-flash" : "gpt-4o"}
               />
+            </div>
+
+            {/* Fast Model */}
+            <div className="space-y-2">
+              <Label htmlFor="fastModel">Fast Model (Cheaper tasks)</Label>
+              <Input
+                id="fastModel"
+                type="text"
+                value={fastModel}
+                onChange={(e) => setFastModel(e.target.value)}
+                placeholder={provider === "gemini" ? "gemini-2.5-flash" : "gpt-4o-mini"}
+              />
+              <p className="text-caption text-muted-foreground">
+                Optional. Used for title translation, chapter summaries, term suggestions, and story
+                context updates to reduce costs.
+              </p>
             </div>
 
             {/* Temperature */}

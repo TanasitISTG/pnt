@@ -40,6 +40,7 @@ export interface ChatCompletionResult {
 export interface AIProviderClient {
   provider: ProviderType;
   model: string;
+  fastModel?: string | null;
   temperature: number;
   baseUrl: string;
   generateChatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult>;
@@ -48,12 +49,20 @@ export interface AIProviderClient {
 export class OpenAIProviderClient implements AIProviderClient {
   provider: ProviderType = "openai";
   model: string;
+  fastModel?: string | null;
   temperature: number;
   baseUrl: string;
   private client: OpenAI;
 
-  constructor(config: { apiKey: string; baseUrl: string; model: string; temperature: number }) {
+  constructor(config: {
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+    fastModel?: string | null;
+    temperature: number;
+  }) {
     this.model = config.model;
+    this.fastModel = config.fastModel;
     this.temperature = config.temperature;
     this.baseUrl = config.baseUrl;
     this.client = new OpenAI({
@@ -86,12 +95,20 @@ export class OpenAIProviderClient implements AIProviderClient {
 export class GeminiProviderClient implements AIProviderClient {
   provider: ProviderType = "gemini";
   model: string;
+  fastModel?: string | null;
   temperature: number;
   baseUrl: string;
   private ai: GoogleGenAI;
 
-  constructor(config: { apiKey: string; baseUrl?: string; model: string; temperature: number }) {
+  constructor(config: {
+    apiKey: string;
+    baseUrl?: string;
+    model: string;
+    fastModel?: string | null;
+    temperature: number;
+  }) {
     this.model = config.model;
+    this.fastModel = config.fastModel;
     this.temperature = config.temperature;
     this.baseUrl = config.baseUrl || "https://generativelanguage.googleapis.com";
     this.ai = new GoogleGenAI({
@@ -161,6 +178,7 @@ export async function createProviderClient(userId: string): Promise<AIProviderCl
       apiKey,
       baseUrl: settings.baseUrl,
       model: settings.model,
+      fastModel: settings.fastModel,
       temperature: settings.temperature,
     });
   }
@@ -169,6 +187,7 @@ export async function createProviderClient(userId: string): Promise<AIProviderCl
     apiKey,
     baseUrl: settings.baseUrl,
     model: settings.model,
+    fastModel: settings.fastModel,
     temperature: settings.temperature,
   });
 }

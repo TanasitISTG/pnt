@@ -123,7 +123,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
     .orderBy(desc(sql`COALESCE(${chapters.number}::numeric, 0)`))
     .limit(1);
 
-  const previousSummary = prevChapter?.summary || null;
+  const previousSummary = novel.storySummary || prevChapter?.summary || null;
   const tailLen = novel.contextTailLength || 500;
   let previousChunkTail: string | null = null;
   if (i > 0 && chunkList[i - 1]?.translation) {
@@ -375,6 +375,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
   try {
     const summarySystemPrompt = buildSummaryPrompt(`${novel.sourceLang}->${novel.targetLang}`);
     const summaryCompletion = await providerConfig.generateChatCompletion({
+      model: providerConfig.fastModel ?? undefined,
       messages: [
         { role: "system", content: summarySystemPrompt },
         {
@@ -398,6 +399,43 @@ export async function finalizeJob(jobId: string): Promise<void> {
         .update(chapters)
         .set({ summary: freshSummary, updatedAt: new Date() })
         .where(eq(chapters.id, chapter.id));
+
+      // Update rolling story summary on novel (non-fatal)
+      try {
+        const storySummaryCompletion = await providerConfig.generateChatCompletion({
+          model: providerConfig.fastModel ?? undefined,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a novel continuity editor. Maintain a running story synopsis (≤400 words in English) of the novel so far. Combine the existing story synopsis with the new chapter summary to create an updated, coherent summary of key events, ongoing plot arcs, and main character states. Output ONLY the updated synopsis.",
+            },
+            {
+              role: "user",
+              content: `Existing story synopsis:\n${
+                novel.storySummary || "None (this is the beginning of the novel)."
+              }\n\nNew chapter summary:\n${freshSummary}`,
+            },
+          ],
+        });
+        totalPromptTokens += storySummaryCompletion.usage?.promptTokens || 0;
+        totalCompletionTokens += storySummaryCompletion.usage?.completionTokens || 0;
+        const updatedStorySummary = storySummaryCompletion.content?.trim();
+        if (updatedStorySummary) {
+          await db
+            .update(novels)
+            .set({ storySummary: updatedStorySummary, updatedAt: new Date() })
+            .where(eq(novels.id, novel.id));
+          logs.push(createLog("info", "Updated rolling story summary."));
+        }
+      } catch (storyErr: any) {
+        logs.push(
+          createLog(
+            "warn",
+            `Rolling story summary update skipped: ${storyErr?.message || "Failed"}`,
+          ),
+        );
+      }
     }
   } catch (sumErr: any) {
     logs.push(createLog("warn", `Summary generation skipped: ${sumErr.message || "Failed"}`));
@@ -447,6 +485,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
     try {
       const suggestCompletion = await providerConfig.generateChatCompletion({
         temperature: 0.3,
+        model: providerConfig.fastModel ?? undefined,
         messages: [
           { role: "system", content: suggestPrompt },
           { role: "user", content: userMessage },
@@ -459,6 +498,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
     } catch {
       const suggestCompletion = await providerConfig.generateChatCompletion({
         temperature: 0.3,
+        model: providerConfig.fastModel ?? undefined,
         messages: [
           { role: "system", content: suggestPrompt },
           { role: "user", content: userMessage },
@@ -500,6 +540,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
         try {
           const reviewCompletion = await providerConfig.generateChatCompletion({
             temperature: 0.1,
+            model: providerConfig.fastModel ?? undefined,
             messages: [
               { role: "system", content: reviewPrompt },
               { role: "user", content: reviewUserMessage },
@@ -512,6 +553,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
         } catch {
           const reviewCompletion = await providerConfig.generateChatCompletion({
             temperature: 0.1,
+            model: providerConfig.fastModel ?? undefined,
             messages: [
               { role: "system", content: reviewPrompt },
               { role: "user", content: reviewUserMessage },

@@ -30,4 +30,9 @@ describe("provider-client module", () => {
     expect(source).toContain("response.usageMetadata?.promptTokenCount");
     expect(source).toContain("response.usageMetadata?.candidatesTokenCount");
   });
+
+  it("passes fastModel configuration to provider clients", () => {
+    expect(source).toContain("fastModel?: string | null");
+    expect(source).toContain("fastModel: settings.fastModel");
+  });
 });

@@ -59,7 +59,8 @@ export const novels = pgTable(
     sourceLang: text("source_lang").notNull(),
     targetLang: text("target_lang").notNull(),
     customPrompt: text("custom_prompt"),
-    chunkSize: integer("chunk_size").notNull().default(2000),
+    storySummary: text("story_summary"),
+    chunkSize: integer("chunk_size").notNull().default(4000),
     contextTailLength: integer("context_tail_length").notNull().default(500),
     // null = draft (admin-only); <= now = live for guests; > now = scheduled
     publishedAt: timestamp("published_at"),

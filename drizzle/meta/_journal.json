@@ -134,6 +134,13 @@
       "when": 1785115365997,
       "tag": "0018_late_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785127620590,
+      "tag": "0019_wild_tigra",
+      "breakpoints": true
     }
   ]
 }
