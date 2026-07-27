@@ -10,6 +10,7 @@ import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "@/lib/translation/provider-client";
 import { translateChapterTitle } from "@/lib/translation/title";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
+import { normalizePunctuation } from "@/lib/translation/paragraphs";
 import {
   createNovelSchema,
   updateNovelSchema,
@@ -326,7 +327,14 @@ export const getChapter = createServerFn({ method: "GET" })
         )
         .limit(1);
 
-      return chapter || null;
+      if (!chapter) return null;
+
+      return {
+        ...chapter,
+        translatedContent: chapter.translatedContent
+          ? normalizePunctuation(chapter.translatedContent)
+          : chapter.translatedContent,
+      };
     });
   });
 

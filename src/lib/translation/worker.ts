@@ -104,6 +104,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
       source: glossaryTerms.source,
       target: glossaryTerms.target,
       category: glossaryTerms.category,
+      note: glossaryTerms.note,
     })
     .from(glossaryTerms)
     .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved")));

@@ -54,12 +54,18 @@ export function countParagraphMarkers(text: string): number {
   return (text.match(MARKER_PATTERN) ?? []).length;
 }
 
-/** Normalize CRLF, duplicate blank lines, leading/trailing whitespace, chunk boundaries. */
+/** Collapse runs of 2+ dot-like characters into a single ellipsis '…'. */
+export function normalizePunctuation(text: string): string {
+  return text.replace(/[.·‥…⋯⋅・⸰．‧]{2,}/g, "…");
+}
+
+/** Normalize CRLF, duplicate blank lines, leading/trailing whitespace, chunk boundaries, dot artifacts. */
 export function normalizeTranslationOutput(text: string): string {
-  return text
+  const normalized = text
     .replace(/\r\n?/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n[ \t]+/g, "\n")
     .trim();
+  return normalizePunctuation(normalized);
 }

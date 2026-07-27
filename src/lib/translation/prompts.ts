@@ -155,12 +155,13 @@ function getStyleGuidelines(pair: LanguagePair): string {
     "## Style Guidelines",
     `- Translate the meaning of each sentence. Restructure for natural ${target} syntax — do not mirror source sentence structure.`,
     "- When the source is intentionally ambiguous, preserve the ambiguity. Do not resolve uncertain pronouns unless the original does.",
-    "- Preserve ellipses (…), emphasis markers, repeated punctuation for dramatic effect, and scene separators. Adapt quotation marks to target language convention.",
+    "- Render every ellipsis or hesitation pause as a single `…`. Never output runs of dots or middle dots (`......`, `······`, `……`).",
     "- For names not in the glossary, transliterate consistently. If a proper noun appears multiple times, use the same translation every time.",
   ];
 
   if (pair === "en->th" || pair === "zh->th") {
     lines.push(
+      "- Thai punctuation and quotes: use curly double quotes (“…”), and do not leave space before `…`.",
       "- Dialogue should sound as if originally written in Thai. Each character must have a consistent speech level, vocabulary, pronoun choice, and honorific usage. Do not make different characters sound alike.",
       "- Keep each named character's Thai pronoun and speech level consistent with the Story Context and preceding translation.",
     );
@@ -179,15 +180,15 @@ function getFewShotExample(pair: LanguagePair): string {
   const examples: Record<LanguagePair, { source: string; translation: string }> = {
     "en->th": {
       source: `"I told you to stay away," he said coldly, turning his back to her. She clenched her fists but said nothing.`,
-      translation: `"บอกแล้วไงว่าอย่าเข้ามาใกล้" เขาพูดเสียงเย็นชาพลางหันหลังให้เธอ เธอกำหมัดแน่นแต่ไม่ได้เอ่ยอะไร`,
+      translation: `“บอกแล้วไงว่าอย่าเข้ามาใกล้” เขาพูดเสียงเย็นชาพลางหันหลังให้เธอ เธอกำหมัดแน่นแต่ไม่ได้เอ่ยอะไร`,
     },
     "zh->en": {
       source: `"你以为你是谁？"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
       translation: `"Who do you think you are?" he sneered. Behind him, the girl trembled yet said nothing.`,
     },
     "zh->th": {
-      source: `"你以为你是谁？"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
-      translation: `"แกคิดว่าแกเป็นใคร?" เขายิ้มเยาะ สาวน้อยด้านหลังตัวสั่นแต่ไม่เอ่ยสักคำ`,
+      source: `"你以为你是谁……"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
+      translation: `“แกคิดว่าแกเป็นใคร…” เขายิ้มเยาะ สาวน้อยด้านหลังตัวสั่นแต่ไม่เอ่ยสักคำ`,
     },
   };
 

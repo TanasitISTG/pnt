@@ -6,6 +6,7 @@ import {
   restoreParagraphMarkers,
   countParagraphMarkers,
   normalizeTranslationOutput,
+  normalizePunctuation,
   PARAGRAPH_MARKER,
 } from "./paragraphs";
 
@@ -87,5 +88,27 @@ describe("paragraph markers", () => {
     const injected = injectParagraphMarkers(original);
     const restored = restoreParagraphMarkers(injected);
     expect(restored).toBe("First paragraph here.\n\nSecond paragraph.\n\nThird one.");
+  });
+});
+
+describe("normalizePunctuation", () => {
+  it("collapses runs of middle dots into a single ellipsis", () => {
+    expect(normalizePunctuation("······")).toBe("…");
+  });
+
+  it("collapses runs of full ellipses into a single ellipsis", () => {
+    expect(normalizePunctuation("……")).toBe("…");
+  });
+
+  it("collapses runs of standard dots into a single ellipsis", () => {
+    expect(normalizePunctuation("......")).toBe("…");
+  });
+
+  it("leaves single decimal point untouched", () => {
+    expect(normalizePunctuation("3.5")).toBe("3.5");
+  });
+
+  it("leaves single ellipsis untouched in Thai text", () => {
+    expect(normalizePunctuation("คิด…แล้ว")).toBe("คิด…แล้ว");
   });
 });

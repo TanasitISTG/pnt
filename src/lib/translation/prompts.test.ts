@@ -94,6 +94,20 @@ describe("prompts module", () => {
     expect(prompt).toContain("same translation every time");
   });
 
+  it("includes single ellipsis guideline", () => {
+    const prompt = buildSystemPrompt("en->th");
+    expect(prompt).toContain("Render every ellipsis or hesitation pause as a single `…`");
+    expect(prompt).toContain("Never output runs of dots");
+  });
+
+  it("includes Thai quotation and ellipsis spacing rule for Thai pairs", () => {
+    for (const pair of ["en->th", "zh->th"]) {
+      const prompt = buildSystemPrompt(pair);
+      expect(prompt).toContain("Thai punctuation and quotes");
+      expect(prompt).toContain("do not leave space before `…`");
+    }
+  });
+
   it("includes dialogue rules for Thai pairs", () => {
     for (const pair of ["en->th", "zh->th"]) {
       const prompt = buildSystemPrompt(pair);
@@ -117,6 +131,12 @@ describe("prompts module", () => {
       expect(prompt).toContain("Source:");
       expect(prompt).toContain("Good translation:");
     }
+  });
+
+  it("includes ellipsis conversion in zh->th few-shot example", () => {
+    const prompt = buildSystemPrompt("zh->th");
+    expect(prompt).toContain("你以为你是谁……");
+    expect(prompt).toContain("แกคิดว่าแกเป็นใคร…");
   });
 
   // -- Glossary --------------------------------------------------------------

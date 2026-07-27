@@ -56,4 +56,20 @@ describe("glossary module", () => {
     const block = formatGlossaryBlock(terms);
     expect(block).toBe("- Lin Fan -> หลินฟาน (character)\n- Sun Peak -> ยอดเขาอาทิตย์ (place)");
   });
+
+  it("formats terms with notes correctly", () => {
+    const terms = [
+      {
+        source: "Lin Fan",
+        target: "หลินฟาน",
+        category: "character",
+        note: "speaks in polite tone (ครับ)",
+      },
+      { source: "Sword", target: "กระบี่", note: "ancient weapon" },
+    ];
+    const block = formatGlossaryBlock(terms);
+    expect(block).toBe(
+      "- Lin Fan -> หลินฟาน (character) — speaks in polite tone (ครับ)\n- Sword -> กระบี่ — ancient weapon",
+    );
+  });
 });

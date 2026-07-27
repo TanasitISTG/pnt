@@ -2,6 +2,7 @@ export interface GlossaryTermInput {
   source: string;
   target: string;
   category?: string | null;
+  note?: string | null;
 }
 
 const CJK_RE = /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/;
@@ -52,7 +53,8 @@ export function formatGlossaryBlock(terms: GlossaryTermInput[]): string {
   return terms
     .map((t) => {
       const cat = t.category ? ` (${t.category})` : "";
-      return `- ${t.source.trim()} -> ${t.target.trim()}${cat}`;
+      const note = t.note && t.note.trim().length > 0 ? ` — ${t.note.trim()}` : "";
+      return `- ${t.source.trim()} -> ${t.target.trim()}${cat}${note}`;
     })
     .join("\n");
 }
