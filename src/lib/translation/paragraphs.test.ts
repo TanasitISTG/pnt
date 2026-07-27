@@ -61,6 +61,15 @@ describe("paragraph markers", () => {
     expect(countParagraphMarkers(marked)).toBe(2);
   });
 
+  it("restores model-mangled marker variants", () => {
+    const mangled = "one\n||¶|\ntwo\n||¶¶||\nthree\n||¶¶\nfour\n¶||\nfive";
+    expect(restoreParagraphMarkers(mangled)).toBe("one\n\ntwo\n\nthree\n\nfour\n\nfive");
+  });
+
+  it("counts mangled variants as markers", () => {
+    expect(countParagraphMarkers("a\n||¶|\nb\n||¶¶||\nc")).toBe(2);
+  });
+
   it("returns zero for text without markers", () => {
     expect(countParagraphMarkers("plain text")).toBe(0);
   });

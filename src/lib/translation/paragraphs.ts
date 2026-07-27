@@ -35,31 +35,29 @@ export function alignParagraphs(rawText: string, translatedText: string): Aligne
 
 export const PARAGRAPH_MARKER = "||¶||";
 
+// The LLM frequently mangles the marker (||¶|, ||¶¶||, ¶||, ...). A pilcrow
+// never appears in real prose, so any run of pipes around pilcrows is a marker.
+const MARKER_PATTERN = /\|*¶+\|*/g;
+
 /** Replace blank-line paragraph breaks with a unique marker the LLM must preserve. */
 export function injectParagraphMarkers(text: string): string {
   return text.replace(/\n\s*\n+/g, `\n${PARAGRAPH_MARKER}\n`);
 }
 
-/** Restore markers back to blank-line breaks and normalize output. */
+/** Restore markers (including model-mangled variants) back to blank-line breaks. */
 export function restoreParagraphMarkers(text: string): string {
-  return normalizeTranslationOutput(text.replaceAll(PARAGRAPH_MARKER, "\n\n"));
+  return normalizeTranslationOutput(text.replace(MARKER_PATTERN, "\n\n"));
 }
 
-/** Count how many paragraph markers appear in the text. */
+/** Count paragraph markers, tolerating model-mangled variants. */
 export function countParagraphMarkers(text: string): number {
-  let count = 0;
-  let pos = 0;
-  while ((pos = text.indexOf(PARAGRAPH_MARKER, pos)) !== -1) {
-    count++;
-    pos += PARAGRAPH_MARKER.length;
-  }
-  return count;
+  return (text.match(MARKER_PATTERN) ?? []).length;
 }
 
 /** Normalize CRLF, duplicate blank lines, leading/trailing whitespace, chunk boundaries. */
 export function normalizeTranslationOutput(text: string): string {
   return text
-    .replace(/\r\n/g, "\n")
+    .replace(/\r\n?/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n[ \t]+/g, "\n")
