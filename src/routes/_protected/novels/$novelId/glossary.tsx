@@ -29,6 +29,7 @@ import {
   approveAllPendingTerms,
   rejectGlossaryTerm,
   getGlossaryStats,
+  previewTermReplacement,
 } from "@/lib/glossary.functions";
 import { createTermSchema, updateTermSchema } from "@/lib/glossary.schemas";
 
@@ -111,6 +112,7 @@ interface EditState {
   target: string;
   category: "character" | "place" | "skill" | "item" | "other";
   note: string;
+  originalTarget: string;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -181,6 +183,12 @@ function NovelGlossaryPage() {
   const [editState, setEditState] = useState<EditState | null>(null);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [deleteTermId, setDeleteTermId] = useState<string | null>(null);
+  const [replaceConfirm, setReplaceConfirm] = useState<{
+    chapterCount: number;
+    occurrences: number;
+    payload: Record<string, any>;
+  } | null>(null);
+  const [previewingReplace, setPreviewingReplace] = useState(false);
 
   // Bulk Import state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -217,9 +225,11 @@ function NovelGlossaryPage() {
 
   const { mutateAsync: saveEdit, isPending: savingEdit } = useMutation({
     mutationFn: (vars: any) => updateGlossaryTerm({ data: vars }),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       invalidateAll();
-      toast.success("Term updated");
+      toast.success(
+        vars.applyToChapters ? "Term updated and replaced in translated chapters" : "Term updated",
+      );
       setEditState(null);
       setEditErrors({});
     },
@@ -343,7 +353,33 @@ function NovelGlossaryPage() {
       return;
     }
 
+    // Target changed → preview how many translated chapters still use the old
+    // target and offer to propagate. Preview failure falls back to a plain save.
+    if (editState.target.trim() !== editState.originalTarget) {
+      setPreviewingReplace(true);
+      try {
+        const preview = await previewTermReplacement({
+          data: { novelId, oldTarget: editState.originalTarget },
+        });
+        if (preview.chapterCount > 0) {
+          setReplaceConfirm({ ...preview, payload });
+          return;
+        }
+      } catch {
+        // fall through to plain save
+      } finally {
+        setPreviewingReplace(false);
+      }
+    }
+
     await saveEdit(payload);
+  };
+
+  const confirmReplace = async (apply: boolean) => {
+    if (!replaceConfirm) return;
+    const { payload } = replaceConfirm;
+    setReplaceConfirm(null);
+    await saveEdit({ ...payload, applyToChapters: apply });
   };
 
   if (!novel) {
@@ -660,7 +696,7 @@ function NovelGlossaryPage() {
                               size="icon"
                               className="size-8 text-emerald-600 dark:text-emerald-400"
                               onClick={handleSaveEdit}
-                              disabled={savingEdit}
+                              disabled={savingEdit || previewingReplace}
                               aria-label="Save edit"
                             >
                               <Check className="size-4" />
@@ -719,6 +755,7 @@ function NovelGlossaryPage() {
                                 target: term.target,
                                 category: term.category as any,
                                 note: term.note || "",
+                                originalTarget: term.target,
                               })
                             }
                             aria-label="Edit term"
@@ -841,6 +878,36 @@ function NovelGlossaryPage() {
         onConfirm={() => deleteTermId && removeTerm(deleteTermId)}
         pending={deletingTerm}
       />
+
+      {/* Replace-in-chapters Confirm Dialog */}
+      <Dialog
+        open={replaceConfirm !== null}
+        onOpenChange={(open) => !open && setReplaceConfirm(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Replace in translated chapters?</DialogTitle>
+            <DialogDescription>
+              The old target{" "}
+              <span className="font-semibold text-foreground">“{editState?.originalTarget}”</span>{" "}
+              appears in {replaceConfirm?.chapterCount ?? 0} translated chapter(s) (
+              {replaceConfirm?.occurrences ?? 0} occurrence(s)).
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-caption text-muted-foreground">
+            Replacement is an exact, case-sensitive match and may also match inside longer words.
+            This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => confirmReplace(false)} disabled={savingEdit}>
+              Save glossary only
+            </Button>
+            <Button onClick={() => confirmReplace(true)} disabled={savingEdit}>
+              {savingEdit ? "Saving..." : "Replace & Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bulk Import Dialog */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>

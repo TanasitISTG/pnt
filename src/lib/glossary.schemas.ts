@@ -27,6 +27,12 @@ export const updateTermSchema = z.object({
   category: termCategorySchema.optional(),
   note: z.string().max(1000).optional().nullable(),
   status: termStatusSchema.optional(),
+  applyToChapters: z.boolean().optional(),
+});
+
+export const previewTermReplacementSchema = z.object({
+  novelId: z.string().min(1),
+  oldTarget: z.string().min(1).max(500),
 });
 
 export const deleteTermSchema = z.object({

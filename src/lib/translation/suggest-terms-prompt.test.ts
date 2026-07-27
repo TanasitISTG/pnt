@@ -14,6 +14,12 @@ describe("suggest-terms-prompt", () => {
     expect(prompt).toContain("en->th");
   });
 
+  it("requests notes in the target language", () => {
+    expect(buildTermSuggestionPrompt("en->th", [])).toContain("note written in Thai");
+    expect(buildTermSuggestionPrompt("zh->en", [])).toContain("note written in English");
+    expect(buildTermSuggestionPrompt("zh->th", [])).toContain("note written in Thai");
+  });
+
   it("includes approved mappings in prompt when provided", () => {
     const prompt = buildTermSuggestionPrompt("en->th", [], {
       approvedMappings: [

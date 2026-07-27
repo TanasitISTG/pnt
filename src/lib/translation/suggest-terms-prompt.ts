@@ -1,3 +1,5 @@
+import { LANG_LABELS, normalizePair } from "./prompts";
+
 export interface SuggestedTerm {
   source: string;
   target: string;
@@ -37,7 +39,7 @@ export function buildTermSuggestionPrompt(
   const parts: string[] = [
     `You are a terminology extraction assistant specializing in literary translation (${languagePair}).`,
     `Analyze the provided translated chapter text and identify key terms: character names, place names, special skills, items, and other recurring novel concepts.`,
-    `For each term, extract its source text (original language), target translation (as used in the translated chapter), category ("character", "place", "skill", "item", or "other"), and an optional brief note.`,
+    `For each term, extract its source text (original language), target translation (as used in the translated chapter), category ("character", "place", "skill", "item", or "other"), and an optional brief note written in ${LANG_LABELS[normalizePair(languagePair)].target}.`,
     existingList,
   ];
 

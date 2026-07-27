@@ -3,7 +3,7 @@ import { eq, and, sql, inArray, count, or, ilike } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
-import { novels, glossaryTerms, termCategoryEnum } from "@/lib/db/schema";
+import { novels, chapters, glossaryTerms, termCategoryEnum } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { nanoid } from "@/lib/utils";
 import {
@@ -14,6 +14,7 @@ import {
   approveTermSchema,
   rejectTermSchema,
   bulkImportTermsSchema,
+  previewTermReplacementSchema,
 } from "@/lib/glossary.schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 
@@ -117,7 +118,11 @@ export const updateGlossaryTerm = createServerFn({ method: "POST" })
       const session = await ensureSession();
 
       const [term] = await db
-        .select({ id: glossaryTerms.id, novelId: glossaryTerms.novelId })
+        .select({
+          id: glossaryTerms.id,
+          novelId: glossaryTerms.novelId,
+          target: glossaryTerms.target,
+        })
         .from(glossaryTerms)
         .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
         .where(and(eq(glossaryTerms.id, data.termId), eq(novels.userId, session.user.id)))
@@ -152,9 +157,63 @@ export const updateGlossaryTerm = createServerFn({ method: "POST" })
         }
       }
 
+      // Opt-in propagation: replace old target string in already-translated chapters.
+      // Exact case-sensitive substring match — may match inside longer words (UI warns).
+      if (data.applyToChapters && data.target !== undefined) {
+        const oldTarget = term.target;
+        const newTarget = data.target.trim();
+        if (newTarget !== oldTarget) {
+          await db
+            .update(chapters)
+            .set({
+              translatedContent: sql`replace(${chapters.translatedContent}, ${oldTarget}, ${newTarget})`,
+            })
+            .where(
+              and(
+                eq(chapters.novelId, term.novelId),
+                sql`strpos(${chapters.translatedContent}, ${oldTarget}) > 0`,
+              ),
+            );
+        }
+      }
+
       await db.update(glossaryTerms).set(updateData).where(eq(glossaryTerms.id, data.termId));
 
       return { success: true };
+    }),
+  );
+
+export const previewTermReplacement = createServerFn({ method: "GET" })
+  .validator(previewTermReplacementSchema)
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+
+      const [novel] = await db
+        .select({ id: novels.id })
+        .from(novels)
+        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+        .limit(1);
+
+      if (!novel) {
+        throw new SafeServerError("Novel not found or unauthorized");
+      }
+
+      const [row] = await db
+        .select({
+          chapterCount: sql<number>`count(*)::int`,
+          // ponytail: ::text cast — CockroachDB can't infer a bare placeholder's type inside length()
+          occurrences: sql<number>`coalesce(sum((length(${chapters.translatedContent}) - length(replace(${chapters.translatedContent}, ${data.oldTarget}, ''))) / length(${data.oldTarget}::text)), 0)::int`,
+        })
+        .from(chapters)
+        .where(
+          and(
+            eq(chapters.novelId, data.novelId),
+            sql`strpos(${chapters.translatedContent}, ${data.oldTarget}) > 0`,
+          ),
+        );
+
+      return { chapterCount: row?.chapterCount ?? 0, occurrences: row?.occurrences ?? 0 };
     }),
   );
 
