@@ -10,7 +10,7 @@ export const termCategoryEnum = pgEnum("glossary_term_category", [
   "other",
 ]);
 
-export const termStatusEnum = pgEnum("glossary_term_status", ["approved", "pending"]);
+export const termStatusEnum = pgEnum("glossary_term_status", ["approved", "pending", "rejected"]);
 
 export const glossaryTerms = pgTable(
   "glossary_terms",

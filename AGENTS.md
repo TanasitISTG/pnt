@@ -38,7 +38,7 @@ Single-admin novel translation app (EN→TH default, ZH→EN, ZH→TH) with gues
 | Regenerate route tree  | `bun run generate-routes`                    |
 | Inngest dev server     | `bun run inngest` (run alongside `bun dev`)  |
 
-Package manager + script runner: **Bun**. Quality gate: `lint` + `format:check` + `test` must stay green.
+Package manager + script runner: **Bun**. Quality gate: `lint` + `format:check` + `typecheck` + `test` must stay green.
 
 ## Stack
 

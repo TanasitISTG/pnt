@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const termCategorySchema = z.enum(["character", "place", "skill", "item", "other"]);
 
-export const termStatusSchema = z.enum(["approved", "pending"]);
+export const termStatusSchema = z.enum(["approved", "pending", "rejected"]);
 
 export const listTermsSchema = z.object({
   novelId: z.string().min(1),

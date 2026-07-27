@@ -127,6 +127,13 @@
       "when": 1784968145029,
       "tag": "0017_mushy_risque",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785115365997,
+      "tag": "0018_late_gunslinger",
+      "breakpoints": true
     }
   ]
 }

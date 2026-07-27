@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, inArray, count } from "drizzle-orm";
+import { eq, and, sql, inArray, count, or, ilike } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
@@ -7,6 +7,7 @@ import { novels, glossaryTerms, termCategoryEnum } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { nanoid } from "@/lib/utils";
 import {
+  listTermsSchema,
   createTermSchema,
   updateTermSchema,
   deleteTermSchema,
@@ -17,7 +18,7 @@ import {
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 
 export const listGlossaryTerms = createServerFn({ method: "GET" })
-  .validator(z.object({ novelId: z.string().min(1) }))
+  .validator(listTermsSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
@@ -32,10 +33,32 @@ export const listGlossaryTerms = createServerFn({ method: "GET" })
         throw new SafeServerError("Novel not found or unauthorized");
       }
 
+      const conditions = [eq(glossaryTerms.novelId, data.novelId)];
+
+      if (data.status && data.status !== "all") {
+        conditions.push(eq(glossaryTerms.status, data.status));
+      }
+
+      if (data.category && data.category !== "all") {
+        conditions.push(eq(glossaryTerms.category, data.category));
+      }
+
+      if (data.search?.trim()) {
+        const escaped = data.search.trim().replace(/[\\%_]/g, (m) => "\\" + m);
+        const pattern = `%${escaped}%`;
+        conditions.push(
+          or(
+            ilike(glossaryTerms.source, pattern),
+            ilike(glossaryTerms.target, pattern),
+            ilike(glossaryTerms.note, pattern),
+          )!,
+        );
+      }
+
       const rows = await db
         .select()
         .from(glossaryTerms)
-        .where(eq(glossaryTerms.novelId, data.novelId));
+        .where(and(...conditions));
 
       return rows;
     }),
@@ -352,7 +375,10 @@ export const rejectGlossaryTerm = createServerFn({ method: "POST" })
         throw new SafeServerError("Glossary term not found or unauthorized");
       }
 
-      await db.delete(glossaryTerms).where(eq(glossaryTerms.id, data.termId));
+      await db
+        .update(glossaryTerms)
+        .set({ status: "rejected", updatedAt: new Date() })
+        .where(eq(glossaryTerms.id, data.termId));
 
       return { success: true };
     }),
@@ -369,6 +395,7 @@ export const getGlossaryStats = createServerFn({ method: "GET" })
           total: count(glossaryTerms.id),
           approved: sql<number>`count(case when ${glossaryTerms.status} = 'approved' then 1 end)::int`,
           pending: sql<number>`count(case when ${glossaryTerms.status} = 'pending' then 1 end)::int`,
+          rejected: sql<number>`count(case when ${glossaryTerms.status} = 'rejected' then 1 end)::int`,
         })
         .from(glossaryTerms)
         .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
@@ -378,6 +405,7 @@ export const getGlossaryStats = createServerFn({ method: "GET" })
         total: row?.total ?? 0,
         approved: row?.approved ?? 0,
         pending: row?.pending ?? 0,
+        rejected: row?.rejected ?? 0,
       };
     }),
   );

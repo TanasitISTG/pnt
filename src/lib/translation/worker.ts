@@ -406,10 +406,21 @@ export async function finalizeJob(jobId: string): Promise<void> {
   logs.push(createLog("info", "Extracting new glossary term suggestions..."));
   await saveJob(job.id, { logsJson: JSON.stringify(logs) });
   try {
-    const approvedTerms = await db
-      .select({ source: glossaryTerms.source, target: glossaryTerms.target })
-      .from(glossaryTerms)
-      .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved")));
+    const [approvedTerms, rejectedTerms] = await Promise.all([
+      db
+        .select({ source: glossaryTerms.source, target: glossaryTerms.target })
+        .from(glossaryTerms)
+        .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved"))),
+      db
+        .select({ source: glossaryTerms.source })
+        .from(glossaryTerms)
+        .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "rejected"))),
+    ]);
+
+    const excludedSources = [
+      ...approvedTerms.map((t) => t.source),
+      ...rejectedTerms.map((t) => t.source),
+    ];
 
     const fullRawSource = chunkList.map((c) => c.text || "").join("\n\n");
     const rawSourceExcerpt = fullRawSource.slice(0, 4000);
@@ -418,7 +429,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
     const effectiveSummary = freshSummary || chapter.summary || undefined;
     const suggestPrompt = buildTermSuggestionPrompt(
       `${novel.sourceLang}->${novel.targetLang}`,
-      approvedTerms.map((t) => t.source),
+      excludedSources,
       {
         rawSourceExcerpt,
         chapterSummary: effectiveSummary,
@@ -544,7 +555,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
 
       // Check for existing term (duplicate case/whitespace-insensitive)
       const [dup] = await db
-        .select({ id: glossaryTerms.id, status: glossaryTerms.status })
+        .select({ id: glossaryTerms.id })
         .from(glossaryTerms)
         .where(
           and(
@@ -555,12 +566,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
         .limit(1);
 
       if (dup) {
-        // Never modify existing approved terms
-        if (dup.status === "approved") {
-          conflictCount++;
-          continue;
-        }
-        // Duplicate pending term — skip
+        // Existing term (approved, pending, or rejected) — skip
         conflictCount++;
         continue;
       }

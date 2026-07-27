@@ -1,0 +1,1 @@
+ALTER TYPE "public"."glossary_term_status" ADD VALUE 'rejected';

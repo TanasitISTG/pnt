@@ -14,6 +14,7 @@ import {
   CheckCheck,
   Sparkles,
   HelpCircle,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -71,14 +72,14 @@ const novelQueryOptions = (novelId: string) =>
 const glossaryTermsQueryOptions = (
   novelId: string,
   search?: string,
-  category?: string,
-  status?: string,
+  category?: "character" | "place" | "skill" | "item" | "other" | "all",
+  status?: "approved" | "pending" | "rejected" | "all",
 ) =>
   queryOptions({
     queryKey: ["glossaryTerms", novelId, { search, category, status }],
     queryFn: () =>
       listGlossaryTerms({
-        data: { novelId, search, category: category as any, status: status as any },
+        data: { novelId, search, category, status },
       }),
   });
 
@@ -92,7 +93,12 @@ export const Route = createFileRoute("/_protected/novels/$novelId/glossary")({
   loader: async ({ params, context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
-      context.queryClient.ensureQueryData(glossaryTermsQueryOptions(params.novelId)),
+      context.queryClient.ensureQueryData(
+        glossaryTermsQueryOptions(params.novelId, "", "all", "approved"),
+      ),
+      context.queryClient.ensureQueryData(
+        glossaryTermsQueryOptions(params.novelId, undefined, undefined, "pending"),
+      ),
       context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
     ]);
   },
@@ -127,6 +133,7 @@ const CATEGORY_ITEMS: Record<string, string> = {
 const STATUS_ITEMS: Record<string, string> = {
   approved: "Approved",
   pending: "Pending",
+  rejected: "Rejected",
   all: "All Status",
 };
 
@@ -152,8 +159,12 @@ function NovelGlossaryPage() {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("approved");
+  const [categoryFilter, setCategoryFilter] = useState<
+    "character" | "place" | "skill" | "item" | "other" | "all"
+  >("all");
+  const [statusFilter, setStatusFilter] = useState<"approved" | "pending" | "rejected" | "all">(
+    "approved",
+  );
 
   const { data: novel } = useQuery(novelQueryOptions(novelId));
   const { data: stats } = useQuery(glossaryStatsQueryOptions(novelId));
@@ -401,6 +412,14 @@ function NovelGlossaryPage() {
                 Pending: {stats?.pending}
               </Badge>
             )}
+            {(stats?.rejected ?? 0) > 0 && (
+              <Badge
+                variant="outline"
+                className="px-3 py-1 text-xs font-mono text-destructive border-destructive/40 bg-destructive/10"
+              >
+                Rejected: {stats?.rejected}
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -536,6 +555,7 @@ function NovelGlossaryPage() {
               <SelectContent>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
                 <SelectItem value="all">All Status</SelectItem>
               </SelectContent>
             </Select>
@@ -675,6 +695,19 @@ function NovelGlossaryPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          {term.status === "rejected" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-500/10"
+                              onClick={() => approveTerm(term.id)}
+                              disabled={approvingTerm}
+                              aria-label="Restore term"
+                              title="Restore term"
+                            >
+                              <RotateCcw className="size-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
