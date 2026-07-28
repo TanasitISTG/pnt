@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,44 +20,29 @@ export function CoverUpload({
   onChange,
   onRemoveCover,
 }: CoverUploadProps) {
-  const [preview, setPreview] = useState<string | null>(cover || null);
-  const [loading, setLoading] = useState(!cover && hasExistingCover && !!existingNovelId);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
+  // Set on explicit remove so a cached existing cover never reappears.
+  const [removed, setRemoved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (cover) {
-      setPreview(cover);
-      setLoading(false);
-      return;
-    }
-
-    let active = true;
-
-    if (hasExistingCover && existingNovelId) {
-      async function loadExistingCover() {
-        try {
-          setLoading(true);
-          const response = await fetch(`/api/covers/${existingNovelId}`);
-          if (!response.ok) return;
-          // data URL instead of an object URL: nothing to revoke, no Blob pin.
-          const dataUrl = await blobToDataUrl(await response.blob());
-          if (active) {
-            setPreview(dataUrl);
-          }
-        } catch {
-        } finally {
-          if (active) {
-            setLoading(false);
-          }
-        }
-      }
-      loadExistingCover();
-    }
-
-    return () => {
-      active = false;
-    };
-  }, [hasExistingCover, existingNovelId, cover]);
+  // useQuery owns the fetch: dedupes mounts, no manual race guard.
+  // retry: false — a missing cover just shows the upload button.
+  const wantsExisting =
+    !removed && !cover && !localPreview && hasExistingCover && !!existingNovelId;
+  const { data: existingCover, isPending } = useQuery({
+    queryKey: ["cover", existingNovelId],
+    queryFn: async () => {
+      const response = await fetch(`/api/covers/${existingNovelId}`);
+      if (!response.ok) throw new Error("Failed to load cover");
+      // data URL instead of an object URL: nothing to revoke, no Blob pin.
+      return blobToDataUrl(await response.blob());
+    },
+    enabled: wantsExisting,
+    retry: false,
+    staleTime: 0, // refetch on mount, matching the old per-mount effect
+  });
+  const preview = cover || localPreview || (wantsExisting ? (existingCover ?? null) : null);
+  const loading = wantsExisting && isPending;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,7 +67,7 @@ export function CoverUpload({
         const result = canvas.toDataURL("image/webp", 0.8);
         // Old Safari silently falls back to PNG when it can't encode WebP.
         const mime = result.startsWith("data:image/webp") ? "image/webp" : "image/png";
-        setPreview(result);
+        setLocalPreview(result);
         onChange(result.slice(result.indexOf(",") + 1), mime);
       },
       { once: true },
@@ -99,7 +85,8 @@ export function CoverUpload({
   const handleRemove = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setPreview(null);
+    setLocalPreview(null);
+    setRemoved(true);
     onChange(null, null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { BookOpen } from "lucide-react";
 
 import { blobToDataUrl } from "@/lib/utils";
@@ -20,8 +21,6 @@ export function NovelCover({
   fallbackSize = 12,
   lazy = false,
 }: NovelCoverProps) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [visible, setVisible] = useState(!lazy);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -48,34 +47,24 @@ export function NovelCover({
     return () => observer.disconnect();
   }, [visible]);
 
-  useEffect(() => {
-    if (!url || !visible) return;
-
-    let active = true;
-
-    async function loadCover() {
-      try {
-        const response = await fetch(url as string);
-        if (!response.ok) throw new Error("Failed to load cover");
-        // data URL instead of an object URL: nothing to revoke, no Blob pin.
-        const dataUrl = await blobToDataUrl(await response.blob());
-        if (active) {
-          setSrc(dataUrl);
-        }
-      } catch {
-        if (active) setError(true);
-      }
-    }
-
-    loadCover();
-
-    return () => {
-      active = false;
-    };
-  }, [url, visible]);
+  // useQuery owns the fetch: dedupes repeat mounts, no manual race guard.
+  // retry: false keeps the fail-fast BookOpen fallback; staleTime: Infinity
+  // because the versioned URL changes whenever the cover does.
+  const { data: src, isError } = useQuery({
+    queryKey: ["cover", url],
+    queryFn: async () => {
+      const response = await fetch(url as string);
+      if (!response.ok) throw new Error("Failed to load cover");
+      // data URL instead of an object URL: nothing to revoke, no Blob pin.
+      return blobToDataUrl(await response.blob());
+    },
+    enabled: !!url && visible,
+    retry: false,
+    staleTime: Infinity,
+  });
 
   // Error / No cover state: Render BookOpen icon fallback immediately
-  if (!url || error) {
+  if (!url || isError) {
     return (
       <div
         className={`w-full h-full flex items-center justify-center bg-foreground/3 text-muted-foreground/60 rounded-[inherit] ${className}`}
