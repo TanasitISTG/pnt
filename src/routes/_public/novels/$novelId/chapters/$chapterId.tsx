@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import {
   ArrowLeft,
@@ -14,7 +14,6 @@ import {
   List,
   Pencil,
   RotateCw,
-  Settings2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,7 +30,9 @@ import { QueryErrorState } from "@/components/query-error-state";
 import { useTranslationJob } from "@/lib/translation/use-translation-job";
 import { alignParagraphs, splitParagraphs } from "@/lib/translation/paragraphs";
 import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader-settings";
-import type { ReaderFontSize, ReaderTypeface, ReaderViewMode } from "@/lib/reader.types";
+import type { ReaderViewMode } from "@/lib/reader.types";
+import { ReaderContent, renderParagraph } from "@/components/reader/chapter-content";
+import { ReaderSettingsPanel } from "@/components/reader/reader-settings-panel";
 import { cn } from "@/lib/utils";
 import { downloadText, sanitizeFilename } from "@/lib/download";
 import { Button } from "@/components/ui/button";
@@ -45,16 +46,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 const chapterQueryOptions = (chapterId: string) =>
   queryOptions({
@@ -119,132 +110,6 @@ const VIEW_MODES: { value: ReaderViewMode; label: string; icon: typeof Columns2 
   { value: "translated", label: "Translated", icon: BookOpen },
   { value: "raw", label: "Raw", icon: FileText },
 ];
-
-function renderParagraph(
-  text: string,
-  key: React.Key,
-  fontSizePx: number,
-  readerFontClass?: string,
-  dimmed = false,
-  lang?: string,
-) {
-  return (
-    <p
-      key={key}
-      lang={lang}
-      className={cn(
-        "whitespace-pre-wrap",
-        dimmed ? "text-muted-foreground" : "text-foreground",
-        readerFontClass,
-      )}
-      style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
-    >
-      {text}
-    </p>
-  );
-}
-
-interface ReaderContentProps {
-  hasTranslation: boolean;
-  viewMode: "side" | "translated" | "raw";
-  aligned: { raw?: string | null; translated?: string | null }[];
-  rawParagraphs: string[];
-  translatedParagraphs: string[];
-  fontSizePx: number;
-  readerFontClass?: string;
-  hydrated: boolean;
-  sourceLang?: string;
-  targetLang?: string;
-}
-
-const LANG_NAMES: Record<string, string> = {
-  zh: "Chinese",
-  en: "English",
-  th: "Thai",
-};
-
-const ReaderContent = memo(function ReaderContent({
-  hasTranslation,
-  viewMode,
-  aligned,
-  rawParagraphs,
-  translatedParagraphs,
-  fontSizePx,
-  readerFontClass,
-  hydrated,
-  sourceLang = "zh",
-  targetLang = "th",
-}: ReaderContentProps) {
-  const sourceName = LANG_NAMES[sourceLang];
-
-  return (
-    <div style={hydrated ? undefined : { visibility: "hidden" }}>
-      {viewMode !== "raw" && hasTranslation && (
-        <p className="text-caption text-muted-foreground mb-4">
-          {sourceName
-            ? `Machine-translated from ${sourceName}. May contain inaccuracies.`
-            : "Machine-translated. May contain inaccuracies."}
-        </p>
-      )}
-      {!hasTranslation ? (
-        <div className="flex flex-col gap-8">
-          <p className="text-caption text-muted-foreground italic">
-            Not translated yet — showing raw text.
-          </p>
-          <div className="mx-auto flex max-w-prose flex-col gap-5">
-            {rawParagraphs.map((p, i) =>
-              renderParagraph(p, i, fontSizePx, readerFontClass, false, sourceLang),
-            )}
-          </div>
-        </div>
-      ) : viewMode === "side" ? (
-        <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
-          {aligned.map((pair, i) => (
-            <div key={i} className="contents">
-              <div>
-                {pair.raw
-                  ? renderParagraph(
-                      pair.raw,
-                      `r-${i}`,
-                      fontSizePx,
-                      readerFontClass,
-                      true,
-                      sourceLang,
-                    )
-                  : null}
-              </div>
-              <div className="border-b border-border pb-5 md:border-b-0 md:pb-0">
-                {pair.translated
-                  ? renderParagraph(
-                      pair.translated,
-                      `t-${i}`,
-                      fontSizePx,
-                      readerFontClass,
-                      false,
-                      targetLang,
-                    )
-                  : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="mx-auto flex max-w-prose flex-col gap-5">
-          {(viewMode === "translated" ? translatedParagraphs : rawParagraphs).map((p, i) =>
-            renderParagraph(
-              p,
-              i,
-              fontSizePx,
-              readerFontClass,
-              false,
-              viewMode === "raw" ? sourceLang : targetLang,
-            ),
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
 
 function ReaderPage() {
   const { novelId, chapterId } = Route.useParams();
@@ -567,50 +432,12 @@ function ReaderPage() {
             </div>
           )}
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" className="size-8" />}
-              aria-label="Reading settings"
-              title="Reading settings"
-            >
-              <Settings2 className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Font size</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={settings.fontSize}
-                  onValueChange={(v) => update({ fontSize: v as ReaderFontSize })}
-                >
-                  {(["S", "M", "L", "XL"] as const).map((s) => (
-                    <DropdownMenuRadioItem key={s} value={s}>
-                      {s}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Typeface</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={settings.typeface}
-                  onValueChange={(v) => update({ typeface: v as ReaderTypeface })}
-                >
-                  <DropdownMenuRadioItem value="default">Sofia Sans</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="reader">Sarabun</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Theme</DropdownMenuLabel>
-                <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
-                  <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ReaderSettingsPanel
+            settings={settings}
+            update={update}
+            theme={theme}
+            setTheme={setTheme}
+          />
 
           {user && hasTranslation && !editing && !jobRunning && (
             <Button
