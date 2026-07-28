@@ -1,27 +1,10 @@
 import "@tanstack/react-start/server-only";
-import { eq, and, sql, lt, desc, inArray } from "drizzle-orm";
 
-import { db } from "@/lib/db";
-import { novels, chapters, translationJobs, glossaryTerms } from "@/lib/db/schema";
-import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "./provider-client";
 import type { AIProviderClient } from "./translation.types";
 import { splitAtParagraphBoundary } from "./chunker";
-import {
-  buildSystemPrompt,
-  buildUserMessage,
-  buildSummaryPrompt,
-  findResidualSourceChars,
-} from "./prompts";
-import { translateChapterTitle } from "./title";
+import { buildSystemPrompt, buildUserMessage, findResidualSourceChars } from "./prompts";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "./glossary";
-import {
-  buildTermSuggestionPrompt,
-  buildTermSuggestionUserMessage,
-  parseTermSuggestions,
-  buildGlossaryReviewPrompt,
-  parseGlossaryReviewResponse,
-} from "./suggest-terms-prompt";
 import {
   injectParagraphMarkers,
   restoreParagraphMarkers,
@@ -32,28 +15,21 @@ import { extractHanziSpans, spliceSpans } from "./residual-repair";
 import { createLog } from "./translation.functions";
 import type { ChunkProgress, LogEntry } from "./translation.types";
 import { log } from "@/lib/log";
+import {
+  loadJob,
+  saveJob,
+  markChapterTranslating,
+  loadApprovedTermsForContext,
+  loadPrevChapterForContext,
+  markChapterTranslated,
+  markChapterError,
+} from "./job-store";
+import { generateSummaryArtifacts } from "./finalize-summary";
+import { suggestAndReviewTerms } from "./finalize-glossary";
 
 // Execution is driven by Inngest (see src/lib/inngest/functions.ts): one event
 // per job, each chunk a memoized step with its own invocation + retries — so no
 // lease, no cron pinger. DB status rows stay the UI's source of truth.
-
-async function loadJob(jobId: string) {
-  const [row] = await db
-    .select({ job: translationJobs, chapter: chapters, novel: novels })
-    .from(translationJobs)
-    .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-    .innerJoin(novels, eq(chapters.novelId, novels.id))
-    .where(eq(translationJobs.id, jobId))
-    .limit(1);
-  return row ?? null;
-}
-
-async function saveJob(jobId: string, patch: Record<string, unknown>) {
-  await db
-    .update(translationJobs)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(eq(translationJobs.id, jobId));
-}
 
 export async function initJob(jobId: string) {
   log("info", "step transition", { jobId, step: "init" });
@@ -68,10 +44,7 @@ export async function initJob(jobId: string) {
 
   if (job.status !== "running") {
     await saveJob(job.id, { status: "running" });
-    await db
-      .update(chapters)
-      .set({ status: "translating", updatedAt: new Date() })
-      .where(eq(chapters.id, chapter.id));
+    await markChapterTranslating(chapter.id);
   }
 
   const chunkList: ChunkProgress[] = JSON.parse(job.chunksJson || "[]");
@@ -322,28 +295,9 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
 
   // Approved glossary terms + previous chapter for rolling context —
   // independent reads, run them concurrently.
-  const [terms, [prevChapter]] = await Promise.all([
-    db
-      .select({
-        source: glossaryTerms.source,
-        target: glossaryTerms.target,
-        category: glossaryTerms.category,
-        note: glossaryTerms.note,
-      })
-      .from(glossaryTerms)
-      .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved"))),
-    db
-      .select({ summary: chapters.summary, translatedContent: chapters.translatedContent })
-      .from(chapters)
-      .where(
-        and(
-          eq(chapters.novelId, novel.id),
-          lt(sql`COALESCE(${chapters.number}::numeric, 0)`, sql`${chapter.number}::numeric`),
-          eq(chapters.status, "translated"),
-        ),
-      )
-      .orderBy(desc(sql`COALESCE(${chapters.number}::numeric, 0)`))
-      .limit(1),
+  const [terms, prevChapter] = await Promise.all([
+    loadApprovedTermsForContext(novel.id),
+    loadPrevChapterForContext(novel.id, chapter.number),
   ]);
 
   const previousSummary = novel.storySummary || prevChapter?.summary || null;
@@ -492,346 +446,33 @@ export async function finalizeJob(jobId: string): Promise<void> {
   let totalPromptTokens = chunkList.reduce((acc, c) => acc + (c.promptTokens || 0), 0);
   let totalCompletionTokens = chunkList.reduce((acc, c) => acc + (c.completionTokens || 0), 0);
 
-  await db
-    .update(chapters)
-    .set({
-      translatedContent: fullTranslation,
-      status: "translated",
-      translatedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(chapters.id, chapter.id));
+  await markChapterTranslated(chapter.id, fullTranslation);
 
-  // Translate chapter title (cheap, non-fatal)
-  const titleRes = await translateChapterTitle(
+  // Phase 1: Summary & title generation
+  const summaryRes = await generateSummaryArtifacts({
     providerConfig,
-    `${novel.sourceLang}->${novel.targetLang}`,
-    chapter.title,
-  );
-  totalPromptTokens += titleRes.promptTokens;
-  totalCompletionTokens += titleRes.completionTokens;
-  if (titleRes.translated) {
-    await db
-      .update(chapters)
-      .set({ translatedTitle: titleRes.translated, updatedAt: new Date() })
-      .where(eq(chapters.id, chapter.id));
-    logs.push(createLog("success", `Title translated: "${titleRes.translated}"`));
-  } else {
-    logs.push(createLog("warn", "Title translation skipped — keeping raw title."));
-  }
+    novel,
+    chapter,
+    fullTranslation,
+    logs,
+    jobId: job.id,
+  });
+  totalPromptTokens += summaryRes.promptTokens;
+  totalCompletionTokens += summaryRes.completionTokens;
 
-  // Generate chapter summary in English
-  logs.push(createLog("info", "Generating English chapter summary..."));
-  await saveJob(job.id, { logsJson: JSON.stringify(logs) });
-  const summaryStartTime = Date.now();
-
-  let freshSummary: string | null = null;
-  try {
-    const summarySystemPrompt = buildSummaryPrompt(`${novel.sourceLang}->${novel.targetLang}`);
-    const summaryCompletion = await providerConfig.generateChatCompletion({
-      model: providerConfig.fastModel ?? undefined,
-      messages: [
-        { role: "system", content: summarySystemPrompt },
-        {
-          role: "user",
-          content: `Please summarize this chapter:\n\n${
-            fullTranslation.length > 10000
-              ? `${fullTranslation.slice(0, 6000)}\n[...]\n${fullTranslation.slice(-4000)}`
-              : fullTranslation
-          }`,
-        },
-      ],
-    });
-    totalPromptTokens += summaryCompletion.usage?.promptTokens || 0;
-    totalCompletionTokens += summaryCompletion.usage?.completionTokens || 0;
-    freshSummary = summaryCompletion.content || null;
-    const summaryTime = ((Date.now() - summaryStartTime) / 1000).toFixed(1);
-    logs.push(createLog("success", `Summary generated in ${summaryTime}s.`));
-
-    if (freshSummary) {
-      await db
-        .update(chapters)
-        .set({ summary: freshSummary, updatedAt: new Date() })
-        .where(eq(chapters.id, chapter.id));
-
-      // Update rolling story summary on novel (non-fatal)
-      try {
-        const storySummaryCompletion = await providerConfig.generateChatCompletion({
-          model: providerConfig.fastModel ?? undefined,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a novel continuity editor. Maintain a running story synopsis (≤400 words in English) of the novel so far. Combine the existing story synopsis with the new chapter summary to create an updated, coherent summary of key events, ongoing plot arcs, and main character states. Output ONLY the updated synopsis.",
-            },
-            {
-              role: "user",
-              content: `Existing story synopsis:\n${
-                novel.storySummary || "None (this is the beginning of the novel)."
-              }\n\nNew chapter summary:\n${freshSummary}`,
-            },
-          ],
-        });
-        totalPromptTokens += storySummaryCompletion.usage?.promptTokens || 0;
-        totalCompletionTokens += storySummaryCompletion.usage?.completionTokens || 0;
-        const updatedStorySummary = storySummaryCompletion.content?.trim();
-        if (updatedStorySummary) {
-          await db
-            .update(novels)
-            .set({ storySummary: updatedStorySummary, updatedAt: new Date() })
-            .where(eq(novels.id, novel.id));
-          logs.push(createLog("info", "Updated rolling story summary."));
-        }
-      } catch (storyErr) {
-        logs.push(
-          createLog(
-            "warn",
-            `Rolling story summary update skipped: ${storyErr instanceof Error ? storyErr.message : "Failed"}`,
-          ),
-        );
-      }
-    }
-  } catch (sumErr) {
-    logs.push(
-      createLog(
-        "warn",
-        `Summary generation skipped: ${sumErr instanceof Error ? sumErr.message : "Failed"}`,
-      ),
-    );
-  }
-
-  // Auto-suggest glossary terms with AI review
-  logs.push(createLog("info", "Extracting new glossary term suggestions..."));
-  await saveJob(job.id, { logsJson: JSON.stringify(logs) });
-  try {
-    const [approvedTerms, rejectedTerms] = await Promise.all([
-      db
-        .select({ source: glossaryTerms.source, target: glossaryTerms.target })
-        .from(glossaryTerms)
-        .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved"))),
-      db
-        .select({ source: glossaryTerms.source })
-        .from(glossaryTerms)
-        .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "rejected"))),
-    ]);
-
-    const excludedSources = [
-      ...approvedTerms.map((t) => t.source),
-      ...rejectedTerms.map((t) => t.source),
-    ];
-
-    const fullRawSource = chunkList.map((c) => c.text || "").join("\n\n");
-    const rawSourceExcerpt = fullRawSource.slice(0, 4000);
-    const translatedExcerpt = fullTranslation.slice(0, 8000);
-
-    const effectiveSummary = freshSummary || chapter.summary || undefined;
-    const suggestPrompt = buildTermSuggestionPrompt(
-      `${novel.sourceLang}->${novel.targetLang}`,
-      excludedSources,
-      {
-        rawSourceExcerpt,
-        chapterSummary: effectiveSummary,
-        approvedMappings: approvedTerms.map((t) => ({ source: t.source, target: t.target })),
-      },
-    );
-
-    const userMessage = buildTermSuggestionUserMessage(translatedExcerpt, {
-      rawSourceExcerpt,
-      chapterSummary: effectiveSummary,
-    });
-
-    let suggestionContent = "";
-    try {
-      const suggestCompletion = await providerConfig.generateChatCompletion({
-        temperature: 0.3,
-        model: providerConfig.fastModel ?? undefined,
-        messages: [
-          { role: "system", content: suggestPrompt },
-          { role: "user", content: userMessage },
-        ],
-        responseFormat: { type: "json_object" },
-      });
-      totalPromptTokens += suggestCompletion.usage?.promptTokens || 0;
-      totalCompletionTokens += suggestCompletion.usage?.completionTokens || 0;
-      suggestionContent = suggestCompletion.content || "";
-    } catch {
-      const suggestCompletion = await providerConfig.generateChatCompletion({
-        temperature: 0.3,
-        model: providerConfig.fastModel ?? undefined,
-        messages: [
-          { role: "system", content: suggestPrompt },
-          { role: "user", content: userMessage },
-        ],
-      });
-      totalPromptTokens += suggestCompletion.usage?.promptTokens || 0;
-      totalCompletionTokens += suggestCompletion.usage?.completionTokens || 0;
-      suggestionContent = suggestCompletion.content || "";
-    }
-
-    const suggestedTerms = parseTermSuggestions(suggestionContent);
-
-    // AI review of extracted terms
-    let reviewResults: Awaited<ReturnType<typeof parseGlossaryReviewResponse>> = [];
-    if (suggestedTerms.length > 0) {
-      logs.push(
-        createLog("info", `Reviewing ${suggestedTerms.length} suggested term(s) with AI...`),
-      );
-      await saveJob(job.id, { logsJson: JSON.stringify(logs) });
-
-      try {
-        const reviewPrompt = buildGlossaryReviewPrompt(
-          `${novel.sourceLang}->${novel.targetLang}`,
-          approvedTerms.map((t) => ({ source: t.source, target: t.target })),
-        );
-
-        const reviewUserMessage = [
-          "Review these suggested glossary terms:",
-          JSON.stringify({ terms: suggestedTerms }, null, 2),
-          "",
-          "Source text excerpt:",
-          rawSourceExcerpt.slice(0, 3000),
-          "",
-          "Translated excerpt:",
-          translatedExcerpt.slice(0, 3000),
-        ].join("\n");
-
-        let reviewContent = "";
-        try {
-          const reviewCompletion = await providerConfig.generateChatCompletion({
-            temperature: 0.1,
-            model: providerConfig.fastModel ?? undefined,
-            messages: [
-              { role: "system", content: reviewPrompt },
-              { role: "user", content: reviewUserMessage },
-            ],
-            responseFormat: { type: "json_object" },
-          });
-          totalPromptTokens += reviewCompletion.usage?.promptTokens || 0;
-          totalCompletionTokens += reviewCompletion.usage?.completionTokens || 0;
-          reviewContent = reviewCompletion.content || "";
-        } catch {
-          const reviewCompletion = await providerConfig.generateChatCompletion({
-            temperature: 0.1,
-            model: providerConfig.fastModel ?? undefined,
-            messages: [
-              { role: "system", content: reviewPrompt },
-              { role: "user", content: reviewUserMessage },
-            ],
-          });
-          totalPromptTokens += reviewCompletion.usage?.promptTokens || 0;
-          totalCompletionTokens += reviewCompletion.usage?.completionTokens || 0;
-          reviewContent = reviewCompletion.content || "";
-        }
-
-        reviewResults = parseGlossaryReviewResponse(reviewContent);
-      } catch (reviewErr) {
-        logs.push(
-          createLog(
-            "warn",
-            `AI review failed (${reviewErr instanceof Error ? reviewErr.message : "error"}) — all terms stored as pending.`,
-          ),
-        );
-      }
-    }
-
-    const reviewBySource = new Map(reviewResults.map((r) => [r.source, r]));
-    let approvedCount = 0;
-    let pendingCount = 0;
-    let rejectedCount = 0;
-    let conflictCount = 0;
-
-    // One batch duplicate check (case/whitespace-insensitive) instead of a
-    // per-term SELECT inside the loop.
-    const suggestedSources = suggestedTerms.map((st) => st.source.trim().toLowerCase());
-    const existingRows =
-      suggestedSources.length > 0
-        ? await db
-            .select({ source: glossaryTerms.source })
-            .from(glossaryTerms)
-            .where(
-              and(
-                eq(glossaryTerms.novelId, novel.id),
-                inArray(sql`lower(trim(${glossaryTerms.source}))`, suggestedSources),
-              ),
-            )
-        : [];
-    const existingSources = new Set(existingRows.map((r) => r.source.trim().toLowerCase()));
-
-    const rowsToInsert: (typeof glossaryTerms.$inferInsert)[] = [];
-
-    for (const st of suggestedTerms) {
-      const review = reviewBySource.get(st.source);
-      const finalTarget =
-        review?.target && review.target.trim().length > 0 ? review.target : st.target;
-
-      // Validity guard: non-empty source, non-empty target, source !== target (case/whitespace-insensitive)
-      if (
-        !st.source.trim().length ||
-        !finalTarget.trim().length ||
-        finalTarget.trim().toLowerCase() === st.source.trim().toLowerCase()
-      ) {
-        rejectedCount++;
-        continue;
-      }
-
-      if (existingSources.has(st.source.trim().toLowerCase())) {
-        // Existing term (approved, pending, or rejected) — skip
-        conflictCount++;
-        continue;
-      }
-
-      // High-confidence reject → skip insertion
-      if (review?.action === "reject" && review.confidence === "high") {
-        rejectedCount++;
-        continue;
-      }
-
-      // High-confidence approve with valid evidence → insert as approved
-      // Deterministic validation: source must appear in raw text, target in translation
-      const sourceInRaw = fullRawSource.includes(st.source);
-      const targetInTranslation = fullTranslation.includes(finalTarget);
-      const approved =
-        review?.action === "approve" &&
-        review.confidence === "high" &&
-        sourceInRaw &&
-        targetInTranslation;
-
-      rowsToInsert.push({
-        id: nanoid(),
-        novelId: novel.id,
-        source: st.source,
-        target: finalTarget,
-        category: st.category,
-        note: st.note || null,
-        status: approved ? "approved" : "pending",
-      });
-      if (approved) approvedCount++;
-      else pendingCount++;
-    }
-
-    if (rowsToInsert.length > 0) {
-      await db.insert(glossaryTerms).values(rowsToInsert);
-    }
-
-    const summary: string[] = [];
-    if (approvedCount > 0) summary.push(`${approvedCount} approved`);
-    if (pendingCount > 0) summary.push(`${pendingCount} pending`);
-    if (rejectedCount > 0) summary.push(`${rejectedCount} rejected`);
-    if (conflictCount > 0) summary.push(`${conflictCount} conflicts`);
-
-    if (summary.length > 0) {
-      logs.push(createLog("success", `Glossary review: ${summary.join(", ")}.`));
-    } else {
-      logs.push(createLog("info", "No new term suggestions extracted."));
-    }
-  } catch (sugErr) {
-    logs.push(
-      createLog(
-        "warn",
-        `Term auto-suggest skipped: ${sugErr instanceof Error ? sugErr.message : "Failed"}`,
-      ),
-    );
-  }
+  // Phase 2: Glossary term extraction & review
+  const glossaryRes = await suggestAndReviewTerms({
+    providerConfig,
+    novel,
+    chapter,
+    chunkList,
+    fullTranslation,
+    freshSummary: summaryRes.freshSummary,
+    logs,
+    jobId: job.id,
+  });
+  totalPromptTokens += glossaryRes.promptTokens;
+  totalCompletionTokens += glossaryRes.completionTokens;
 
   logs.push(
     createLog(
@@ -860,8 +501,5 @@ export async function failJob(jobId: string, message: string): Promise<void> {
   logs.push(createLog("error", `Job failed: ${message}`));
 
   await saveJob(job.id, { status: "error", error: message, logsJson: JSON.stringify(logs) });
-  await db
-    .update(chapters)
-    .set({ status: "error", updatedAt: new Date() })
-    .where(eq(chapters.id, chapter.id));
+  await markChapterError(chapter.id);
 }
