@@ -21,6 +21,7 @@ export const scrapeChapter = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       await ensureSession();
+      findSource(data.url);
       return fetchAndParse(data.url, data.provider);
     }),
   );
@@ -36,6 +37,7 @@ export const importChapter = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
+      findSource(data.url);
 
       const [novel] = await db
         .select({ id: novels.id })

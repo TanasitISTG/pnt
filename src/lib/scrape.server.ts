@@ -13,8 +13,12 @@ const SCRAPER_FETCH_TIMEOUT_MS = 30_000;
 const MAX_HTML_CHARS = 5_000_000;
 
 export async function directFetch(url: string): Promise<string> {
+  // redirect: "manual" + explicit 3xx rejection — redirect targets are never
+  // fetched, so assertPublicHost can't be bypassed by a redirect to a private
+  // IP. (redirect: "error" would work too, but its rejection is an untyped
+  // TypeError indistinguishable from DNS/connection failures.)
   const res = await fetch(url, {
-    redirect: "follow",
+    redirect: "manual",
     signal: AbortSignal.timeout(DIRECT_FETCH_TIMEOUT_MS),
     headers: {
       "User-Agent":
@@ -23,6 +27,12 @@ export async function directFetch(url: string): Promise<string> {
       "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
     },
   });
+  if (res.status >= 300 && res.status < 400) {
+    log("warn", "Direct scrape fetch blocked redirect", { url, status: res.status });
+    throw new SafeServerError(`Source site attempted a redirect (HTTP ${res.status}) — blocked`, {
+      cause: res.status,
+    });
+  }
   if (!res.ok) {
     log("warn", "Direct scrape fetch failed", { url, status: res.status });
     throw new SafeServerError(`Source site returned HTTP ${res.status}`, { cause: res.status });
