@@ -57,7 +57,7 @@ export function AddChapterSection({
   }, [chapters]);
 
   // Manual chapter form state
-  const [chapNumber, setChapNumber] = useState<string>(autoNextNumber.toString());
+  const [chapNumber, setChapNumber] = useState<string>(() => autoNextNumber.toString());
   const [chapTitle, setChapTitle] = useState("");
   const [chapContent, setChapContent] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -240,7 +240,8 @@ export function AddChapterSection({
       return;
     }
 
-    await addChapter(payload);
+    // onError toasts the failure; swallow the rejection so it isn't unhandled.
+    await addChapter(payload).catch(() => {});
   };
 
   return (

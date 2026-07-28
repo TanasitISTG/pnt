@@ -79,12 +79,13 @@ export const startImportJob = createServerFn({ method: "POST" })
   .validator(startImportJobSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
-
+      // Cheap input validation first — these errors don't need a session.
       if (data.from > data.to || data.to - data.from > 500) {
         throw new SafeServerError("Invalid range (from ≤ to, max 500 chapters)");
       }
       findSource(data.baseUrl); // validates host before the URL is stored
+
+      const session = await ensureSession();
 
       const [novel] = await db
         .select({ id: novels.id })
@@ -102,15 +103,17 @@ export const startImportJob = createServerFn({ method: "POST" })
             sql`${importJobs.status} IN ('pending', 'running')`,
           ),
         );
-      for (const j of active) {
-        await db
-          .update(importJobs)
-          .set({ status: "cancelled", updatedAt: new Date() })
-          .where(eq(importJobs.id, j.id));
-        await inngest
-          .send({ name: "scrape/import.cancelled", data: { jobId: j.id } })
-          .catch(() => {});
-      }
+      await Promise.all(
+        active.map(async (j) => {
+          await db
+            .update(importJobs)
+            .set({ status: "cancelled", updatedAt: new Date() })
+            .where(eq(importJobs.id, j.id));
+          await inngest
+            .send({ name: "scrape/import.cancelled", data: { jobId: j.id } })
+            .catch(() => {});
+        }),
+      );
 
       const jobId = nanoid();
       await db.insert(importJobs).values({

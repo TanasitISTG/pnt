@@ -31,19 +31,20 @@ export const startTranslationJob = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      // Verify provider is configured
-      const providerConfig = await createProviderClient(session.user.id);
-
-      // Verify chapter ownership & load novel settings
-      const [row] = await db
-        .select({
-          chapter: chapters,
-          novel: novels,
-        })
-        .from(chapters)
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
-        .limit(1);
+      // Verify provider is configured + verify chapter ownership & load novel
+      // settings — independent reads, run them concurrently.
+      const [providerConfig, [row]] = await Promise.all([
+        createProviderClient(session.user.id),
+        db
+          .select({
+            chapter: chapters,
+            novel: novels,
+          })
+          .from(chapters)
+          .innerJoin(novels, eq(chapters.novelId, novels.id))
+          .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
+          .limit(1),
+      ]);
 
       if (!row) {
         throw new SafeServerError("Chapter not found or unauthorized");
@@ -68,12 +69,14 @@ export const startTranslationJob = createServerFn({ method: "POST" })
           ),
         );
 
-      for (const j of existingJobs) {
-        await db
-          .update(translationJobs)
-          .set({ status: "cancelled", updatedAt: new Date() })
-          .where(eq(translationJobs.id, j.id));
-      }
+      await Promise.all(
+        existingJobs.map((j) =>
+          db
+            .update(translationJobs)
+            .set({ status: "cancelled", updatedAt: new Date() })
+            .where(eq(translationJobs.id, j.id)),
+        ),
+      );
 
       const initialChunks: ChunkProgress[] = chunkInfos.map((c) => ({
         index: c.index,

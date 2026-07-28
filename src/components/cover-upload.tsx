@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { blobToDataUrl } from "@/lib/utils";
 
 interface CoverUploadProps {
   existingNovelId?: string | null;
@@ -30,7 +31,6 @@ export function CoverUpload({
     }
 
     let active = true;
-    let objectUrl = "";
 
     if (hasExistingCover && existingNovelId) {
       async function loadExistingCover() {
@@ -38,10 +38,10 @@ export function CoverUpload({
           setLoading(true);
           const response = await fetch(`/api/covers/${existingNovelId}`);
           if (!response.ok) return;
-          const blob = await response.blob();
+          // data URL instead of an object URL: nothing to revoke, no Blob pin.
+          const dataUrl = await blobToDataUrl(await response.blob());
           if (active) {
-            objectUrl = URL.createObjectURL(blob);
-            setPreview(objectUrl);
+            setPreview(dataUrl);
           }
         } catch {
         } finally {
@@ -55,13 +55,10 @@ export function CoverUpload({
 
     return () => {
       active = false;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
     };
   }, [hasExistingCover, existingNovelId, cover]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -72,25 +69,31 @@ export function CoverUpload({
 
     // Downscale + re-encode once at upload so every guest fetch is a small WebP.
     const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    img.addEventListener("load", () => {
-      URL.revokeObjectURL(objectUrl);
-      const scale = Math.min(1, 800 / img.naturalWidth);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.naturalWidth * scale);
-      canvas.height = Math.round(img.naturalHeight * scale);
-      canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const result = canvas.toDataURL("image/webp", 0.8);
-      // Old Safari silently falls back to PNG when it can't encode WebP.
-      const mime = result.startsWith("data:image/webp") ? "image/webp" : "image/png";
-      setPreview(result);
-      onChange(result.slice(result.indexOf(",") + 1), mime);
-    });
-    img.addEventListener("error", () => {
-      URL.revokeObjectURL(objectUrl);
-      toast.error("Could not read that image file");
-    });
-    img.src = objectUrl;
+    // once: true — listeners self-remove after firing, nothing to clean up.
+    img.addEventListener(
+      "load",
+      () => {
+        const scale = Math.min(1, 800 / img.naturalWidth);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const result = canvas.toDataURL("image/webp", 0.8);
+        // Old Safari silently falls back to PNG when it can't encode WebP.
+        const mime = result.startsWith("data:image/webp") ? "image/webp" : "image/png";
+        setPreview(result);
+        onChange(result.slice(result.indexOf(",") + 1), mime);
+      },
+      { once: true },
+    );
+    img.addEventListener(
+      "error",
+      () => {
+        toast.error("Could not read that image file");
+      },
+      { once: true },
+    );
+    img.src = await blobToDataUrl(file);
   };
 
   const handleRemove = (e: React.MouseEvent) => {

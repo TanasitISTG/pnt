@@ -51,11 +51,13 @@ export function ProviderSettingsCard({
   const [fastModel, setFastModel] = useState(initialSettings.fastModel || "");
   const [temperature, setTemperature] = useState(initialSettings.temperature);
   const [requestTimeoutSec, setRequestTimeoutSec] = useState(
-    initialSettings.requestTimeoutSec?.toString() ?? "",
+    () => initialSettings.requestTimeoutSec?.toString() ?? "",
   );
-  const [inputPrice, setInputPrice] = useState(initialSettings.inputPricePer1M?.toString() ?? "");
+  const [inputPrice, setInputPrice] = useState(
+    () => initialSettings.inputPricePer1M?.toString() ?? "",
+  );
   const [outputPrice, setOutputPrice] = useState(
-    initialSettings.outputPricePer1M?.toString() ?? "",
+    () => initialSettings.outputPricePer1M?.toString() ?? "",
   );
 
   const [hasApiKey, setHasApiKey] = useState(initialSettings.hasApiKey);

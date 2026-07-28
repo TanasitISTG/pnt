@@ -10,7 +10,7 @@ export function ConsentBanner() {
   if (!hydrated || consent !== "pending") return null;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-surface shadow-lg transition-all p-4 md:p-5">
+    <div className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-surface shadow-lg p-4 md:p-5">
       <div className="mx-auto flex max-w-[1200px] flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-start gap-3">
           <Cookie className="size-5 shrink-0 text-muted-foreground mt-0.5" />

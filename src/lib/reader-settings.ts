@@ -52,16 +52,17 @@ export function useReaderSettings() {
   }, []);
 
   const update = useCallback((patch: Partial<ReaderSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      cached = next;
-      try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // storage full/blocked — settings just won't persist
-      }
-      return next;
-    });
+    // `cached` mirrors `settings` post-mount (the effect below sets both), so it
+    // is the current value here — keeping side effects out of the state updater,
+    // which React may invoke more than once.
+    const next = { ...(cached ?? DEFAULTS), ...patch };
+    cached = next;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // storage full/blocked — settings just won't persist
+    }
+    setSettings(next);
   }, []);
 
   return { settings, update, hydrated };

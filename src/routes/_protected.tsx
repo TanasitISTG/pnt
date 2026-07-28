@@ -1,4 +1,10 @@
-import { Outlet, createFileRoute, redirect, useLocation } from "@tanstack/react-router";
+import {
+  Outlet,
+  createFileRoute,
+  redirect,
+  useLocation,
+  type ErrorComponentProps,
+} from "@tanstack/react-router";
 
 import { AppShell } from "@/components/app-shell";
 import { ErrorPage } from "@/components/error-page";
@@ -13,21 +19,7 @@ export const Route = createFileRoute("/_protected")({
     }
     return { user: context.user };
   },
-  errorComponent: (props) => {
-    const location = useLocation();
-    const error = props.error as Error & { cause?: Error };
-    if (
-      error?.name === "UnauthorizedError" ||
-      error?.message === "Unauthorized" ||
-      error?.cause?.name === "UnauthorizedError"
-    ) {
-      throw redirect({
-        to: "/login",
-        search: { redirect: location.href },
-      });
-    }
-    return <ErrorPage {...props} />;
-  },
+  errorComponent: ProtectedErrorComponent,
   head: () => ({
     meta: [
       {
@@ -38,6 +30,22 @@ export const Route = createFileRoute("/_protected")({
   }),
   component: ProtectedLayout,
 });
+
+function ProtectedErrorComponent(props: ErrorComponentProps) {
+  const location = useLocation();
+  const error = props.error as Error & { cause?: Error };
+  if (
+    error?.name === "UnauthorizedError" ||
+    error?.message === "Unauthorized" ||
+    error?.cause?.name === "UnauthorizedError"
+  ) {
+    throw redirect({
+      to: "/login",
+      search: { redirect: location.href },
+    });
+  }
+  return <ErrorPage {...props} />;
+}
 
 function ProtectedLayout() {
   const { user } = Route.useRouteContext();

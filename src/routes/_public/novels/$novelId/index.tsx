@@ -230,7 +230,7 @@ function NovelDetailPage() {
     );
   };
 
-  const selectableIds = chapters.filter((c) => !isRowTranslating(c.id, c.status)).map((c) => c.id);
+  const selectableIds = chapters.flatMap((c) => (isRowTranslating(c.id, c.status) ? [] : [c.id]));
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
 
   const toggleSelect = (id: string, checked: boolean) =>

@@ -12,7 +12,6 @@ const baseEnvSchema = z.object({
   // ZenRows scraper configuration (optional, app boots keyless).
   SCRAPER_API_KEY: z.string().optional(),
   SCRAPER_BASE: z
-    .string()
     .url()
     .optional()
     .refine((v) => !v || v.startsWith("https://api.zenrows.com"), {
@@ -41,15 +40,3 @@ const devEnvSchema = baseEnvSchema.extend({
 const envSchema = process.env.NODE_ENV === "production" ? prodEnvSchema : devEnvSchema;
 
 export const env = envSchema.parse(process.env);
-
-const seedEnvSchema = z.object({
-  adminEmail: z.string().email().optional(),
-  adminName: z.string().optional(),
-  adminPassword: z.string().optional(),
-});
-
-export const seedEnv = seedEnvSchema.parse({
-  adminEmail: process.env.SEED_ADMIN_EMAIL,
-  adminName: process.env.SEED_ADMIN_NAME,
-  adminPassword: process.env.SEED_ADMIN_PASSWORD,
-});

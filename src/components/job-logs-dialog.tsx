@@ -191,8 +191,8 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {chunks.map((chunk, idx) => (
-                        <TableRow key={idx} className="h-11">
+                      {chunks.map((chunk) => (
+                        <TableRow key={chunk.index} className="h-11">
                           <TableCell className="font-mono font-medium">{chunk.index + 1}</TableCell>
                           <TableCell className="font-mono text-muted-foreground">
                             {chunk.textLength.toLocaleString()} chars

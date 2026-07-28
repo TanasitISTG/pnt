@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Globe, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,10 @@ export function PublishMenu({ publishedAt, onChange, pending = false }: PublishM
   const state = publishState(publishedAt);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [value, setValue] = useState("");
+  // toLocaleString differs between server and browser timezones — format it
+  // only after mount so SSR and hydration render identical text.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const openSchedule = () => {
     const base = publishedAt ? new Date(publishedAt) : new Date();
@@ -50,10 +54,12 @@ export function PublishMenu({ publishedAt, onChange, pending = false }: PublishM
       ? "Draft"
       : state === "live"
         ? "Live"
-        : `Scheduled ${new Date(publishedAt as string).toLocaleString(undefined, {
-            dateStyle: "medium",
-            timeStyle: "short",
-          })}`;
+        : mounted
+          ? `Scheduled ${new Date(publishedAt as string).toLocaleString(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}`
+          : "Scheduled";
 
   return (
     <>

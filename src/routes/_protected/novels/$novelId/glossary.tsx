@@ -293,7 +293,8 @@ function NovelGlossaryPage() {
       return;
     }
 
-    await addTerm(payload);
+    // onError toasts the failure; swallow the rejection so it isn't unhandled.
+    await addTerm(payload).catch(() => {});
   };
 
   const handleSaveEdit = async () => {

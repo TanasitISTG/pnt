@@ -47,9 +47,5 @@ export function useConsent() {
     };
   }, []);
 
-  const handleSetConsent = (value: ConsentState) => {
-    setConsent(value);
-  };
-
-  return { consent, setConsent: handleSetConsent, hydrated };
+  return { consent, setConsent, hydrated };
 }

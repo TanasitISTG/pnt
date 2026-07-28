@@ -69,9 +69,12 @@ function parseQuanben(html: string, url: string): ScrapedChapter {
   const end = start === -1 ? -1 : html.indexOf('class="list_page"', start);
   if (start === -1 || end === -1) throw new Error("Could not find chapter content on page");
 
-  const paragraphs = [...html.slice(start, end).matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)]
-    .map((m) => decodeEntities(stripTags(m[1])).trim())
-    .filter((p) => p.length > 0 && !BOILERPLATE_RE.test(p));
+  const paragraphs = [...html.slice(start, end).matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)].flatMap(
+    (m) => {
+      const p = decodeEntities(stripTags(m[1])).trim();
+      return p.length > 0 && !BOILERPLATE_RE.test(p) ? [p] : [];
+    },
+  );
   if (paragraphs.length === 0) throw new Error("Chapter content is empty");
 
   const next = /href="([^"]+)"[^>]*>\s*下一頁\s*</.exec(html);
@@ -303,13 +306,12 @@ export function parseTwkan(html: string, url: string): ScrapedChapter {
   contentHtml = contentHtml.replace(/<ins[^>]*>[\s\S]*?<\/ins>/gi, "");
 
   const rawLines = contentHtml.split(/<br\s*\/?>/i);
-  const paragraphs = rawLines
-    .map((line) =>
-      decodeEntities(stripTags(line))
-        .replace(/^[\u3000\u2003\s&nbsp;&emsp;]+|[\u3000\u2003\s&nbsp;&emsp;]+$/g, "")
-        .trim(),
-    )
-    .filter((line) => line.length > 0 && line.length < 5000 && !BOILERPLATE_RE.test(line));
+  const paragraphs = rawLines.flatMap((line) => {
+    const p = decodeEntities(stripTags(line))
+      .replace(/^[\u3000\u2003\s&nbsp;&emsp;]+|[\u3000\u2003\s&nbsp;&emsp;]+$/g, "")
+      .trim();
+    return p.length > 0 && p.length < 5000 && !BOILERPLATE_RE.test(p) ? [p] : [];
+  });
 
   if (paragraphs.length === 0) {
     throw new SafeServerError("Chapter text extracted is empty");
@@ -603,18 +605,18 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
 
   const pMatches = [...contentHtml.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)];
   if (pMatches.length > 0) {
-    paragraphs = pMatches
-      .map((m) => decodeEntities(stripTags(m[1])).trim())
-      .filter((p) => p.length > 0 && !BOILERPLATE_RE.test(p));
+    paragraphs = pMatches.flatMap((m) => {
+      const p = decodeEntities(stripTags(m[1])).trim();
+      return p.length > 0 && !BOILERPLATE_RE.test(p) ? [p] : [];
+    });
   } else {
     const rawLines = contentHtml.split(/<br\s*\/?>/i);
-    paragraphs = rawLines
-      .map((line) =>
-        decodeEntities(stripTags(line))
-          .replace(/^[\u3000\u2003\s&nbsp;&emsp;]+|[\u3000\u2003\s&nbsp;&emsp;]+$/g, "")
-          .trim(),
-      )
-      .filter((line) => line.length > 0 && line.length < 5000 && !BOILERPLATE_RE.test(line));
+    paragraphs = rawLines.flatMap((line) => {
+      const p = decodeEntities(stripTags(line))
+        .replace(/^[\u3000\u2003\s&nbsp;&emsp;]+|[\u3000\u2003\s&nbsp;&emsp;]+$/g, "")
+        .trim();
+      return p.length > 0 && p.length < 5000 && !BOILERPLATE_RE.test(p) ? [p] : [];
+    });
   }
 
   if (paragraphs.length === 0) {

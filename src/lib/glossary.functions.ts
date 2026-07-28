@@ -262,6 +262,7 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
         .filter((l) => l.length > 0);
 
       const validCategories = termCategoryEnum.enumValues;
+      const validCategorySet = new Set<string>(validCategories);
       const errors: string[] = [];
 
       const parsedMap = new Map<
@@ -295,7 +296,7 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
 
         if (parts[2]) {
           const catInput = parts[2].toLowerCase();
-          if ((validCategories as readonly string[]).includes(catInput)) {
+          if (validCategorySet.has(catInput)) {
             category = catInput as (typeof validCategories)[number];
           }
         }

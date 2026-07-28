@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BookOpen } from "lucide-react";
 
+import { blobToDataUrl } from "@/lib/utils";
+
 interface NovelCoverProps {
   novelId?: string | null;
   coverVersion?: string | number | Date | null;
@@ -25,7 +27,7 @@ export function NovelCover({
   const rootRef = useRef<HTMLDivElement>(null);
 
   // ponytail: <img src="/api/..."> 404s in the dev server for asset-like fetch
-  // dests (TanStack/router#7403, open, needs-upstream-fix), so we fetch + object
+  // dests (TanStack/router#7403, open, needs-upstream-fix), so we fetch + data
   // URL instead. The versioned URL + immutable cache headers still make repeat
   // loads instant; switch back to a plain <img> once the upstream fix lands.
   const version = coverVersion instanceof Date ? coverVersion.getTime() : coverVersion;
@@ -50,16 +52,15 @@ export function NovelCover({
     if (!url || !visible) return;
 
     let active = true;
-    let objectUrl = "";
 
     async function loadCover() {
       try {
         const response = await fetch(url as string);
         if (!response.ok) throw new Error("Failed to load cover");
-        const blob = await response.blob();
+        // data URL instead of an object URL: nothing to revoke, no Blob pin.
+        const dataUrl = await blobToDataUrl(await response.blob());
         if (active) {
-          objectUrl = URL.createObjectURL(blob);
-          setSrc(objectUrl);
+          setSrc(dataUrl);
         }
       } catch {
         if (active) setError(true);
@@ -70,7 +71,6 @@ export function NovelCover({
 
     return () => {
       active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [url, visible]);
 

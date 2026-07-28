@@ -1,5 +1,5 @@
 import "@tanstack/react-start/server-only";
-import { eq, and, sql, lt, desc } from "drizzle-orm";
+import { eq, and, sql, lt, desc, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels, chapters, translationJobs, glossaryTerms } from "@/lib/db/schema";
@@ -320,30 +320,31 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
     ),
   );
 
-  // Approved glossary terms for the novel
-  const terms = await db
-    .select({
-      source: glossaryTerms.source,
-      target: glossaryTerms.target,
-      category: glossaryTerms.category,
-      note: glossaryTerms.note,
-    })
-    .from(glossaryTerms)
-    .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved")));
-
-  // Previous chapter summary for rolling context
-  const [prevChapter] = await db
-    .select({ summary: chapters.summary, translatedContent: chapters.translatedContent })
-    .from(chapters)
-    .where(
-      and(
-        eq(chapters.novelId, novel.id),
-        lt(sql`COALESCE(${chapters.number}::numeric, 0)`, sql`${chapter.number}::numeric`),
-        eq(chapters.status, "translated"),
-      ),
-    )
-    .orderBy(desc(sql`COALESCE(${chapters.number}::numeric, 0)`))
-    .limit(1);
+  // Approved glossary terms + previous chapter for rolling context —
+  // independent reads, run them concurrently.
+  const [terms, [prevChapter]] = await Promise.all([
+    db
+      .select({
+        source: glossaryTerms.source,
+        target: glossaryTerms.target,
+        category: glossaryTerms.category,
+        note: glossaryTerms.note,
+      })
+      .from(glossaryTerms)
+      .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved"))),
+    db
+      .select({ summary: chapters.summary, translatedContent: chapters.translatedContent })
+      .from(chapters)
+      .where(
+        and(
+          eq(chapters.novelId, novel.id),
+          lt(sql`COALESCE(${chapters.number}::numeric, 0)`, sql`${chapter.number}::numeric`),
+          eq(chapters.status, "translated"),
+        ),
+      )
+      .orderBy(desc(sql`COALESCE(${chapters.number}::numeric, 0)`))
+      .limit(1),
+  ]);
 
   const previousSummary = novel.storySummary || prevChapter?.summary || null;
   const tailLen = novel.contextTailLength || 500;
@@ -739,6 +740,25 @@ export async function finalizeJob(jobId: string): Promise<void> {
     let rejectedCount = 0;
     let conflictCount = 0;
 
+    // One batch duplicate check (case/whitespace-insensitive) instead of a
+    // per-term SELECT inside the loop.
+    const suggestedSources = suggestedTerms.map((st) => st.source.trim().toLowerCase());
+    const existingRows =
+      suggestedSources.length > 0
+        ? await db
+            .select({ source: glossaryTerms.source })
+            .from(glossaryTerms)
+            .where(
+              and(
+                eq(glossaryTerms.novelId, novel.id),
+                inArray(sql`lower(trim(${glossaryTerms.source}))`, suggestedSources),
+              ),
+            )
+        : [];
+    const existingSources = new Set(existingRows.map((r) => r.source.trim().toLowerCase()));
+
+    const rowsToInsert: (typeof glossaryTerms.$inferInsert)[] = [];
+
     for (const st of suggestedTerms) {
       const review = reviewBySource.get(st.source);
       const finalTarget =
@@ -754,19 +774,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
         continue;
       }
 
-      // Check for existing term (duplicate case/whitespace-insensitive)
-      const [dup] = await db
-        .select({ id: glossaryTerms.id })
-        .from(glossaryTerms)
-        .where(
-          and(
-            eq(glossaryTerms.novelId, novel.id),
-            sql`lower(trim(${glossaryTerms.source})) = lower(trim(${st.source}))`,
-          ),
-        )
-        .limit(1);
-
-      if (dup) {
+      if (existingSources.has(st.source.trim().toLowerCase())) {
         // Existing term (approved, pending, or rejected) — skip
         conflictCount++;
         continue;
@@ -782,35 +790,27 @@ export async function finalizeJob(jobId: string): Promise<void> {
       // Deterministic validation: source must appear in raw text, target in translation
       const sourceInRaw = fullRawSource.includes(st.source);
       const targetInTranslation = fullTranslation.includes(finalTarget);
-      if (
+      const approved =
         review?.action === "approve" &&
         review.confidence === "high" &&
         sourceInRaw &&
-        targetInTranslation
-      ) {
-        await db.insert(glossaryTerms).values({
-          id: nanoid(),
-          novelId: novel.id,
-          source: st.source,
-          target: finalTarget,
-          category: st.category,
-          note: st.note || null,
-          status: "approved",
-        });
-        approvedCount++;
-      } else {
-        // Uncertain or no review → store as pending
-        await db.insert(glossaryTerms).values({
-          id: nanoid(),
-          novelId: novel.id,
-          source: st.source,
-          target: finalTarget,
-          category: st.category,
-          note: st.note || null,
-          status: "pending",
-        });
-        pendingCount++;
-      }
+        targetInTranslation;
+
+      rowsToInsert.push({
+        id: nanoid(),
+        novelId: novel.id,
+        source: st.source,
+        target: finalTarget,
+        category: st.category,
+        note: st.note || null,
+        status: approved ? "approved" : "pending",
+      });
+      if (approved) approvedCount++;
+      else pendingCount++;
+    }
+
+    if (rowsToInsert.length > 0) {
+      await db.insert(glossaryTerms).values(rowsToInsert);
     }
 
     const summary: string[] = [];

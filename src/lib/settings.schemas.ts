@@ -3,7 +3,6 @@ import { z } from "zod";
 export const saveProviderSettingsSchema = z.object({
   provider: z.enum(["openai", "gemini"]).default("openai"),
   baseUrl: z
-    .string()
     .url("Base URL must be a valid URL")
     .or(z.literal(""))
     .default("https://api.openai.com/v1"),
@@ -19,7 +18,6 @@ export const saveProviderSettingsSchema = z.object({
 export const testProviderConnectionSchema = z.object({
   provider: z.enum(["openai", "gemini"]).default("openai"),
   baseUrl: z
-    .string()
     .url("Base URL must be a valid URL")
     .or(z.literal(""))
     .default("https://api.openai.com/v1"),
