@@ -1,20 +1,14 @@
 import { useState } from "react";
-import {
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  Cpu,
-  ShieldCheck,
-  Zap,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-} from "lucide-react";
+import { Loader2, Cpu, Zap } from "lucide-react";
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ProviderSelectionSection } from "./provider-selection-section";
+import { ApiKeySection } from "./api-key-section";
+import { TimeoutPricingFields } from "./timeout-pricing-fields";
+import { TestResultBanner } from "./test-result-banner";
 import type { getProviderSettings } from "@/lib/settings.functions";
 import type {
   SaveProviderSettingsInput,
@@ -145,124 +139,11 @@ export function ProviderSettingsCard({
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Provider Selector */}
-          <div className="space-y-2">
-            <Label>Provider Type</Label>
-            <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-              <button
-                type="button"
-                onClick={() => handleProviderChange("openai")}
-                className={`flex flex-col items-start rounded-lg border p-3 text-left transition-colors ${
-                  provider === "openai"
-                    ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
-                    : "border-border bg-background text-muted-foreground hover:bg-muted/50"
-                }`}
-              >
-                <span className="font-medium text-foreground">OpenAI-Compatible</span>
-                <span className="text-caption text-muted-foreground">
-                  OpenAI, OpenRouter, DeepSeek, Local LLM
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleProviderChange("gemini")}
-                className={`flex flex-col items-start rounded-lg border p-3 text-left transition-colors ${
-                  provider === "gemini"
-                    ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
-                    : "border-border bg-background text-muted-foreground hover:bg-muted/50"
-                }`}
-              >
-                <span className="font-medium text-foreground">Google AI Studio</span>
-                <span className="text-caption text-muted-foreground">
-                  Gemini 2.5 Flash / Pro, 1.5 Flash
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Presets */}
-          <div className="space-y-2">
-            <Label className="text-caption text-muted-foreground">Quick Presets</Label>
-            <div className="flex flex-wrap gap-2">
-              {provider === "gemini" ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      applyPreset(
-                        "gemini",
-                        "https://generativelanguage.googleapis.com",
-                        "gemini-2.5-flash",
-                      )
-                    }
-                  >
-                    Gemini 2.5 Flash
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      applyPreset(
-                        "gemini",
-                        "https://generativelanguage.googleapis.com",
-                        "gemini-2.5-pro",
-                      )
-                    }
-                  >
-                    Gemini 2.5 Pro
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      applyPreset(
-                        "gemini",
-                        "https://generativelanguage.googleapis.com",
-                        "gemini-1.5-flash",
-                      )
-                    }
-                  >
-                    Gemini 1.5 Flash
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyPreset("openai", "https://api.openai.com/v1", "gpt-4o")}
-                  >
-                    OpenAI (gpt-4o)
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      applyPreset("openai", "https://openrouter.ai/api/v1", "deepseek/deepseek-r1")
-                    }
-                  >
-                    OpenRouter (DeepSeek R1)
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      applyPreset("openai", "https://api.deepseek.com/v1", "deepseek-chat")
-                    }
-                  >
-                    DeepSeek Direct
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
+          <ProviderSelectionSection
+            provider={provider}
+            onProviderChange={handleProviderChange}
+            onApplyPreset={applyPreset}
+          />
 
           {/* Base URL */}
           <div className="space-y-2">
@@ -281,49 +162,13 @@ export function ProviderSettingsCard({
             />
           </div>
 
-          {/* API Key */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="apiKey">
-                  {provider === "gemini" ? "Google AI Studio API Key" : "API Key"}
-                </Label>
-                {provider === "gemini" && (
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5 text-caption text-primary hover:underline"
-                  >
-                    Get Key
-                    <ExternalLink className="size-3" />
-                  </a>
-                )}
-              </div>
-              {hasApiKey && (
-                <span className="flex items-center gap-1 text-caption text-emerald-600 dark:text-emerald-400">
-                  <ShieldCheck className="size-3.5" />
-                  Key saved ({apiKeyMasked})
-                </span>
-              )}
-            </div>
-            <Input
-              id="apiKey"
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={
-                hasApiKey
-                  ? `Leave blank to keep saved key (${apiKeyMasked})`
-                  : provider === "gemini"
-                    ? "AIzaSy…"
-                    : "sk-proj-…"
-              }
-            />
-            <p className="text-caption text-muted-foreground">
-              Your key is encrypted on the server and never sent to the browser.
-            </p>
-          </div>
+          <ApiKeySection
+            provider={provider}
+            apiKey={apiKey}
+            onApiKeyChange={setApiKey}
+            hasApiKey={hasApiKey}
+            apiKeyMasked={apiKeyMasked}
+          />
 
           {/* Model */}
           <div className="space-y-2">
@@ -378,112 +223,22 @@ export function ProviderSettingsCard({
             </p>
           </div>
 
-          {/* Request Timeout */}
-          <div className="space-y-2">
-            <Label htmlFor="requestTimeoutSec">Request Timeout (seconds)</Label>
-            <Input
-              id="requestTimeoutSec"
-              type="number"
-              min="10"
-              max="600"
-              value={requestTimeoutSec}
-              onChange={(e) => setRequestTimeoutSec(e.target.value)}
-              placeholder="240"
-            />
-            <p className="text-caption text-muted-foreground">
-              Request timeout (seconds) — raise for slow/free APIs; keep ≤270 on Vercel Hobby
-            </p>
-          </div>
-
-          {/* Cost tracking prices */}
-          <div className="space-y-2">
-            <Label>Token Prices (USD per 1M tokens, optional)</Label>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Input
-                  id="inputPrice"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={inputPrice}
-                  onChange={(e) => setInputPrice(e.target.value)}
-                  placeholder="Input, e.g. 0.075"
-                />
-                <p className="text-caption text-muted-foreground">Input / prompt</p>
-              </div>
-              <div className="space-y-1.5">
-                <Input
-                  id="outputPrice"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={outputPrice}
-                  onChange={(e) => setOutputPrice(e.target.value)}
-                  placeholder="Output, e.g. 0.30"
-                />
-                <p className="text-caption text-muted-foreground">Output / completion</p>
-              </div>
-            </div>
-            <p className="text-caption text-muted-foreground">
-              Used to show per-chapter translation cost on the novel page. Leave blank to track
-              tokens only.
-            </p>
-          </div>
+          <TimeoutPricingFields
+            requestTimeoutSec={requestTimeoutSec}
+            onRequestTimeoutSecChange={setRequestTimeoutSec}
+            inputPrice={inputPrice}
+            onInputPriceChange={setInputPrice}
+            outputPrice={outputPrice}
+            onOutputPriceChange={setOutputPrice}
+          />
 
           {/* Test connection result banner */}
           {testResult && (
-            <div
-              className={`flex items-start gap-3 rounded-lg border p-4 ${
-                testResult.success
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
-                  : "border-red-500/30 bg-red-500/10 text-red-800 dark:text-red-200"
-              }`}
-            >
-              {testResult.success ? (
-                <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              ) : (
-                <AlertCircle className="mt-0.5 size-5 shrink-0 text-red-600 dark:text-red-400" />
-              )}
-              <div className="min-w-0 flex-1 text-body">
-                <p className="font-semibold">
-                  {testResult.success
-                    ? `Connection Successful (${testResult.latencyMs}ms)`
-                    : "Connection Failed"}
-                </p>
-                {testResult.success ? (
-                  <p className="mt-1 text-caption opacity-90">
-                    Sample completion: "{testResult.sample}"
-                  </p>
-                ) : (
-                  <div>
-                    <p className="mt-1 break-words text-caption opacity-90">
-                      {showFullError || (testResult.error?.length || 0) <= 120
-                        ? testResult.error
-                        : `${testResult.error?.slice(0, 120)}…`}
-                    </p>
-                    {(testResult.error?.length || 0) > 120 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowFullError((prev) => !prev)}
-                        className="mt-2 flex items-center gap-1 text-caption font-medium underline opacity-90 hover:opacity-100"
-                      >
-                        {showFullError ? (
-                          <>
-                            <ChevronUp className="size-3.5" />
-                            Show less
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="size-3.5" />
-                            Show details
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            <TestResultBanner
+              testResult={testResult}
+              showFullError={showFullError}
+              onToggleFullError={() => setShowFullError((prev) => !prev)}
+            />
           )}
 
           {/* Buttons */}

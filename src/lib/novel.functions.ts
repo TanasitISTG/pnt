@@ -480,16 +480,27 @@ export const translateMissingTitles = createServerFn({ method: "POST" })
       const providerConfig = await createProviderClient(session.user.id);
       const pair = `${novel.sourceLang}->${novel.targetLang}`;
 
+      // Small parallel batches: 20 sequential LLM calls is slow, 20 parallel
+      // is a provider rate-limit burst. 5 at a time.
+      const BATCH_SIZE = 5;
       let translated = 0;
-      for (const ch of missing) {
-        const { translated: title } = await translateChapterTitle(providerConfig, pair, ch.title);
-        if (title) {
-          await db
-            .update(chapters)
-            .set({ translatedTitle: title, updatedAt: new Date() })
-            .where(eq(chapters.id, ch.id));
-          translated++;
-        }
+      for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+        const results = await Promise.all(
+          missing.slice(i, i + BATCH_SIZE).map(async (ch) => {
+            const { translated: title } = await translateChapterTitle(
+              providerConfig,
+              pair,
+              ch.title,
+            );
+            if (!title) return false;
+            await db
+              .update(chapters)
+              .set({ translatedTitle: title, updatedAt: new Date() })
+              .where(eq(chapters.id, ch.id));
+            return true;
+          }),
+        );
+        translated += results.filter(Boolean).length;
       }
 
       return { translated };

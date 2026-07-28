@@ -346,21 +346,31 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
       }));
 
       const CHUNK_SIZE = 500;
+      // 500-row chunks keep statements small; 2 in flight bounds the
+      // serverless DB burst while still overlapping round trips.
+      const INSERT_CONCURRENCY = 2;
+      const insertChunks: (typeof rowsToInsert)[] = [];
       for (let i = 0; i < rowsToInsert.length; i += CHUNK_SIZE) {
-        const chunk = rowsToInsert.slice(i, i + CHUNK_SIZE);
-        await db
-          .insert(glossaryTerms)
-          .values(chunk)
-          .onConflictDoUpdate({
-            target: [glossaryTerms.novelId, glossaryTerms.source],
-            set: {
-              target: sql`excluded.target`,
-              category: sql`excluded.category`,
-              note: sql`coalesce(excluded.note, ${glossaryTerms.note})`,
-              status: "approved",
-              updatedAt: new Date(),
-            },
-          });
+        insertChunks.push(rowsToInsert.slice(i, i + CHUNK_SIZE));
+      }
+      for (let i = 0; i < insertChunks.length; i += INSERT_CONCURRENCY) {
+        await Promise.all(
+          insertChunks.slice(i, i + INSERT_CONCURRENCY).map((chunk) =>
+            db
+              .insert(glossaryTerms)
+              .values(chunk)
+              .onConflictDoUpdate({
+                target: [glossaryTerms.novelId, glossaryTerms.source],
+                set: {
+                  target: sql`excluded.target`,
+                  category: sql`excluded.category`,
+                  note: sql`coalesce(excluded.note, ${glossaryTerms.note})`,
+                  status: "approved",
+                  updatedAt: new Date(),
+                },
+              }),
+          ),
+        );
       }
 
       return { imported, updated, totalProcessed: imported + updated, errors };
