@@ -9,12 +9,8 @@ import {
   Upload,
   Check,
   X,
-  Edit,
-  Trash2,
   CheckCheck,
   Sparkles,
-  HelpCircle,
-  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,7 +38,6 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -62,14 +57,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+  CategoryBadge,
+  EDIT_CATEGORY_ITEMS,
+  GlossaryTable,
+  type EditState,
+  type GlossaryTerm,
+} from "@/components/glossary/glossary-table";
+import { GlossaryDialogs } from "@/components/glossary/glossary-dialogs";
 
 const novelQueryOptions = (novelId: string) =>
   queryOptions({
@@ -113,23 +107,6 @@ export const Route = createFileRoute("/_protected/novels/$novelId/glossary")({
   component: NovelGlossaryPage,
 });
 
-interface EditState {
-  termId: string;
-  source: string;
-  target: string;
-  category: "character" | "place" | "skill" | "item" | "other";
-  note: string;
-  originalTarget: string;
-}
-
-const CATEGORY_COLORS: Record<string, string> = {
-  character: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  place: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  skill: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
-  item: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  other: "bg-muted text-muted-foreground border-border",
-};
-
 const CATEGORY_ITEMS: Record<string, string> = {
   all: "All Categories",
   character: "Character",
@@ -145,23 +122,6 @@ const STATUS_ITEMS: Record<string, string> = {
   rejected: "Rejected",
   all: "All Status",
 };
-
-const EDIT_CATEGORY_ITEMS: Record<string, string> = {
-  character: "Character",
-  place: "Place",
-  skill: "Skill",
-  item: "Item",
-  other: "Other",
-};
-
-function CategoryBadge({ category }: { category: string }) {
-  const colorClass = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
-  return (
-    <Badge variant="outline" className={`capitalize font-medium text-xs ${colorClass}`}>
-      {category}
-    </Badge>
-  );
-}
 
 function NovelGlossaryPage() {
   const { novelId } = Route.useParams();
@@ -618,174 +578,29 @@ function NovelGlossaryPage() {
             </p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-1/3">Source Term</TableHead>
-                  <TableHead className="w-1/3">Target Translation</TableHead>
-                  <TableHead className="w-28">Category</TableHead>
-                  <TableHead>Note</TableHead>
-                  <TableHead className="w-24 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {terms.map((term) => {
-                  const isEditing = editState?.termId === term.id;
-
-                  if (isEditing) {
-                    return (
-                      <TableRow key={term.id} className="bg-muted/40">
-                        <TableCell>
-                          <Input
-                            value={editState.source}
-                            onChange={(e) =>
-                              setEditState((s) => s && { ...s, source: e.target.value })
-                            }
-                            placeholder="Source"
-                            size={1}
-                          />
-                          {editErrors.source && (
-                            <span className="text-caption text-destructive block mt-1">
-                              {editErrors.source}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={editState.target}
-                            onChange={(e) =>
-                              setEditState((s) => s && { ...s, target: e.target.value })
-                            }
-                            placeholder="Target"
-                            size={1}
-                          />
-                          {editErrors.target && (
-                            <span className="text-caption text-destructive block mt-1">
-                              {editErrors.target}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={editState.category}
-                            onValueChange={(val) =>
-                              setEditState((s) => s && { ...s, category: val as TermCategory })
-                            }
-                            items={EDIT_CATEGORY_ITEMS}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="character">Character</SelectItem>
-                              <SelectItem value="place">Place</SelectItem>
-                              <SelectItem value="skill">Skill</SelectItem>
-                              <SelectItem value="item">Item</SelectItem>
-                              <SelectItem value="other">Other</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={editState.note}
-                            onChange={(e) =>
-                              setEditState((s) => s && { ...s, note: e.target.value })
-                            }
-                            placeholder="Note (optional)"
-                            size={1}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-emerald-600 dark:text-emerald-400"
-                              onClick={handleSaveEdit}
-                              disabled={savingEdit || previewingReplace}
-                              aria-label="Save edit"
-                            >
-                              <Check className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-muted-foreground"
-                              onClick={() => {
-                                setEditState(null);
-                                setEditErrors({});
-                              }}
-                              aria-label="Cancel edit"
-                            >
-                              <X className="size-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }
-
-                  return (
-                    <TableRow key={term.id}>
-                      <TableCell className="font-semibold text-foreground">{term.source}</TableCell>
-                      <TableCell className="font-medium text-foreground">{term.target}</TableCell>
-                      <TableCell>
-                        <CategoryBadge category={term.category} />
-                      </TableCell>
-                      <TableCell className="text-caption text-muted-foreground">
-                        {term.note || "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          {term.status === "rejected" && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-500/10"
-                              onClick={() => approveTerm(term.id)}
-                              disabled={approvingTerm}
-                              aria-label="Restore term"
-                              title="Restore term"
-                            >
-                              <RotateCcw className="size-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() =>
-                              setEditState({
-                                termId: term.id,
-                                source: term.source,
-                                target: term.target,
-                                category: term.category as TermCategory,
-                                note: term.note || "",
-                                originalTarget: term.target,
-                              })
-                            }
-                            aria-label="Edit term"
-                          >
-                            <Edit className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            onClick={() => setDeleteTermId(term.id)}
-                            aria-label="Delete term"
-                          >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          <GlossaryTable
+            terms={terms}
+            editState={editState}
+            setEditState={setEditState}
+            editErrors={editErrors}
+            setEditErrors={setEditErrors}
+            onEdit={(term: GlossaryTerm) =>
+              setEditState({
+                termId: term.id,
+                source: term.source,
+                target: term.target,
+                category: term.category,
+                note: term.note || "",
+                originalTarget: term.target,
+              })
+            }
+            onSaveEdit={handleSaveEdit}
+            onDelete={setDeleteTermId}
+            onApprove={approveTerm}
+            savingEdit={savingEdit}
+            previewingReplace={previewingReplace}
+            approvingTerm={approvingTerm}
+          />
         )}
       </div>
 
@@ -876,99 +691,23 @@ function NovelGlossaryPage() {
         </Card>
       </div>
 
-      {/* Delete Dialog */}
-      <DeleteConfirmDialog
-        title="Delete Glossary Term"
-        description="Are you sure you want to delete this term? This action cannot be undone."
-        open={deleteTermId !== null}
-        onOpenChange={(open) => !open && setDeleteTermId(null)}
-        onConfirm={() => deleteTermId && removeTerm(deleteTermId)}
-        pending={deletingTerm}
+      <GlossaryDialogs
+        deleteOpen={deleteTermId !== null}
+        onDeleteOpenChange={(open) => !open && setDeleteTermId(null)}
+        onDeleteConfirm={() => deleteTermId && removeTerm(deleteTermId)}
+        deletingTerm={deletingTerm}
+        replaceConfirm={replaceConfirm}
+        onReplaceOpenChange={(open) => !open && setReplaceConfirm(null)}
+        originalTarget={editState?.originalTarget}
+        onReplaceConfirm={confirmReplace}
+        savingEdit={savingEdit}
+        importOpen={importDialogOpen}
+        onImportOpenChange={setImportDialogOpen}
+        tsvText={tsvText}
+        onTsvTextChange={setTsvText}
+        onImport={() => doBulkImport(tsvText)}
+        importing={importing}
       />
-
-      {/* Replace-in-chapters Confirm Dialog */}
-      <Dialog
-        open={replaceConfirm !== null}
-        onOpenChange={(open) => !open && setReplaceConfirm(null)}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Replace in translated chapters?</DialogTitle>
-            <DialogDescription>
-              The old target{" "}
-              <span className="font-semibold text-foreground">“{editState?.originalTarget}”</span>{" "}
-              appears in {replaceConfirm?.chapterCount ?? 0} translated chapter(s) (
-              {replaceConfirm?.occurrences ?? 0} occurrence(s)).
-            </DialogDescription>
-          </DialogHeader>
-          <p className="text-caption text-muted-foreground">
-            Replacement is an exact, case-sensitive match and may also match inside longer words.
-            This cannot be undone.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => confirmReplace(false)} disabled={savingEdit}>
-              Save glossary only
-            </Button>
-            <Button onClick={() => confirmReplace(true)} disabled={savingEdit}>
-              {savingEdit ? "Saving..." : "Replace & Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Import Dialog */}
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Bulk Import Glossary Terms (TSV)</DialogTitle>
-            <DialogDescription>
-              Paste tab-separated text containing one term per line. Format: <br />
-              <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-foreground font-mono">
-                source &lt;tab&gt; target &lt;tab&gt; category &lt;tab&gt; note
-              </code>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-3 py-2">
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <HelpCircle className="size-3.5" />
-              <span>Example TSV format:</span>
-            </div>
-            <pre className="text-xs bg-muted p-3 rounded-md font-mono text-muted-foreground overflow-x-auto select-all">
-              {`Lin Fan\tหลินฟาน\tcharacter\tProtagonist
-Sun Peak\tยอดเขาอาทิตย์\tplace\tSect location
-Solar Slash\tเพลงดาบสุริยะ\tskill`}
-            </pre>
-
-            <Label htmlFor="tsv-input">TSV Content</Label>
-            <Textarea
-              id="tsv-input"
-              rows={8}
-              placeholder="Paste TSV data here..."
-              value={tsvText}
-              onChange={(e) => setTsvText(e.target.value)}
-              className="font-mono text-xs"
-            />
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setImportDialogOpen(false);
-                setTsvText("");
-              }}
-              disabled={importing}
-            >
-              Cancel
-            </Button>
-            <Button onClick={() => doBulkImport(tsvText)} disabled={importing || !tsvText.trim()}>
-              <Upload className="size-4" />
-              {importing ? "Importing..." : "Import Terms"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
