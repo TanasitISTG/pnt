@@ -230,11 +230,13 @@ describe("prompts module", () => {
 
   // -- findResidualSourceChars -----------------------------------------------
 
-  it("findResidualSourceChars flags hanzi in zh output only", () => {
+  it("findResidualSourceChars flags hanzi regardless of pair", () => {
     expect(findResidualSourceChars("zh->th", "สวัสดี【虎哥送嘉年华】ครับ")).toHaveLength(6);
     expect(findResidualSourceChars("zh->en", "clean English text")).toHaveLength(0);
     expect(findResidualSourceChars("zh->th", "ข้อความไทยล้วน")).toHaveLength(0);
     expect(findResidualSourceChars("en->th", "leftover English words")).toHaveLength(0);
+    // en->th with CJK = misconfigured sourceLang or model artifact — still flagged.
+    expect(findResidualSourceChars("en->th", "เหลือ剩余คำ")).toHaveLength(2);
   });
 
   // -- buildSummaryPrompt ----------------------------------------------------

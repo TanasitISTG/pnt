@@ -90,12 +90,12 @@ export function buildSummaryPrompt(_pair: string): string {
 // Residual source-script detection
 // ---------------------------------------------------------------------------
 
-// CJK ideographs (ext-A + unified + compat). Leftover hanzi in zh output = missed translation.
+// CJK ideographs (ext-A + unified + compat). Leftover hanzi in output = missed translation.
 const CJK_RE = /[㐀-䶿一-鿿豈-﫿]/g;
 
-/** Leftover source-script chars in a translation. zh pairs only — latin-in-Thai is too common to flag. */
-export function findResidualSourceChars(pair: string, text: string): string[] {
-  if (normalizePair(pair) === "en->th") return [];
+/** Leftover CJK chars in a translation — never legitimate output, so detection is pair-agnostic
+ *  (a wrong sourceLang on the novel must not disable it). `pair` kept for caller compatibility. */
+export function findResidualSourceChars(_pair: string, text: string): string[] {
   return text.match(CJK_RE) || [];
 }
 
