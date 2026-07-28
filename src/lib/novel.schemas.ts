@@ -66,3 +66,8 @@ export const setChapterPublishedSchema = z.object({
   chapterId: z.string().min(1),
   publishedAt: z.coerce.date().nullable(),
 });
+
+export type CreateNovelInput = z.input<typeof createNovelSchema>;
+export type UpdateNovelInput = z.input<typeof updateNovelSchema>;
+export type CreateChapterInput = z.input<typeof createChapterSchema>;
+export type UpdateChapterInput = z.input<typeof updateChapterSchema>;

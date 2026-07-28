@@ -12,8 +12,8 @@ import {
   parseTwkanToc,
   biqugeTocUrlFromReader,
   parseBiqugeToc,
-  type ScrapeProvider,
 } from "@/lib/scrape";
+import type { ScrapeProvider } from "@/lib/scrape.types";
 import { fetchAndParse, fetchHtml } from "@/lib/scrape.server";
 import { log } from "@/lib/log";
 

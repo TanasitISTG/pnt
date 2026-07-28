@@ -1,7 +1,4 @@
-export interface ChunkInfo {
-  index: number;
-  text: string;
-}
+import type { ChunkInfo } from "./translation.types";
 
 export function chunkText(text: string, targetSize = 2000): ChunkInfo[] {
   if (!text || text.trim().length === 0) {

@@ -7,11 +7,8 @@ import { providerSettings } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { auth } from "@/lib/auth";
 import { encrypt, decrypt } from "@/lib/translation/crypto";
-import {
-  OpenAIProviderClient,
-  GeminiProviderClient,
-  type ProviderType,
-} from "@/lib/translation/provider-client";
+import { OpenAIProviderClient, GeminiProviderClient } from "@/lib/translation/provider-client";
+import type { ProviderType } from "@/lib/translation/translation.types";
 import {
   saveProviderSettingsSchema,
   testProviderConnectionSchema,

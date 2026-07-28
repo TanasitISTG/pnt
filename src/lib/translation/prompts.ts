@@ -1,8 +1,4 @@
-export type LanguagePair = "en->th" | "zh->en" | "zh->th";
-
-export interface ContextOptions {
-  previousSummary?: string | null;
-}
+import type { ContextOptions, LanguagePair } from "./translation.types";
 
 // ---------------------------------------------------------------------------
 // Public builders

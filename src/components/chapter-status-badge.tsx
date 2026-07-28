@@ -1,7 +1,7 @@
 import type { chapterStatusEnum } from "@/lib/db/schema";
 import { Badge } from "@/components/ui/badge";
 
-type ChapterStatus = (typeof chapterStatusEnum.enumValues)[number];
+export type ChapterStatus = (typeof chapterStatusEnum.enumValues)[number];
 
 interface ChapterStatusBadgeProps {
   status: ChapterStatus;

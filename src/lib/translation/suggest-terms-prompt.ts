@@ -1,30 +1,13 @@
+import { z } from "zod";
+
 import { LANG_LABELS, normalizePair } from "./prompts";
-
-export interface SuggestedTerm {
-  source: string;
-  target: string;
-  category: "character" | "place" | "skill" | "item" | "other";
-  note?: string;
-}
-
-export type GlossaryReviewAction = "approve" | "reject" | "pending";
-export type GlossaryReviewConfidence = "high" | "medium" | "low";
-
-export interface GlossaryReviewResult {
-  source: string;
-  target: string;
-  action: GlossaryReviewAction;
-  confidence: GlossaryReviewConfidence;
-  reason: string;
-  matchingApprovedTerm?: string;
-}
-
-export interface TermSuggestionContext {
-  rawSourceExcerpt?: string;
-  translatedExcerpt?: string;
-  chapterSummary?: string;
-  approvedMappings?: { source: string; target: string }[];
-}
+import type {
+  GlossaryReviewAction,
+  GlossaryReviewConfidence,
+  GlossaryReviewResult,
+  SuggestedTerm,
+  TermSuggestionContext,
+} from "./translation.types";
 
 export function buildTermSuggestionPrompt(
   languagePair: string,
@@ -86,6 +69,23 @@ export function buildTermSuggestionUserMessage(
 const VALID_REVIEW_ACTIONS = new Set(["approve", "reject", "pending"]);
 const VALID_REVIEW_CONFIDENCES = new Set(["high", "medium", "low"]);
 
+// LLM output is untrusted JSON — validate shape with zod before coercion.
+const reviewItemSchema = z.object({
+  source: z.string().trim().min(1),
+  target: z.string().trim().min(1),
+  action: z.unknown().optional(),
+  confidence: z.unknown().optional(),
+  reason: z.unknown().optional(),
+  matchingApprovedTerm: z.unknown().optional(),
+});
+
+const suggestionItemSchema = z.object({
+  source: z.string().trim().min(1),
+  target: z.string().trim().min(1),
+  category: z.unknown().optional(),
+  note: z.unknown().optional(),
+});
+
 export function buildGlossaryReviewPrompt(
   languagePair: string,
   approvedMappings: { source: string; target: string }[],
@@ -138,43 +138,39 @@ export function parseGlossaryReviewResponse(rawContent: string): GlossaryReviewR
   }
 
   try {
-    const parsed = JSON.parse(jsonString);
-    const rawArray = Array.isArray(parsed)
+    const parsed: unknown = JSON.parse(jsonString);
+    const container = parsed as { reviews?: unknown };
+    const rawArray: unknown[] = Array.isArray(parsed)
       ? parsed
-      : Array.isArray(parsed?.reviews)
-        ? parsed.reviews
+      : Array.isArray(container?.reviews)
+        ? container.reviews
         : [];
 
-    return rawArray
-      .filter(
-        (item: any) =>
-          item &&
-          typeof item.source === "string" &&
-          typeof item.target === "string" &&
-          item.source.trim().length > 0 &&
-          item.target.trim().length > 0,
-      )
-      .map((item: any) => {
-        const action = VALID_REVIEW_ACTIONS.has(String(item.action))
-          ? (String(item.action) as GlossaryReviewAction)
-          : "pending";
-        const confidence = VALID_REVIEW_CONFIDENCES.has(String(item.confidence))
-          ? (String(item.confidence) as GlossaryReviewConfidence)
-          : "low";
+    return rawArray.flatMap((item) => {
+      const r = reviewItemSchema.safeParse(item);
+      if (!r.success) return [];
+      const action = VALID_REVIEW_ACTIONS.has(String(r.data.action))
+        ? (String(r.data.action) as GlossaryReviewAction)
+        : "pending";
+      const confidence = VALID_REVIEW_CONFIDENCES.has(String(r.data.confidence))
+        ? (String(r.data.confidence) as GlossaryReviewConfidence)
+        : "low";
 
-        return {
-          source: item.source.trim(),
-          target: item.target.trim(),
+      return [
+        {
+          source: r.data.source,
+          target: r.data.target,
           action,
           confidence,
-          reason: typeof item.reason === "string" ? item.reason.trim() : "",
+          reason: typeof r.data.reason === "string" ? r.data.reason.trim() : "",
           matchingApprovedTerm:
-            typeof item.matchingApprovedTerm === "string" &&
-            item.matchingApprovedTerm.trim().length > 0
-              ? item.matchingApprovedTerm.trim()
+            typeof r.data.matchingApprovedTerm === "string" &&
+            r.data.matchingApprovedTerm.trim().length > 0
+              ? r.data.matchingApprovedTerm.trim()
               : undefined,
-        };
-      });
+        },
+      ];
+    });
   } catch {
     return [];
   }
@@ -192,32 +188,31 @@ export function parseTermSuggestions(rawContent: string): SuggestedTerm[] {
   }
 
   try {
-    const parsed = JSON.parse(jsonString);
-    const rawArray = Array.isArray(parsed)
+    const parsed: unknown = JSON.parse(jsonString);
+    const container = parsed as { terms?: unknown };
+    const rawArray: unknown[] = Array.isArray(parsed)
       ? parsed
-      : Array.isArray(parsed?.terms)
-        ? parsed.terms
+      : Array.isArray(container?.terms)
+        ? container.terms
         : [];
 
     const validCategories = new Set(["character", "place", "skill", "item", "other"]);
 
-    return rawArray
-      .filter(
-        (item: any) =>
-          item &&
-          typeof item.source === "string" &&
-          typeof item.target === "string" &&
-          item.source.trim().length > 0 &&
-          item.target.trim().length > 0,
-      )
-      .map((item: any) => ({
-        source: item.source.trim(),
-        target: item.target.trim(),
-        category: validCategories.has(String(item.category).toLowerCase())
-          ? (String(item.category).toLowerCase() as SuggestedTerm["category"])
-          : "other",
-        note: typeof item.note === "string" ? item.note.trim() : undefined,
-      }));
+    return rawArray.flatMap((item) => {
+      const r = suggestionItemSchema.safeParse(item);
+      if (!r.success) return [];
+      const category = validCategories.has(String(r.data.category).toLowerCase())
+        ? (String(r.data.category).toLowerCase() as SuggestedTerm["category"])
+        : "other";
+      return [
+        {
+          source: r.data.source,
+          target: r.data.target,
+          category,
+          note: typeof r.data.note === "string" ? r.data.note.trim() : undefined,
+        },
+      ];
+    });
   } catch {
     return [];
   }

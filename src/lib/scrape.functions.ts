@@ -125,21 +125,23 @@ export const startImportJob = createServerFn({ method: "POST" })
 
       try {
         await inngest.send({ name: "scrape/import.requested", data: { jobId, runKey: nanoid() } });
-      } catch (err: any) {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const code =
+          err instanceof Error
+            ? ((err as { code?: string }).code ??
+              (err.cause as { code?: string } | undefined)?.code)
+            : undefined;
         log("error", "Failed to send Inngest event in startImportJob", {
           jobId,
-          error: err?.message || err,
+          error: msg,
         });
-        if (
-          err?.message?.includes("fetch failed") ||
-          err?.cause?.code === "ECONNREFUSED" ||
-          err?.code === "ECONNREFUSED"
-        ) {
+        if (msg.includes("fetch failed") || code === "ECONNREFUSED") {
           throw new SafeServerError(
             "Inngest dev server is not running. Please run 'bun run inngest' in a separate terminal alongside 'bun dev'.",
           );
         }
-        throw new SafeServerError(`Failed to enqueue import job: ${err?.message || err}`);
+        throw new SafeServerError(`Failed to enqueue import job: ${msg}`);
       }
 
       return { jobId };

@@ -6,44 +6,18 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { providerSettings } from "@/lib/db/schema";
 import { decrypt } from "@/lib/translation/crypto";
+import type {
+  AIProviderClient,
+  ChatCompletionOptions,
+  ChatCompletionResult,
+  ProviderType,
+} from "./translation.types";
 
 export class ProviderNotConfiguredError extends Error {
   constructor(message = "AI provider settings are not configured") {
     super(message);
     this.name = "ProviderNotConfiguredError";
   }
-}
-
-export type ProviderType = "openai" | "gemini";
-
-export interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
-
-export interface ChatCompletionOptions {
-  messages: ChatMessage[];
-  temperature?: number;
-  model?: string;
-  responseFormat?: { type: "json_object" | "text" };
-  maxTokens?: number;
-}
-
-export interface ChatCompletionResult {
-  content: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-  };
-}
-
-export interface AIProviderClient {
-  provider: ProviderType;
-  model: string;
-  fastModel?: string | null;
-  temperature: number;
-  baseUrl: string;
-  generateChatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult>;
 }
 
 export class OpenAIProviderClient implements AIProviderClient {
@@ -165,8 +139,6 @@ export class GeminiProviderClient implements AIProviderClient {
     };
   }
 }
-
-export type ProviderClientConfig = AIProviderClient;
 
 export async function createProviderClient(userId: string): Promise<AIProviderClient> {
   const [settings] = await db

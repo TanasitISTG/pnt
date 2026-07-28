@@ -10,6 +10,9 @@ import {
 } from "@/lib/scrape.worker";
 import { log } from "@/lib/log";
 
+// onFailure wraps the original trigger event: event.data.event.data.jobId.
+type FailedRunEventData = { event?: { data?: { jobId?: string } } };
+
 // One run per translation job. Each chunk is a memoized step = its own HTTP
 // invocation (fresh 5-min Vercel budget) with automatic retries; a crash
 // resumes from the last completed step, so no DB lease is needed.
@@ -23,7 +26,7 @@ export const translateChapterFn = inngest.createFunction(
     idempotency: "event.data.runKey",
     cancelOn: [{ event: "translation/job.cancelled", match: "data.jobId" }],
     onFailure: async ({ event, error }) => {
-      const jobId = (event.data as any).event?.data?.jobId;
+      const jobId = (event.data as FailedRunEventData).event?.data?.jobId;
       if (!jobId) {
         log("error", "Translation onFailure fired without jobId", { event, error: error.message });
         return;
@@ -58,7 +61,7 @@ export const importChaptersFn = inngest.createFunction(
     idempotency: "event.data.runKey",
     cancelOn: [{ event: "scrape/import.cancelled", match: "data.jobId" }],
     onFailure: async ({ event, error }) => {
-      const jobId = (event.data as any).event?.data?.jobId;
+      const jobId = (event.data as FailedRunEventData).event?.data?.jobId;
       if (!jobId) {
         log("error", "Import onFailure fired without jobId", { event, error: error.message });
         return;

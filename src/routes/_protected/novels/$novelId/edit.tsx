@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { getNovel, updateNovel, setNovelPublished } from "@/lib/novel.functions";
+import type { UpdateNovelInput } from "@/lib/novel.schemas";
 import { NovelForm } from "@/components/novel-form";
 import { PublishMenu } from "@/components/publish-menu";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ function EditNovelPage() {
   const { data: novel } = useQuery(novelQueryOptions(novelId));
 
   const { mutateAsync: update, isPending } = useMutation({
-    mutationFn: (vars: any) => updateNovel({ data: vars }),
+    mutationFn: (vars: UpdateNovelInput) => updateNovel({ data: vars }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["novels"] });
       queryClient.invalidateQueries({ queryKey: ["novel", novelId] });

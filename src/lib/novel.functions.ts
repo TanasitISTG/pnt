@@ -199,7 +199,7 @@ export const updateNovel = createServerFn({ method: "POST" })
         throw new SafeServerError("Novel not found or unauthorized");
       }
 
-      const updateValues: Record<string, any> = {
+      const updateValues: Record<string, unknown> = {
         title: data.title,
         originalTitle: data.originalTitle,
         author: data.author,
@@ -390,7 +390,7 @@ export const updateChapterRaw = createServerFn({ method: "POST" })
         throw new SafeServerError("Chapter not found or unauthorized");
       }
 
-      const updateValues: Record<string, any> = {
+      const updateValues: Record<string, unknown> = {
         updatedAt: new Date(),
       };
 

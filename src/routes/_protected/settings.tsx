@@ -24,7 +24,7 @@ import {
   testProviderConnection,
   changePassword,
 } from "@/lib/settings.functions";
-import type { ProviderType } from "@/lib/translation/provider-client";
+import type { ProviderType } from "@/lib/translation/translation.types";
 
 export const Route = createFileRoute("/_protected/settings")({
   loader: async () => {

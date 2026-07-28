@@ -235,8 +235,8 @@ async function runEval() {
         adheredGlossaryTerms,
         glossaryAdherencePercent,
       });
-    } catch (err: any) {
-      const errorMsg = err?.message || String(err);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`Error evaluating Chapter ${chapter.number}: ${errorMsg}`);
       evalResults.push({
         chapterNumber: String(chapter.number),

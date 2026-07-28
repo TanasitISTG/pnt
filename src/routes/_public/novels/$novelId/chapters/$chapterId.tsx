@@ -30,13 +30,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { QueryErrorState } from "@/components/query-error-state";
 import { useTranslationJob } from "@/lib/translation/use-translation-job";
 import { alignParagraphs, splitParagraphs } from "@/lib/translation/paragraphs";
-import {
-  READER_FONT_SIZE_PX,
-  useReaderSettings,
-  type ReaderFontSize,
-  type ReaderTypeface,
-  type ReaderViewMode,
-} from "@/lib/reader-settings";
+import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader-settings";
+import type { ReaderFontSize, ReaderTypeface, ReaderViewMode } from "@/lib/reader.types";
 import { cn } from "@/lib/utils";
 import { downloadText, sanitizeFilename } from "@/lib/download";
 import { Button } from "@/components/ui/button";

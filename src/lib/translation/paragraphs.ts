@@ -16,10 +16,7 @@ export function splitParagraphs(text: string): string[] {
   return lineSplit.length > 0 ? lineSplit : [trimmed];
 }
 
-export interface AlignedParagraph {
-  raw?: string;
-  translated?: string;
-}
+import type { AlignedParagraph } from "./translation.types";
 
 // Align by index; when counts mismatch the shorter side leaves gaps at the tail.
 export function alignParagraphs(rawText: string, translatedText: string): AlignedParagraph[] {

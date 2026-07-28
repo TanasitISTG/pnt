@@ -51,3 +51,8 @@ export const approveTermSchema = z.object({
 export const rejectTermSchema = z.object({
   termId: z.string().min(1),
 });
+
+export type TermCategory = z.infer<typeof termCategorySchema>;
+export type TermStatus = z.infer<typeof termStatusSchema>;
+export type CreateTermInput = z.input<typeof createTermSchema>;
+export type UpdateTermInput = z.input<typeof updateTermSchema>;

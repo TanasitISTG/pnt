@@ -4,7 +4,8 @@ import { eq, and, sql, lt, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { novels, chapters, translationJobs, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
-import { createProviderClient, type AIProviderClient } from "./provider-client";
+import { createProviderClient } from "./provider-client";
+import type { AIProviderClient } from "./translation.types";
 import { splitAtParagraphBoundary } from "./chunker";
 import {
   buildSystemPrompt,
@@ -28,7 +29,8 @@ import {
   normalizeTranslationOutput,
 } from "./paragraphs";
 import { extractHanziSpans, spliceSpans } from "./residual-repair";
-import { createLog, type ChunkProgress, type LogEntry } from "./translation.functions";
+import { createLog } from "./translation.functions";
+import type { ChunkProgress, LogEntry } from "./translation.types";
 import { log } from "@/lib/log";
 
 // Execution is driven by Inngest (see src/lib/inngest/functions.ts): one event
@@ -141,11 +143,11 @@ async function translatePiece(
           ),
         );
       }
-    } catch (markerFixErr: any) {
+    } catch (markerFixErr) {
       logs.push(
         createLog(
           "warn",
-          `${chunkLabel} marker fix failed (${markerFixErr?.message || "error"}) — keeping original.`,
+          `${chunkLabel} marker fix failed (${markerFixErr instanceof Error ? markerFixErr.message : "error"}) — keeping original.`,
         ),
       );
     }
@@ -218,11 +220,11 @@ async function repairResidualHanzi(
         text = fix.content;
         logs.push(createLog("info", `${chunkLabel} re-requested for untranslated passage.`));
       }
-    } catch (fixErr: any) {
+    } catch (fixErr) {
       logs.push(
         createLog(
           "warn",
-          `${chunkLabel} re-translation failed (${fixErr?.message || "error"}) — keeping original.`,
+          `${chunkLabel} re-translation failed (${fixErr instanceof Error ? fixErr.message : "error"}) — keeping original.`,
         ),
       );
     }
@@ -274,11 +276,11 @@ async function repairResidualHanzi(
           ),
         );
       }
-    } catch (spanErr: any) {
+    } catch (spanErr) {
       logs.push(
         createLog(
           "warn",
-          `${chunkLabel} span repair failed (${spanErr?.message || "error"}) — keeping original.`,
+          `${chunkLabel} span repair failed (${spanErr instanceof Error ? spanErr.message : "error"}) — keeping original.`,
         ),
       );
     }
@@ -388,10 +390,11 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
         logs,
         chunkLabel,
       );
-    } catch (err: any) {
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message.toLowerCase() : "";
       const isTimeout =
-        err?.message?.toLowerCase().includes("timed out") ||
-        err?.name === "APIConnectionTimeoutError";
+        errMsg.includes("timed out") ||
+        (err instanceof Error && err.name === "APIConnectionTimeoutError");
       if (isTimeout && text.length > 1200 && depth < 2) {
         logs.push(
           createLog(
@@ -421,9 +424,9 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
 
   try {
     result = await translatePieceWithAutoSplit(currentChunk.text, previousChunkTail, 0);
-  } catch (err: any) {
+  } catch (err) {
     // Record which chunk failed for the UI, then rethrow — Inngest owns retries.
-    currentChunk.error = err?.message || "API Error";
+    currentChunk.error = err instanceof Error ? err.message : "API Error";
     chunkList[i] = currentChunk;
     logs.push(
       createLog("warn", `Chunk ${i + 1}/${chunkList.length} failed: ${currentChunk.error}`),
@@ -578,17 +581,22 @@ export async function finalizeJob(jobId: string): Promise<void> {
             .where(eq(novels.id, novel.id));
           logs.push(createLog("info", "Updated rolling story summary."));
         }
-      } catch (storyErr: any) {
+      } catch (storyErr) {
         logs.push(
           createLog(
             "warn",
-            `Rolling story summary update skipped: ${storyErr?.message || "Failed"}`,
+            `Rolling story summary update skipped: ${storyErr instanceof Error ? storyErr.message : "Failed"}`,
           ),
         );
       }
     }
-  } catch (sumErr: any) {
-    logs.push(createLog("warn", `Summary generation skipped: ${sumErr.message || "Failed"}`));
+  } catch (sumErr) {
+    logs.push(
+      createLog(
+        "warn",
+        `Summary generation skipped: ${sumErr instanceof Error ? sumErr.message : "Failed"}`,
+      ),
+    );
   }
 
   // Auto-suggest glossary terms with AI review
@@ -715,11 +723,11 @@ export async function finalizeJob(jobId: string): Promise<void> {
         }
 
         reviewResults = parseGlossaryReviewResponse(reviewContent);
-      } catch (reviewErr: any) {
+      } catch (reviewErr) {
         logs.push(
           createLog(
             "warn",
-            `AI review failed (${reviewErr?.message || "error"}) — all terms stored as pending.`,
+            `AI review failed (${reviewErr instanceof Error ? reviewErr.message : "error"}) — all terms stored as pending.`,
           ),
         );
       }
@@ -816,8 +824,13 @@ export async function finalizeJob(jobId: string): Promise<void> {
     } else {
       logs.push(createLog("info", "No new term suggestions extracted."));
     }
-  } catch (sugErr: any) {
-    logs.push(createLog("warn", `Term auto-suggest skipped: ${sugErr.message || "Failed"}`));
+  } catch (sugErr) {
+    logs.push(
+      createLog(
+        "warn",
+        `Term auto-suggest skipped: ${sugErr instanceof Error ? sugErr.message : "Failed"}`,
+      ),
+    );
   }
 
   logs.push(

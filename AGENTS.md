@@ -38,6 +38,7 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 - **Reader preferences** (`src/lib/reader-settings.ts`, localStorage key `pnt-reader-settings`): `fontSize`, `typeface`, `viewMode` (`side`/`translated`/`raw`) — all persist across refresh. Theme is **not** part of this object (see above).
 - **Fonts:** global stack `"Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui`; Thai fallback is mandatory wherever translated text renders; Sarabun (`font-reader`) is the reader long-form option.
 - **Imports:** alias `@/*` and `#/*` → `./src/*`.
+- **Types:** shared/domain types live in colocated leaf modules (`src/lib/translation/translation.types.ts`, `src/lib/scrape.types.ts`, `src/lib/reader.types.ts`); zod-inferred input types live in their `*.schemas.ts` (`CreateNovelInput`, `UpdateTermInput`, …). `any` is banned — enforced by oxlint `typescript/no-explicit-any`; narrow `catch` vars with `instanceof Error` and validate untrusted JSON with zod.
 - **shadcn components** live in `src/components/ui` — restyle their class strings to design tokens, don't fork the structure.
 - **Server code:** server functions validated with zod; env access only via `src/lib/env.ts` (zod-parsed, server-only).
 - **Routes:** file-based under `src/routes`; `src/routeTree.gen.ts` is generated — never edit by hand.

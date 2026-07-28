@@ -39,7 +39,7 @@ const bytea = customType<{ data: Buffer; driverData: unknown }>({
       }
       return Buffer.from(value, "hex");
     }
-    return Buffer.from(value as any);
+    return Buffer.from(value as ArrayBuffer);
   },
 });
 

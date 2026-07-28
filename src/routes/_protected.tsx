@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_protected")({
   },
   errorComponent: (props) => {
     const location = useLocation();
-    const error = props.error as any;
+    const error = props.error as Error & { cause?: Error };
     if (
       error?.name === "UnauthorizedError" ||
       error?.message === "Unauthorized" ||

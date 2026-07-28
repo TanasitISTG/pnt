@@ -9,15 +9,7 @@ import {
   listActiveTranslationJobs,
   getTranslationJobsTerminalStatus,
 } from "./translation.functions";
-
-export interface ActiveJobState {
-  jobId: string;
-  chapterId: string;
-  status: "pending" | "running" | "done" | "error" | "cancelled";
-  doneChunks: number;
-  totalChunks: number;
-  error?: string | null;
-}
+import type { ActiveJobState } from "./translation.types";
 
 // This hook is a read-only observer: translation work is executed by Inngest
 // (see src/lib/inngest/functions.ts), never by the browser — so page
@@ -207,8 +199,8 @@ export function useTranslationJob(novelId: string, enabled = true) {
         });
         toast.info("Translation queued");
         invalidate();
-      } catch (err: any) {
-        toast.error(err.message || "Failed to start translation");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to start translation");
       }
     },
     [invalidate, updateJob],
@@ -240,8 +232,8 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
         invalidate();
         return res.queued.length;
-      } catch (err: any) {
-        toast.error(err.message || "Failed to queue translations");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to queue translations");
         return 0;
       }
     },
@@ -255,8 +247,8 @@ export function useTranslationJob(novelId: string, enabled = true) {
         removeJob(chapterId);
         toast.info("Translation cancelled");
         invalidate();
-      } catch (err: any) {
-        toast.error(err.message || "Failed to cancel translation");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to cancel translation");
       }
     },
     [invalidate, removeJob],
@@ -280,8 +272,8 @@ export function useTranslationJob(novelId: string, enabled = true) {
         });
         toast.info("Translation requeued");
         invalidate();
-      } catch (err: any) {
-        toast.error(err.message || "Failed to retry translation");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to retry translation");
       }
     },
     [invalidate],

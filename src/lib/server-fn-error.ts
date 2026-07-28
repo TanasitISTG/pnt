@@ -17,12 +17,13 @@ export class SafeServerError extends Error {
 export async function withSafeHandler<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
-  } catch (err: any) {
+  } catch (err) {
+    const name = err instanceof Error ? err.name : undefined;
     if (
       err instanceof UnauthorizedError ||
       err instanceof SafeServerError ||
-      err?.name === "UnauthorizedError" ||
-      err?.name === "SafeServerError"
+      name === "UnauthorizedError" ||
+      name === "SafeServerError"
     ) {
       throw err;
     }

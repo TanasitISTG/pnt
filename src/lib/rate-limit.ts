@@ -43,7 +43,11 @@ export async function checkRateLimit(bucket: string, limit: number, windowMs = 6
       RETURNING count
     `);
 
-    const rows = (result as any).rows ?? result;
+    // postgres.js returns a row array; HTTP drivers wrap it in { rows }.
+    type CountRow = { count?: number };
+    const rows = (
+      Array.isArray(result) ? result : (result as unknown as { rows: CountRow[] }).rows
+    ) as CountRow[];
     const count = Number(rows[0]?.count ?? 1);
     if (isOverLimit(count, limit)) throw new RateLimitError();
   } catch (err) {

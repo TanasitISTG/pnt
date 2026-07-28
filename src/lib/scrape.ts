@@ -3,14 +3,7 @@
 
 import { SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
-
-export type ScrapeProvider = "auto" | "direct" | "zenrows" | "scrapingbee" | "firecrawl";
-
-export interface ScrapeProviderMeta {
-  id: ScrapeProvider;
-  label: string;
-  description: string;
-}
+import type { ScrapeProviderMeta, ScrapedChapter } from "./scrape.types";
 
 export const SCRAPE_PROVIDERS: ScrapeProviderMeta[] = [
   { id: "auto", label: "Automatic", description: "Default per-site proxy behavior" },
@@ -19,13 +12,6 @@ export const SCRAPE_PROVIDERS: ScrapeProviderMeta[] = [
   { id: "scrapingbee", label: "ScrapingBee", description: "ScrapingBee HTML API" },
   { id: "firecrawl", label: "Firecrawl", description: "Firecrawl scrape endpoint" },
 ];
-
-export interface ScrapedChapter {
-  number: number;
-  title: string;
-  content: string;
-  nextUrl: string | null;
-}
 
 interface Source {
   name: string;
@@ -724,11 +710,12 @@ export async function assertPublicHost(url: string): Promise<void> {
           throw new Error(`Private IP address blocked: ${entry.address}`);
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       // Fail-closed for SSRF defense-in-depth: any DNS failure rejects the fetch
       // (mitigated by upstream host whitelist, but strict mode is safer).
-      if (err.message?.includes("blocked")) throw err;
-      throw new Error(`DNS resolution failed for ${hostname}: ${err.message ?? err}`, {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("blocked")) throw err;
+      throw new Error(`DNS resolution failed for ${hostname}: ${msg}`, {
         cause: err,
       });
     }

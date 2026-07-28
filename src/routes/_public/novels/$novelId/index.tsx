@@ -24,7 +24,8 @@ import { useTranslationJob } from "@/lib/translation/use-translation-job";
 import { JobLogsDialog } from "@/components/job-logs-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { QueryErrorState } from "@/components/query-error-state";
-import { getReaderProgress, type ReaderProgress } from "@/lib/reader-progress";
+import { getReaderProgress } from "@/lib/reader-progress";
+import type { ReaderProgress } from "@/lib/reader.types";
 
 import {
   getNovel,
@@ -47,7 +48,8 @@ import {
   getImportJobStatus,
   getActiveImportJob,
 } from "@/lib/scrape.functions";
-import { SCRAPE_PROVIDERS, SUPPORTED_SITES_LABEL, type ScrapeProvider } from "@/lib/scrape";
+import { SCRAPE_PROVIDERS, SUPPORTED_SITES_LABEL } from "@/lib/scrape";
+import type { ScrapeProvider } from "@/lib/scrape.types";
 import { getGlossaryStats } from "@/lib/glossary.functions";
 import { getNovelCosts } from "@/lib/translation/translation.functions";
 import { exportNovelEpub, exportNovelTxt } from "@/lib/export.functions";
@@ -90,7 +92,12 @@ import {
 } from "@/components/ui/accordion";
 import { ChapterStatusBadge } from "@/components/chapter-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { createChapterSchema, updateChapterSchema } from "@/lib/novel.schemas";
+import {
+  createChapterSchema,
+  updateChapterSchema,
+  type CreateChapterInput,
+  type UpdateChapterInput,
+} from "@/lib/novel.schemas";
 import { cn } from "#/lib/utils";
 
 const novelQueryOptions = (novelId: string) =>
@@ -370,7 +377,7 @@ function NovelDetailPage() {
   });
 
   const { mutateAsync: saveChapterEdit, isPending: savingEdit } = useMutation({
-    mutationFn: (vars: any) => updateChapterRaw({ data: vars }),
+    mutationFn: (vars: UpdateChapterInput) => updateChapterRaw({ data: vars }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
       toast.success("Chapter updated");
@@ -407,8 +414,8 @@ function NovelDetailPage() {
     try {
       const res = await exportNovelTxt({ data: { novelId } });
       downloadText(res.filename, res.content);
-    } catch (err: any) {
-      toast.error(err.message || "Export failed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
     } finally {
       setExporting(null);
     }
@@ -419,8 +426,8 @@ function NovelDetailPage() {
     try {
       const res = await exportNovelEpub({ data: { novelId } });
       downloadBase64(res.filename, res.dataBase64, "application/epub+zip");
-    } catch (err: any) {
-      toast.error(err.message || "Export failed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
     } finally {
       setExporting(null);
     }
@@ -1355,8 +1362,8 @@ function AddChapterSection({ novelId, chapters, invalidateChapters }: AddChapter
         error: null,
       });
       toast.info(`Import of chapters ${from}–${to} queued`);
-    } catch (e: any) {
-      toast.error(e.message || "Failed to start import");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to start import");
     }
   };
 
@@ -1367,8 +1374,8 @@ function AddChapterSection({ novelId, chapters, invalidateChapters }: AddChapter
       setImportJob((j) => (j ? { ...j, status: "cancelled" } : j));
       invalidateChapters();
       toast.info("Import cancelled");
-    } catch (e: any) {
-      toast.error(e.message || "Failed to cancel import");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to cancel import");
     }
   };
 
@@ -1382,8 +1389,8 @@ function AddChapterSection({ novelId, chapters, invalidateChapters }: AddChapter
       setFormErrors({});
       if (r.nextUrl) setScrapeUrl(r.nextUrl);
       toast.success(`Fetched chapter ${r.number}: ${r.title}`);
-    } catch (e: any) {
-      toast.error(e.message || "Fetch failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Fetch failed");
     } finally {
       setScrapeBusy(null);
     }
@@ -1402,15 +1409,15 @@ function AddChapterSection({ novelId, chapters, invalidateChapters }: AddChapter
         toast.info(`Chapter ${r.number} already exists — skipped`);
       }
       if (r.nextUrl) setScrapeUrl(r.nextUrl);
-    } catch (e: any) {
-      toast.error(e.message || "Import failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Import failed");
     } finally {
       setScrapeBusy(null);
     }
   };
 
   const { mutateAsync: addChapter, isPending: addingChapter } = useMutation({
-    mutationFn: (vars: any) => createChapter({ data: vars }),
+    mutationFn: (vars: CreateChapterInput) => createChapter({ data: vars }),
     onSuccess: () => {
       invalidateChapters();
       toast.success("Chapter added successfully");
@@ -1420,7 +1427,7 @@ function AddChapterSection({ novelId, chapters, invalidateChapters }: AddChapter
       const nextNum = Number(chapNumber) + 1;
       setChapNumber(isNaN(nextNum) ? "" : nextNum.toString());
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast.error(error.message || "Failed to add chapter");
     },
   });

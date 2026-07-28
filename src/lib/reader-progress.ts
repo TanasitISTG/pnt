@@ -1,8 +1,4 @@
-export interface ReaderProgress {
-  lastChapterId: string | null;
-  readChapterIds: string[];
-  scrollFraction?: number;
-}
+import type { ReaderProgress } from "./reader.types";
 
 const STORAGE_KEY = "pnt-reader-progress";
 

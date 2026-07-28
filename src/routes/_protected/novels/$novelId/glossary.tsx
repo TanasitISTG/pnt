@@ -31,7 +31,14 @@ import {
   getGlossaryStats,
   previewTermReplacement,
 } from "@/lib/glossary.functions";
-import { createTermSchema, updateTermSchema } from "@/lib/glossary.schemas";
+import {
+  createTermSchema,
+  updateTermSchema,
+  type CreateTermInput,
+  type TermCategory,
+  type TermStatus,
+  type UpdateTermInput,
+} from "@/lib/glossary.schemas";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -186,7 +193,7 @@ function NovelGlossaryPage() {
   const [replaceConfirm, setReplaceConfirm] = useState<{
     chapterCount: number;
     occurrences: number;
-    payload: Record<string, any>;
+    payload: UpdateTermInput;
   } | null>(null);
   const [previewingReplace, setPreviewingReplace] = useState(false);
 
@@ -209,7 +216,7 @@ function NovelGlossaryPage() {
   };
 
   const { mutateAsync: addTerm, isPending: addingTerm } = useMutation({
-    mutationFn: (vars: any) => createGlossaryTerm({ data: vars }),
+    mutationFn: (vars: CreateTermInput) => createGlossaryTerm({ data: vars }),
     onSuccess: () => {
       invalidateAll();
       toast.success("Glossary term added");
@@ -224,7 +231,7 @@ function NovelGlossaryPage() {
   });
 
   const { mutateAsync: saveEdit, isPending: savingEdit } = useMutation({
-    mutationFn: (vars: any) => updateGlossaryTerm({ data: vars }),
+    mutationFn: (vars: UpdateTermInput) => updateGlossaryTerm({ data: vars }),
     onSuccess: (_data, vars) => {
       invalidateAll();
       toast.success(
@@ -562,7 +569,7 @@ function NovelGlossaryPage() {
           <div className="w-full sm:w-44">
             <Select
               value={categoryFilter}
-              onValueChange={(val: any) => setCategoryFilter(val)}
+              onValueChange={(val) => setCategoryFilter(val as TermCategory | "all")}
               items={CATEGORY_ITEMS}
             >
               <SelectTrigger className="w-full">
@@ -582,7 +589,7 @@ function NovelGlossaryPage() {
           <div className="w-full sm:w-36">
             <Select
               value={statusFilter}
-              onValueChange={(val: any) => setStatusFilter(val)}
+              onValueChange={(val) => setStatusFilter(val as TermStatus | "all")}
               items={STATUS_ITEMS}
             >
               <SelectTrigger className="w-full">
@@ -662,8 +669,8 @@ function NovelGlossaryPage() {
                         <TableCell>
                           <Select
                             value={editState.category}
-                            onValueChange={(val: any) =>
-                              setEditState((s) => s && { ...s, category: val })
+                            onValueChange={(val) =>
+                              setEditState((s) => s && { ...s, category: val as TermCategory })
                             }
                             items={EDIT_CATEGORY_ITEMS}
                           >
@@ -753,7 +760,7 @@ function NovelGlossaryPage() {
                                 termId: term.id,
                                 source: term.source,
                                 target: term.target,
-                                category: term.category as any,
+                                category: term.category as TermCategory,
                                 note: term.note || "",
                                 originalTarget: term.target,
                               })
@@ -831,7 +838,7 @@ function NovelGlossaryPage() {
                   <Label htmlFor="category">Category</Label>
                   <Select
                     value={newCategory}
-                    onValueChange={(val: any) => setNewCategory(val)}
+                    onValueChange={(val) => setNewCategory(val as TermCategory)}
                     items={EDIT_CATEGORY_ITEMS}
                   >
                     <SelectTrigger id="category">

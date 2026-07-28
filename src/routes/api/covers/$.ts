@@ -43,9 +43,9 @@ export const Route = createFileRoute("/api/covers/$")({
           // Since Uint8Array/Buffer can be sent in Response directly, we convert to Buffer/Uint8Array:
           const buffer = Buffer.isBuffer(novel.cover)
             ? novel.cover
-            : Buffer.from(novel.cover as any);
+            : Buffer.from(novel.cover as Uint8Array);
 
-          return new Response(buffer, {
+          return new Response(new Uint8Array(buffer), {
             headers: {
               "Content-Type": novel.coverMime || "image/jpeg",
               // Guest URLs carry ?v=<updatedAt> (bumps on any novel edit), so a
@@ -55,7 +55,7 @@ export const Route = createFileRoute("/api/covers/$")({
                 : "public, max-age=31536000, immutable",
             },
           });
-        } catch (err: any) {
+        } catch (err) {
           if (err instanceof RateLimitError) {
             return new Response("Too Many Requests", { status: 429 });
           }

@@ -9,12 +9,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  getTranslationJobStatus,
-  type LogEntry,
-  type SlimChunkProgress,
-} from "@/lib/translation/translation.functions";
-import { ChapterStatusBadge } from "./chapter-status-badge";
+import { getTranslationJobStatus } from "@/lib/translation/translation.functions";
+import type { LogEntry, SlimChunkProgress } from "@/lib/translation/translation.types";
+import { ChapterStatusBadge, type ChapterStatus } from "./chapter-status-badge";
 import { Loader2, Terminal, Cpu, Zap, XCircle } from "lucide-react";
 
 interface JobLogsDialogProps {
@@ -73,7 +70,7 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
           </div>
           {jobData && (
             <div className="flex items-center gap-2">
-              <ChapterStatusBadge status={jobData.status as any} />
+              <ChapterStatusBadge status={jobData.status as ChapterStatus} />
               {(jobData.status === "running" || jobData.status === "pending") && (
                 <Loader2 className="size-4 animate-spin text-muted-foreground" />
               )}

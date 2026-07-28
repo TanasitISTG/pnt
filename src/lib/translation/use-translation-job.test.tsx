@@ -47,7 +47,7 @@ describe("useTranslationJob", () => {
     vi.mocked(translationFns.startTranslationJob).mockResolvedValueOnce({
       jobId: "job-101",
       totalChunks: 4,
-    } as any);
+    } as never);
 
     const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
 
@@ -74,7 +74,7 @@ describe("useTranslationJob", () => {
         { chapterId: "ch-2", jobId: "job-2", totalChunks: 5 },
       ],
       skipped: [],
-    } as any);
+    } as never);
 
     const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
 
@@ -128,8 +128,8 @@ function createScrapeHandlers(
       try {
         const r = await scrapeChapterFn(url);
         toast.success(`Fetched chapter ${r.number}: ${r.title}`);
-      } catch (e: any) {
-        toast.error(e.message || "Fetch failed");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Fetch failed");
       }
     },
     handleAdd: async (url: string) => {
@@ -140,8 +140,8 @@ function createScrapeHandlers(
         } else {
           toast.info(`Chapter ${r.number} already exists — skipped`);
         }
-      } catch (e: any) {
-        toast.error(e.message || "Import failed");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Import failed");
       }
     },
   };

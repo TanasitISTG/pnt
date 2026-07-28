@@ -18,32 +18,7 @@ import {
   getJobsTerminalStatusSchema,
 } from "@/lib/translation/translation.schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
-
-export interface SlimChunkProgress {
-  index: number;
-  textLength: number;
-  hasTranslation: boolean;
-  promptTokens?: number;
-  completionTokens?: number;
-  latencyMs?: number;
-  error?: string;
-}
-
-export interface ChunkProgress {
-  index: number;
-  text: string;
-  translation?: string;
-  promptTokens?: number;
-  completionTokens?: number;
-  latencyMs?: number;
-  error?: string;
-}
-
-export interface LogEntry {
-  timestamp: string;
-  level: "info" | "warn" | "error" | "success";
-  message: string;
-}
+import type { ChunkProgress, LogEntry, SlimChunkProgress } from "./translation.types";
 
 export function createLog(level: LogEntry["level"], message: string): LogEntry {
   const time = new Date().toLocaleTimeString("en-US", { hour12: false });
@@ -193,10 +168,10 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
           } else {
             skipped.push({ chapterId: ch.id, reason: "No job created" });
           }
-        } catch (err: any) {
+        } catch (err) {
           skipped.push({
             chapterId: ch.id,
-            reason: err?.message || "Failed to start translation",
+            reason: err instanceof Error ? err.message : "Failed to start translation",
           });
         }
       }

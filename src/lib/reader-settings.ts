@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type ReaderFontSize = "S" | "M" | "L" | "XL";
-export type ReaderTypeface = "default" | "reader";
-export type ReaderViewMode = "side" | "translated" | "raw";
-
-export interface ReaderSettings {
-  fontSize: ReaderFontSize;
-  typeface: ReaderTypeface;
-  viewMode: ReaderViewMode;
-}
+import type { ReaderFontSize, ReaderSettings } from "./reader.types";
 
 const STORAGE_KEY = "pnt-reader-settings";
 

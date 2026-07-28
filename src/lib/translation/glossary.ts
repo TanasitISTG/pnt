@@ -1,9 +1,4 @@
-export interface GlossaryTermInput {
-  source: string;
-  target: string;
-  category?: string | null;
-  note?: string | null;
-}
+import type { GlossaryTermInput } from "./translation.types";
 
 const CJK_RE = /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/;
 

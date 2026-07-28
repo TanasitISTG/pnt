@@ -3,13 +3,8 @@ import "@tanstack/react-start/server-only";
 import { z } from "zod";
 
 import { env } from "@/lib/env";
-import {
-  findSource,
-  parseChapter,
-  assertPublicHost,
-  type ScrapedChapter,
-  type ScrapeProvider,
-} from "@/lib/scrape";
+import { findSource, parseChapter, assertPublicHost } from "@/lib/scrape";
+import type { ScrapedChapter, ScrapeProvider } from "@/lib/scrape.types";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
 
@@ -236,11 +231,13 @@ export async function fetchHtml(url: string, provider: ScrapeProvider = "auto"):
     } else {
       try {
         html = await directFetch(url);
-      } catch (e: any) {
-        if (env.SCRAPER_API_KEY && (e?.cause === 403 || e?.message?.includes("HTTP 403"))) {
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        const cause = e instanceof Error ? e.cause : undefined;
+        if (env.SCRAPER_API_KEY && (cause === 403 || msg.includes("HTTP 403"))) {
           log("info", "Direct fetch got 403, falling back to scraperFetch via ZenRows", { url });
           html = await scraperFetch(url);
-        } else if (e?.cause === 403 || e?.message?.includes("HTTP 403")) {
+        } else if (cause === 403 || msg.includes("HTTP 403")) {
           throw new SafeServerError(
             `Source site ${source.name} returned HTTP 403 Forbidden. Set SCRAPER_API_KEY in .env.local to enable scraper proxy.`,
           );

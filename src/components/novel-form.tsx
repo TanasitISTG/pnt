@@ -79,7 +79,7 @@ export function NovelForm({
 
   const handleSelectChange = (field: "sourceLang" | "targetLang", value: string | null) => {
     if (!value) return;
-    setForm((prev) => ({ ...prev, [field]: value as any }));
+    setForm((prev) => ({ ...prev, [field]: value as NovelFormData[typeof field] }));
   };
 
   return (

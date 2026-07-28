@@ -2,13 +2,9 @@
 // Character class mirrors CJK_RE in ./prompts.ts — keep in sync: detection
 // (findResidualSourceChars) and extraction must agree on what "hanzi" is.
 
-const CJK_SPAN_RE = /[㐀-䶿一-鿿豈-﫿]+/g;
+import type { HanziSpan } from "./translation.types";
 
-export interface HanziSpan {
-  start: number;
-  end: number; // exclusive
-  text: string;
-}
+const CJK_SPAN_RE = /[㐀-䶿一-鿿豈-﫿]+/g;
 
 /** Maximal runs of CJK ideographs with offsets, in document order. */
 export function extractHanziSpans(text: string): HanziSpan[] {

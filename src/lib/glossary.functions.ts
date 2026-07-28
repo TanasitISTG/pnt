@@ -132,7 +132,7 @@ export const updateGlossaryTerm = createServerFn({ method: "POST" })
         throw new SafeServerError("Glossary term not found or unauthorized");
       }
 
-      const updateData: Record<string, any> = { updatedAt: new Date() };
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (data.source !== undefined) updateData.source = data.source.trim();
       if (data.target !== undefined) updateData.target = data.target.trim();
       if (data.category !== undefined) updateData.category = data.category;

@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import type { ProviderClientConfig } from "./provider-client";
+import type { ProviderClientConfig } from "./translation.types";
 import { buildTitlePrompt } from "./prompts";
 
 /**

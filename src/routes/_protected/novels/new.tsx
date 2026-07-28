@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { createNovel } from "@/lib/novel.functions";
+import type { CreateNovelInput } from "@/lib/novel.schemas";
 import { NovelForm } from "@/components/novel-form";
 import { Button } from "@/components/ui/button";
 
@@ -16,7 +17,7 @@ function NewNovelPage() {
   const queryClient = useQueryClient();
 
   const { mutateAsync: create, isPending } = useMutation({
-    mutationFn: (vars: any) => createNovel({ data: vars }),
+    mutationFn: (vars: CreateNovelInput) => createNovel({ data: vars }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["novels"] });
       toast.success("Novel created successfully");
