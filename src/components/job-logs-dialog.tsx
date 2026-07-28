@@ -39,7 +39,10 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
 
   if (!open || (!jobId && !chapterId)) return null;
 
-  const logs: LogEntry[] = jobData?.logs || [];
+  // Rows written before LogEntry.id existed get a positional fallback id.
+  const logs: LogEntry[] = (jobData?.logs || []).map((l, i) =>
+    l.id ? l : { ...l, id: `legacy-${i}` },
+  );
   const chunks: SlimChunkProgress[] = jobData?.chunks || [];
   const usage = jobData?.usageJson ? JSON.parse(jobData.usageJson) : null;
 
@@ -148,8 +151,8 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
                 {logs.length === 0 ? (
                   <span className="text-cream/40 italic">No logs recorded yet.</span>
                 ) : (
-                  logs.map((log, i) => (
-                    <div key={i} className="flex items-start gap-2.5 leading-relaxed">
+                  logs.map((log) => (
+                    <div key={log.id} className="flex items-start gap-2.5 leading-relaxed">
                       <span className="text-cream/40 shrink-0 font-mono">[{log.timestamp}]</span>
                       <span
                         className={

@@ -2,6 +2,8 @@ import { Check, Edit, RotateCcw, Trash2, X } from "lucide-react";
 
 import { type TermCategory, type TermStatus } from "@/lib/glossary.schemas";
 
+import { EDIT_CATEGORY_ITEMS } from "./category-items";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,14 +47,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   skill: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
   item: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
   other: "bg-muted text-muted-foreground border-border",
-};
-
-export const EDIT_CATEGORY_ITEMS: Record<string, string> = {
-  character: "Character",
-  place: "Place",
-  skill: "Skill",
-  item: "Item",
-  other: "Other",
 };
 
 export function CategoryBadge({ category }: { category: string }) {

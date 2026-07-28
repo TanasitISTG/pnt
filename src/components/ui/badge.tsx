@@ -46,4 +46,6 @@ function Badge({
   });
 }
 
-export { Badge, badgeVariants };
+// badgeVariants intentionally not exported: nothing outside this file uses
+// it, and non-component exports break Fast Refresh state preservation.
+export { Badge };

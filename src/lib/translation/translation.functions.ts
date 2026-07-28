@@ -22,7 +22,7 @@ import type { ChunkProgress, LogEntry, SlimChunkProgress } from "./translation.t
 
 export function createLog(level: LogEntry["level"], message: string): LogEntry {
   const time = new Date().toLocaleTimeString("en-US", { hour12: false });
-  return { timestamp: time, level, message };
+  return { id: nanoid(), timestamp: time, level, message };
 }
 
 export const startTranslationJob = createServerFn({ method: "POST" })
@@ -159,23 +159,42 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
         }
       }
 
-      for (const ch of targetChapters) {
-        try {
-          const res = await startTranslationJob({ data: { chapterId: ch.id } });
-          if (res?.jobId && typeof res.totalChunks === "number") {
-            queued.push({
-              chapterId: ch.id,
-              jobId: res.jobId,
-              totalChunks: res.totalChunks,
-            });
-          } else {
-            skipped.push({ chapterId: ch.id, reason: "No job created" });
-          }
-        } catch (err) {
-          skipped.push({
-            chapterId: ch.id,
-            reason: err instanceof Error ? err.message : "Failed to start translation",
-          });
+      // Start jobs in small parallel batches: fully sequential is N×latency,
+      // fully parallel is an unbounded DB/event burst on serverless for large
+      // selections. Results are collected per batch so queued/skipped keep
+      // chapter order.
+      const BATCH_SIZE = 5;
+      type BatchResult =
+        | { queued: (typeof queued)[number] }
+        | { skipped: (typeof skipped)[number] };
+      for (let i = 0; i < targetChapters.length; i += BATCH_SIZE) {
+        const results = await Promise.all(
+          targetChapters.slice(i, i + BATCH_SIZE).map(async (ch): Promise<BatchResult> => {
+            try {
+              const res = await startTranslationJob({ data: { chapterId: ch.id } });
+              if (res?.jobId && typeof res.totalChunks === "number") {
+                return {
+                  queued: {
+                    chapterId: ch.id,
+                    jobId: res.jobId,
+                    totalChunks: res.totalChunks,
+                  },
+                };
+              }
+              return { skipped: { chapterId: ch.id, reason: "No job created" } };
+            } catch (err) {
+              return {
+                skipped: {
+                  chapterId: ch.id,
+                  reason: err instanceof Error ? err.message : "Failed to start translation",
+                },
+              };
+            }
+          }),
+        );
+        for (const r of results) {
+          if ("queued" in r) queued.push(r.queued);
+          else skipped.push(r.skipped);
         }
       }
 

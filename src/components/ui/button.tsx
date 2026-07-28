@@ -53,4 +53,6 @@ function Button({
   );
 }
 
-export { Button, buttonVariants };
+// buttonVariants intentionally not exported: nothing outside this file uses
+// it, and non-component exports break Fast Refresh state preservation.
+export { Button };

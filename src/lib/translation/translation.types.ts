@@ -24,6 +24,9 @@ export interface ChunkProgress {
 }
 
 export interface LogEntry {
+  // Unique per entry; used as React key in the log console. Rows written
+  // before this field existed are backfilled client-side on read.
+  id: string;
   timestamp: string;
   level: "info" | "warn" | "error" | "success";
   message: string;

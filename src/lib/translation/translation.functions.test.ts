@@ -23,4 +23,10 @@ describe("translation batch query predicates", () => {
   it("returns queued and skipped arrays from startTranslationJobs", () => {
     expect(source).toContain("return { queued, skipped };");
   });
+
+  it("starts batch jobs with bounded concurrency and preserves chapter order", () => {
+    expect(source).toContain("const BATCH_SIZE = 5;");
+    expect(source).toContain("await Promise.all(");
+    expect(source).toContain('if ("queued" in r) queued.push(r.queued);');
+  });
 });

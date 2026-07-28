@@ -58,11 +58,11 @@ import {
 } from "@/components/ui/table";
 import {
   CategoryBadge,
-  EDIT_CATEGORY_ITEMS,
   GlossaryTable,
   type EditState,
   type GlossaryTerm,
 } from "@/components/glossary/glossary-table";
+import { EDIT_CATEGORY_ITEMS } from "@/components/glossary/category-items";
 import { GlossaryDialogs } from "@/components/glossary/glossary-dialogs";
 
 const novelQueryOptions = (novelId: string) =>
