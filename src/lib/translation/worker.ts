@@ -195,7 +195,7 @@ async function repairResidualHanzi(
   let completionTokens = 0;
 
   const initial = findResidualSourceChars(langPair, text);
-  if (initial.length <= 2) return { translation: text, promptTokens, completionTokens };
+  if (initial.length === 0) return { translation: text, promptTokens, completionTokens };
   logs.push(
     createLog("warn", `${chunkLabel} has ${initial.length} untranslated hanzi — repairing.`),
   );
@@ -232,7 +232,7 @@ async function repairResidualHanzi(
 
   // Surgical splice for what remains (primary path, or stragglers after retry).
   const spans = extractHanziSpans(text);
-  const stillDirty = findResidualSourceChars(langPair, text).length > 2;
+  const stillDirty = findResidualSourceChars(langPair, text).length > 0;
   if (stillDirty && spans.length > 0 && spans.every((s) => s.text.length <= LONG_SPAN_LIMIT)) {
     try {
       const targetLang = langPair.toLowerCase().endsWith("th") ? "Thai" : "English";
@@ -262,8 +262,8 @@ async function repairResidualHanzi(
         text = spliced;
         logs.push(
           createLog(
-            left > 2 ? "warn" : "success",
-            left > 2
+            left > 0 ? "warn" : "success",
+            left > 0
               ? `${chunkLabel} still has ${left} hanzi after span repair — keeping anyway.`
               : `${chunkLabel} hanzi spans repaired.`,
           ),

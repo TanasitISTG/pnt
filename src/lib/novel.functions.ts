@@ -633,7 +633,7 @@ export const getResidualHanziChapters = createServerFn({ method: "GET" })
       for (const ch of chapterRows) {
         if (ch.translatedContent) {
           const count = findResidualSourceChars(pair, ch.translatedContent).length;
-          if (count > 2) {
+          if (count > 0) {
             flagged.push({
               chapterId: ch.id,
               number: ch.number,
