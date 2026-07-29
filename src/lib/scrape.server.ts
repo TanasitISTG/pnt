@@ -40,133 +40,162 @@ export async function directFetch(url: string): Promise<string> {
   return res.text();
 }
 
-export async function scraperFetch(url: string, forceJsRender?: boolean): Promise<string> {
-  const apiKey = env.SCRAPER_API_KEY;
-  if (!apiKey) {
+// ---------------------------------------------------------------------------
+// Proxy providers (ZenRows / ScrapingBee / Firecrawl)
+// ---------------------------------------------------------------------------
+
+interface RenderOpts {
+  jsRender: string;
+  premiumProxy: string;
+}
+
+interface ProxyRequest {
+  url: string;
+  init?: RequestInit;
+  /** Redacted URL for logs (API keys stripped). */
+  logUrl?: string;
+}
+
+interface ProxyProviderSpec {
+  /** Display name used in logs and error messages. */
+  name: string;
+  apiKey: string | undefined;
+  /** Env var named in the missing-key error. */
+  missingKeyEnv: string;
+  buildRequest(url: string, renderOpts: RenderOpts, apiKey: string): ProxyRequest;
+  /** Defaults to res.text(). Throw SafeServerError for invalid payloads. */
+  parseResponse?: (res: Response) => Promise<string>;
+  /** Statuses that trigger one retry with js_render forced on (bot challenges). */
+  retryWithJsRenderStatuses?: number[];
+}
+
+async function parseErrorDetail(res: Response): Promise<string> {
+  try {
+    const errJson = await res.json();
+    return errJson.error || errJson.message || JSON.stringify(errJson);
+  } catch {
+    return res.statusText;
+  }
+}
+
+async function proxiedFetch(
+  spec: ProxyProviderSpec,
+  url: string,
+  forceJsRender?: boolean,
+): Promise<string> {
+  if (!spec.apiKey) {
     throw new SafeServerError(
-      "Scraping this site requires SCRAPER_API_KEY to be set in environment variables",
+      `Scraping this site requires ${spec.missingKeyEnv} to be set in environment variables`,
     );
   }
+  const apiKey = spec.apiKey;
 
+  // twkan requires js_render=true for Cloudflare challenge; biquge is static
+  // HTML so js_render=false prevents ad JS redirects.
   const source = findSource(url);
-  const baseUrl = env.SCRAPER_BASE || "https://api.zenrows.com/v1/";
-
-  // twkan requires js_render=true for Cloudflare challenge; biquge is static HTML so js_render=false prevents ad JS redirects
   const defaultJsRender = source.name === "twkan" ? "true" : "false";
   const jsRender = forceJsRender ? "true" : (env.SCRAPER_RENDER_JS ?? defaultJsRender);
   const premiumProxy = env.SCRAPER_PREMIUM_PROXY ?? "false";
 
-  const targetUrl = new URL(baseUrl);
-  targetUrl.searchParams.set("apikey", apiKey);
-  targetUrl.searchParams.set("url", url);
-  if (jsRender === "true") {
-    targetUrl.searchParams.set("js_render", "true");
-  }
-  if (premiumProxy === "true") {
-    targetUrl.searchParams.set("premium_proxy", "true");
-  }
+  const req = spec.buildRequest(url, { jsRender, premiumProxy }, apiKey);
 
-  log("info", "Executing scraperFetch via ZenRows", {
+  log("info", `Executing ${spec.name} fetch`, {
     url,
     jsRender,
     premiumProxy,
-    zenrowsUrl: targetUrl.toString().replace(apiKey, "HIDDEN_KEY"),
+    ...(req.logUrl ? { requestUrl: req.logUrl } : {}),
   });
 
-  const res = await fetch(targetUrl.toString(), {
+  const res = await fetch(req.url, {
+    ...req.init,
     signal: AbortSignal.timeout(SCRAPER_FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
-    let errorDetail = "";
-    try {
-      const errJson = await res.json();
-      errorDetail = errJson.error || errJson.message || JSON.stringify(errJson);
-    } catch {
-      errorDetail = res.statusText;
-    }
+    const errorDetail = await parseErrorDetail(res);
 
-    // If ZenRows returned 422 RESP001 or 5xx without JS rendering, retry once with JS rendering enabled
-    if ((res.status === 422 || res.status === 500) && !forceJsRender && jsRender !== "true") {
-      log("warn", `ZenRows returned HTTP ${res.status}, retrying with forceJsRender=true`, {
+    if (
+      spec.retryWithJsRenderStatuses?.includes(res.status) &&
+      !forceJsRender &&
+      jsRender !== "true"
+    ) {
+      log("warn", `${spec.name} returned HTTP ${res.status}, retrying with forceJsRender=true`, {
         url,
         error: errorDetail,
       });
-      return scraperFetch(url, true);
+      return proxiedFetch(spec, url, true);
     }
 
-    log("error", "ZenRows scrape fetch failed", { url, status: res.status, error: errorDetail });
-    throw new SafeServerError(`Scraper returned HTTP ${res.status}: ${errorDetail}`);
+    log("error", `${spec.name} scrape fetch failed`, {
+      url,
+      status: res.status,
+      error: errorDetail,
+    });
+    throw new SafeServerError(`${spec.name} returned HTTP ${res.status}: ${errorDetail}`, {
+      cause: res.status,
+    });
   }
 
-  const text = await res.text();
-  const pageTitleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text);
-  const pageTitle = pageTitleMatch ? pageTitleMatch[1].trim() : "(no title)";
+  return spec.parseResponse ? spec.parseResponse(res) : res.text();
+}
 
+const zenrowsSpec: ProxyProviderSpec = {
+  name: "ZenRows",
+  apiKey: env.SCRAPER_API_KEY,
+  missingKeyEnv: "SCRAPER_API_KEY",
+  retryWithJsRenderStatuses: [422, 500],
+  buildRequest(url, { jsRender, premiumProxy }, apiKey) {
+    const baseUrl = env.SCRAPER_BASE || "https://api.zenrows.com/v1/";
+    const targetUrl = new URL(baseUrl);
+    targetUrl.searchParams.set("apikey", apiKey);
+    targetUrl.searchParams.set("url", url);
+    if (jsRender === "true") {
+      targetUrl.searchParams.set("js_render", "true");
+    }
+    if (premiumProxy === "true") {
+      targetUrl.searchParams.set("premium_proxy", "true");
+    }
+    return {
+      url: targetUrl.toString(),
+      logUrl: targetUrl.toString().replace(apiKey, "HIDDEN_KEY"),
+    };
+  },
+};
+
+export async function scraperFetch(url: string, forceJsRender?: boolean): Promise<string> {
+  const text = await proxiedFetch(zenrowsSpec, url, forceJsRender);
+
+  const pageTitleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text);
   log("info", "ZenRows scrape fetch completed", {
     url,
-    status: res.status,
     length: text.length,
-    pageTitle,
+    pageTitle: pageTitleMatch ? pageTitleMatch[1].trim() : "(no title)",
     sample: text.slice(0, 300).replace(/\s+/g, " "),
   });
 
   return text;
 }
 
-export async function scrapingBeeFetch(url: string, forceJsRender?: boolean): Promise<string> {
-  const apiKey = env.SCRAPINGBEE_API_KEY;
-  if (!apiKey) {
-    throw new SafeServerError(
-      "Scraping this site requires SCRAPINGBEE_API_KEY to be set in environment variables",
-    );
-  }
-
-  const source = findSource(url);
-  const baseUrl = "https://app.scrapingbee.com/api/v1/";
-
-  const defaultJsRender = source.name === "twkan" ? "true" : "false";
-  const jsRender = forceJsRender ? "true" : (env.SCRAPER_RENDER_JS ?? defaultJsRender);
-  const premiumProxy = env.SCRAPER_PREMIUM_PROXY ?? "false";
-
-  const targetUrl = new URL(baseUrl);
-  targetUrl.searchParams.set("url", url);
-  targetUrl.searchParams.set("render_js", jsRender === "true" ? "true" : "false");
-  if (premiumProxy === "true") {
-    targetUrl.searchParams.set("premium_proxy", "true");
-  }
-
-  log("info", "Executing scrapingBeeFetch", {
-    url,
-    jsRender,
-    premiumProxy,
-  });
-
-  const res = await fetch(targetUrl.toString(), {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    signal: AbortSignal.timeout(SCRAPER_FETCH_TIMEOUT_MS),
-  });
-
-  if (!res.ok) {
-    let errorDetail = "";
-    try {
-      const errJson = await res.json();
-      errorDetail = errJson.error || errJson.message || JSON.stringify(errJson);
-    } catch {
-      errorDetail = res.statusText;
+const scrapingBeeSpec: ProxyProviderSpec = {
+  name: "ScrapingBee",
+  apiKey: env.SCRAPINGBEE_API_KEY,
+  missingKeyEnv: "SCRAPINGBEE_API_KEY",
+  buildRequest(url, { jsRender, premiumProxy }, apiKey) {
+    const targetUrl = new URL("https://app.scrapingbee.com/api/v1/");
+    targetUrl.searchParams.set("url", url);
+    targetUrl.searchParams.set("render_js", jsRender === "true" ? "true" : "false");
+    if (premiumProxy === "true") {
+      targetUrl.searchParams.set("premium_proxy", "true");
     }
+    return {
+      url: targetUrl.toString(),
+      init: { headers: { Authorization: `Bearer ${apiKey}` } },
+    };
+  },
+};
 
-    log("error", "ScrapingBee scrape fetch failed", {
-      url,
-      status: res.status,
-      error: errorDetail,
-    });
-    throw new SafeServerError(`ScrapingBee returned HTTP ${res.status}: ${errorDetail}`);
-  }
-
-  return res.text();
+export async function scrapingBeeFetch(url: string, forceJsRender?: boolean): Promise<string> {
+  return proxiedFetch(scrapingBeeSpec, url, forceJsRender);
 }
 
 const firecrawlResponseSchema = z.object({
@@ -179,54 +208,39 @@ const firecrawlResponseSchema = z.object({
   error: z.string().optional(),
 });
 
-export async function firecrawlFetch(url: string): Promise<string> {
-  const apiKey = env.FIRECRAWL_API_KEY;
-  if (!apiKey) {
-    throw new SafeServerError(
-      "Scraping this site requires FIRECRAWL_API_KEY to be set in environment variables",
-    );
-  }
-
-  log("info", "Executing firecrawlFetch", { url });
-
-  const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url,
-      formats: ["rawHtml"],
-      onlyMainContent: false,
-    }),
-    signal: AbortSignal.timeout(SCRAPER_FETCH_TIMEOUT_MS),
-  });
-
-  if (!res.ok) {
-    let errorDetail = "";
-    try {
-      const errJson = await res.json();
-      errorDetail = errJson.error || errJson.message || JSON.stringify(errJson);
-    } catch {
-      errorDetail = res.statusText;
+const firecrawlSpec: ProxyProviderSpec = {
+  name: "Firecrawl",
+  apiKey: env.FIRECRAWL_API_KEY,
+  missingKeyEnv: "FIRECRAWL_API_KEY",
+  buildRequest(url, _renderOpts, apiKey) {
+    return {
+      url: "https://api.firecrawl.dev/v2/scrape",
+      init: {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url, formats: ["rawHtml"], onlyMainContent: false }),
+      },
+    };
+  },
+  async parseResponse(res) {
+    const json = await res.json();
+    const parsed = firecrawlResponseSchema.safeParse(json);
+    if (!parsed.success || !parsed.data.data?.rawHtml) {
+      const errMessage = parsed.success
+        ? parsed.data?.error || "Missing rawHtml in response data"
+        : "Invalid Firecrawl response payload";
+      log("error", "Firecrawl response validation failed", { error: errMessage });
+      throw new SafeServerError(`Firecrawl scrape failed: ${errMessage}`);
     }
+    return parsed.data.data.rawHtml;
+  },
+};
 
-    log("error", "Firecrawl scrape fetch failed", { url, status: res.status, error: errorDetail });
-    throw new SafeServerError(`Firecrawl returned HTTP ${res.status}: ${errorDetail}`);
-  }
-
-  const json = await res.json();
-  const parsed = firecrawlResponseSchema.safeParse(json);
-  if (!parsed.success || !parsed.data.data?.rawHtml) {
-    const errMessage = parsed.success
-      ? parsed.data?.error || "Missing rawHtml in response data"
-      : "Invalid Firecrawl response payload";
-    log("error", "Firecrawl response validation failed", { url, error: errMessage });
-    throw new SafeServerError(`Firecrawl scrape failed: ${errMessage}`);
-  }
-
-  return parsed.data.data.rawHtml;
+export async function firecrawlFetch(url: string): Promise<string> {
+  return proxiedFetch(firecrawlSpec, url);
 }
 
 export async function fetchHtml(url: string, provider: ScrapeProvider = "auto"): Promise<string> {
