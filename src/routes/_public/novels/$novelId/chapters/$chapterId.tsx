@@ -4,12 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
-import {
-  getChapter,
-  getNovel,
-  listChapters,
-  updateChapterTranslation,
-} from "@/lib/novel.functions";
+import { getNovel } from "@/lib/novel.functions";
+import { getChapter, listChapters, updateChapterTranslation } from "@/lib/chapter.functions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { QueryErrorState } from "@/components/query-error-state";
 import { useTranslationJob } from "@/lib/translation/use-translation-job";

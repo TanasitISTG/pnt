@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createChapter } from "@/lib/novel.functions";
+import { createChapter } from "@/lib/chapter.functions";
 import { createChapterSchema, type CreateChapterInput } from "@/lib/novel.schemas";
 import { ScrapeImportSection } from "@/components/scrape-import-section";
 

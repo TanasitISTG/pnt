@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { deleteNovel } from "@/lib/novel.functions";
 import {
-  deleteNovel,
   deleteChapter,
   setChapterPublished,
   setAllChaptersPublished,
-  translateMissingTitles,
-} from "@/lib/novel.functions";
+} from "@/lib/chapter.functions";
+import { translateMissingTitles } from "@/lib/chapter-ops.functions";
 
 export function useNovelDetailMutations(novelId: string) {
   const queryClient = useQueryClient();

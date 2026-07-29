@@ -5,6 +5,9 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { log } from "@/lib/log";
 
+// Guests hit read endpoints without a session; per-IP per-minute cap for scraping control.
+export const GUEST_READ_LIMIT = 60;
+
 export class RateLimitError extends Error {
   constructor() {
     super("Too many requests");

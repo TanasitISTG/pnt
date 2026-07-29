@@ -17,7 +17,9 @@ import { useNovelExport } from "@/components/use-novel-export";
 import { getReaderProgress } from "@/lib/reader-progress";
 import type { ReaderProgress } from "@/lib/reader.types";
 
-import { getNovel, listChapters, getResidualHanziChapters } from "@/lib/novel.functions";
+import { getNovel } from "@/lib/novel.functions";
+import { listChapters } from "@/lib/chapter.functions";
+import { getResidualHanziChapters } from "@/lib/chapter-ops.functions";
 import { getGlossaryStats } from "@/lib/glossary.functions";
 import { getNovelCosts } from "@/lib/translation/translation.functions";
 import { Button } from "@/components/ui/button";

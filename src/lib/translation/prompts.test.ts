@@ -5,6 +5,8 @@ import {
   buildSummaryPrompt,
   buildTitlePrompt,
   findResidualSourceChars,
+  RESIDUAL_CJK_CLASS,
+  RESIDUAL_CJK_SQL_RE,
 } from "./prompts";
 
 describe("prompts module", () => {
@@ -256,5 +258,28 @@ describe("prompts module", () => {
     const prompt = buildTitlePrompt("zh->th");
     expect(prompt).toContain("Chinese to Thai");
     expect(prompt).toContain("ONLY the translated title");
+  });
+
+  // -- Shared residual CJK class (JS scanner ↔ SQL pre-filter) ---------------
+
+  it("RESIDUAL_CJK_SQL_RE is a bracket class built from the shared char class", () => {
+    expect(RESIDUAL_CJK_SQL_RE).toBe(`[${RESIDUAL_CJK_CLASS}]`);
+  });
+
+  it("SQL class matches exactly what the JS scanner flags", () => {
+    // The DB pre-filter and the JS counter must agree, or the badge would
+    // miss chapters the repair pass flags (or vice versa).
+    const sqlRe = new RegExp(RESIDUAL_CJK_SQL_RE);
+    const samples = [
+      "ภาคที่หนึ่ง 第一章 เข้าสู่", // unified ideographs in Thai prose
+      "㐀", // ext-A
+      "豈", // compat ideograph
+      "clean English text",
+      "ข้อความไทยล้วน", // pure Thai
+      "",
+    ];
+    for (const s of samples) {
+      expect(sqlRe.test(s)).toBe(findResidualSourceChars("zh->th", s).length > 0);
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getChapter, updateChapterRaw } from "@/lib/novel.functions";
+import { getChapter, updateChapterRaw } from "@/lib/chapter.functions";
 import { updateChapterSchema, type UpdateChapterInput } from "@/lib/novel.schemas";
 import type { ChapterRow } from "@/components/chapter-table";
 
