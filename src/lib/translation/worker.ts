@@ -13,7 +13,7 @@ import {
 } from "./paragraphs";
 import { extractHanziSpans, spliceSpans } from "./residual-repair";
 import { createLog } from "./translation.functions";
-import type { ChunkProgress, LogEntry } from "./translation.types";
+import type { ChunkProgress, LogEntry, SlimChunkProgress } from "./translation.types";
 import { log } from "@/lib/log";
 import {
   loadJob,
@@ -419,6 +419,24 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
   });
 }
 
+// Done jobs are not retryable (retryTranslationJob only accepts error/cancelled),
+// so drop the full source/translated payloads — 2× chapter text per job row —
+// and keep display metadata. Cancelled/errored jobs keep payloads: retry resumes
+// from chunksJson. UI reads the slim shape via getTranslationJobStatus.
+// ponytail: superseded cancelled jobs still retain payloads — delete-on-supersede
+// deferred (an in-flight run of a deleted row throws instead of exiting cleanly).
+function stripChunkPayloads(chunkList: ChunkProgress[]): SlimChunkProgress[] {
+  return chunkList.map((c) => ({
+    index: c.index,
+    textLength: c.text?.length ?? 0,
+    hasTranslation: !!c.translation,
+    promptTokens: c.promptTokens,
+    completionTokens: c.completionTokens,
+    latencyMs: c.latencyMs,
+    ...(c.error ? { error: c.error } : {}),
+  }));
+}
+
 export async function finalizeJob(jobId: string): Promise<void> {
   log("info", "step transition", { jobId, step: "finalize" });
   const row = await loadJob(jobId);
@@ -483,7 +501,7 @@ export async function finalizeJob(jobId: string): Promise<void> {
 
   await saveJob(job.id, {
     status: "done",
-    chunksJson: JSON.stringify(chunkList),
+    chunksJson: JSON.stringify(stripChunkPayloads(chunkList)),
     logsJson: JSON.stringify(logs),
     usageJson: JSON.stringify({ totalPromptTokens, totalCompletionTokens }),
   });

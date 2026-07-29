@@ -208,8 +208,20 @@ describe("translation worker steps", () => {
         status: "running",
         doneChunks: 2,
         chunksJson: JSON.stringify([
-          { text: "c1", translation: "Translated 1", promptTokens: 10, completionTokens: 20 },
-          { text: "c2", translation: "Translated 2", promptTokens: 10, completionTokens: 20 },
+          {
+            index: 0,
+            text: "c1",
+            translation: "Translated 1",
+            promptTokens: 10,
+            completionTokens: 20,
+          },
+          {
+            index: 1,
+            text: "c2",
+            translation: "Translated 2",
+            promptTokens: 10,
+            completionTokens: 20,
+          },
         ]),
       },
       chapter: mockChapter,
@@ -246,6 +258,22 @@ describe("translation worker steps", () => {
         status: "done",
       }),
     );
+
+    // Done jobs must not retain full chunk payloads (2× chapter text per row)
+    const doneCall = vi
+      .mocked(jobStore.saveJob)
+      .mock.calls.find(([, patch]) => patch.status === "done");
+    const savedChunks = JSON.parse(doneCall![1].chunksJson as string);
+    expect(savedChunks).toHaveLength(2);
+    expect(savedChunks[0]).not.toHaveProperty("text");
+    expect(savedChunks[0]).not.toHaveProperty("translation");
+    expect(savedChunks[0]).toMatchObject({
+      index: 0,
+      textLength: 2,
+      hasTranslation: true,
+      promptTokens: 10,
+      completionTokens: 20,
+    });
   });
 
   it("8. finalizeJob cancelled status skips finalization", async () => {

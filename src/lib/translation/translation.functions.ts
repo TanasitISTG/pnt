@@ -456,11 +456,15 @@ export const getTranslationJobStatus = createServerFn({ method: "GET" })
       }
 
       const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
-      const rawChunks: ChunkProgress[] = JSON.parse(row.job.chunksJson || "[]");
+      // Union: active/errored/cancelled jobs carry full ChunkProgress payloads
+      // (needed for resume); done jobs are stripped to SlimChunkProgress.
+      const rawChunks: (ChunkProgress & Partial<SlimChunkProgress>)[] = JSON.parse(
+        row.job.chunksJson || "[]",
+      );
       const chunks: SlimChunkProgress[] = rawChunks.map((c) => ({
         index: c.index,
-        textLength: c.text?.length ?? 0,
-        hasTranslation: !!c.translation,
+        textLength: c.textLength ?? c.text?.length ?? 0,
+        hasTranslation: c.hasTranslation ?? !!c.translation,
         promptTokens: c.promptTokens,
         completionTokens: c.completionTokens,
         latencyMs: c.latencyMs,
