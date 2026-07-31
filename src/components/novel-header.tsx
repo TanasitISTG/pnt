@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { NovelCover } from "@/components/novel-cover";
+import { PublishMenu } from "@/components/publish-menu";
 import type { ChapterRow } from "@/components/chapter-table";
 import { formatCost, formatTokens } from "@/lib/utils";
 import type { getNovel } from "@/lib/novel.functions";
@@ -40,6 +41,8 @@ export interface NovelHeaderProps {
   lastReadChapter: ChapterRow | null;
   firstChapter: ChapterRow | null;
   exporting: "txt" | "epub" | null;
+  publishingNovel: boolean;
+  onPublishNovel: (publishedAt: Date | null) => void;
   onExportTxt: () => void;
   onExportEpub: () => void;
   onDeleteNovel: () => void;
@@ -55,6 +58,8 @@ export function NovelHeader({
   lastReadChapter,
   firstChapter,
   exporting,
+  publishingNovel,
+  onPublishNovel,
   onExportTxt,
   onExportEpub,
   onDeleteNovel,
@@ -74,6 +79,12 @@ export function NovelHeader({
         </Button>
         {isAdmin && (
           <div className="flex gap-2">
+            <PublishMenu
+              publishedAt={novel.publishedAt}
+              pending={publishingNovel}
+              onChange={onPublishNovel}
+              ariaLabel="Novel publishing options"
+            />
             <Button
               variant="outline"
               size="sm"

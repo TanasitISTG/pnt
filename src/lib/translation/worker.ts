@@ -13,16 +13,19 @@ import {
 } from "./paragraphs";
 import { extractHanziSpans, spliceSpans } from "./residual-repair";
 import { createLog } from "./log-entry";
-import type { ChunkProgress, LogEntry, SlimChunkProgress } from "./translation.types";
+import type { ChunkProgress, LogEntry } from "./translation.types";
 import { log } from "@/lib/log";
 import {
   beginJob,
+  completeChunk,
   completeJob,
   failActiveJob,
   loadJob,
+  loadJobChunk,
+  loadJobChunks,
   loadApprovedTermsForContext,
   loadPrevChapterForContext,
-  saveJobProgress,
+  saveChunkFailure,
 } from "./job-store";
 import { canRunJob, isCompletedChunk, isNextChunk } from "./job-state";
 import { generateSummaryArtifacts } from "./finalize-summary";
@@ -39,8 +42,7 @@ export async function initJob(jobId: string, generation: number) {
     return { skip: true as const, doneChunks: 0, totalChunks: 0 };
   }
   const { job } = row;
-  const chunkList: ChunkProgress[] = JSON.parse(job.chunksJson || "[]");
-  return { skip: false as const, doneChunks: job.doneChunks, totalChunks: chunkList.length };
+  return { skip: false as const, doneChunks: job.doneChunks, totalChunks: job.totalChunks };
 }
 
 interface TranslatePieceResult {
@@ -263,25 +265,23 @@ async function repairResidualHanzi(
 
 export async function translateChunk(jobId: string, i: number, generation: number): Promise<void> {
   log("info", "step transition", { jobId, step: "translateChunk", chunk: i });
-  const row = await loadJob(jobId);
+  const row = await loadJobChunk(jobId, i);
   if (!row) throw new Error(`Job ${jobId} not found`);
-  const { job, chapter, novel } = row;
+  const { job, chapter, novel, chunk: currentChunk, previousChunk } = row;
 
   if (job.status !== "running" || !canRunJob(job, chapter, generation)) return;
   if (isCompletedChunk(job, i)) return;
   if (!isNextChunk(job, i)) throw new Error(`Chunk ${i} is out of sequence for job ${jobId}`);
+  if (!currentChunk) throw new Error(`Chunk ${i} missing in job ${jobId}`);
 
   const providerConfig = await createProviderClient(novel.userId);
 
   const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
-  const chunkList: ChunkProgress[] = JSON.parse(job.chunksJson || "[]");
-  const currentChunk = chunkList[i];
-  if (!currentChunk) throw new Error(`Chunk ${i} missing in job ${jobId}`);
 
   logs.push(
     createLog(
       "info",
-      `Translating chunk ${i + 1}/${chunkList.length} (${currentChunk.text.length.toLocaleString()} chars)...`,
+      `Translating chunk ${i + 1}/${job.totalChunks} (${currentChunk.sourceText.length.toLocaleString()} chars)...`,
     ),
   );
 
@@ -295,13 +295,13 @@ export async function translateChunk(jobId: string, i: number, generation: numbe
   const previousSummary = novel.storySummary || prevChapter?.summary || null;
   const tailLen = novel.contextTailLength || 500;
   let previousChunkTail: string | null = null;
-  if (i > 0 && chunkList[i - 1]?.translation) {
-    previousChunkTail = chunkList[i - 1].translation!.slice(-tailLen);
+  if (i > 0 && previousChunk?.translation) {
+    previousChunkTail = previousChunk.translation.slice(-tailLen);
   } else if (i === 0 && prevChapter?.translatedContent) {
     previousChunkTail = prevChapter.translatedContent.slice(-tailLen);
   }
 
-  const matchedTerms = filterGlossaryForChunk(terms, currentChunk.text);
+  const matchedTerms = filterGlossaryForChunk(terms, currentChunk.sourceText);
   const glossaryBlock = formatGlossaryBlock(matchedTerms);
   if (matchedTerms.length > 0) {
     logs.push(
@@ -320,7 +320,7 @@ export async function translateChunk(jobId: string, i: number, generation: numbe
   );
 
   const langPair = `${novel.sourceLang}->${novel.targetLang}`;
-  const chunkLabel = `Chunk ${i + 1}/${chunkList.length}`;
+  const chunkLabel = `Chunk ${i + 1}/${job.totalChunks}`;
 
   async function translatePieceWithAutoSplit(
     text: string,
@@ -370,18 +370,12 @@ export async function translateChunk(jobId: string, i: number, generation: numbe
   let result: TranslatePieceResult;
 
   try {
-    result = await translatePieceWithAutoSplit(currentChunk.text, previousChunkTail, 0);
+    result = await translatePieceWithAutoSplit(currentChunk.sourceText, previousChunkTail, 0);
   } catch (err) {
     // Record which chunk failed for the UI, then rethrow — Inngest owns retries.
-    currentChunk.error = err instanceof Error ? err.message : "API Error";
-    chunkList[i] = currentChunk;
-    logs.push(
-      createLog("warn", `Chunk ${i + 1}/${chunkList.length} failed: ${currentChunk.error}`),
-    );
-    const saved = await saveJobProgress(job.id, generation, i, {
-      chunksJson: JSON.stringify(chunkList),
-      logsJson: JSON.stringify(logs),
-    });
+    const error = err instanceof Error ? err.message : "API Error";
+    logs.push(createLog("warn", `Chunk ${i + 1}/${job.totalChunks} failed: ${error}`));
+    const saved = await saveChunkFailure(job.id, generation, i, error, JSON.stringify(logs));
     if (!saved) return;
     throw err;
   }
@@ -391,43 +385,20 @@ export async function translateChunk(jobId: string, i: number, generation: numbe
   const promptTokens = result.promptTokens;
   const completionTokens = result.completionTokens;
 
-  currentChunk.translation = translation;
-  currentChunk.promptTokens = promptTokens;
-  currentChunk.completionTokens = completionTokens;
-  currentChunk.latencyMs = elapsedMs;
-  delete currentChunk.error;
-  chunkList[i] = currentChunk;
-
   logs.push(
     createLog(
       "success",
-      `Chunk ${i + 1}/${chunkList.length} completed in ${(elapsedMs / 1000).toFixed(1)}s (tokens: ${promptTokens} prompt + ${completionTokens} completion).`,
+      `Chunk ${i + 1}/${job.totalChunks} completed in ${(elapsedMs / 1000).toFixed(1)}s (tokens: ${promptTokens} prompt + ${completionTokens} completion).`,
     ),
   );
 
-  await saveJobProgress(job.id, generation, i, {
-    doneChunks: i + 1,
-    chunksJson: JSON.stringify(chunkList),
+  await completeChunk(job.id, generation, i, {
+    translation,
+    promptTokens,
+    completionTokens,
+    latencyMs: elapsedMs,
     logsJson: JSON.stringify(logs),
   });
-}
-
-// Done jobs are not retryable (retryTranslationJob only accepts error/cancelled),
-// so drop the full source/translated payloads — 2× chapter text per job row —
-// and keep display metadata. Cancelled/errored jobs keep payloads: retry resumes
-// from chunksJson. UI reads the slim shape via getTranslationJobStatus.
-// ponytail: superseded cancelled jobs still retain payloads — delete-on-supersede
-// deferred (an in-flight run of a deleted row throws instead of exiting cleanly).
-function stripChunkPayloads(chunkList: ChunkProgress[]): SlimChunkProgress[] {
-  return chunkList.map((c) => ({
-    index: c.index,
-    textLength: c.text?.length ?? 0,
-    hasTranslation: !!c.translation,
-    promptTokens: c.promptTokens,
-    completionTokens: c.completionTokens,
-    latencyMs: c.latencyMs,
-    ...(c.error ? { error: c.error } : {}),
-  }));
 }
 
 export async function finalizeJob(jobId: string, generation: number): Promise<void> {
@@ -441,12 +412,21 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
   const providerConfig = await createProviderClient(novel.userId);
 
   const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
-  const chunkList: ChunkProgress[] = JSON.parse(job.chunksJson || "[]");
-  if (job.doneChunks < chunkList.length) {
+  const chunkRows = await loadJobChunks(jobId);
+  if (job.doneChunks < chunkRows.length || chunkRows.length !== job.totalChunks) {
     throw new Error(
-      `Job ${jobId} finalize called with ${job.doneChunks}/${chunkList.length} chunks`,
+      `Job ${jobId} finalize called with ${job.doneChunks}/${job.totalChunks} chunks`,
     );
   }
+  const chunkList: ChunkProgress[] = chunkRows.map((chunk) => ({
+    index: chunk.index,
+    text: chunk.sourceText,
+    translation: chunk.translation ?? undefined,
+    promptTokens: chunk.promptTokens ?? undefined,
+    completionTokens: chunk.completionTokens ?? undefined,
+    latencyMs: chunk.latencyMs ?? undefined,
+    error: chunk.error ?? undefined,
+  }));
 
   logs.push(createLog("info", "All chunks translated. Assembling chapter..."));
 
@@ -495,7 +475,6 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
     chapterSummary: summaryRes.freshSummary,
     storySummary: summaryRes.updatedStorySummary,
     glossaryRows: glossaryRes.rowsToInsert,
-    chunksJson: JSON.stringify(stripChunkPayloads(chunkList)),
     logsJson: JSON.stringify(logs),
     usageJson: JSON.stringify({ totalPromptTokens, totalCompletionTokens }),
   });

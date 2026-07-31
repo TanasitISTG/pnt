@@ -3,7 +3,8 @@ import "@tanstack/react-start/server-only";
 import { z } from "zod";
 
 import { env } from "@/lib/env";
-import { findSource, parseChapter, assertPublicHost } from "@/lib/scrape";
+import { findSource, parseChapter } from "@/lib/scrape";
+import { assertPublicHost } from "@/lib/scrape/network-policy.server";
 import type { ScrapedChapter, ScrapeProvider } from "@/lib/scrape.types";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";

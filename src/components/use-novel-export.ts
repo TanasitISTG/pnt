@@ -1,16 +1,21 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { exportNovelEpub, exportNovelTxt } from "@/lib/export.functions";
-import { downloadBase64, downloadText } from "@/lib/download";
+import { downloadUrl } from "@/lib/download";
 
 export function useNovelExport(novelId: string) {
   const [exporting, setExporting] = useState<"txt" | "epub" | null>(null);
 
-  const handleExportTxt = async () => {
-    setExporting("txt");
+  const exportNovel = async (format: "txt" | "epub") => {
+    setExporting(format);
     try {
-      const res = await exportNovelTxt({ data: { novelId } });
-      downloadText(res.filename, res.content);
+      const url = `/api/exports/${encodeURIComponent(novelId)}/${format}`;
+      const response = await fetch(url, { method: "HEAD" });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 404 ? "No translated chapters to export yet" : "Export failed",
+        );
+      }
+      downloadUrl(url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -18,17 +23,8 @@ export function useNovelExport(novelId: string) {
     }
   };
 
-  const handleExportEpub = async () => {
-    setExporting("epub");
-    try {
-      const res = await exportNovelEpub({ data: { novelId } });
-      downloadBase64(res.filename, res.dataBase64, "application/epub+zip");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Export failed");
-    } finally {
-      setExporting(null);
-    }
-  };
+  const handleExportTxt = () => exportNovel("txt");
+  const handleExportEpub = () => exportNovel("epub");
 
   return { exporting, handleExportTxt, handleExportEpub };
 }

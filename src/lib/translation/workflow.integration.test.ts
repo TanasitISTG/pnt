@@ -1,17 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
-
-vi.mock("./outbox", () => ({
-  dispatchTranslationOutboxEventBestEffort: vi.fn().mockResolvedValue(undefined),
-}));
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
+let completeChunk: typeof import("./job-store").completeChunk;
 let completeJob: typeof import("./job-store").completeJob;
 let enqueueTranslationJob: typeof import("./translation.functions").enqueueTranslationJob;
+const skipEagerDispatch = async () => {};
 
 async function seedChapter(rawContent = "First paragraph.\n\nSecond paragraph.") {
   const userId = `user-${randomUUID()}`;
@@ -49,7 +47,7 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     process.env.INNGEST_DEV ||= "1";
 
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
-    ({ completeJob } = await import("./job-store"));
+    ({ completeChunk, completeJob } = await import("./job-store"));
     ({ enqueueTranslationJob } = await import("./translation.functions"));
   });
 
@@ -82,8 +80,8 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     try {
       const provider = { model: "integration-model" } as never;
       const results = await Promise.all([
-        enqueueTranslationJob(fixture.userId, fixture.chapterId, provider),
-        enqueueTranslationJob(fixture.userId, fixture.chapterId, provider),
+        enqueueTranslationJob(fixture.userId, fixture.chapterId, provider, skipEagerDispatch),
+        enqueueTranslationJob(fixture.userId, fixture.chapterId, provider, skipEagerDispatch),
       ]);
 
       const jobs = await sql<{ id: string; status: string; generation: number }[]>`
@@ -150,7 +148,6 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
               status: "approved",
             },
           ],
-          chunksJson: "[]",
           logsJson: "[]",
           usageJson: "{}",
         }),
@@ -168,6 +165,147 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
       expect(chapter.translatedContent).toBeNull();
       expect(novel.storySummary).toBeNull();
       expect(terms).toHaveLength(0);
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("rejects cancel-during-finalize without writing artifacts", async () => {
+    const fixture = await seedChapter();
+    const jobId = `job-${randomUUID()}`;
+    try {
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation",
+          "total_chunks", "done_chunks"
+        ) VALUES (${jobId}, ${fixture.chapterId}, 'cancelled', 1, 1, 1, 1)
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET "active_translation_job_id" = NULL, "translation_generation" = 1, "status" = 'raw'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+
+      await expect(
+        completeJob({
+          jobId,
+          generation: 1,
+          fullTranslation: "Cancelled translation",
+          storySummary: "Cancelled summary",
+          glossaryRows: [],
+          logsJson: "[]",
+          usageJson: "{}",
+        }),
+      ).resolves.toBe(false);
+
+      const [chapter] = await sql<{ translatedContent: string | null }[]>`
+        SELECT "translated_content" AS "translatedContent" FROM "chapters"
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      expect(chapter.translatedContent).toBeNull();
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("rejects replacement-during-finalize and preserves the replacement owner", async () => {
+    const fixture = await seedChapter();
+    const staleJobId = `job-${randomUUID()}`;
+    const replacementJobId = `job-${randomUUID()}`;
+    try {
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation",
+          "total_chunks", "done_chunks"
+        ) VALUES (${staleJobId}, ${fixture.chapterId}, 'cancelled', 1, 1, 1, 1)
+      `;
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation",
+          "total_chunks", "done_chunks"
+        ) VALUES (${replacementJobId}, ${fixture.chapterId}, 'running', 1, 2, 1, 0)
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET "active_translation_job_id" = ${replacementJobId},
+            "translation_generation" = 2, "status" = 'translating'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+
+      await expect(
+        completeJob({
+          jobId: staleJobId,
+          generation: 1,
+          fullTranslation: "Stale replacement",
+          storySummary: "Stale summary",
+          glossaryRows: [],
+          logsJson: "[]",
+          usageJson: "{}",
+        }),
+      ).resolves.toBe(false);
+
+      const [chapter] = await sql<
+        { translatedContent: string | null; activeJobId: string | null }[]
+      >`
+        SELECT "translated_content" AS "translatedContent",
+               "active_translation_job_id" AS "activeJobId"
+        FROM "chapters" WHERE "id" = ${fixture.chapterId}
+      `;
+      expect(chapter).toEqual({ translatedContent: null, activeJobId: replacementJobId });
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("persists one completed chunk and advances the cursor atomically", async () => {
+    const fixture = await seedChapter("One chunk only.");
+    const jobId = `job-${randomUUID()}`;
+    try {
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation",
+          "total_chunks", "done_chunks"
+        ) VALUES (${jobId}, ${fixture.chapterId}, 'running', 1, 1, 1, 0)
+      `;
+      await sql`
+        INSERT INTO "translation_job_chunks" ("job_id", "chunk_index", "source_text", "text_length")
+        VALUES (${jobId}, 0, 'One chunk only.', 15)
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET "active_translation_job_id" = ${jobId}, "translation_generation" = 1,
+            "status" = 'translating'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+
+      await expect(
+        completeChunk(jobId, 1, 0, {
+          translation: "Translated once.",
+          promptTokens: 4,
+          completionTokens: 3,
+          latencyMs: 20,
+          logsJson: "[]",
+        }),
+      ).resolves.toBe(true);
+      await expect(
+        completeChunk(jobId, 1, 0, {
+          translation: "Duplicate write.",
+          promptTokens: 9,
+          completionTokens: 9,
+          latencyMs: 99,
+          logsJson: "[]",
+        }),
+      ).resolves.toBe(false);
+
+      const [job] = await sql<{ doneChunks: number }[]>`
+        SELECT "done_chunks" AS "doneChunks" FROM "translation_jobs" WHERE "id" = ${jobId}
+      `;
+      const [chunk] = await sql<{ translation: string | null }[]>`
+        SELECT "translation" FROM "translation_job_chunks"
+        WHERE "job_id" = ${jobId} AND "chunk_index" = 0
+      `;
+      expect(job.doneChunks).toBe(1);
+      expect(chunk.translation).toBe("Translated once.");
     } finally {
       await deleteFixture(fixture.userId);
     }

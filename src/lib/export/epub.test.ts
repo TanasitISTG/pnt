@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 
-import { buildEpub } from "./epub";
+import { buildEpub, createEpubStream } from "./epub";
 
 const META = {
   title: "Test Novel <&>",
@@ -23,6 +23,27 @@ describe("buildEpub", () => {
   it("has mimetype first with the exact required content", () => {
     expect(names[0]).toBe("mimetype");
     expect(strFromU8(entries["mimetype"])).toBe("application/epub+zip");
+  });
+
+  describe("createEpubStream", () => {
+    it("streams a valid archive without a base64 copy", async () => {
+      async function* chapters() {
+        for (const chapter of CHAPTERS) yield chapter;
+      }
+
+      const bytes = new Uint8Array(
+        await new Response(
+          createEpubStream(
+            META,
+            CHAPTERS.map((chapter) => chapter.title),
+            chapters(),
+          ),
+        ).arrayBuffer(),
+      );
+      const streamedEntries = unzipSync(bytes);
+      expect(strFromU8(streamedEntries["mimetype"])).toBe("application/epub+zip");
+      expect(strFromU8(entries["OEBPS/chapter-2.xhtml"])).toContain("Only para.");
+    });
   });
 
   it("contains container, opf, nav, and one xhtml per chapter", () => {

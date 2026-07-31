@@ -1,9 +1,15 @@
 import "@tanstack/react-start/server-only";
 
-import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { chapters, glossaryTerms, novels, translationJobs } from "@/lib/db/schema";
+import {
+  chapters,
+  glossaryTerms,
+  novels,
+  translationJobChunks,
+  translationJobs,
+} from "@/lib/db/schema";
 import { canRunJob } from "./job-state";
 
 export async function loadJob(jobId: string) {
@@ -15,6 +21,34 @@ export async function loadJob(jobId: string) {
     .where(eq(translationJobs.id, jobId))
     .limit(1);
   return row ?? null;
+}
+
+export async function loadJobChunk(jobId: string, index: number) {
+  const row = await loadJob(jobId);
+  if (!row) return null;
+  const chunks = await db
+    .select()
+    .from(translationJobChunks)
+    .where(
+      and(
+        eq(translationJobChunks.jobId, jobId),
+        inArray(translationJobChunks.index, index > 0 ? [index - 1, index] : [index]),
+      ),
+    )
+    .orderBy(asc(translationJobChunks.index));
+  return {
+    ...row,
+    chunk: chunks.find((chunk) => chunk.index === index) ?? null,
+    previousChunk: chunks.find((chunk) => chunk.index === index - 1) ?? null,
+  };
+}
+
+export async function loadJobChunks(jobId: string) {
+  return db
+    .select()
+    .from(translationJobChunks)
+    .where(eq(translationJobChunks.jobId, jobId))
+    .orderBy(asc(translationJobChunks.index));
 }
 
 export async function beginJob(jobId: string, generation: number) {
@@ -66,43 +100,98 @@ export async function beginJob(jobId: string, generation: number) {
   });
 }
 
-export async function saveJobProgress(
+async function lockRunnableJob(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   jobId: string,
   generation: number,
   expectedDoneChunks: number,
-  patch: Partial<typeof translationJobs.$inferInsert>,
+) {
+  const [row] = await tx
+    .select({ job: translationJobs, chapter: chapters })
+    .from(translationJobs)
+    .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+    .where(eq(translationJobs.id, jobId))
+    .limit(1)
+    .for("update");
+
+  if (
+    !row ||
+    row.job.status !== "running" ||
+    row.job.doneChunks !== expectedDoneChunks ||
+    !canRunJob(row.job, row.chapter, generation)
+  ) {
+    return null;
+  }
+  return row;
+}
+
+export async function saveChunkFailure(
+  jobId: string,
+  generation: number,
+  index: number,
+  error: string,
+  logsJson: string,
 ) {
   return db.transaction(async (tx) => {
-    const [row] = await tx
-      .select({ job: translationJobs, chapter: chapters })
-      .from(translationJobs)
-      .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-      .where(eq(translationJobs.id, jobId))
-      .limit(1)
-      .for("update");
+    const row = await lockRunnableJob(tx, jobId, generation, index);
+    if (!row) return false;
+    await tx
+      .update(translationJobChunks)
+      .set({ error })
+      .where(and(eq(translationJobChunks.jobId, jobId), eq(translationJobChunks.index, index)));
+    await tx
+      .update(translationJobs)
+      .set({ logsJson, updatedAt: new Date() })
+      .where(eq(translationJobs.id, jobId));
+    return true;
+  });
+}
 
-    if (
-      !row ||
-      row.job.status !== "running" ||
-      row.job.doneChunks !== expectedDoneChunks ||
-      !canRunJob(row.job, row.chapter, generation)
-    ) {
-      return false;
-    }
+export async function completeChunk(
+  jobId: string,
+  generation: number,
+  index: number,
+  result: {
+    translation: string;
+    promptTokens: number;
+    completionTokens: number;
+    latencyMs: number;
+    logsJson: string;
+  },
+) {
+  return db.transaction(async (tx) => {
+    const row = await lockRunnableJob(tx, jobId, generation, index);
+    if (!row) return false;
+    const chunkUpdated = await tx
+      .update(translationJobChunks)
+      .set({
+        translation: result.translation,
+        promptTokens: result.promptTokens,
+        completionTokens: result.completionTokens,
+        latencyMs: result.latencyMs,
+        error: null,
+        completedAt: new Date(),
+      })
+      .where(and(eq(translationJobChunks.jobId, jobId), eq(translationJobChunks.index, index)))
+      .returning({ jobId: translationJobChunks.jobId });
+    if (chunkUpdated.length !== 1) throw new Error(`Chunk ${index} missing in job ${jobId}`);
 
     const updated = await tx
       .update(translationJobs)
-      .set({ ...patch, updatedAt: new Date() })
+      .set({ doneChunks: index + 1, logsJson: result.logsJson, updatedAt: new Date() })
       .where(
         and(
           eq(translationJobs.id, jobId),
           eq(translationJobs.status, "running"),
           eq(translationJobs.generation, generation),
-          eq(translationJobs.doneChunks, expectedDoneChunks),
+          eq(translationJobs.doneChunks, index),
         ),
       )
       .returning({ id: translationJobs.id });
-    return updated.length === 1;
+    if (updated.length !== 1) {
+      throw new Error(`Job ${jobId} lost ownership while completing chunk ${index}`);
+    }
+    return true;
   });
 }
 
@@ -114,7 +203,6 @@ export interface CompleteJobInput {
   chapterSummary?: string;
   storySummary?: string;
   glossaryRows: (typeof glossaryTerms.$inferInsert)[];
-  chunksJson: string;
   logsJson: string;
   usageJson: string;
 }
@@ -179,7 +267,6 @@ export async function completeJob(input: CompleteJobInput) {
       .update(translationJobs)
       .set({
         status: "done",
-        chunksJson: input.chunksJson,
         logsJson: input.logsJson,
         usageJson: input.usageJson,
         updatedAt: new Date(),

@@ -19,14 +19,4 @@ describe("translation batch query predicates", () => {
   it("returns totalChunks from startTranslationJob", () => {
     expect(source).toContain("return { jobId: queued.jobId, totalChunks: queued.totalChunks };");
   });
-
-  it("returns queued and skipped arrays from startTranslationJobs", () => {
-    expect(source).toContain("return { queued, skipped };");
-  });
-
-  it("enqueues batch jobs with bounded concurrency", () => {
-    expect(source).toContain("const BATCH_ENQUEUE_CONCURRENCY = 2;");
-    expect(source).toContain("mapWithConcurrency(");
-    expect(source).toContain("BATCH_ENQUEUE_CONCURRENCY");
-  });
 });

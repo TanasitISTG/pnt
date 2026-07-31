@@ -23,6 +23,7 @@ import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
+import { Route as ApiExportsSplatRouteImport } from './routes/api/exports/$'
 import { Route as ProtectedNovelsNovelIdEditRouteImport } from './routes/_protected/novels/$novelId/edit'
 import { Route as ProtectedNovelsNovelIdGlossaryRouteImport } from './routes/_protected/novels/$novelId/glossary'
 import { Route as PublicNovelsNovelIdIndexRouteImport } from './routes/_public/novels/$novelId/index'
@@ -96,6 +97,11 @@ const ApiCoversSplatRoute = ApiCoversSplatRouteImport.update({
   path: '/api/covers/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiExportsSplatRoute = ApiExportsSplatRouteImport.update({
+  id: '/api/exports/$',
+  path: '/api/exports/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProtectedNovelsNovelIdEditRoute =
   ProtectedNovelsNovelIdEditRouteImport.update({
     id: '/novels/$novelId/edit',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
+  '/api/exports/$': typeof ApiExportsSplatRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
+  '/api/exports/$': typeof ApiExportsSplatRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId': typeof PublicNovelsNovelIdIndexRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
+  '/api/exports/$': typeof ApiExportsSplatRoute
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/_public/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
@@ -193,6 +202,7 @@ export interface FileRouteTypes {
     | '/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
+    | '/api/exports/$'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
+    | '/api/exports/$'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId'
@@ -231,6 +242,7 @@ export interface FileRouteTypes {
     | '/_protected/novels/new'
     | '/api/auth/$'
     | '/api/covers/$'
+    | '/api/exports/$'
     | '/_protected/novels/$novelId/edit'
     | '/_protected/novels/$novelId/glossary'
     | '/_public/novels/$novelId/'
@@ -249,6 +261,7 @@ export interface RootRouteChildren {
   ApiSitemapRoute: typeof ApiSitemapRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCoversSplatRoute: typeof ApiCoversSplatRoute
+  ApiExportsSplatRoute: typeof ApiExportsSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -351,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCoversSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/exports/$': {
+      id: '/api/exports/$'
+      path: '/api/exports/$'
+      fullPath: '/api/exports/$'
+      preLoaderRoute: typeof ApiExportsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_protected/novels/$novelId/edit': {
       id: '/_protected/novels/$novelId/edit'
       path: '/novels/$novelId/edit'
@@ -428,6 +448,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSitemapRoute: ApiSitemapRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCoversSplatRoute: ApiCoversSplatRoute,
+  ApiExportsSplatRoute: ApiExportsSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

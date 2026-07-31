@@ -71,6 +71,7 @@ bun run inngest
 | Format / check        | `bun run format` / `bun run format:check`        |
 | Tests                 | `bun run test`                                   |
 | PostgreSQL invariants | `TEST_DATABASE_URL=... bun run test:integration` |
+| Browser workflow      | `bun run test:e2e`                               |
 | Release audit         | `bun run audit:release`                          |
 | DB generate / migrate | `bun run db:generate` / `bun run db:migrate`     |
 | Seed admin user       | `bun run seed:user`                              |
@@ -83,15 +84,15 @@ once against the target database before promoting a deployment. Vercel builds us
 locked dependency graph and do not mutate database state, which avoids concurrent preview
 builds racing the production schema.
 
-The release audit fails on high or critical advisories. A currently known moderate esbuild
-advisory is confined to legacy migration tooling under `drizzle-kit`; it is still reported
-by `bun audit` and should be removed when that toolchain drops its old nested esbuild.
+The release audit fails on moderate, high, or critical advisories. Direct dependencies and
+tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `esbuild`,
+`gaxios`, and `adm-zip` releases. Validate reproducibility with `bun install --frozen-lockfile`.
 
 ## Environment Variables
 
 | Variable                   | Required | Description                                                    |
 | -------------------------- | -------- | -------------------------------------------------------------- |
-| `DATABASE_URL`             | Yes      | CockroachDB / PostgreSQL connection string (SSL required)      |
+| `DATABASE_URL`             | Yes      | CockroachDB / PostgreSQL TCP connection string                 |
 | `BETTER_AUTH_SECRET`       | Yes      | 32-byte base64 random string                                   |
 | `BETTER_AUTH_URL`          | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`) |
 | `APP_ENCRYPTION_KEY`       | Yes      | 32-byte base64 random string for encrypting API keys at rest   |
@@ -135,6 +136,33 @@ src/
   components/ui/                # Restyled shadcn/Base UI primitives
   styles/globals.css            # Design tokens (@theme)
 ```
+
+The `postgres` driver uses a maximum pool size of three connections per application process.
+That bound is intentional for serverless instances; account for `3 x active instances` when
+sizing the database connection limit or external pooler.
+
+## Persistence and delivery boundaries
+
+- Translation job metadata lives in `translation_jobs`; ordered chunk source, progress, output,
+  token counts, latency, and errors live in `translation_job_chunks`. Migration 0022 backfills
+  legacy `chunks_json` values idempotently; the old column remains dormant for expand/contract
+  rollback compatibility.
+- Translation enqueue commits a durable `translation_outbox` row in the same transaction as
+  job state. Eager dispatch is best-effort, while the Inngest cron retries pending rows.
+- Novel TXT and EPUB downloads use authenticated `/api/exports/:novelId` responses. Chapters are
+  read through a PostgreSQL cursor in numeric chapter order and streamed to the client rather
+  than base64-encoding the complete export in a server-function payload.
+- `src/lib/scrape.ts` is a client-safe facade over pure parsers. DNS resolution and private-IP
+  rejection live in the server-only `src/lib/scrape/network-policy.server.ts` boundary.
+
+## Local verification
+
+`bun run test` runs unit tests only. `bun run test:integration` requires an explicitly isolated
+`TEST_DATABASE_URL`; on Windows, `.tura/script/run-postgres-integration.ps1` owns a disposable
+local PostgreSQL service and runs all integration files. `bun run test:e2e` owns a guarded
+`*_e2e` database, app, Inngest dev server, and deterministic OpenAI-compatible stub, then drives
+login, novel/chapter creation, translation, publication, logout, and guest reading in an installed
+Chrome or Edge browser. Every child process is bounded and torn down on success or failure.
 
 ## Docs
 

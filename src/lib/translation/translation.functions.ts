@@ -1,12 +1,12 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
-import { eq, and, inArray, sql, desc, asc } from "drizzle-orm";
+import { eq, and, inArray, sql, desc, asc, gte } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { mapWithConcurrency } from "@/lib/async";
 import {
   novels,
   chapters,
   translationJobs,
+  translationJobChunks,
   translationOutbox,
   providerSettings,
 } from "@/lib/db/schema";
@@ -28,10 +28,9 @@ import type { ChunkProgress, LogEntry, SlimChunkProgress } from "./translation.t
 import { createLog } from "./log-entry";
 import type { AIProviderClient } from "./translation.types";
 import { translationRunIdentity } from "./job-state";
+import { enqueueTranslationBatchInOrder } from "./batch";
 
 export { createLog } from "./log-entry";
-
-const BATCH_ENQUEUE_CONCURRENCY = 2;
 
 const dispatchOutboxBestEffort = createServerOnlyFn(async (outboxId: string) => {
   const { dispatchTranslationOutboxEventBestEffort } = await import("./outbox");
@@ -42,6 +41,7 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
   userId: string,
   chapterId: string,
   providerConfig: AIProviderClient,
+  dispatch: (outboxId: string) => Promise<void> = dispatchOutboxBestEffort,
 ) {
   const queued = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -96,9 +96,16 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
       generation,
       totalChunks: chunkInfos.length,
       doneChunks: 0,
-      chunksJson: JSON.stringify(initialChunks),
       logsJson: JSON.stringify(logs),
     });
+    await tx.insert(translationJobChunks).values(
+      initialChunks.map((chunk) => ({
+        jobId,
+        index: chunk.index,
+        sourceText: chunk.text,
+        textLength: chunk.text.length,
+      })),
+    );
     await tx
       .update(chapters)
       .set({
@@ -126,7 +133,7 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
     return { jobId, outboxId, totalChunks: chunkInfos.length };
   });
 
-  await dispatchOutboxBestEffort(queued.outboxId);
+  await dispatch(queued.outboxId);
   return { jobId: queued.jobId, totalChunks: queued.totalChunks };
 });
 
@@ -162,44 +169,18 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
           .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`)),
       ]);
 
-      const queued: { chapterId: string; jobId: string; totalChunks: number }[] = [];
-      const skipped: { chapterId: string; reason?: string }[] = [];
-
-      const foundIds = new Set(targetChapters.map((ch) => ch.id));
-      for (const id of data.chapterIds) {
-        if (!foundIds.has(id)) {
-          skipped.push({ chapterId: id, reason: "Chapter not found or unauthorized" });
-        }
-      }
-
-      const enqueueResults = await mapWithConcurrency(
-        targetChapters,
-        BATCH_ENQUEUE_CONCURRENCY,
-        async (chapter) => {
-          try {
-            const result = await enqueueTranslationJob(session.user.id, chapter.id, providerConfig);
-            return {
-              type: "queued" as const,
-              chapterId: chapter.id,
-              jobId: result.jobId,
-              totalChunks: result.totalChunks,
-            };
-          } catch (error) {
-            return {
-              type: "skipped" as const,
-              chapterId: chapter.id,
-              reason: error instanceof Error ? error.message : "Failed to start translation",
-            };
-          }
-        },
+      const targetChapterIds = new Set(targetChapters.map((chapter) => chapter.id));
+      const missing = data.chapterIds.flatMap((chapterId) =>
+        targetChapterIds.has(chapterId)
+          ? []
+          : [{ chapterId, reason: "Chapter not found or unauthorized" }],
       );
 
-      for (const result of enqueueResults) {
-        if (result.type === "queued") queued.push(result);
-        else skipped.push(result);
-      }
+      const result = await enqueueTranslationBatchInOrder(targetChapters, (chapterId) =>
+        enqueueTranslationJob(session.user.id, chapterId, providerConfig),
+      );
 
-      return { queued, skipped };
+      return { queued: result.queued, skipped: [...missing, ...result.skipped] };
     }),
   );
 
@@ -303,6 +284,15 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
         const generation = row.chapter.translationGeneration + 1;
         const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
         logs.push(createLog("info", "Job retry initiated. Resuming from last completed chunk..."));
+        await tx
+          .update(translationJobChunks)
+          .set({ error: null })
+          .where(
+            and(
+              eq(translationJobChunks.jobId, row.job.id),
+              gte(translationJobChunks.index, row.job.doneChunks),
+            ),
+          );
         const updated = await tx
           .update(translationJobs)
           .set({
@@ -504,17 +494,19 @@ export const getTranslationJobStatus = createServerFn({ method: "GET" })
       const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
       // Union: active/errored/cancelled jobs carry full ChunkProgress payloads
       // (needed for resume); done jobs are stripped to SlimChunkProgress.
-      const rawChunks: (ChunkProgress & Partial<SlimChunkProgress>)[] = JSON.parse(
-        row.job.chunksJson || "[]",
-      );
-      const chunks: SlimChunkProgress[] = rawChunks.map((c) => ({
-        index: c.index,
-        textLength: c.textLength ?? c.text?.length ?? 0,
-        hasTranslation: c.hasTranslation ?? !!c.translation,
-        promptTokens: c.promptTokens,
-        completionTokens: c.completionTokens,
-        latencyMs: c.latencyMs,
-        error: c.error,
+      const chunkRows = await db
+        .select()
+        .from(translationJobChunks)
+        .where(eq(translationJobChunks.jobId, row.job.id))
+        .orderBy(asc(translationJobChunks.index));
+      const chunks: SlimChunkProgress[] = chunkRows.map((chunk) => ({
+        index: chunk.index,
+        textLength: chunk.textLength,
+        hasTranslation: chunk.translation !== null,
+        promptTokens: chunk.promptTokens ?? undefined,
+        completionTokens: chunk.completionTokens ?? undefined,
+        latencyMs: chunk.latencyMs ?? undefined,
+        error: chunk.error ?? undefined,
       }));
 
       return {

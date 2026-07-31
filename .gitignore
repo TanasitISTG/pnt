@@ -13,5 +13,8 @@ dist-ssr
 __unconfig*
 todos.json
 evals/results/
+.tura/e2e/
+playwright-report/
+test-results/
 
 .vercel

@@ -50,8 +50,11 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 - `chapters.active_translation_job_id text null`
 - `translation_jobs.source_revision integer not null default 1`
 - `translation_jobs.generation integer not null default 1`
+- `translation_job_chunks` rows keyed by `(job_id, chunk_index)` containing ordered source text, translation progress, token counts, latency, errors, and completion time.
 - Partial unique index on active translation jobs by chapter.
 - `translation_outbox` table containing stable payloads and dispatch status.
+
+Migration 0022 idempotently expands legacy `translation_jobs.chunks_json` arrays into chunk rows. The legacy column remains readable but dormant during the expand/contract rollback window; all current writes target `translation_job_chunks`.
 
 The active-job column intentionally has no foreign key. Translation jobs already cascade when a chapter is deleted, while avoiding a circular foreign-key lifecycle lets the transaction clear ownership before or while terminalizing a job.
 
@@ -59,7 +62,9 @@ The active-job column intentionally has no foreign key. Translation jobs already
 
 - `translation/job-state.ts`: pure transition predicates and compatibility helpers.
 - `translation/job-store.ts`: conditional persistence and atomic worker commits.
-- `translation/outbox.ts`: durable event delivery.
+- `translation/outbox.ts`: durable event delivery; due rows compare against PostgreSQL `CURRENT_TIMESTAMP` so database visibility and eligibility use one clock.
+- `export/stream.ts` and `/api/exports/$`: authenticated cursor-backed TXT/EPUB response streaming with numeric chapter ordering and `HEAD` support.
+- `scrape.ts` and `scrape/parsers.ts`: client-safe source metadata and pure HTML parsing; `scrape/network-policy.server.ts` exclusively owns DNS resolution and private-address rejection.
 - Route-facing server functions authenticate and delegate state transitions; they do not implement worker validity rules.
 - Inngest orchestrates retries and per-novel concurrency but is not the source of truth for job validity.
 
@@ -67,8 +72,10 @@ The active-job column intentionally has no foreign key. Translation jobs already
 
 The dedicated compatibility suite must cover public job shapes, stale-worker rejection, terminal-job immutability, migration defaults, ordered batch results, matching-revision retries, and migration-level uniqueness/outbox constraints.
 
-Database integration tests require `TEST_DATABASE_URL` and exercise the migration's partial unique index, concurrent production enqueues, and stale finalization against an isolated PostgreSQL service. They must never fall back to the application database.
+Database integration tests require `TEST_DATABASE_URL` and exercise legacy chunk backfill/idempotence, the migration's partial unique index, concurrent production enqueues, stale finalization, failed outbox recovery, and streamed export ownership/order/headers/bytes against an isolated PostgreSQL service. They must never fall back to the application database.
 
-## Deferred work
+The browser compatibility gate is `bun run test:e2e`. Its supervisor refuses database names without the `_e2e` suffix, owns local app/PostgreSQL/Inngest/OpenAI-stub lifecycles, uses an installed Chrome or Edge through Playwright on Node, and proves login, create, translate, publish, logout, and guest-read behavior without route interception.
 
-Normalizing `chunks_json` into chunk rows and streaming large exports remain worthwhile performance changes, but are deliberately separate from the state-integrity repair. Scrape responses are already bounded to 5 MB while streaming. Future storage changes must preserve the contracts above.
+## Deferred cleanup
+
+After the expand/contract rollback window closes, remove the dormant `translation_jobs.chunks_json` column in a separate contract migration. Scrape responses remain bounded to 5 MB while streaming. Future storage or delivery changes must preserve the invariants and compatibility gates above.

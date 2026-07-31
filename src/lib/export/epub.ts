@@ -1,4 +1,4 @@
-import { zipSync, strToU8, type Zippable } from "fflate";
+import { Zip, ZipDeflate, ZipPassThrough, zipSync, strToU8, type Zippable } from "fflate";
 
 export interface EpubChapter {
   title: string;
@@ -33,26 +33,31 @@ ${body}
 </html>`;
 }
 
-// Minimal valid EPUB 3: mimetype (stored, first), container, opf, nav, chapters.
-export function buildEpub(meta: EpubMetadata, chapters: EpubChapter[]): Uint8Array {
-  const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-
-  const container = `<?xml version="1.0" encoding="utf-8"?>
+function containerXml(): string {
+  return `<?xml version="1.0" encoding="utf-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles>
     <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
   </rootfiles>
 </container>`;
+}
 
-  const manifestItems = chapters
+function packageXml(
+  meta: EpubMetadata,
+  chapterTitles: readonly string[],
+  modified: string,
+): string {
+  const manifestItems = chapterTitles
     .map(
-      (_, i) =>
-        `    <item id="ch${i + 1}" href="chapter-${i + 1}.xhtml" media-type="application/xhtml+xml"/>`,
+      (_, index) =>
+        `    <item id="ch${index + 1}" href="chapter-${index + 1}.xhtml" media-type="application/xhtml+xml"/>`,
     )
     .join("\n");
-  const spineItems = chapters.map((_, i) => `    <itemref idref="ch${i + 1}"/>`).join("\n");
+  const spineItems = chapterTitles
+    .map((_, index) => `    <itemref idref="ch${index + 1}"/>`)
+    .join("\n");
 
-  const opf = `<?xml version="1.0" encoding="utf-8"?>
+  return `<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="pub-id" version="3.0">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="pub-id">${esc(meta.identifier)}</dc:identifier>
@@ -69,12 +74,14 @@ ${manifestItems}
 ${spineItems}
   </spine>
 </package>`;
+}
 
-  const navItems = chapters
-    .map((c, i) => `      <li><a href="chapter-${i + 1}.xhtml">${esc(c.title)}</a></li>`)
+function navigationXml(meta: EpubMetadata, chapterTitles: readonly string[]): string {
+  const navItems = chapterTitles
+    .map((title, index) => `      <li><a href="chapter-${index + 1}.xhtml">${esc(title)}</a></li>`)
     .join("\n");
 
-  const nav = `<?xml version="1.0" encoding="utf-8"?>
+  return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head><title>${esc(meta.title)}</title></head>
@@ -87,13 +94,85 @@ ${navItems}
   </nav>
 </body>
 </html>`;
+}
+
+function addTextFile(
+  zip: Zip,
+  filename: string,
+  content: string,
+  level: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = 9,
+) {
+  const file = level === 0 ? new ZipPassThrough(filename) : new ZipDeflate(filename, { level });
+  zip.add(file);
+  file.push(strToU8(content), true);
+}
+
+export function createEpubStream(
+  meta: EpubMetadata,
+  chapterTitles: readonly string[],
+  chapters: AsyncIterable<EpubChapter>,
+): ReadableStream<Uint8Array> {
+  let cancelled = false;
+  let zip: Zip | null = null;
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      zip = new Zip((error, chunk, final) => {
+        if (cancelled) return;
+        if (error) {
+          controller.error(error);
+          return;
+        }
+        controller.enqueue(chunk);
+        if (final) controller.close();
+      });
+
+      void (async () => {
+        try {
+          const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+          addTextFile(zip!, "mimetype", "application/epub+zip", 0);
+          addTextFile(zip!, "META-INF/container.xml", containerXml());
+          addTextFile(zip!, "OEBPS/content.opf", packageXml(meta, chapterTitles, modified));
+          addTextFile(zip!, "OEBPS/nav.xhtml", navigationXml(meta, chapterTitles));
+
+          let index = 0;
+          for await (const chapter of chapters) {
+            if (cancelled) return;
+            index += 1;
+            addTextFile(
+              zip!,
+              `OEBPS/chapter-${index}.xhtml`,
+              chapterXhtml(chapter.title, chapter.paragraphs),
+            );
+          }
+          if (index !== chapterTitles.length) {
+            throw new Error(`Expected ${chapterTitles.length} EPUB chapters, received ${index}`);
+          }
+          zip!.end();
+        } catch (error) {
+          if (!cancelled) controller.error(error);
+        }
+      })();
+    },
+    cancel() {
+      cancelled = true;
+      zip?.terminate();
+    },
+  });
+}
+
+// Minimal valid EPUB 3: mimetype (stored, first), container, opf, nav, chapters.
+export function buildEpub(meta: EpubMetadata, chapters: EpubChapter[]): Uint8Array {
+  const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+
+  const titles = chapters.map((chapter) => chapter.title);
 
   const files: Zippable = {
     // mimetype must be the first entry and uncompressed per the EPUB spec.
     mimetype: [strToU8("application/epub+zip"), { level: 0 }],
-    "META-INF/container.xml": [strToU8(container), { level: 9 }],
-    "OEBPS/content.opf": [strToU8(opf), { level: 9 }],
-    "OEBPS/nav.xhtml": [strToU8(nav), { level: 9 }],
+    "META-INF/container.xml": [strToU8(containerXml()), { level: 9 }],
+    "OEBPS/content.opf": [strToU8(packageXml(meta, titles, modified)), { level: 9 }],
+    "OEBPS/nav.xhtml": [strToU8(navigationXml(meta, titles)), { level: 9 }],
   };
   chapters.forEach((c, i) => {
     files[`OEBPS/chapter-${i + 1}.xhtml`] = [

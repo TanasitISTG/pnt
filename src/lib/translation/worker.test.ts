@@ -8,10 +8,13 @@ import * as providerClientModule from "./provider-client";
 
 vi.mock("./job-store", () => ({
   beginJob: vi.fn(),
+  completeChunk: vi.fn(),
   completeJob: vi.fn(),
   failActiveJob: vi.fn(),
   loadJob: vi.fn(),
-  saveJobProgress: vi.fn(),
+  loadJobChunk: vi.fn(),
+  loadJobChunks: vi.fn(),
+  saveChunkFailure: vi.fn(),
   loadApprovedTermsForContext: vi.fn().mockResolvedValue([]),
   loadPrevChapterForContext: vi.fn().mockResolvedValue(null),
   loadTermSourcesForExclusion: vi.fn().mockResolvedValue({
@@ -56,18 +59,19 @@ describe("translation worker guarded state transitions", () => {
     sourceRevision: 7,
     doneChunks: 0,
     totalChunks: 2,
-    chunksJson: JSON.stringify([
-      { index: 0, text: "Chunk 1 text" },
-      { index: 1, text: "Chunk 2 text" },
-    ]),
     logsJson: "[]",
   };
   const row = { job: mockJob, chapter: mockChapter, novel: mockNovel };
+  const chunks = [
+    { jobId: "job-1", index: 0, sourceText: "Chunk 1 text", textLength: 12 },
+    { jobId: "job-1", index: 1, sourceText: "Chunk 2 text", textLength: 12 },
+  ];
   const provider = { generateChatCompletion: vi.fn() };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(jobStore.saveJobProgress).mockResolvedValue(true);
+    vi.mocked(jobStore.completeChunk).mockResolvedValue(true);
+    vi.mocked(jobStore.saveChunkFailure).mockResolvedValue(true);
     vi.mocked(jobStore.completeJob).mockResolvedValue(true);
     vi.mocked(jobStore.failActiveJob).mockResolvedValue(true);
     vi.mocked(providerClientModule.createProviderClient).mockResolvedValue(provider as never);
@@ -110,7 +114,11 @@ describe("translation worker guarded state transitions", () => {
   });
 
   it("writes translated progress with generation and expected cursor", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue(row as never);
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
     provider.generateChatCompletion.mockResolvedValueOnce({
       content: "Translated Chunk 1",
       usage: { promptTokens: 10, completionTokens: 20 },
@@ -118,40 +126,51 @@ describe("translation worker guarded state transitions", () => {
 
     await translateChunk("job-1", 0, generation);
 
-    expect(jobStore.saveJobProgress).toHaveBeenCalledWith(
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
       "job-1",
       generation,
       0,
-      expect.objectContaining({ doneChunks: 1 }),
+      expect.objectContaining({ translation: "Translated Chunk 1" }),
     );
   });
 
   it("does not call the provider for a stale event generation", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue(row as never);
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
     await translateChunk("job-1", 0, generation - 1);
     expect(provider.generateChatCompletion).not.toHaveBeenCalled();
-    expect(jobStore.saveJobProgress).not.toHaveBeenCalled();
+    expect(jobStore.completeChunk).not.toHaveBeenCalled();
   });
 
   it("does not replay a completed chunk", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
       ...row,
       job: { ...mockJob, doneChunks: 1 },
+      chunk: chunks[0],
+      previousChunk: null,
     } as never);
     await translateChunk("job-1", 0, generation);
     expect(provider.generateChatCompletion).not.toHaveBeenCalled();
   });
 
   it("records a provider error without advancing the cursor", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue(row as never);
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
     provider.generateChatCompletion.mockRejectedValue(new Error("API Error: 500"));
 
     await expect(translateChunk("job-1", 0, generation)).rejects.toThrow("API Error: 500");
-    expect(jobStore.saveJobProgress).toHaveBeenCalledWith(
+    expect(jobStore.saveChunkFailure).toHaveBeenCalledWith(
       "job-1",
       generation,
       0,
-      expect.not.objectContaining({ doneChunks: expect.anything() }),
+      "API Error: 500",
+      expect.stringContaining("API Error: 500"),
     );
   });
 
@@ -161,24 +180,24 @@ describe("translation worker guarded state transitions", () => {
       job: {
         ...mockJob,
         doneChunks: 2,
-        chunksJson: JSON.stringify([
-          {
-            index: 0,
-            text: "c1",
-            translation: "Translated 1",
-            promptTokens: 10,
-            completionTokens: 20,
-          },
-          {
-            index: 1,
-            text: "c2",
-            translation: "Translated 2",
-            promptTokens: 10,
-            completionTokens: 20,
-          },
-        ]),
       },
     } as never);
+    vi.mocked(jobStore.loadJobChunks).mockResolvedValue([
+      {
+        ...chunks[0],
+        sourceText: "c1",
+        translation: "Translated 1",
+        promptTokens: 10,
+        completionTokens: 20,
+      },
+      {
+        ...chunks[1],
+        sourceText: "c2",
+        translation: "Translated 2",
+        promptTokens: 10,
+        completionTokens: 20,
+      },
+    ] as never);
 
     await finalizeJob("job-1", generation);
 
@@ -194,9 +213,7 @@ describe("translation worker guarded state transitions", () => {
         usageJson: JSON.stringify({ totalPromptTokens: 30, totalCompletionTokens: 60 }),
       }),
     );
-    const chunks = JSON.parse(vi.mocked(jobStore.completeJob).mock.calls[0][0].chunksJson);
-    expect(chunks[0]).not.toHaveProperty("text");
-    expect(chunks[0]).not.toHaveProperty("translation");
+    expect(jobStore.loadJobChunks).toHaveBeenCalledWith("job-1");
   });
 
   it("skips finalization after chapter ownership moves", async () => {

@@ -32,6 +32,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pnt_test
       TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pnt_test
+      E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pnt_e2e
       BETTER_AUTH_SECRET: ci-secret-at-least-thirty-two-bytes
       BETTER_AUTH_URL: http://localhost:3000
       APP_ENCRYPTION_KEY: dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=
@@ -55,8 +56,12 @@ jobs:
         run: bun run lint 2>&1 | tee .ci-logs/lint.log
       - name: Typecheck
         run: bun run typecheck 2>&1 | tee .ci-logs/typecheck.log
-      - name: Test, including PostgreSQL integration invariants
+      - name: Run unit tests
         run: bun run test 2>&1 | tee .ci-logs/test.log
+      - name: Run isolated PostgreSQL integration invariants
+        run: bun run test:integration 2>&1 | tee .ci-logs/integration.log
+      - name: Run local browser workflow
+        run: bun run test:e2e 2>&1 | tee .ci-logs/e2e.log
       - name: Build
         run: bun run build 2>&1 | tee .ci-logs/build.log
       - name: Audit production dependencies
@@ -66,6 +71,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ci-failure-logs
-          path: .ci-logs
+          path: |
+            .ci-logs
+            .tura/e2e/logs
+            .tura/e2e/test-results
           if-no-files-found: ignore
           retention-days: 7

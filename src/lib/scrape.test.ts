@@ -4,8 +4,6 @@ import {
   parseChapter,
   chapterUrlFor,
   findSource,
-  isPrivateIp,
-  assertPublicHost,
   parseTwkanToc,
   twkanTocUrlFromReader,
   isTwkanTocUrl,
@@ -13,6 +11,7 @@ import {
   biqugeTocUrlFromReader,
   isBiqugeTocUrl,
 } from "@/lib/scrape";
+import { assertPublicHost, isPrivateIp } from "@/lib/scrape/network-policy.server";
 
 const QUANBEN_URL = "https://www.quanben.io/n/some-novel/30.html";
 

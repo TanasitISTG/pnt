@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { deleteNovel } from "@/lib/novel.functions";
+import { deleteNovel, setNovelPublished } from "@/lib/novel.functions";
 import {
   deleteChapter,
   setChapterPublished,
@@ -24,6 +24,18 @@ export function useNovelDetailMutations(novelId: string) {
     },
     onError: (error) => {
       toast.error(error.message || "Failed to delete novel");
+    },
+  });
+
+  const { mutate: publishNovel, isPending: publishingNovel } = useMutation({
+    mutationFn: (publishedAt: Date | null) => setNovelPublished({ data: { novelId, publishedAt } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["novels"] });
+      toast.success("Novel publish state updated");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update novel publish state");
     },
   });
 
@@ -79,6 +91,8 @@ export function useNovelDetailMutations(novelId: string) {
   return {
     removeNovel,
     deletingNovel,
+    publishNovel,
+    publishingNovel,
     removeChapter,
     deletingChapter,
     deleteChapterId,

@@ -1,5 +1,14 @@
 import { relations, sql } from "drizzle-orm";
-import { pgTable, pgEnum, text, timestamp, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  pgEnum,
+  text,
+  timestamp,
+  integer,
+  index,
+  uniqueIndex,
+  primaryKey,
+} from "drizzle-orm/pg-core";
 import { chapters } from "./novels";
 
 export const jobStatusEnum = pgEnum("translation_job_status", [
@@ -22,6 +31,7 @@ export const translationJobs = pgTable(
     generation: integer("generation").notNull().default(1),
     totalChunks: integer("total_chunks").notNull(),
     doneChunks: integer("done_chunks").notNull().default(0),
+    // Expand/contract compatibility only. New code persists progress in translation_job_chunks.
     chunksJson: text("chunks_json"),
     error: text("error"),
     usageJson: text("usage_json"),
@@ -37,6 +47,32 @@ export const translationJobs = pgTable(
   ],
 );
 
+export const translationJobChunks = pgTable(
+  "translation_job_chunks",
+  {
+    jobId: text("job_id")
+      .notNull()
+      .references(() => translationJobs.id, { onDelete: "cascade" }),
+    index: integer("chunk_index").notNull(),
+    sourceText: text("source_text").notNull(),
+    textLength: integer("text_length").notNull(),
+    translation: text("translation"),
+    promptTokens: integer("prompt_tokens"),
+    completionTokens: integer("completion_tokens"),
+    latencyMs: integer("latency_ms"),
+    error: text("error"),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [primaryKey({ columns: [table.jobId, table.index] })],
+);
+
 export const translationJobsRelations = relations(translationJobs, ({ one }) => ({
   chapter: one(chapters, { fields: [translationJobs.chapterId], references: [chapters.id] }),
+}));
+
+export const translationJobChunksRelations = relations(translationJobChunks, ({ one }) => ({
+  job: one(translationJobs, {
+    fields: [translationJobChunks.jobId],
+    references: [translationJobs.id],
+  }),
 }));

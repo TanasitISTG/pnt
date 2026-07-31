@@ -26,6 +26,7 @@ interface PublishMenuProps {
   publishedAt: Date | string | null | undefined;
   onChange: (publishedAt: Date | null) => void;
   pending?: boolean;
+  ariaLabel?: string;
 }
 
 // datetime-local values are local time with no timezone suffix
@@ -34,7 +35,12 @@ function toLocalInputValue(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function PublishMenu({ publishedAt, onChange, pending = false }: PublishMenuProps) {
+export function PublishMenu({
+  publishedAt,
+  onChange,
+  pending = false,
+  ariaLabel = "Publishing options",
+}: PublishMenuProps) {
   const state = publishState(publishedAt);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [value, setValue] = useState("");
@@ -66,8 +72,8 @@ export function PublishMenu({ publishedAt, onChange, pending = false }: PublishM
       <DropdownMenu>
         <DropdownMenuTrigger
           render={<Button variant="outline" size="sm" disabled={pending} />}
-          aria-label="Publishing options"
-          title="Publishing options"
+          aria-label={ariaLabel}
+          title={ariaLabel}
         >
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
           <span className="max-w-64 truncate">{label}</span>

@@ -10,7 +10,14 @@ import { log } from "@/lib/log";
 
 const OUTBOX_DISPATCH_CONCURRENCY = 2;
 
-export async function dispatchTranslationOutboxEvent(outboxId: string): Promise<boolean> {
+type SendOutboxEvent = (event: { name: string; data: Record<string, unknown> }) => Promise<unknown>;
+
+const sendOutboxEvent: SendOutboxEvent = (event) => inngest.send(event as never);
+
+export async function dispatchTranslationOutboxEvent(
+  outboxId: string,
+  send: SendOutboxEvent = sendOutboxEvent,
+): Promise<boolean> {
   const [row] = await db
     .select()
     .from(translationOutbox)
@@ -18,7 +25,7 @@ export async function dispatchTranslationOutboxEvent(outboxId: string): Promise<
       and(
         eq(translationOutbox.id, outboxId),
         eq(translationOutbox.status, "pending"),
-        lte(translationOutbox.availableAt, new Date()),
+        lte(translationOutbox.availableAt, sql`CURRENT_TIMESTAMP`),
       ),
     )
     .limit(1);
@@ -27,7 +34,7 @@ export async function dispatchTranslationOutboxEvent(outboxId: string): Promise<
 
   try {
     const data = JSON.parse(row.payloadJson) as Record<string, unknown>;
-    await inngest.send({ name: row.eventName, data } as never);
+    await send({ name: row.eventName, data });
     await db
       .update(translationOutbox)
       .set({ status: "sent", sentAt: new Date(), lastError: null, updatedAt: new Date() })
@@ -67,7 +74,10 @@ export async function dispatchPendingTranslationOutbox(limit = 25) {
     .select({ id: translationOutbox.id })
     .from(translationOutbox)
     .where(
-      and(eq(translationOutbox.status, "pending"), lte(translationOutbox.availableAt, new Date())),
+      and(
+        eq(translationOutbox.status, "pending"),
+        lte(translationOutbox.availableAt, sql`CURRENT_TIMESTAMP`),
+      ),
     )
     .orderBy(asc(translationOutbox.createdAt))
     .limit(limit);

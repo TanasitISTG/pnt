@@ -194,6 +194,8 @@ function NovelDetailPage() {
   const {
     removeNovel,
     deletingNovel,
+    publishNovel,
+    publishingNovel,
     removeChapter,
     deletingChapter,
     deleteChapterId,
@@ -288,6 +290,8 @@ function NovelDetailPage() {
         lastReadChapter={lastReadChapter}
         firstChapter={firstChapter}
         exporting={exporting}
+        publishingNovel={publishingNovel}
+        onPublishNovel={publishNovel}
         onExportTxt={handleExportTxt}
         onExportEpub={handleExportEpub}
         onDeleteNovel={() => setDeleteNovelOpen(true)}
