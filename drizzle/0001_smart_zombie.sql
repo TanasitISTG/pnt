@@ -1,4 +1,4 @@
-CREATE TYPE IF NOT EXISTS "public"."chapter_status" AS ENUM('raw', 'queued', 'translating', 'translated', 'error');--> statement-breakpoint
+CREATE TYPE "public"."chapter_status" AS ENUM('raw', 'queued', 'translating', 'translated', 'error');--> statement-breakpoint
 CREATE TABLE "chapters" (
 	"id" text PRIMARY KEY NOT NULL,
 	"novel_id" text NOT NULL,

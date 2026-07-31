@@ -1,4 +1,4 @@
-CREATE TYPE IF NOT EXISTS "public"."import_job_status" AS ENUM('pending', 'running', 'done', 'error', 'cancelled');--> statement-breakpoint
+CREATE TYPE "public"."import_job_status" AS ENUM('pending', 'running', 'done', 'error', 'cancelled');--> statement-breakpoint
 CREATE TABLE "import_jobs" (
 	"id" text PRIMARY KEY NOT NULL,
 	"novel_id" text NOT NULL,

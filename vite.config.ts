@@ -35,9 +35,6 @@ const config = defineConfig({
     tanstackStart(),
     viteReact(),
   ],
-  test: {
-    passWithNoTests: true,
-  },
 });
 
 export default config;

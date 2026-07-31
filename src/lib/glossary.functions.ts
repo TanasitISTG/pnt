@@ -17,6 +17,7 @@ import {
   previewTermReplacementSchema,
 } from "@/lib/glossary.schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
+import { updateGlossaryTermAtomic } from "@/lib/glossary.service";
 
 export const listGlossaryTerms = createServerFn({ method: "GET" })
   .validator(listTermsSchema)
@@ -116,70 +117,7 @@ export const updateGlossaryTerm = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const [term] = await db
-        .select({
-          id: glossaryTerms.id,
-          novelId: glossaryTerms.novelId,
-          target: glossaryTerms.target,
-        })
-        .from(glossaryTerms)
-        .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
-        .where(and(eq(glossaryTerms.id, data.termId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!term) {
-        throw new SafeServerError("Glossary term not found or unauthorized");
-      }
-
-      const updateData: Record<string, unknown> = { updatedAt: new Date() };
-      if (data.source !== undefined) updateData.source = data.source.trim();
-      if (data.target !== undefined) updateData.target = data.target.trim();
-      if (data.category !== undefined) updateData.category = data.category;
-      if (data.note !== undefined) updateData.note = data.note?.trim() || null;
-      if (data.status !== undefined) updateData.status = data.status;
-
-      if (data.source !== undefined) {
-        const [existing] = await db
-          .select({ id: glossaryTerms.id })
-          .from(glossaryTerms)
-          .where(
-            and(
-              eq(glossaryTerms.novelId, term.novelId),
-              eq(glossaryTerms.source, data.source.trim()),
-              sql`${glossaryTerms.id} != ${data.termId}`,
-            ),
-          )
-          .limit(1);
-
-        if (existing) {
-          throw new SafeServerError(`Term with source "${data.source.trim()}" already exists`);
-        }
-      }
-
-      // Opt-in propagation: replace old target string in already-translated chapters.
-      // Exact case-sensitive substring match — may match inside longer words (UI warns).
-      if (data.applyToChapters && data.target !== undefined) {
-        const oldTarget = term.target;
-        const newTarget = data.target.trim();
-        if (newTarget !== oldTarget) {
-          await db
-            .update(chapters)
-            .set({
-              translatedContent: sql`replace(${chapters.translatedContent}, ${oldTarget}, ${newTarget})`,
-            })
-            .where(
-              and(
-                eq(chapters.novelId, term.novelId),
-                sql`strpos(${chapters.translatedContent}, ${oldTarget}) > 0`,
-              ),
-            );
-        }
-      }
-
-      await db.update(glossaryTerms).set(updateData).where(eq(glossaryTerms.id, data.termId));
-
-      return { success: true };
+      return updateGlossaryTermAtomic(session.user.id, data);
     }),
   );
 

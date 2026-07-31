@@ -17,16 +17,16 @@ describe("translation batch query predicates", () => {
   });
 
   it("returns totalChunks from startTranslationJob", () => {
-    expect(source).toContain("return { jobId, totalChunks: chunkInfos.length };");
+    expect(source).toContain("return { jobId: queued.jobId, totalChunks: queued.totalChunks };");
   });
 
   it("returns queued and skipped arrays from startTranslationJobs", () => {
     expect(source).toContain("return { queued, skipped };");
   });
 
-  it("starts batch jobs with bounded concurrency and preserves chapter order", () => {
-    expect(source).toContain("const BATCH_SIZE = 5;");
-    expect(source).toContain("await Promise.all(");
-    expect(source).toContain('if ("queued" in r) queued.push(r.queued);');
+  it("enqueues batch jobs sequentially in numeric chapter order", () => {
+    expect(source).toContain("for (const chapter of targetChapters)");
+    expect(source).toContain("await enqueueTranslationJob");
+    expect(source).not.toContain("const BATCH_SIZE = 5;");
   });
 });

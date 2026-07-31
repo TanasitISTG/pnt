@@ -1,13 +1,18 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { eq, and, inArray, sql, desc, asc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { novels, chapters, translationJobs, providerSettings } from "@/lib/db/schema";
+import {
+  novels,
+  chapters,
+  translationJobs,
+  translationOutbox,
+  providerSettings,
+} from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth.functions";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "@/lib/translation/provider-client";
 import { chunkText } from "@/lib/translation/chunker";
-import { inngest } from "@/lib/inngest/client";
 import {
   startTranslationJobSchema,
   startTranslationJobsSchema,
@@ -19,11 +24,108 @@ import {
 } from "@/lib/translation/translation.schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import type { ChunkProgress, LogEntry, SlimChunkProgress } from "./translation.types";
+import { createLog } from "./log-entry";
+import type { AIProviderClient } from "./translation.types";
+import { translationRunIdentity } from "./job-state";
 
-export function createLog(level: LogEntry["level"], message: string): LogEntry {
-  const time = new Date().toLocaleTimeString("en-US", { hour12: false });
-  return { id: nanoid(), timestamp: time, level, message };
-}
+export { createLog } from "./log-entry";
+
+const dispatchOutboxBestEffort = createServerOnlyFn(async (outboxId: string) => {
+  const { dispatchTranslationOutboxEventBestEffort } = await import("./outbox");
+  await dispatchTranslationOutboxEventBestEffort(outboxId);
+});
+
+export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTranslationJob(
+  userId: string,
+  chapterId: string,
+  providerConfig: AIProviderClient,
+) {
+  const queued = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ chapter: chapters, novel: novels })
+      .from(chapters)
+      .innerJoin(novels, eq(chapters.novelId, novels.id))
+      .where(and(eq(chapters.id, chapterId), eq(novels.userId, userId)))
+      .limit(1)
+      .for("update");
+
+    if (!row) throw new SafeServerError("Chapter not found or unauthorized");
+
+    const { chapter, novel } = row;
+    const chunkInfos = chunkText(chapter.rawContent, novel.chunkSize || 2000);
+    if (chunkInfos.length === 0) throw new SafeServerError("Chapter content is empty");
+
+    const cancelledJobs = await tx
+      .update(translationJobs)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(
+        and(
+          eq(translationJobs.chapterId, chapter.id),
+          sql`${translationJobs.status} IN ('pending', 'running')`,
+        ),
+      )
+      .returning({ id: translationJobs.id, generation: translationJobs.generation });
+
+    const initialChunks: ChunkProgress[] = chunkInfos.map((chunk) => ({
+      index: chunk.index,
+      text: chunk.text,
+    }));
+    const logs: LogEntry[] = [
+      createLog(
+        "info",
+        `Job initialized for Chapter "${chapter.title}" (${chapter.rawCharCount.toLocaleString()} chars).`,
+      ),
+      createLog(
+        "info",
+        `Split into ${chunkInfos.length} chunk(s) (target size: ${(novel.chunkSize || 2000).toLocaleString()} chars). Model: ${providerConfig.model}`,
+      ),
+    ];
+    const jobId = nanoid();
+    const outboxId = nanoid();
+    const generation = chapter.translationGeneration + 1;
+    const runKey = nanoid();
+
+    await tx.insert(translationJobs).values({
+      id: jobId,
+      chapterId: chapter.id,
+      status: "pending",
+      sourceRevision: chapter.sourceRevision,
+      generation,
+      totalChunks: chunkInfos.length,
+      doneChunks: 0,
+      chunksJson: JSON.stringify(initialChunks),
+      logsJson: JSON.stringify(logs),
+    });
+    await tx
+      .update(chapters)
+      .set({
+        status: "queued",
+        activeTranslationJobId: jobId,
+        translationGeneration: generation,
+        updatedAt: new Date(),
+      })
+      .where(eq(chapters.id, chapter.id));
+    await tx.insert(translationOutbox).values({
+      id: outboxId,
+      eventName: "translation/job.requested",
+      payloadJson: JSON.stringify({ jobId, novelId: novel.id, generation, runKey }),
+    });
+    if (cancelledJobs.length > 0) {
+      await tx.insert(translationOutbox).values(
+        cancelledJobs.map((cancelled) => ({
+          id: nanoid(),
+          eventName: "translation/job.cancelled",
+          payloadJson: JSON.stringify(translationRunIdentity(cancelled)),
+        })),
+      );
+    }
+
+    return { jobId, outboxId, totalChunks: chunkInfos.length };
+  });
+
+  await dispatchOutboxBestEffort(queued.outboxId);
+  return { jobId: queued.jobId, totalChunks: queued.totalChunks };
+});
 
 export const startTranslationJob = createServerFn({ method: "POST" })
   .validator(startTranslationJobSchema)
@@ -31,107 +133,8 @@ export const startTranslationJob = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      // Verify provider is configured + verify chapter ownership & load novel
-      // settings — independent reads, run them concurrently.
-      const [providerConfig, [row]] = await Promise.all([
-        createProviderClient(session.user.id),
-        db
-          .select({
-            chapter: chapters,
-            novel: novels,
-          })
-          .from(chapters)
-          .innerJoin(novels, eq(chapters.novelId, novels.id))
-          .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
-          .limit(1),
-      ]);
-
-      if (!row) {
-        throw new SafeServerError("Chapter not found or unauthorized");
-      }
-
-      const { chapter, novel } = row;
-
-      // Split text into chunks
-      const chunkInfos = chunkText(chapter.rawContent, novel.chunkSize || 2000);
-      if (chunkInfos.length === 0) {
-        throw new SafeServerError("Chapter content is empty");
-      }
-
-      // Cancel any existing active jobs for this chapter
-      const existingJobs = await db
-        .select({ id: translationJobs.id })
-        .from(translationJobs)
-        .where(
-          and(
-            eq(translationJobs.chapterId, chapter.id),
-            sql`${translationJobs.status} IN ('pending', 'running')`,
-          ),
-        );
-
-      await Promise.all(
-        existingJobs.map((j) =>
-          db
-            .update(translationJobs)
-            .set({ status: "cancelled", updatedAt: new Date() })
-            .where(eq(translationJobs.id, j.id)),
-        ),
-      );
-
-      const initialChunks: ChunkProgress[] = chunkInfos.map((c) => ({
-        index: c.index,
-        text: c.text,
-      }));
-
-      const logs: LogEntry[] = [
-        createLog(
-          "info",
-          `Job initialized for Chapter "${chapter.title}" (${chapter.rawCharCount.toLocaleString()} chars).`,
-        ),
-        createLog(
-          "info",
-          `Split into ${chunkInfos.length} chunk(s) (target size: ${(novel.chunkSize || 2000).toLocaleString()} chars). Model: ${providerConfig.model}`,
-        ),
-      ];
-
-      const jobId = nanoid();
-
-      await db.insert(translationJobs).values({
-        id: jobId,
-        chapterId: chapter.id,
-        status: "pending",
-        totalChunks: chunkInfos.length,
-        doneChunks: 0,
-        chunksJson: JSON.stringify(initialChunks),
-        logsJson: JSON.stringify(logs),
-      });
-
-      await db
-        .update(chapters)
-        .set({ status: "queued", updatedAt: new Date() })
-        .where(eq(chapters.id, chapter.id));
-
-      try {
-        await inngest.send({
-          name: "translation/job.requested",
-          data: { jobId, runKey: nanoid() },
-        });
-      } catch {
-        const errorLogs = JSON.stringify([
-          ...logs,
-          createLog("error", "Inngest dispatch failed — retry this job to re-trigger."),
-        ]);
-        await db
-          .update(translationJobs)
-          .set({ status: "error", error: "Inngest dispatch failed", logsJson: errorLogs })
-          .where(eq(translationJobs.id, jobId));
-        await db
-          .update(chapters)
-          .set({ status: "error", updatedAt: new Date() })
-          .where(eq(chapters.id, chapter.id));
-      }
-
-      return { jobId, totalChunks: chunkInfos.length };
+      const providerConfig = await createProviderClient(session.user.id);
+      return enqueueTranslationJob(session.user.id, data.chapterId, providerConfig);
     }),
   );
 
@@ -140,13 +143,19 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-      await createProviderClient(session.user.id);
+      const providerConfig = await createProviderClient(session.user.id);
 
       const targetChapters = await db
         .select({ id: chapters.id, number: chapters.number })
         .from(chapters)
         .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(and(inArray(chapters.id, data.chapterIds), eq(novels.userId, session.user.id)))
+        .where(
+          and(
+            inArray(chapters.id, data.chapterIds),
+            eq(chapters.novelId, data.novelId),
+            eq(novels.userId, session.user.id),
+          ),
+        )
         .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
 
       const queued: { chapterId: string; jobId: string; totalChunks: number }[] = [];
@@ -159,42 +168,19 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
         }
       }
 
-      // Start jobs in small parallel batches: fully sequential is N×latency,
-      // fully parallel is an unbounded DB/event burst on serverless for large
-      // selections. Results are collected per batch so queued/skipped keep
-      // chapter order.
-      const BATCH_SIZE = 5;
-      type BatchResult =
-        | { queued: (typeof queued)[number] }
-        | { skipped: (typeof skipped)[number] };
-      for (let i = 0; i < targetChapters.length; i += BATCH_SIZE) {
-        const results = await Promise.all(
-          targetChapters.slice(i, i + BATCH_SIZE).map(async (ch): Promise<BatchResult> => {
-            try {
-              const res = await startTranslationJob({ data: { chapterId: ch.id } });
-              if (res?.jobId && typeof res.totalChunks === "number") {
-                return {
-                  queued: {
-                    chapterId: ch.id,
-                    jobId: res.jobId,
-                    totalChunks: res.totalChunks,
-                  },
-                };
-              }
-              return { skipped: { chapterId: ch.id, reason: "No job created" } };
-            } catch (err) {
-              return {
-                skipped: {
-                  chapterId: ch.id,
-                  reason: err instanceof Error ? err.message : "Failed to start translation",
-                },
-              };
-            }
-          }),
-        );
-        for (const r of results) {
-          if ("queued" in r) queued.push(r.queued);
-          else skipped.push(r.skipped);
+      for (const chapter of targetChapters) {
+        try {
+          const result = await enqueueTranslationJob(session.user.id, chapter.id, providerConfig);
+          queued.push({
+            chapterId: chapter.id,
+            jobId: result.jobId,
+            totalChunks: result.totalChunks,
+          });
+        } catch (error) {
+          skipped.push({
+            chapterId: chapter.id,
+            reason: error instanceof Error ? error.message : "Failed to start translation",
+          });
         }
       }
 
@@ -208,49 +194,55 @@ export const cancelTranslationJob = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      const [row] = await db
-        .select({
-          job: translationJobs,
-          chapter: chapters,
-        })
-        .from(translationJobs)
-        .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(and(eq(translationJobs.id, data.jobId), eq(novels.userId, session.user.id)))
-        .limit(1);
+      const outboxId = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .select({ job: translationJobs, chapter: chapters })
+          .from(translationJobs)
+          .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+          .innerJoin(novels, eq(chapters.novelId, novels.id))
+          .where(and(eq(translationJobs.id, data.jobId), eq(novels.userId, session.user.id)))
+          .limit(1)
+          .for("update");
 
-      if (!row) {
-        throw new SafeServerError("Job not found or unauthorized");
-      }
+        if (!row) throw new SafeServerError("Job not found or unauthorized");
+        if (
+          !["pending", "running"].includes(row.job.status) ||
+          row.chapter.activeTranslationJobId !== row.job.id
+        ) {
+          return null;
+        }
 
-      const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
-      logs.push(createLog("warn", "Job cancelled by user."));
-
-      await db
-        .update(translationJobs)
-        .set({
-          status: "cancelled",
-          logsJson: JSON.stringify(logs),
-          updatedAt: new Date(),
-        })
-        .where(eq(translationJobs.id, row.job.id));
-
-      await db
-        .update(chapters)
-        .set({
-          status: row.chapter.translatedContent ? "translated" : "raw",
-          updatedAt: new Date(),
-        })
-        .where(eq(chapters.id, row.chapter.id));
-
-      try {
-        await inngest.send({
-          name: "translation/job.cancelled",
-          data: { jobId: row.job.id },
+        const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
+        logs.push(createLog("warn", "Job cancelled by user."));
+        await tx
+          .update(translationJobs)
+          .set({ status: "cancelled", logsJson: JSON.stringify(logs), updatedAt: new Date() })
+          .where(
+            and(
+              eq(translationJobs.id, row.job.id),
+              sql`${translationJobs.status} IN ('pending', 'running')`,
+            ),
+          );
+        await tx
+          .update(chapters)
+          .set({
+            activeTranslationJobId: null,
+            status: row.chapter.translatedContent ? "translated" : "raw",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(eq(chapters.id, row.chapter.id), eq(chapters.activeTranslationJobId, row.job.id)),
+          );
+        const id = nanoid();
+        await tx.insert(translationOutbox).values({
+          id,
+          eventName: "translation/job.cancelled",
+          payloadJson: JSON.stringify(translationRunIdentity(row.job)),
         });
-      } catch {
-        // Inngest unreachable — DB status check in step handler still stops execution.
-      }
+        return id;
+      });
+
+      if (outboxId) await dispatchOutboxBestEffort(outboxId);
 
       return { success: true };
     }),
@@ -261,56 +253,95 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
+      await createProviderClient(session.user.id);
 
-      const [row] = await db
-        .select({
-          job: translationJobs,
-          chapter: chapters,
-        })
-        .from(translationJobs)
-        .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(and(eq(translationJobs.id, data.jobId), eq(novels.userId, session.user.id)))
-        .limit(1);
+      const retried = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .select({ job: translationJobs, chapter: chapters, novelId: novels.id })
+          .from(translationJobs)
+          .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+          .innerJoin(novels, eq(chapters.novelId, novels.id))
+          .where(and(eq(translationJobs.id, data.jobId), eq(novels.userId, session.user.id)))
+          .limit(1)
+          .for("update");
 
-      if (!row) {
-        throw new SafeServerError("Job not found or unauthorized");
-      }
+        if (!row) throw new SafeServerError("Job not found or unauthorized");
+        if (!["error", "cancelled"].includes(row.job.status)) {
+          throw new SafeServerError("Job is not retryable");
+        }
+        if (row.job.sourceRevision !== row.chapter.sourceRevision) {
+          throw new SafeServerError("Chapter source changed; start a new translation instead");
+        }
 
-      const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
-      logs.push(createLog("info", "Job retry initiated. Resuming from last completed chunk..."));
+        const cancelledJobs = await tx
+          .update(translationJobs)
+          .set({ status: "cancelled", updatedAt: new Date() })
+          .where(
+            and(
+              eq(translationJobs.chapterId, row.chapter.id),
+              sql`${translationJobs.id} != ${row.job.id}`,
+              sql`${translationJobs.status} IN ('pending', 'running')`,
+            ),
+          )
+          .returning({ id: translationJobs.id, generation: translationJobs.generation });
 
-      const updated = await db
-        .update(translationJobs)
-        .set({
-          status: "pending",
-          error: null,
-          logsJson: JSON.stringify(logs),
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(translationJobs.id, row.job.id),
-            sql`${translationJobs.status} IN ('error', 'cancelled')`,
-          ),
-        )
-        .returning({ id: translationJobs.id });
+        const generation = row.chapter.translationGeneration + 1;
+        const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
+        logs.push(createLog("info", "Job retry initiated. Resuming from last completed chunk..."));
+        const updated = await tx
+          .update(translationJobs)
+          .set({
+            status: "pending",
+            generation,
+            sourceRevision: row.chapter.sourceRevision,
+            error: null,
+            logsJson: JSON.stringify(logs),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(translationJobs.id, row.job.id),
+              sql`${translationJobs.status} IN ('error', 'cancelled')`,
+            ),
+          )
+          .returning({ id: translationJobs.id });
+        if (updated.length === 0) throw new SafeServerError("Job is not retryable");
 
-      if (updated.length === 0) {
-        throw new SafeServerError("Job is not retryable");
-      }
+        await tx
+          .update(chapters)
+          .set({
+            status: "queued",
+            activeTranslationJobId: row.job.id,
+            translationGeneration: generation,
+            updatedAt: new Date(),
+          })
+          .where(eq(chapters.id, row.chapter.id));
 
-      await db
-        .update(chapters)
-        .set({ status: "queued", updatedAt: new Date() })
-        .where(eq(chapters.id, row.chapter.id));
-
-      await inngest.send({
-        name: "translation/job.requested",
-        data: { jobId: row.job.id, runKey: nanoid() },
+        const outboxId = nanoid();
+        await tx.insert(translationOutbox).values({
+          id: outboxId,
+          eventName: "translation/job.requested",
+          payloadJson: JSON.stringify({
+            jobId: row.job.id,
+            novelId: row.novelId,
+            generation,
+            runKey: nanoid(),
+          }),
+        });
+        if (cancelledJobs.length > 0) {
+          await tx.insert(translationOutbox).values(
+            cancelledJobs.map((cancelled) => ({
+              id: nanoid(),
+              eventName: "translation/job.cancelled",
+              payloadJson: JSON.stringify(translationRunIdentity(cancelled)),
+            })),
+          );
+        }
+        return { jobId: row.job.id, outboxId };
       });
 
-      return { success: true, jobId: row.job.id };
+      await dispatchOutboxBestEffort(retried.outboxId);
+      return { success: true, jobId: retried.jobId };
     }),
   );
 

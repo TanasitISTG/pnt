@@ -1,6 +1,6 @@
-CREATE TYPE IF NOT EXISTS "public"."translation_job_status" AS ENUM('pending', 'running', 'done', 'error', 'cancelled');--> statement-breakpoint
-CREATE TYPE IF NOT EXISTS "public"."glossary_term_category" AS ENUM('character', 'place', 'skill', 'item', 'other');--> statement-breakpoint
-CREATE TYPE IF NOT EXISTS "public"."glossary_term_status" AS ENUM('approved', 'pending');--> statement-breakpoint
+CREATE TYPE "public"."translation_job_status" AS ENUM('pending', 'running', 'done', 'error', 'cancelled');--> statement-breakpoint
+CREATE TYPE "public"."glossary_term_category" AS ENUM('character', 'place', 'skill', 'item', 'other');--> statement-breakpoint
+CREATE TYPE "public"."glossary_term_status" AS ENUM('approved', 'pending');--> statement-breakpoint
 CREATE TABLE "translation_jobs" (
 	"id" text PRIMARY KEY NOT NULL,
 	"chapter_id" text NOT NULL,

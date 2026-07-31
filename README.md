@@ -62,17 +62,30 @@ bun run inngest
 
 ### Commands
 
-| Task                  | Command                                      |
-| --------------------- | -------------------------------------------- |
-| Dev server            | `bun dev`                                    |
-| Inngest dev           | `bun run inngest`                            |
-| Production build      | `bun run build`                              |
-| Lint / fix            | `bun run lint` / `bun run lint:fix`          |
-| Format / check        | `bun run format` / `bun run format:check`    |
-| Tests                 | `bun run test`                               |
-| DB generate / migrate | `bun run db:generate` / `bun run db:migrate` |
-| Seed admin user       | `bun run seed:user`                          |
-| Regenerate route tree | `bun run generate-routes`                    |
+| Task                  | Command                                          |
+| --------------------- | ------------------------------------------------ |
+| Dev server            | `bun dev`                                        |
+| Inngest dev           | `bun run inngest`                                |
+| Production build      | `bun run build`                                  |
+| Lint / fix            | `bun run lint` / `bun run lint:fix`              |
+| Format / check        | `bun run format` / `bun run format:check`        |
+| Tests                 | `bun run test`                                   |
+| PostgreSQL invariants | `TEST_DATABASE_URL=... bun run test:integration` |
+| Release audit         | `bun run audit:release`                          |
+| DB generate / migrate | `bun run db:generate` / `bun run db:migrate`     |
+| Seed admin user       | `bun run seed:user`                              |
+| Regenerate route tree | `bun run generate-routes`                        |
+
+### Deployment migrations
+
+Database migrations are a release step, not a Vercel build step. Run `bun run db:migrate`
+once against the target database before promoting a deployment. Vercel builds use the
+locked dependency graph and do not mutate database state, which avoids concurrent preview
+builds racing the production schema.
+
+The release audit fails on high or critical advisories. A currently known moderate esbuild
+advisory is confined to legacy migration tooling under `drizzle-kit`; it is still reported
+by `bun audit` and should be removed when that toolchain drops its old nested esbuild.
 
 ## Environment Variables
 

@@ -1,0 +1,74 @@
+# Translation Workflow Architecture
+
+## Objective
+
+Make translation, chapter editing, glossary propagation, and event dispatch safe under concurrent requests, retries, cancellation, and partial infrastructure failure without changing the public server-function contracts used by the UI.
+
+## Compatibility contract
+
+- Existing server-function names, validators, response shapes, job statuses, and persisted chapter fields remain readable.
+- Existing translation jobs remain queryable and terminal jobs remain immutable.
+- A job retry resumes completed chunks only when its source revision still matches the chapter.
+- Batch translation still reports ordered `queued` and `skipped` arrays.
+- Translation, summary, title, glossary, and publication behavior remains available through the existing routes.
+
+## Durable invariants
+
+1. A chapter has at most one active translation job.
+2. `chapters.active_translation_job_id` is the authority for which job may mutate chapter-derived state.
+3. `chapters.source_revision` increments whenever source content, source title, or chapter number changes.
+4. A job may write only while all of these remain true:
+   - its status is the expected active status;
+   - its generation matches the executing event;
+   - its source revision matches the chapter;
+   - the chapter points to that job as active.
+5. Raw-content edits invalidate derived translation artifacts and supersede active work atomically.
+6. Manual translation edits supersede active work and produce a consistent translated chapter state atomically.
+7. Database state and an intent to dispatch an Inngest event commit in one transaction. Dispatch is at-least-once; the stable event `runKey` provides execution idempotency, and cancellation targets the exact `(job ID, generation)` run.
+8. Translation jobs for one novel execute one at a time. This preserves chapter-order context and prevents concurrent rolling-summary writers. Different novels may execute concurrently.
+9. Multi-record glossary propagation is atomic.
+10. Session replay and DOM autocapture are disabled; optional telemetry is limited to page views and exception events after consent.
+
+## State transitions
+
+| Operation          | Job transition                                        | Chapter transition                                                  |
+| ------------------ | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| Start              | prior active -> `cancelled`; new -> `pending`         | generation + 1, active job set, `queued`                            |
+| Worker init        | `pending` -> `running`                                | `translating` if ownership still matches                            |
+| Chunk complete     | `running` -> `running`                                | none                                                                |
+| Finalize           | `running` -> `done`                                   | translation committed, active job cleared, `translated`             |
+| Cancel             | active -> `cancelled`                                 | active job cleared; `translated` if content exists, otherwise `raw` |
+| Failure            | active -> `error`                                     | active job cleared, `error`                                         |
+| Retry              | `error`/`cancelled` -> `pending`, generation replaced | generation + 1, active job set, `queued`                            |
+| Source edit        | active -> `cancelled`                                 | source revision + 1, active job cleared, derived state invalidated  |
+| Manual translation | active -> `cancelled`                                 | active job cleared, coherent translated timestamps/status           |
+
+## Persistence changes
+
+- `chapters.source_revision integer not null default 1`
+- `chapters.translation_generation integer not null default 0`
+- `chapters.active_translation_job_id text null`
+- `translation_jobs.source_revision integer not null default 1`
+- `translation_jobs.generation integer not null default 1`
+- Partial unique index on active translation jobs by chapter.
+- `translation_outbox` table containing stable payloads and dispatch status.
+
+The active-job column intentionally has no foreign key. Translation jobs already cascade when a chapter is deleted, while avoiding a circular foreign-key lifecycle lets the transaction clear ownership before or while terminalizing a job.
+
+## Boundaries
+
+- `translation/job-state.ts`: pure transition predicates and compatibility helpers.
+- `translation/job-store.ts`: conditional persistence and atomic worker commits.
+- `translation/outbox.ts`: durable event delivery.
+- Route-facing server functions authenticate and delegate state transitions; they do not implement worker validity rules.
+- Inngest orchestrates retries and per-novel concurrency but is not the source of truth for job validity.
+
+## Backward-compatibility verification
+
+The dedicated compatibility suite must cover public job shapes, stale-worker rejection, terminal-job immutability, migration defaults, ordered batch results, matching-revision retries, and migration-level uniqueness/outbox constraints.
+
+Database integration tests require `TEST_DATABASE_URL` and exercise the migration's partial unique index, concurrent production enqueues, and stale finalization against an isolated PostgreSQL service. They must never fall back to the application database.
+
+## Deferred work
+
+Normalizing `chunks_json` into chunk rows and streaming large exports remain worthwhile performance changes, but are deliberately separate from the state-integrity repair. Scrape responses are already bounded to 5 MB while streaming. Future storage changes must preserve the contracts above.

@@ -1,0 +1,77 @@
+import "@tanstack/react-start/server-only";
+
+import { and, asc, eq, lte, sql } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { translationOutbox } from "@/lib/db/schema";
+import { inngest } from "@/lib/inngest/client";
+import { log } from "@/lib/log";
+
+export async function dispatchTranslationOutboxEvent(outboxId: string): Promise<boolean> {
+  const [row] = await db
+    .select()
+    .from(translationOutbox)
+    .where(
+      and(
+        eq(translationOutbox.id, outboxId),
+        eq(translationOutbox.status, "pending"),
+        lte(translationOutbox.availableAt, new Date()),
+      ),
+    )
+    .limit(1);
+
+  if (!row) return false;
+
+  try {
+    const data = JSON.parse(row.payloadJson) as Record<string, unknown>;
+    await inngest.send({ name: row.eventName, data } as never);
+    await db
+      .update(translationOutbox)
+      .set({ status: "sent", sentAt: new Date(), lastError: null, updatedAt: new Date() })
+      .where(and(eq(translationOutbox.id, row.id), eq(translationOutbox.status, "pending")));
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const delayMs = Math.min(300_000, 5_000 * 2 ** Math.min(row.attempts, 6));
+    await db
+      .update(translationOutbox)
+      .set({
+        attempts: sql`${translationOutbox.attempts} + 1`,
+        lastError: message.slice(0, 2000),
+        availableAt: new Date(Date.now() + delayMs),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(translationOutbox.id, row.id), eq(translationOutbox.status, "pending")));
+    log("warn", "Translation outbox dispatch deferred", { outboxId, error: message });
+    return false;
+  }
+}
+
+export async function dispatchTranslationOutboxEventBestEffort(outboxId: string): Promise<void> {
+  try {
+    await dispatchTranslationOutboxEvent(outboxId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log("warn", "Translation outbox eager dispatch failed; scheduled delivery will retry", {
+      outboxId,
+      error: message,
+    });
+  }
+}
+
+export async function dispatchPendingTranslationOutbox(limit = 25) {
+  const rows = await db
+    .select({ id: translationOutbox.id })
+    .from(translationOutbox)
+    .where(
+      and(eq(translationOutbox.status, "pending"), lte(translationOutbox.availableAt, new Date())),
+    )
+    .orderBy(asc(translationOutbox.createdAt))
+    .limit(limit);
+
+  let sent = 0;
+  for (const row of rows) {
+    if (await dispatchTranslationOutboxEvent(row.id)) sent++;
+  }
+  return { examined: rows.length, sent };
+}

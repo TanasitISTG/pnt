@@ -1,4 +1,4 @@
 {
-  "buildCommand": "bun run predeploy && bun run build && bun run postbuild",
-  "installCommand": "bun install"
+  "buildCommand": "bun run build && bun run postbuild",
+  "installCommand": "bun install --frozen-lockfile"
 }

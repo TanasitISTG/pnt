@@ -1,13 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import type { novels, chapters } from "@/lib/db/schema";
-import {
-  saveJob,
-  setChapterTranslatedTitle,
-  setChapterSummary,
-  setNovelStorySummary,
-} from "./job-store";
-import { createLog } from "./translation.functions";
+import { createLog } from "./log-entry";
 import type { AIProviderClient, LogEntry } from "./translation.types";
 import { translateChapterTitle } from "./title";
 import { buildSummaryPrompt } from "./prompts";
@@ -18,12 +12,12 @@ export interface FinalizeSummaryParams {
   chapter: typeof chapters.$inferSelect;
   fullTranslation: string;
   logs: LogEntry[];
-  jobId: string;
 }
 
 export interface FinalizeSummaryResult {
   translatedTitle?: string;
   freshSummary?: string;
+  updatedStorySummary?: string;
   promptTokens: number;
   completionTokens: number;
 }
@@ -34,7 +28,6 @@ export async function generateSummaryArtifacts({
   chapter,
   fullTranslation,
   logs,
-  jobId,
 }: FinalizeSummaryParams): Promise<FinalizeSummaryResult> {
   let promptTokens = 0;
   let completionTokens = 0;
@@ -50,7 +43,6 @@ export async function generateSummaryArtifacts({
   completionTokens += titleRes.completionTokens;
   if (titleRes.translated) {
     translatedTitle = titleRes.translated;
-    await setChapterTranslatedTitle(chapter.id, titleRes.translated);
     logs.push(createLog("success", `Title translated: "${titleRes.translated}"`));
   } else {
     logs.push(createLog("warn", "Title translation skipped — keeping raw title."));
@@ -58,10 +50,10 @@ export async function generateSummaryArtifacts({
 
   // Generate chapter summary in English
   logs.push(createLog("info", "Generating English chapter summary..."));
-  await saveJob(jobId, { logsJson: JSON.stringify(logs) });
   const summaryStartTime = Date.now();
 
   let freshSummary: string | undefined;
+  let updatedStorySummary: string | undefined;
   try {
     const summarySystemPrompt = buildSummaryPrompt(`${novel.sourceLang}->${novel.targetLang}`);
     const summaryCompletion = await providerConfig.generateChatCompletion({
@@ -88,8 +80,6 @@ export async function generateSummaryArtifacts({
     logs.push(createLog("success", `Summary generated in ${summaryTime}s.`));
 
     if (freshSummary) {
-      await setChapterSummary(chapter.id, freshSummary);
-
       // Update rolling story summary on novel (non-fatal)
       try {
         const storySummaryCompletion = await providerConfig.generateChatCompletion({
@@ -110,9 +100,8 @@ export async function generateSummaryArtifacts({
         });
         promptTokens += storySummaryCompletion.usage?.promptTokens || 0;
         completionTokens += storySummaryCompletion.usage?.completionTokens || 0;
-        const updatedStorySummary = storySummaryCompletion.content?.trim();
+        updatedStorySummary = storySummaryCompletion.content?.trim() || undefined;
         if (updatedStorySummary) {
-          await setNovelStorySummary(novel.id, updatedStorySummary);
           logs.push(createLog("info", "Updated rolling story summary."));
         }
       } catch (storyErr) {
@@ -136,6 +125,7 @@ export async function generateSummaryArtifacts({
   return {
     translatedTitle,
     freshSummary,
+    updatedStorySummary,
     promptTokens,
     completionTokens,
   };

@@ -12,18 +12,19 @@ import {
   normalizeTranslationOutput,
 } from "./paragraphs";
 import { extractHanziSpans, spliceSpans } from "./residual-repair";
-import { createLog } from "./translation.functions";
+import { createLog } from "./log-entry";
 import type { ChunkProgress, LogEntry, SlimChunkProgress } from "./translation.types";
 import { log } from "@/lib/log";
 import {
+  beginJob,
+  completeJob,
+  failActiveJob,
   loadJob,
-  saveJob,
-  markChapterTranslating,
   loadApprovedTermsForContext,
   loadPrevChapterForContext,
-  markChapterTranslated,
-  markChapterError,
+  saveJobProgress,
 } from "./job-store";
+import { canRunJob, isCompletedChunk, isNextChunk } from "./job-state";
 import { generateSummaryArtifacts } from "./finalize-summary";
 import { suggestAndReviewTerms } from "./finalize-glossary";
 
@@ -31,22 +32,13 @@ import { suggestAndReviewTerms } from "./finalize-glossary";
 // per job, each chunk a memoized step with its own invocation + retries — so no
 // lease, no cron pinger. DB status rows stay the UI's source of truth.
 
-export async function initJob(jobId: string) {
+export async function initJob(jobId: string, generation: number) {
   log("info", "step transition", { jobId, step: "init" });
-  const row = await loadJob(jobId);
-  if (!row) throw new Error(`Job ${jobId} not found`);
-  const { job, chapter } = row;
-
-  // Cancelled/done/errored before the run started (e.g. replaced by a newer job).
-  if (job.status !== "pending" && job.status !== "running") {
+  const row = await beginJob(jobId, generation);
+  if (!row) {
     return { skip: true as const, doneChunks: 0, totalChunks: 0 };
   }
-
-  if (job.status !== "running") {
-    await saveJob(job.id, { status: "running" });
-    await markChapterTranslating(chapter.id);
-  }
-
+  const { job } = row;
   const chunkList: ChunkProgress[] = JSON.parse(job.chunksJson || "[]");
   return { skip: false as const, doneChunks: job.doneChunks, totalChunks: chunkList.length };
 }
@@ -269,15 +261,15 @@ async function repairResidualHanzi(
   return { translation: text, promptTokens, completionTokens };
 }
 
-export async function translateChunk(jobId: string, i: number): Promise<void> {
+export async function translateChunk(jobId: string, i: number, generation: number): Promise<void> {
   log("info", "step transition", { jobId, step: "translateChunk", chunk: i });
   const row = await loadJob(jobId);
   if (!row) throw new Error(`Job ${jobId} not found`);
   const { job, chapter, novel } = row;
 
-  // Cancelled mid-run, or this chunk already landed in a previous attempt.
-  if (job.status !== "running" && job.status !== "pending") return;
-  if (i < job.doneChunks) return;
+  if (job.status !== "running" || !canRunJob(job, chapter, generation)) return;
+  if (isCompletedChunk(job, i)) return;
+  if (!isNextChunk(job, i)) throw new Error(`Chunk ${i} is out of sequence for job ${jobId}`);
 
   const providerConfig = await createProviderClient(novel.userId);
 
@@ -386,10 +378,11 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
     logs.push(
       createLog("warn", `Chunk ${i + 1}/${chunkList.length} failed: ${currentChunk.error}`),
     );
-    await saveJob(job.id, {
+    const saved = await saveJobProgress(job.id, generation, i, {
       chunksJson: JSON.stringify(chunkList),
       logsJson: JSON.stringify(logs),
     });
+    if (!saved) return;
     throw err;
   }
 
@@ -412,7 +405,7 @@ export async function translateChunk(jobId: string, i: number): Promise<void> {
     ),
   );
 
-  await saveJob(job.id, {
+  await saveJobProgress(job.id, generation, i, {
     doneChunks: i + 1,
     chunksJson: JSON.stringify(chunkList),
     logsJson: JSON.stringify(logs),
@@ -437,14 +430,13 @@ function stripChunkPayloads(chunkList: ChunkProgress[]): SlimChunkProgress[] {
   }));
 }
 
-export async function finalizeJob(jobId: string): Promise<void> {
+export async function finalizeJob(jobId: string, generation: number): Promise<void> {
   log("info", "step transition", { jobId, step: "finalize" });
   const row = await loadJob(jobId);
   if (!row) throw new Error(`Job ${jobId} not found`);
   const { job, chapter, novel } = row;
 
-  if (job.status === "done") return; // replay of an already-finalized run
-  if (job.status !== "running") return; // cancelled mid-run
+  if (job.status !== "running" || !canRunJob(job, chapter, generation)) return;
 
   const providerConfig = await createProviderClient(novel.userId);
 
@@ -464,8 +456,6 @@ export async function finalizeJob(jobId: string): Promise<void> {
   let totalPromptTokens = chunkList.reduce((acc, c) => acc + (c.promptTokens || 0), 0);
   let totalCompletionTokens = chunkList.reduce((acc, c) => acc + (c.completionTokens || 0), 0);
 
-  await markChapterTranslated(chapter.id, fullTranslation);
-
   // Phase 1: Summary & title generation
   const summaryRes = await generateSummaryArtifacts({
     providerConfig,
@@ -473,7 +463,6 @@ export async function finalizeJob(jobId: string): Promise<void> {
     chapter,
     fullTranslation,
     logs,
-    jobId: job.id,
   });
   totalPromptTokens += summaryRes.promptTokens;
   totalCompletionTokens += summaryRes.completionTokens;
@@ -487,7 +476,6 @@ export async function finalizeJob(jobId: string): Promise<void> {
     fullTranslation,
     freshSummary: summaryRes.freshSummary,
     logs,
-    jobId: job.id,
   });
   totalPromptTokens += glossaryRes.promptTokens;
   totalCompletionTokens += glossaryRes.completionTokens;
@@ -499,8 +487,14 @@ export async function finalizeJob(jobId: string): Promise<void> {
     ),
   );
 
-  await saveJob(job.id, {
-    status: "done",
+  await completeJob({
+    jobId: job.id,
+    generation,
+    fullTranslation,
+    translatedTitle: summaryRes.translatedTitle,
+    chapterSummary: summaryRes.freshSummary,
+    storySummary: summaryRes.updatedStorySummary,
+    glossaryRows: glossaryRes.rowsToInsert,
     chunksJson: JSON.stringify(stripChunkPayloads(chunkList)),
     logsJson: JSON.stringify(logs),
     usageJson: JSON.stringify({ totalPromptTokens, totalCompletionTokens }),
@@ -508,16 +502,14 @@ export async function finalizeJob(jobId: string): Promise<void> {
 }
 
 /** Called from the function's onFailure — marks the job/chapter errored for the UI. */
-export async function failJob(jobId: string, message: string): Promise<void> {
+export async function failJob(jobId: string, generation: number, message: string): Promise<void> {
   log("error", "step transition", { jobId, step: "fail", message });
   const row = await loadJob(jobId);
   if (!row) return;
-  const { job, chapter } = row;
-  if (job.status !== "running" && job.status !== "pending") return; // cancelled/done elsewhere
+  const { job } = row;
 
   const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
   logs.push(createLog("error", `Job failed: ${message}`));
 
-  await saveJob(job.id, { status: "error", error: message, logsJson: JSON.stringify(logs) });
-  await markChapterError(chapter.id);
+  await failActiveJob(job.id, generation, message, JSON.stringify(logs));
 }

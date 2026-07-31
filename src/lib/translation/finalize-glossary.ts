@@ -2,13 +2,8 @@ import "@tanstack/react-start/server-only";
 
 import type { novels, chapters, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
-import {
-  saveJob,
-  loadTermSourcesForExclusion,
-  findExistingTermSources,
-  insertGlossaryTerms,
-} from "./job-store";
-import { createLog } from "./translation.functions";
+import { loadTermSourcesForExclusion, findExistingTermSources } from "./job-store";
+import { createLog } from "./log-entry";
 import type { AIProviderClient, ChatMessage, ChunkProgress, LogEntry } from "./translation.types";
 import {
   buildTermSuggestionPrompt,
@@ -26,7 +21,6 @@ export interface FinalizeGlossaryParams {
   fullTranslation: string;
   freshSummary?: string;
   logs: LogEntry[];
-  jobId: string;
 }
 
 export interface FinalizeGlossaryResult {
@@ -36,6 +30,7 @@ export interface FinalizeGlossaryResult {
   conflictCount: number;
   promptTokens: number;
   completionTokens: number;
+  rowsToInsert: (typeof glossaryTerms.$inferInsert)[];
 }
 
 async function generateJsonWithFallback(
@@ -77,7 +72,6 @@ export async function suggestAndReviewTerms({
   fullTranslation,
   freshSummary,
   logs,
-  jobId,
 }: FinalizeGlossaryParams): Promise<FinalizeGlossaryResult> {
   let promptTokens = 0;
   let completionTokens = 0;
@@ -85,9 +79,9 @@ export async function suggestAndReviewTerms({
   let pendingCount = 0;
   let rejectedCount = 0;
   let conflictCount = 0;
+  let rowsToInsert: (typeof glossaryTerms.$inferInsert)[] = [];
 
   logs.push(createLog("info", "Extracting new glossary term suggestions..."));
-  await saveJob(jobId, { logsJson: JSON.stringify(logs) });
 
   try {
     const { approvedTerms, rejectedTerms } = await loadTermSourcesForExclusion(novel.id);
@@ -132,7 +126,6 @@ export async function suggestAndReviewTerms({
       logs.push(
         createLog("info", `Reviewing ${suggestedTerms.length} suggested term(s) with AI...`),
       );
-      await saveJob(jobId, { logsJson: JSON.stringify(logs) });
 
       try {
         const reviewPrompt = buildGlossaryReviewPrompt(
@@ -174,7 +167,7 @@ export async function suggestAndReviewTerms({
     const suggestedSources = suggestedTerms.map((st) => st.source.trim().toLowerCase());
     const existingSources = await findExistingTermSources(novel.id, suggestedSources);
 
-    const rowsToInsert: (typeof glossaryTerms.$inferInsert)[] = [];
+    rowsToInsert = [];
 
     for (const st of suggestedTerms) {
       const review = reviewBySource.get(st.source);
@@ -226,10 +219,6 @@ export async function suggestAndReviewTerms({
       else pendingCount++;
     }
 
-    if (rowsToInsert.length > 0) {
-      await insertGlossaryTerms(rowsToInsert);
-    }
-
     const summary: string[] = [];
     if (approvedCount > 0) summary.push(`${approvedCount} approved`);
     if (pendingCount > 0) summary.push(`${pendingCount} pending`);
@@ -257,5 +246,6 @@ export async function suggestAndReviewTerms({
     conflictCount,
     promptTokens,
     completionTokens,
+    rowsToInsert,
   };
 }

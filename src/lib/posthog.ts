@@ -30,12 +30,9 @@ export function initPostHog() {
     capture_exceptions: consent === "granted",
     opt_out_capturing_by_default: consent !== "granted",
     persistence: consent === "granted" ? "localStorage+cookie" : "memory",
-    // PostHog Cloud project has autocapture + session recording enabled in the
-    // dashboard; leaving them on per user request. The sub-scripts the SDK
-    // lazily loads from us-assets.i.posthog.com may trip CORS errors on networks
-    // with third-party tracker blocking (Firefox ETP) — out of app control.
-    autocapture: true,
-    disable_session_recording: false,
+    // Novel text and editor contents must never be captured as analytics data.
+    autocapture: false,
+    disable_session_recording: true,
   });
 
   if (consent === "denied") {

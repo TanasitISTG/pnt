@@ -10,7 +10,42 @@ import { log } from "@/lib/log";
 
 const DIRECT_FETCH_TIMEOUT_MS = 10_000;
 const SCRAPER_FETCH_TIMEOUT_MS = 30_000;
-const MAX_HTML_CHARS = 5_000_000;
+const MAX_HTML_BYTES = 5_000_000;
+const MAX_ERROR_BYTES = 64_000;
+
+async function readResponseText(res: Response, maxBytes = MAX_HTML_BYTES): Promise<string> {
+  const contentLength = res.headers.get("content-length");
+  if (contentLength) {
+    const declaredBytes = Number(contentLength);
+    if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+      await res.body?.cancel();
+      throw new SafeServerError("Page too large");
+    }
+  }
+
+  if (!res.body) return "";
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        await reader.cancel();
+        throw new SafeServerError("Page too large");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 export async function directFetch(url: string): Promise<string> {
   // redirect: "manual" + explicit 3xx rejection — redirect targets are never
@@ -37,7 +72,7 @@ export async function directFetch(url: string): Promise<string> {
     log("warn", "Direct scrape fetch failed", { url, status: res.status });
     throw new SafeServerError(`Source site returned HTTP ${res.status}`, { cause: res.status });
   }
-  return res.text();
+  return readResponseText(res);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +106,7 @@ interface ProxyProviderSpec {
 
 async function parseErrorDetail(res: Response): Promise<string> {
   try {
-    const errJson = await res.json();
+    const errJson = JSON.parse(await readResponseText(res, MAX_ERROR_BYTES));
     return errJson.error || errJson.message || JSON.stringify(errJson);
   } catch {
     return res.statusText;
@@ -136,7 +171,7 @@ async function proxiedFetch(
     });
   }
 
-  return spec.parseResponse ? spec.parseResponse(res) : res.text();
+  return spec.parseResponse ? spec.parseResponse(res) : readResponseText(res);
 }
 
 const zenrowsSpec: ProxyProviderSpec = {
@@ -226,7 +261,7 @@ const firecrawlSpec: ProxyProviderSpec = {
     };
   },
   async parseResponse(res) {
-    const json = await res.json();
+    const json = JSON.parse(await readResponseText(res));
     const parsed = firecrawlResponseSchema.safeParse(json);
     if (!parsed.success || !parsed.data.data?.rawHtml) {
       const errMessage = parsed.success
@@ -280,11 +315,6 @@ export async function fetchHtml(url: string, provider: ScrapeProvider = "auto"):
     html = await firecrawlFetch(url);
   } else {
     throw new SafeServerError(`Unknown scrape provider: ${provider}`);
-  }
-
-  if (html.length > MAX_HTML_CHARS) {
-    log("error", "Scrape page size limit exceeded", { url, length: html.length });
-    throw new SafeServerError("Page too large");
   }
 
   return html;

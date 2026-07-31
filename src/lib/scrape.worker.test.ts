@@ -30,6 +30,13 @@ vi.mock("./scrape", async (importActual) => {
   };
 });
 
+async function runChapter(n: number, chapterUrls?: Record<number, string>) {
+  // importOneChapter sleeps a polite per-site delay before fetching.
+  const promise = importOneChapter("job-1", n, chapterUrls);
+  await vi.advanceTimersByTimeAsync(1600);
+  return promise;
+}
+
 describe("scrape worker steps", () => {
   const quanbenJob = {
     id: "job-1",
@@ -59,14 +66,6 @@ describe("scrape worker steps", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
-
-  async function runChapter(n: number, chapterUrls?: Record<number, string>) {
-    // importOneChapter sleeps a polite per-site delay before fetching —
-    // flush it via fake timers (400ms quanben / 1500ms twkan, advance past both).
-    const p = importOneChapter("job-1", n, chapterUrls);
-    await vi.advanceTimersByTimeAsync(1600);
-    return p;
-  }
 
   it("1. initImportJob skips when the job row is gone", async () => {
     vi.mocked(jobStore.loadImportJob).mockResolvedValue(null as never);

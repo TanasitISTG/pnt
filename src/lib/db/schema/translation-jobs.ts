@@ -1,5 +1,5 @@
-import { relations } from "drizzle-orm";
-import { pgTable, pgEnum, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { pgTable, pgEnum, text, timestamp, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { chapters } from "./novels";
 
 export const jobStatusEnum = pgEnum("translation_job_status", [
@@ -18,6 +18,8 @@ export const translationJobs = pgTable(
       .notNull()
       .references(() => chapters.id, { onDelete: "cascade" }),
     status: jobStatusEnum("status").notNull().default("pending"),
+    sourceRevision: integer("source_revision").notNull().default(1),
+    generation: integer("generation").notNull().default(1),
     totalChunks: integer("total_chunks").notNull(),
     doneChunks: integer("done_chunks").notNull().default(0),
     chunksJson: text("chunks_json"),
@@ -27,7 +29,12 @@ export const translationJobs = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [index("translation_jobs_chapter_id_idx").on(table.chapterId)],
+  (table) => [
+    index("translation_jobs_chapter_id_idx").on(table.chapterId),
+    uniqueIndex("translation_jobs_one_active_per_chapter_idx")
+      .on(table.chapterId)
+      .where(sql`${table.status} IN ('pending', 'running')`),
+  ],
 );
 
 export const translationJobsRelations = relations(translationJobs, ({ one }) => ({

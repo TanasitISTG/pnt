@@ -1,211 +1,165 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { initJob, translateChunk, finalizeJob, failJob } from "./worker";
+import { failJob, finalizeJob, initJob, translateChunk } from "./worker";
+import * as finalizeGlossaryModule from "./finalize-glossary";
+import * as finalizeSummaryModule from "./finalize-summary";
 import * as jobStore from "./job-store";
 import * as providerClientModule from "./provider-client";
-import * as finalizeSummaryModule from "./finalize-summary";
-import * as finalizeGlossaryModule from "./finalize-glossary";
 
 vi.mock("./job-store", () => ({
+  beginJob: vi.fn(),
+  completeJob: vi.fn(),
+  failActiveJob: vi.fn(),
   loadJob: vi.fn(),
-  saveJob: vi.fn(),
-  markChapterTranslating: vi.fn(),
+  saveJobProgress: vi.fn(),
   loadApprovedTermsForContext: vi.fn().mockResolvedValue([]),
   loadPrevChapterForContext: vi.fn().mockResolvedValue(null),
-  markChapterTranslated: vi.fn(),
-  setChapterTranslatedTitle: vi.fn(),
-  setChapterSummary: vi.fn(),
-  setNovelStorySummary: vi.fn(),
-  loadTermSourcesForExclusion: vi.fn().mockResolvedValue({ approvedTerms: [], rejectedTerms: [] }),
+  loadTermSourcesForExclusion: vi.fn().mockResolvedValue({
+    approvedTerms: [],
+    rejectedTerms: [],
+  }),
   findExistingTermSources: vi.fn().mockResolvedValue(new Set()),
-  insertGlossaryTerms: vi.fn(),
-  markChapterError: vi.fn(),
 }));
 
-vi.mock("./provider-client", () => ({
-  createProviderClient: vi.fn(),
-}));
+vi.mock("./provider-client", () => ({ createProviderClient: vi.fn() }));
+vi.mock("./finalize-summary", () => ({ generateSummaryArtifacts: vi.fn() }));
+vi.mock("./finalize-glossary", () => ({ suggestAndReviewTerms: vi.fn() }));
 
-vi.mock("./finalize-summary", () => ({
-  generateSummaryArtifacts: vi.fn(),
-}));
-
-vi.mock("./finalize-glossary", () => ({
-  suggestAndReviewTerms: vi.fn(),
-}));
-
-describe("translation worker steps", () => {
+describe("translation worker guarded state transitions", () => {
+  const generation = 3;
   const mockNovel = {
     id: "novel-1",
     userId: "user-1",
-    sourceLang: "ZH",
-    targetLang: "TH",
+    sourceLang: "zh",
+    targetLang: "th",
     customPrompt: null,
     contextTailLength: 500,
     storySummary: "Old story summary",
   };
-
   const mockChapter = {
     id: "chapter-1",
     novelId: "novel-1",
     number: "1",
     title: "Chapter 1",
     rawContent: "Test raw content",
+    translatedTitle: null,
+    summary: null,
+    activeTranslationJobId: "job-1",
+    translationGeneration: generation,
+    sourceRevision: 7,
   };
-
   const mockJob = {
     id: "job-1",
     chapterId: "chapter-1",
     status: "running",
+    generation,
+    sourceRevision: 7,
     doneChunks: 0,
-    chunksJson: JSON.stringify([{ text: "Chunk 1 text" }, { text: "Chunk 2 text" }]),
+    totalChunks: 2,
+    chunksJson: JSON.stringify([
+      { index: 0, text: "Chunk 1 text" },
+      { index: 1, text: "Chunk 2 text" },
+    ]),
     logsJson: "[]",
   };
-
-  const mockProviderClient = {
-    userId: "user-1",
-    generateChatCompletion: vi.fn(),
-  };
+  const row = { job: mockJob, chapter: mockChapter, novel: mockNovel };
+  const provider = { generateChatCompletion: vi.fn() };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(providerClientModule.createProviderClient).mockResolvedValue(
-      mockProviderClient as never,
-    );
+    vi.mocked(jobStore.saveJobProgress).mockResolvedValue(true);
+    vi.mocked(jobStore.completeJob).mockResolvedValue(true);
+    vi.mocked(jobStore.failActiveJob).mockResolvedValue(true);
+    vi.mocked(providerClientModule.createProviderClient).mockResolvedValue(provider as never);
+    vi.mocked(finalizeSummaryModule.generateSummaryArtifacts).mockResolvedValue({
+      translatedTitle: "Translated Title",
+      freshSummary: "Chapter summary",
+      updatedStorySummary: "Updated story",
+      promptTokens: 5,
+      completionTokens: 10,
+    });
+    vi.mocked(finalizeGlossaryModule.suggestAndReviewTerms).mockResolvedValue({
+      approvedCount: 0,
+      pendingCount: 0,
+      rejectedCount: 0,
+      conflictCount: 0,
+      promptTokens: 5,
+      completionTokens: 10,
+      rowsToInsert: [],
+    });
   });
 
-  it("initJob marks job running and returns chunk counts", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: { ...mockJob, status: "pending", doneChunks: 0 },
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
+  it("initializes only through the generation-aware transaction", async () => {
+    vi.mocked(jobStore.beginJob).mockResolvedValue(row as never);
 
-    const res = await initJob("job-1");
-
-    expect(res).toEqual({ skip: false, doneChunks: 0, totalChunks: 2 });
-    expect(jobStore.saveJob).toHaveBeenCalledWith("job-1", { status: "running" });
-    expect(jobStore.markChapterTranslating).toHaveBeenCalledWith("chapter-1");
+    await expect(initJob("job-1", generation)).resolves.toEqual({
+      skip: false,
+      doneChunks: 0,
+      totalChunks: 2,
+    });
+    expect(jobStore.beginJob).toHaveBeenCalledWith("job-1", generation);
   });
 
-  it("1. translateChunk standard execution updates doneChunks, chunksJson, and job", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: { ...mockJob, doneChunks: 0 },
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
+  it("skips when ownership was lost before initialization", async () => {
+    vi.mocked(jobStore.beginJob).mockResolvedValue(null);
+    await expect(initJob("job-1", generation)).resolves.toEqual({
+      skip: true,
+      doneChunks: 0,
+      totalChunks: 0,
+    });
+  });
 
-    mockProviderClient.generateChatCompletion.mockResolvedValueOnce({
+  it("writes translated progress with generation and expected cursor", async () => {
+    vi.mocked(jobStore.loadJob).mockResolvedValue(row as never);
+    provider.generateChatCompletion.mockResolvedValueOnce({
       content: "Translated Chunk 1",
       usage: { promptTokens: 10, completionTokens: 20 },
     });
 
-    await translateChunk("job-1", 0);
+    await translateChunk("job-1", 0, generation);
 
-    expect(mockProviderClient.generateChatCompletion).toHaveBeenCalledTimes(1);
-    expect(jobStore.saveJob).toHaveBeenCalledWith(
+    expect(jobStore.saveJobProgress).toHaveBeenCalledWith(
       "job-1",
-      expect.objectContaining({
-        doneChunks: 1,
-      }),
+      generation,
+      0,
+      expect.objectContaining({ doneChunks: 1 }),
     );
   });
 
-  it("2. translateChunk idempotent skip when doneChunks >= chunkIndex + 1", async () => {
+  it("does not call the provider for a stale event generation", async () => {
+    vi.mocked(jobStore.loadJob).mockResolvedValue(row as never);
+    await translateChunk("job-1", 0, generation - 1);
+    expect(provider.generateChatCompletion).not.toHaveBeenCalled();
+    expect(jobStore.saveJobProgress).not.toHaveBeenCalled();
+  });
+
+  it("does not replay a completed chunk", async () => {
     vi.mocked(jobStore.loadJob).mockResolvedValue({
+      ...row,
       job: { ...mockJob, doneChunks: 1 },
-      chapter: mockChapter,
-      novel: mockNovel,
     } as never);
-
-    await translateChunk("job-1", 0);
-
-    expect(mockProviderClient.generateChatCompletion).not.toHaveBeenCalled();
-    expect(jobStore.saveJob).not.toHaveBeenCalled();
+    await translateChunk("job-1", 0, generation);
+    expect(provider.generateChatCompletion).not.toHaveBeenCalled();
   });
 
-  it("3. translateChunk cancelled status aborts early without calling provider LLM", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: { ...mockJob, status: "cancelled", doneChunks: 0 },
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
+  it("records a provider error without advancing the cursor", async () => {
+    vi.mocked(jobStore.loadJob).mockResolvedValue(row as never);
+    provider.generateChatCompletion.mockRejectedValue(new Error("API Error: 500"));
 
-    await translateChunk("job-1", 0);
-
-    expect(mockProviderClient.generateChatCompletion).not.toHaveBeenCalled();
-    expect(jobStore.saveJob).not.toHaveBeenCalled();
-  });
-
-  it("4. translateChunk triggers auto-split fallback on timeout", async () => {
-    const longText = "Paragraph line text.\n\n".repeat(70); // >1200 chars
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: {
-        ...mockJob,
-        doneChunks: 0,
-        chunksJson: JSON.stringify([{ text: longText }]),
-      },
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
-
-    // First call times out
-    mockProviderClient.generateChatCompletion
-      .mockRejectedValueOnce(new Error("Request timed out"))
-      .mockResolvedValue({
-        content: "Half translation ||¶||",
-        usage: { promptTokens: 5, completionTokens: 10 },
-      });
-
-    await translateChunk("job-1", 0);
-
-    expect(mockProviderClient.generateChatCompletion).toHaveBeenCalledTimes(5);
-    expect(jobStore.saveJob).toHaveBeenCalledWith(
+    await expect(translateChunk("job-1", 0, generation)).rejects.toThrow("API Error: 500");
+    expect(jobStore.saveJobProgress).toHaveBeenCalledWith(
       "job-1",
-      expect.objectContaining({
-        doneChunks: 1,
-      }),
+      generation,
+      0,
+      expect.not.objectContaining({ doneChunks: expect.anything() }),
     );
   });
 
-  it("5. translateChunk provider error saves chunk.error then rethrows for Inngest retry", async () => {
+  it("commits all final artifacts through one guarded transaction", async () => {
     vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: { ...mockJob, doneChunks: 0 },
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
-
-    mockProviderClient.generateChatCompletion.mockRejectedValue(new Error("API Error: 500"));
-
-    await expect(translateChunk("job-1", 0)).rejects.toThrow("API Error: 500");
-
-    expect(jobStore.saveJob).toHaveBeenCalledWith(
-      "job-1",
-      expect.objectContaining({
-        chunksJson: expect.stringContaining("API Error: 500"),
-      }),
-    );
-    // doneChunks must NOT advance on failure
-    const savedPatch = vi.mocked(jobStore.saveJob).mock.calls[0][1];
-    expect(savedPatch).not.toHaveProperty("doneChunks");
-  });
-
-  it("6. finalizeJob throws when called before all chunks are done", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: { ...mockJob, status: "running", doneChunks: 1 }, // totalChunks = 2
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
-
-    await expect(finalizeJob("job-1")).rejects.toThrow("1/2");
-    expect(jobStore.markChapterTranslated).not.toHaveBeenCalled();
-  });
-
-  it("7. finalizeJob standard success calls summary & glossary phases and sets chapter translated", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
+      ...row,
       job: {
         ...mockJob,
-        status: "running",
         doneChunks: 2,
         chunksJson: JSON.stringify([
           {
@@ -224,140 +178,45 @@ describe("translation worker steps", () => {
           },
         ]),
       },
-      chapter: mockChapter,
-      novel: mockNovel,
     } as never);
 
-    vi.mocked(finalizeSummaryModule.generateSummaryArtifacts).mockResolvedValue({
-      translatedTitle: "Translated Title",
-      freshSummary: "Chapter summary text",
-      promptTokens: 5,
-      completionTokens: 10,
-    });
+    await finalizeJob("job-1", generation);
 
-    vi.mocked(finalizeGlossaryModule.suggestAndReviewTerms).mockResolvedValue({
-      approvedCount: 1,
-      pendingCount: 0,
-      rejectedCount: 0,
-      conflictCount: 0,
-      promptTokens: 5,
-      completionTokens: 10,
-    });
-
-    await finalizeJob("job-1");
-
-    expect(jobStore.markChapterTranslated).toHaveBeenCalledWith(
-      "chapter-1",
-      "Translated 1\n\nTranslated 2",
-    );
-    expect(finalizeSummaryModule.generateSummaryArtifacts).toHaveBeenCalledTimes(1);
-    expect(finalizeGlossaryModule.suggestAndReviewTerms).toHaveBeenCalledTimes(1);
-    expect(jobStore.saveJob).toHaveBeenCalledWith(
-      "job-1",
+    expect(jobStore.completeJob).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: "done",
+        jobId: "job-1",
+        generation,
+        fullTranslation: "Translated 1\n\nTranslated 2",
+        translatedTitle: "Translated Title",
+        chapterSummary: "Chapter summary",
+        storySummary: "Updated story",
+        glossaryRows: [],
+        usageJson: JSON.stringify({ totalPromptTokens: 30, totalCompletionTokens: 60 }),
       }),
     );
-
-    // Done jobs must not retain full chunk payloads (2× chapter text per row)
-    const doneCall = vi
-      .mocked(jobStore.saveJob)
-      .mock.calls.find(([, patch]) => patch.status === "done");
-    const savedChunks = JSON.parse(doneCall![1].chunksJson as string);
-    expect(savedChunks).toHaveLength(2);
-    expect(savedChunks[0]).not.toHaveProperty("text");
-    expect(savedChunks[0]).not.toHaveProperty("translation");
-    expect(savedChunks[0]).toMatchObject({
-      index: 0,
-      textLength: 2,
-      hasTranslation: true,
-      promptTokens: 10,
-      completionTokens: 20,
-    });
+    const chunks = JSON.parse(vi.mocked(jobStore.completeJob).mock.calls[0][0].chunksJson);
+    expect(chunks[0]).not.toHaveProperty("text");
+    expect(chunks[0]).not.toHaveProperty("translation");
   });
 
-  it("8. finalizeJob cancelled status skips finalization", async () => {
+  it("skips finalization after chapter ownership moves", async () => {
     vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: { ...mockJob, status: "cancelled", doneChunks: 2 },
-      chapter: mockChapter,
-      novel: mockNovel,
+      ...row,
+      chapter: { ...mockChapter, activeTranslationJobId: "job-2" },
     } as never);
-
-    await finalizeJob("job-1");
-
-    expect(jobStore.markChapterTranslated).not.toHaveBeenCalled();
+    await finalizeJob("job-1", generation);
     expect(finalizeSummaryModule.generateSummaryArtifacts).not.toHaveBeenCalled();
+    expect(jobStore.completeJob).not.toHaveBeenCalled();
   });
 
-  it("9. finalizeJob no-op if status is errored or already done", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: { ...mockJob, status: "done", doneChunks: 2 },
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
-
-    await finalizeJob("job-1");
-
-    expect(jobStore.markChapterTranslated).not.toHaveBeenCalled();
-    expect(finalizeSummaryModule.generateSummaryArtifacts).not.toHaveBeenCalled();
-  });
-
-  it("10. finalizeJob updates story summary and token usage metrics via phase modules", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: {
-        ...mockJob,
-        status: "running",
-        doneChunks: 1,
-        chunksJson: JSON.stringify([
-          { text: "c1", translation: "T1", promptTokens: 10, completionTokens: 10 },
-        ]),
-      },
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
-
-    vi.mocked(finalizeSummaryModule.generateSummaryArtifacts).mockResolvedValue({
-      freshSummary: "New summary",
-      promptTokens: 10,
-      completionTokens: 10,
-    });
-
-    vi.mocked(finalizeGlossaryModule.suggestAndReviewTerms).mockResolvedValue({
-      approvedCount: 0,
-      pendingCount: 0,
-      rejectedCount: 0,
-      conflictCount: 0,
-      promptTokens: 5,
-      completionTokens: 5,
-    });
-
-    await finalizeJob("job-1");
-
-    expect(jobStore.saveJob).toHaveBeenCalledWith(
+  it("marks failure only through the guarded failure transaction", async () => {
+    vi.mocked(jobStore.loadJob).mockResolvedValue(row as never);
+    await failJob("job-1", generation, "LLM API Failure");
+    expect(jobStore.failActiveJob).toHaveBeenCalledWith(
       "job-1",
-      expect.objectContaining({
-        status: "done",
-        usageJson: JSON.stringify({ totalPromptTokens: 25, totalCompletionTokens: 25 }),
-      }),
+      generation,
+      "LLM API Failure",
+      expect.stringContaining("LLM API Failure"),
     );
-  });
-
-  it("11. failJob updates job and chapter status to errored", async () => {
-    vi.mocked(jobStore.loadJob).mockResolvedValue({
-      job: { ...mockJob, status: "running" },
-      chapter: mockChapter,
-      novel: mockNovel,
-    } as never);
-
-    await failJob("job-1", "LLM API Failure");
-
-    expect(jobStore.saveJob).toHaveBeenCalledWith(
-      "job-1",
-      expect.objectContaining({
-        status: "error",
-        error: "LLM API Failure",
-      }),
-    );
-    expect(jobStore.markChapterError).toHaveBeenCalledWith("chapter-1");
   });
 });

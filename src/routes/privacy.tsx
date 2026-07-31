@@ -47,8 +47,9 @@ function PrivacyPage() {
           </p>
           <ul className="list-disc pl-5 space-y-1 text-body text-muted-foreground">
             <li>
-              <strong className="text-foreground">PostHog</strong>: Optional product analytics and
-              crash reports, active only with explicit user consent.
+              <strong className="text-foreground">PostHog</strong>: Optional page-view analytics and
+              crash reports, active only with explicit user consent. Session replay and automatic
+              page-content capture are disabled.
             </li>
             <li>
               <strong className="text-foreground">Translation Providers</strong>: Novel raw text is

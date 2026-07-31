@@ -9,9 +9,11 @@ import {
   failImportJob,
 } from "@/lib/scrape.worker";
 import { log } from "@/lib/log";
+import { dispatchPendingTranslationOutbox } from "@/lib/translation/outbox";
+import { TRANSLATION_CANCEL_IF } from "@/lib/translation/job-state";
 
 // onFailure wraps the original trigger event: event.data.event.data.jobId.
-type FailedRunEventData = { event?: { data?: { jobId?: string } } };
+type FailedRunEventData = { event?: { data?: { jobId?: string; generation?: number } } };
 
 // One run per translation job. Each chunk is a memoized step = its own HTTP
 // invocation (fresh 5-min Vercel budget) with automatic retries; a crash
@@ -21,33 +23,46 @@ export const translateChapterFn = inngest.createFunction(
     id: "translate-chapter",
     triggers: { event: "translation/job.requested" },
     retries: 3,
+    concurrency: { limit: 1, key: "event.data.novelId" },
     // runKey is a fresh nanoid per enqueue — duplicate sends of the same
     // enqueue collapse, while a deliberate retry (new runKey) always runs.
     idempotency: "event.data.runKey",
-    cancelOn: [{ event: "translation/job.cancelled", match: "data.jobId" }],
+    cancelOn: [{ event: "translation/job.cancelled", if: TRANSLATION_CANCEL_IF }],
     onFailure: async ({ event, error }) => {
       const jobId = (event.data as FailedRunEventData).event?.data?.jobId;
+      // Migration 0021 assigns generation 1 to jobs queued by the old event shape.
+      const generation = (event.data as FailedRunEventData).event?.data?.generation ?? 1;
       if (!jobId) {
         log("error", "Translation onFailure fired without jobId", { event, error: error.message });
         return;
       }
       log("error", "Translation job failed", { jobId, error: error.message });
-      await failJob(jobId, error.message);
+      await failJob(jobId, generation, error.message);
     },
   },
   async ({ event, step }) => {
-    const { jobId } = event.data as { jobId: string };
+    const { jobId, generation = 1 } = event.data as { jobId: string; generation?: number };
 
-    const init = await step.run("init", () => initJob(jobId));
+    const init = await step.run("init", () => initJob(jobId, generation));
     if (init.skip) return { skipped: true };
 
     for (let i = init.doneChunks; i < init.totalChunks; i++) {
-      await step.run(`chunk-${i}`, () => translateChunk(jobId, i));
+      await step.run(`chunk-${i}`, () => translateChunk(jobId, i, generation));
     }
 
-    await step.run("finalize", () => finalizeJob(jobId));
+    await step.run("finalize", () => finalizeJob(jobId, generation));
     return { done: true };
   },
+);
+
+export const dispatchTranslationOutboxFn = inngest.createFunction(
+  {
+    id: "dispatch-translation-outbox",
+    triggers: { cron: "*/1 * * * *" },
+    retries: 0,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => step.run("dispatch-pending", () => dispatchPendingTranslationOutbox()),
 );
 
 // One run per bulk chapter import. Each chapter is a memoized step (own HTTP
@@ -86,4 +101,4 @@ export const importChaptersFn = inngest.createFunction(
   },
 );
 
-export const functions = [translateChapterFn, importChaptersFn];
+export const functions = [translateChapterFn, dispatchTranslationOutboxFn, importChaptersFn];

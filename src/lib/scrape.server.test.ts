@@ -52,16 +52,33 @@ describe("scrape.server", () => {
     expect(err).not.toBeInstanceOf(SafeServerError);
   });
 
-  it("fetchHtml rejects body > MAX_HTML_CHARS", async () => {
+  it("fetchHtml rejects a declared oversized body before buffering it", async () => {
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("not read"));
+        controller.close();
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { "content-length": "5000001" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchHtml("https://www.quanben.io/n/test/1.html", "direct")).rejects.toThrow(
+      "Page too large",
+    );
+  });
+
+  it("fetchHtml stops an oversized streamed body without a content-length header", async () => {
     const hugeHtml = "a".repeat(5_000_001);
     const fetchMock = vi
       .fn()
       .mockImplementation(() => Promise.resolve(new Response(hugeHtml, { status: 200 })));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(fetchHtml("https://www.quanben.io/n/test/1.html", "direct")).rejects.toThrow(
-      SafeServerError,
-    );
     await expect(fetchHtml("https://www.quanben.io/n/test/1.html", "direct")).rejects.toThrow(
       "Page too large",
     );
