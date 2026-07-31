@@ -133,12 +133,15 @@ export const getResidualHanziChapters = createServerFn({ method: "GET" })
       const contentById = new Map(contents.map((c) => [c.id, c.translatedContent]));
 
       const pair = `${novel.sourceLang}->${novel.targetLang}`;
-      return flagged
-        .map((ch) => ({
+      const residualChapters: { chapterId: string; number: string; count: number }[] = [];
+      for (const ch of flagged) {
+        const result = {
           chapterId: ch.id,
           number: ch.number,
           count: findResidualSourceChars(pair, contentById.get(ch.id) ?? "").length,
-        }))
-        .filter((ch) => ch.count > 0);
+        };
+        if (result.count > 0) residualChapters.push(result);
+      }
+      return residualChapters;
     });
   });

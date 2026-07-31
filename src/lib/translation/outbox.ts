@@ -3,9 +3,12 @@ import "@tanstack/react-start/server-only";
 import { and, asc, eq, lte, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { mapWithConcurrency } from "@/lib/async";
 import { translationOutbox } from "@/lib/db/schema";
 import { inngest } from "@/lib/inngest/client";
 import { log } from "@/lib/log";
+
+const OUTBOX_DISPATCH_CONCURRENCY = 2;
 
 export async function dispatchTranslationOutboxEvent(outboxId: string): Promise<boolean> {
   const [row] = await db
@@ -69,9 +72,9 @@ export async function dispatchPendingTranslationOutbox(limit = 25) {
     .orderBy(asc(translationOutbox.createdAt))
     .limit(limit);
 
-  let sent = 0;
-  for (const row of rows) {
-    if (await dispatchTranslationOutboxEvent(row.id)) sent++;
-  }
+  const results = await mapWithConcurrency(rows, OUTBOX_DISPATCH_CONCURRENCY, (row) =>
+    dispatchTranslationOutboxEvent(row.id),
+  );
+  const sent = results.reduce((count, wasSent) => count + Number(wasSent), 0);
   return { examined: rows.length, sent };
 }

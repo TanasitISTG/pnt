@@ -41,6 +41,16 @@ describe("scrape.server", () => {
     expect(err.message).toContain("302");
   });
 
+  it("uses the shared no-redirect boundary for proxy requests", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./scrape.server.ts", import.meta.url), "utf8"),
+    );
+
+    expect(source).toContain("const res = await fetchWithoutRedirects(");
+    expect(source).toContain("req.init ?? {},");
+    expect(source.match(/await fetch\(/g)).toHaveLength(1);
+  });
+
   it("directFetch does not misclassify network failures as redirects", async () => {
     // undici throws TypeError("fetch failed") for DNS/connection errors —
     // those must surface as-is, not as a "redirect blocked" message.

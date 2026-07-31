@@ -47,27 +47,41 @@ async function readResponseText(res: Response, maxBytes = MAX_HTML_BYTES): Promi
   }
 }
 
-export async function directFetch(url: string): Promise<string> {
-  // redirect: "manual" + explicit 3xx rejection — redirect targets are never
-  // fetched, so assertPublicHost can't be bypassed by a redirect to a private
-  // IP. (redirect: "error" would work too, but its rejection is an untyped
-  // TypeError indistinguishable from DNS/connection failures.)
+async function fetchWithoutRedirects(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  context: string,
+): Promise<Response> {
   const res = await fetch(url, {
+    ...init,
     redirect: "manual",
-    signal: AbortSignal.timeout(DIRECT_FETCH_TIMEOUT_MS),
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-    },
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (res.status >= 300 && res.status < 400) {
-    log("warn", "Direct scrape fetch blocked redirect", { url, status: res.status });
-    throw new SafeServerError(`Source site attempted a redirect (HTTP ${res.status}) — blocked`, {
+    await res.body?.cancel();
+    log("warn", `${context} fetch blocked redirect`, { url, status: res.status });
+    throw new SafeServerError(`${context} attempted a redirect (HTTP ${res.status}) - blocked`, {
       cause: res.status,
     });
   }
+  return res;
+}
+
+export async function directFetch(url: string): Promise<string> {
+  const res = await fetchWithoutRedirects(
+    url,
+    {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+      },
+    },
+    DIRECT_FETCH_TIMEOUT_MS,
+    "Source site",
+  );
   if (!res.ok) {
     log("warn", "Direct scrape fetch failed", { url, status: res.status });
     throw new SafeServerError(`Source site returned HTTP ${res.status}`, { cause: res.status });
@@ -141,10 +155,12 @@ async function proxiedFetch(
     ...(req.logUrl ? { requestUrl: req.logUrl } : {}),
   });
 
-  const res = await fetch(req.url, {
-    ...req.init,
-    signal: AbortSignal.timeout(SCRAPER_FETCH_TIMEOUT_MS),
-  });
+  const res = await fetchWithoutRedirects(
+    req.url,
+    req.init ?? {},
+    SCRAPER_FETCH_TIMEOUT_MS,
+    spec.name,
+  );
 
   if (!res.ok) {
     const errorDetail = await parseErrorDetail(res);

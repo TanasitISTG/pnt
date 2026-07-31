@@ -33,6 +33,10 @@ export interface FinalizeGlossaryResult {
   rowsToInsert: (typeof glossaryTerms.$inferInsert)[];
 }
 
+function containsLiteralText(text: string, candidate: string): boolean {
+  return text.includes(candidate);
+}
+
 async function generateJsonWithFallback(
   providerConfig: AIProviderClient,
   temperature: number,
@@ -198,8 +202,8 @@ export async function suggestAndReviewTerms({
 
       // High-confidence approve with valid evidence → insert as approved
       // Deterministic validation: source must appear in raw text, target in translation
-      const sourceInRaw = fullRawSource.includes(st.source);
-      const targetInTranslation = fullTranslation.includes(finalTarget);
+      const sourceInRaw = containsLiteralText(fullRawSource, st.source);
+      const targetInTranslation = containsLiteralText(fullTranslation, finalTarget);
       const approved =
         review?.action === "approve" &&
         review.confidence === "high" &&

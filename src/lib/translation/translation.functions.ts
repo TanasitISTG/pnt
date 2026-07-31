@@ -2,6 +2,7 @@ import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { eq, and, inArray, sql, desc, asc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { mapWithConcurrency } from "@/lib/async";
 import {
   novels,
   chapters,
@@ -29,6 +30,8 @@ import type { AIProviderClient } from "./translation.types";
 import { translationRunIdentity } from "./job-state";
 
 export { createLog } from "./log-entry";
+
+const BATCH_ENQUEUE_CONCURRENCY = 2;
 
 const dispatchOutboxBestEffort = createServerOnlyFn(async (outboxId: string) => {
   const { dispatchTranslationOutboxEventBestEffort } = await import("./outbox");
@@ -143,20 +146,21 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-      const providerConfig = await createProviderClient(session.user.id);
-
-      const targetChapters = await db
-        .select({ id: chapters.id, number: chapters.number })
-        .from(chapters)
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(
-          and(
-            inArray(chapters.id, data.chapterIds),
-            eq(chapters.novelId, data.novelId),
-            eq(novels.userId, session.user.id),
-          ),
-        )
-        .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
+      const [providerConfig, targetChapters] = await Promise.all([
+        createProviderClient(session.user.id),
+        db
+          .select({ id: chapters.id, number: chapters.number })
+          .from(chapters)
+          .innerJoin(novels, eq(chapters.novelId, novels.id))
+          .where(
+            and(
+              inArray(chapters.id, data.chapterIds),
+              eq(chapters.novelId, data.novelId),
+              eq(novels.userId, session.user.id),
+            ),
+          )
+          .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`)),
+      ]);
 
       const queued: { chapterId: string; jobId: string; totalChunks: number }[] = [];
       const skipped: { chapterId: string; reason?: string }[] = [];
@@ -168,20 +172,31 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
         }
       }
 
-      for (const chapter of targetChapters) {
-        try {
-          const result = await enqueueTranslationJob(session.user.id, chapter.id, providerConfig);
-          queued.push({
-            chapterId: chapter.id,
-            jobId: result.jobId,
-            totalChunks: result.totalChunks,
-          });
-        } catch (error) {
-          skipped.push({
-            chapterId: chapter.id,
-            reason: error instanceof Error ? error.message : "Failed to start translation",
-          });
-        }
+      const enqueueResults = await mapWithConcurrency(
+        targetChapters,
+        BATCH_ENQUEUE_CONCURRENCY,
+        async (chapter) => {
+          try {
+            const result = await enqueueTranslationJob(session.user.id, chapter.id, providerConfig);
+            return {
+              type: "queued" as const,
+              chapterId: chapter.id,
+              jobId: result.jobId,
+              totalChunks: result.totalChunks,
+            };
+          } catch (error) {
+            return {
+              type: "skipped" as const,
+              chapterId: chapter.id,
+              reason: error instanceof Error ? error.message : "Failed to start translation",
+            };
+          }
+        },
+      );
+
+      for (const result of enqueueResults) {
+        if (result.type === "queued") queued.push(result);
+        else skipped.push(result);
       }
 
       return { queued, skipped };

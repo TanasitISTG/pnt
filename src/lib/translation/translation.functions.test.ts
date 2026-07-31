@@ -24,9 +24,9 @@ describe("translation batch query predicates", () => {
     expect(source).toContain("return { queued, skipped };");
   });
 
-  it("enqueues batch jobs sequentially in numeric chapter order", () => {
-    expect(source).toContain("for (const chapter of targetChapters)");
-    expect(source).toContain("await enqueueTranslationJob");
-    expect(source).not.toContain("const BATCH_SIZE = 5;");
+  it("enqueues batch jobs with bounded concurrency", () => {
+    expect(source).toContain("const BATCH_ENQUEUE_CONCURRENCY = 2;");
+    expect(source).toContain("mapWithConcurrency(");
+    expect(source).toContain("BATCH_ENQUEUE_CONCURRENCY");
   });
 });
