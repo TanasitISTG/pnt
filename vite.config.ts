@@ -13,6 +13,7 @@ import { nitro } from "nitro/vite";
 const isVitest = !!process.env.VITEST;
 
 const config = defineConfig({
+  build: { target: "es2022" },
   resolve: { tsconfigPaths: true },
   plugins: [
     devtools(),

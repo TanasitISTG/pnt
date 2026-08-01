@@ -3,12 +3,12 @@ import { Link, type ErrorComponentProps } from "@tanstack/react-router";
 import { Home, RefreshCw, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { posthog } from "@/lib/posthog";
+import { captureException } from "@/lib/posthog";
 
 export function ErrorPage({ error, reset }: ErrorComponentProps) {
   useEffect(() => {
     if (error) {
-      posthog.captureException(error);
+      captureException(error);
     }
   }, [error]);
 

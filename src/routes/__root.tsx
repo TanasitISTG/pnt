@@ -1,17 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
-import { TanStackDevtools } from "@tanstack/react-devtools";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
-
-import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 
 import appCss from "../styles/globals.css?url";
 
 import { getSession } from "../lib/auth.functions";
 import { getConsent, useConsent } from "@/lib/consent";
-import { posthog, initPostHog, updatePostHogConsent } from "../lib/posthog";
+import { captureException, initPostHog, updatePostHogConsent } from "../lib/posthog";
 import { ConsentBanner } from "@/components/consent-banner";
 import { NotFoundPage } from "@/components/not-found-page";
 
@@ -20,6 +16,10 @@ import type { QueryClient } from "@tanstack/react-query";
 interface MyRouterContext {
   queryClient: QueryClient;
 }
+
+type DevtoolsModule = typeof import("@tanstack/react-devtools");
+type RouterDevtoolsModule = typeof import("@tanstack/react-router-devtools");
+type QueryDevtoolsModule = typeof import("../integrations/tanstack-query/devtools");
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   notFoundComponent: NotFoundPage,
@@ -87,6 +87,47 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
   shellComponent: RootDocument,
 });
 
+function DevelopmentDevtools() {
+  const [devtools, setDevtools] = useState<React.ReactNode>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      import("@tanstack/react-devtools"),
+      import("@tanstack/react-router-devtools"),
+      import("../integrations/tanstack-query/devtools"),
+    ]).then(
+      ([reactDevtools, routerDevtools, queryDevtools]: [
+        DevtoolsModule,
+        RouterDevtoolsModule,
+        QueryDevtoolsModule,
+      ]) => {
+        if (cancelled) return;
+        const TanStackDevtools = reactDevtools.TanStackDevtools;
+        const TanStackRouterDevtoolsPanel = routerDevtools.TanStackRouterDevtoolsPanel;
+        const TanStackQueryDevtools = queryDevtools.default;
+        setDevtools(
+          <TanStackDevtools
+            config={{ position: "bottom-right" }}
+            plugins={[
+              {
+                name: "Tanstack Router",
+                render: <TanStackRouterDevtoolsPanel />,
+              },
+              TanStackQueryDevtools,
+            ]}
+          />,
+        );
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return devtools;
+}
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { consent } = useConsent();
 
@@ -95,7 +136,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (getConsent() === "granted" && event.reason) {
-        posthog.captureException(
+        captureException(
           event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
         );
       }
@@ -103,9 +144,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
     const handleError = (event: ErrorEvent) => {
       if (getConsent() === "granted" && event.error) {
-        posthog.captureException(
-          event.error instanceof Error ? event.error : new Error(event.message),
-        );
+        captureException(event.error instanceof Error ? event.error : new Error(event.message));
       }
     };
 
@@ -138,18 +177,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           <Toaster />
           <ConsentBanner />
         </ThemeProvider>
-        <TanStackDevtools
-          config={{
-            position: "bottom-right",
-          }}
-          plugins={[
-            {
-              name: "Tanstack Router",
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            TanStackQueryDevtools,
-          ]}
-        />
+        {import.meta.env.DEV && <DevelopmentDevtools />}
         <Scripts />
       </body>
     </html>

@@ -67,7 +67,7 @@ export function AppShell({ user, children }: AppShellProps) {
               to="/"
               className="flex items-center gap-2 text-card-title font-semibold text-foreground no-underline"
             >
-              <img src="/logo-256.png" alt="" className="size-8 rounded-md" />
+              <img src="/favicon.png" alt="" width={32} height={32} className="size-8 rounded-md" />
               Pnt
             </Link>
             <nav className="hidden items-center gap-6 md:flex">

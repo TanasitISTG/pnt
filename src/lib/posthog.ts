@@ -1,55 +1,66 @@
-import posthog from "posthog-js";
-
 import { getConsent, type ConsentState } from "@/lib/consent";
 
-// ponytail: module flag makes initPostHog idempotent — PostHog throws a no-op
-// warning when posthog.init() is called twice, and TanStack Start hydration can
-// run RootDocument effects more than once per mount. Guarding init is safer
-// than re-init attempts: persistence can't upgrade mid-session once PostHog is
-// alive (would need reset+reload). Acceptance mid-session uses opt_in instead;
-// cross-session identity for the first post-accept session is lost but cheap
-// (single admin, analytics noise only).
 let initialized = false;
+let clientPromise: Promise<typeof import("posthog-js").default | null> | null = null;
+let client: typeof import("posthog-js").default | null = null;
 
-export function initPostHog() {
-  if (typeof window === "undefined" || !import.meta.env.PROD) return;
-  if (initialized) return;
-  const key = import.meta.env.VITE_PUBLIC_POSTHOG_KEY ?? import.meta.env.VITE_POSTHOG_PROJECT_TOKEN;
-  if (!key) return;
+function canUsePostHog() {
+  return typeof window !== "undefined" && import.meta.env.PROD && getConsent() === "granted";
+}
 
-  const host =
-    import.meta.env.VITE_PUBLIC_POSTHOG_HOST ??
-    import.meta.env.VITE_POSTHOG_HOST ??
-    "https://us.i.posthog.com";
+async function getPostHogClient() {
+  if (!canUsePostHog()) return null;
+  if (client) return client;
+  if (clientPromise) return clientPromise;
 
-  const consent = getConsent();
+  clientPromise = import("posthog-js").then((module) => {
+    const key =
+      import.meta.env.VITE_PUBLIC_POSTHOG_KEY ?? import.meta.env.VITE_POSTHOG_PROJECT_TOKEN;
+    if (!key) return null;
 
-  posthog.init(key, {
-    api_host: host,
-    capture_pageview: consent === "granted",
-    capture_exceptions: consent === "granted",
-    opt_out_capturing_by_default: consent !== "granted",
-    persistence: consent === "granted" ? "localStorage+cookie" : "memory",
-    // Novel text and editor contents must never be captured as analytics data.
-    autocapture: false,
-    disable_session_recording: true,
+    const host =
+      import.meta.env.VITE_PUBLIC_POSTHOG_HOST ??
+      import.meta.env.VITE_POSTHOG_HOST ??
+      "https://us.i.posthog.com";
+
+    const posthog = module.default;
+    if (!initialized) {
+      posthog.init(key, {
+        api_host: host,
+        capture_pageview: true,
+        capture_exceptions: true,
+        persistence: "localStorage+cookie",
+        autocapture: false,
+        disable_session_recording: true,
+      });
+      initialized = true;
+    }
+    client = posthog;
+    return posthog;
   });
 
-  if (consent === "denied") {
-    posthog.opt_out_capturing();
-  }
-  initialized = true;
+  return clientPromise;
 }
 
-export function updatePostHogConsent(consent: ConsentState) {
+export async function initPostHog() {
+  await getPostHogClient();
+}
+
+export async function updatePostHogConsent(consent: ConsentState) {
   if (typeof window === "undefined" || !import.meta.env.PROD) return;
-  if (!initialized) return;
 
   if (consent === "granted") {
-    posthog.opt_in_capturing();
-  } else if (consent === "denied") {
-    posthog.opt_out_capturing();
+    const posthog = await getPostHogClient();
+    posthog?.opt_in_capturing();
+    return;
+  }
+
+  if (initialized && client) {
+    client.opt_out_capturing();
   }
 }
 
-export { posthog };
+export function captureException(error: unknown) {
+  if (getConsent() !== "granted") return;
+  void getPostHogClient().then((posthog) => posthog?.captureException(error));
+}

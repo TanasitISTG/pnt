@@ -84,8 +84,14 @@ function LibraryPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
-          {novels.map((novel) => (
-            <NovelCard key={novel.id} novel={novel} showPublishState={!!user} />
+          {novels.map((novel, index) => (
+            <NovelCard
+              key={novel.id}
+              novel={novel}
+              showPublishState={!!user}
+              lazyCover={index > 3}
+              priorityCover={index === 0}
+            />
           ))}
         </div>
       )}

@@ -23,9 +23,16 @@ interface Novel {
 interface NovelCardProps {
   novel: Novel;
   showPublishState?: boolean;
+  lazyCover?: boolean;
+  priorityCover?: boolean;
 }
 
-export function NovelCard({ novel, showPublishState = false }: NovelCardProps) {
+export function NovelCard({
+  novel,
+  showPublishState = false,
+  lazyCover = true,
+  priorityCover = false,
+}: NovelCardProps) {
   const percent =
     novel.chapterCount > 0 ? Math.round((novel.translatedCount / novel.chapterCount) * 100) : 0;
   const state = publishState(novel.publishedAt);
@@ -41,7 +48,8 @@ export function NovelCard({ novel, showPublishState = false }: NovelCardProps) {
           <NovelCover
             novelId={novel.hasCover ? novel.id : null}
             coverVersion={novel.updatedAt}
-            lazy
+            lazy={lazyCover}
+            priority={priorityCover}
             alt={novel.title}
             className="h-full w-full object-cover transition-transform duration-300 group-hover/card-link:scale-[1.02]"
             fallbackSize={12}
@@ -82,7 +90,11 @@ export function NovelCard({ novel, showPublishState = false }: NovelCardProps) {
               </span>
               <span>{percent}%</span>
             </div>
-            <Progress value={percent} className="h-1.5" />
+            <Progress
+              value={percent}
+              aria-label={`${novel.title} translation progress`}
+              className="h-1.5"
+            />
           </div>
         </CardContent>
       </Card>
