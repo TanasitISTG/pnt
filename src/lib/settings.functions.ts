@@ -181,13 +181,19 @@ export const testProviderConnection = createServerFn({ method: "POST" })
         const startTime = Date.now();
 
         const response = await client.generateChatCompletion({
-          messages: [{ role: "user", content: "Say hello." }],
-          maxTokens: 10,
+          messages: [{ role: "user", content: "Reply with exactly: hello" }],
+          maxTokens: 128,
         });
 
         const latencyMs = Date.now() - startTime;
-        const sample = response.content.trim() || "OK";
-
+        const sample = response.content.trim();
+        if (!sample) {
+          return {
+            success: false as const,
+            error:
+              "Provider returned no visible response. The model may have exhausted its output on reasoning.",
+          };
+        }
         return {
           success: true as const,
           latencyMs,

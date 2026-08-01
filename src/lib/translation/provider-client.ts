@@ -51,12 +51,18 @@ export class OpenAIProviderClient implements AIProviderClient {
   }
 
   async generateChatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
+    const model = options.model ?? this.model;
+    const isOpenCodeGoFlash =
+      model === "deepseek-v4-flash" &&
+      (this.baseUrl === "https://opencode.ai/zen/go/v1" ||
+        this.baseUrl === "https://opencode.ai/zen/go/v1/");
     const completion = await this.client.chat.completions.create({
-      model: options.model ?? this.model,
+      model,
       temperature: options.temperature ?? this.temperature,
-      max_tokens: options.maxTokens,
+      max_tokens: options.maxTokens ?? (isOpenCodeGoFlash ? 8192 : undefined),
       messages: options.messages,
       response_format: options.responseFormat,
+      reasoning_effort: isOpenCodeGoFlash ? "low" : undefined,
     });
 
     return {
