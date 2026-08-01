@@ -303,9 +303,9 @@ export function ChapterTable({
 
   return (
     <Table>
-      <TableHeader>
-        <TableRow>
-          {isAdmin && (
+      {isAdmin && (
+        <TableHeader>
+          <TableRow>
             <TableHead className="w-10">
               <input
                 type="checkbox"
@@ -315,14 +315,14 @@ export function ChapterTable({
                 className="size-4 accent-primary align-middle"
               />
             </TableHead>
-          )}
-          <TableHead className="w-16">#</TableHead>
-          <TableHead>Title</TableHead>
-          <TableHead className="w-32 hidden sm:table-cell">Chars</TableHead>
-          <TableHead className="w-32 hidden sm:table-cell">Status</TableHead>
-          {isAdmin && <TableHead className="w-24 text-right">Actions</TableHead>}
-        </TableRow>
-      </TableHeader>
+            <TableHead className="w-16">#</TableHead>
+            <TableHead>Title</TableHead>
+            <TableHead className="w-32 hidden sm:table-cell">Chars</TableHead>
+            <TableHead className="w-32 hidden sm:table-cell">Status</TableHead>
+            <TableHead className="w-24 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+      )}
       <TableBody>{chapters.map(renderChapterRow)}</TableBody>
     </Table>
   );
