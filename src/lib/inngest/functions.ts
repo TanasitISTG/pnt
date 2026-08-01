@@ -11,6 +11,7 @@ import {
 import { log } from "@/lib/log";
 import { dispatchPendingTranslationOutbox } from "@/lib/translation/outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/job-state";
+import { runTranslationEvalReport } from "@/lib/translation/eval-worker";
 
 // onFailure wraps the original trigger event: event.data.event.data.jobId.
 type FailedRunEventData = { event?: { data?: { jobId?: string; generation?: number } } };
@@ -101,4 +102,22 @@ export const importChaptersFn = inngest.createFunction(
   },
 );
 
-export const functions = [translateChapterFn, dispatchTranslationOutboxFn, importChaptersFn];
+export const translationEvalFn = inngest.createFunction(
+  {
+    id: "translation-eval",
+    triggers: { event: "translation/eval.requested" },
+    retries: 1,
+    idempotency: "event.data.runKey",
+  },
+  async ({ event, step }) => {
+    const { reportId } = event.data as { reportId: string };
+    return await step.run("run-eval", () => runTranslationEvalReport(reportId));
+  },
+);
+
+export const functions = [
+  translateChapterFn,
+  dispatchTranslationOutboxFn,
+  importChaptersFn,
+  translationEvalFn,
+];

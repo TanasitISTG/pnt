@@ -2,13 +2,13 @@
 
 Single-admin novel translation app (EN→TH default, ZH→EN, ZH→TH) with guest read-only access. TanStack Start + Drizzle/Neon + Better Auth, deployed on Vercel.
 
-> This file covers Phase 8 state and is finalized at P8.9. Task IDs (`P<phase>.<n>`) reference [docs/TASKS.md](docs/TASKS.md).
+> Current repo has no `docs/PLAN.md` or `docs/TASKS.md`; do not cite them as required context.
 
 ## Docs map
 
-- [docs/PLAN.md](docs/PLAN.md) — approved build plan (product decisions, stack, data model, route map, phases)
-- [docs/TASKS.md](docs/TASKS.md) — task breakdown with IDs and acceptance criteria
+- [README.md](README.md) — product overview, setup, commands, deployment notes
 - [DESIGN.md](DESIGN.md) — **single source of truth for UI**; every component must follow its tokens and §7 Do/Don'ts
+- [AGENTS.md](AGENTS.md) — current implementation constraints and operational notes
 
 ## Commands
 
@@ -37,7 +37,7 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 
 - **Design tokens only.** Colors/radius/shadows/type come from `@theme` in `src/styles/globals.css` (mirrors DESIGN.md). Semantic tokens (`background`, `foreground`, `muted-foreground`, `border`, `surface`, `surface-2`, `primary`, `primary-foreground`) flip in dark mode — prefer them over the constant palette (`cream`, `charcoal`, `off-white`). Grays are `foreground/<opacity>` (flips) or `charcoal/<opacity>` (fixed) — never arbitrary gray hex/tailwind-gray utilities. Secondary text is `text-muted-foreground`; subtle fills are `bg-muted` (foreground tint). Borders: `border` passive, `foreground/40` interactive — never mixed. Radius: `rounded-sm/md/lg/xl/2xl` = 4/6/8/12/16; `rounded-full` only for pill/icon buttons. Shadows: `shadow-button-inset` (dark buttons), `shadow-focus` (button focus), `shadow-ring-blue` (input focus). Type: `text-display(-alt)/text-section/text-sub/text-card-title/text-body-lg/text-caption`; weights 400/600 only (480 display-alt). No card box-shadows; no pure-white surfaces.
 - **Dark mode** is owned by `next-themes` (`ThemeProvider` in `__root.tsx`, `attribute="class"`, `defaultTheme="system"`): it sets `.dark` on `<html>` app-wide, persisted under the `theme` localStorage key. Tokens are CSS vars flipped in `.dark` — always use the semantic utilities so both themes work. The reader's theme control writes to `useTheme()`, never to reader-local state; do not wrap page sections in local `.dark` divs.
-- **Reader preferences** (`src/lib/reader-settings.ts`, localStorage key `pnt-reader-settings`): `fontSize`, `typeface`, `viewMode` (`side`/`translated`/`raw`) — all persist across refresh. Theme is **not** part of this object (see above).
+- **Reader preferences** (`src/lib/reader-settings.ts`, localStorage key `pnt-reader-settings`): `fontSize`, `typeface`, `viewMode` (`side`/`translated`/`raw`) — all persist across refresh. Theme is **not** part of this object (see above). Reader keyboard shortcuts use `@tanstack/react-hotkeys`; keep shortcuts as progressive enhancement and avoid firing single-key actions from form fields.
 - **Fonts:** global stack `"Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui`; Thai fallback is mandatory wherever translated text renders; Sarabun (`font-reader`) is the reader long-form option.
 - **Imports:** alias `@/*` and `#/*` → `./src/*`.
 - **Types:** shared/domain types live in colocated leaf modules (`src/lib/translation/translation.types.ts`, `src/lib/scrape.types.ts`, `src/lib/reader.types.ts`); zod-inferred input types live in their `*.schemas.ts` (`CreateNovelInput`, `UpdateTermInput`, …). `any` is banned — enforced by oxlint `typescript/no-explicit-any`; narrow `catch` vars with `instanceof Error` and validate untrusted JSON with zod.
@@ -67,7 +67,7 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 - **Residual Hanzi visibility:** Admin-only `getResidualHanziChapters({ novelId })` server function (in `src/lib/chapter-ops.functions.ts`) pre-filters translated chapters DB-side with the shared `RESIDUAL_CJK_SQL_RE` class, then counts exact matches in JS via `findResidualSourceChars` for flagged rows only (pair-agnostic — any CJK in output is flagged; clean chapters' bodies never leave Postgres); rendered as an amber badge on novel detail chapter table rows. **Inline repair** (`repairResidualHanzi` in `worker.ts`, helpers in `residual-repair.ts`): runs on marked text before `restoreParagraphMarkers` on any residual — surgical span splice first (one JSON call translating extracted Hanzi runs, spliced by offset), whole-chunk retry only when any span >200 chars (passage-level failure); survivors are kept and surface via the badge.
 - **Rolling story summary & fast-model routing:** `novels.story_summary` maintains a running novel synopsis (≤400 words) updated during `finalizeJob` and injected into `## Story Context`. Optional `provider_settings.fast_model` routes cheaper non-prose tasks (title, summary, term suggestion/review, story summary) to a cheaper model.
 - **Glossary target propagation:** editing a term's target in the glossary UI offers optional find-and-replace across the novel's translated chapters (`previewTermReplacement` + `updateGlossaryTerm` with `applyToChapters`, exact case-sensitive SQL `replace()` — may match inside longer words, UI warns). AI-extracted term notes are written in the target language (prompt-enforced).
-- **Offline evaluation script:** `bun run eval:translation <novelId> [chapterNumbers]` (`scripts/eval-translation.ts`) evaluates quality metrics (residual CJK, marker mismatches, dot artifacts, glossary adherence %, token usage, latency) without writing to DB, outputting a summary table and saving a report to `evals/results/<timestamp>.json`.
+- **Offline evaluation script:** `bun run eval:translation <novelId> [chapterNumbers]` (`scripts/eval-translation.ts`) evaluates quality metrics (residual CJK, marker mismatches, dot artifacts, glossary adherence %, token usage, latency) without writing to DB, outputting a summary table and saving a report to `evals/results/<timestamp>.json`. Admin in-app quality reports live in `translation_eval_reports` and run through Inngest (`translation/eval.requested`) using `src/lib/translation/eval-worker.ts`; they evaluate persisted translated content for residual CJK, paragraph mismatches, and glossary adherence.
 
 ## Chapter scraping & bulk import
 
@@ -76,8 +76,10 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 - **Bulk range import is Inngest-driven** (`import-chapters` fn in `src/lib/inngest/functions.ts`, steps in `src/lib/scrape.worker.ts` with DB queries isolated in `scrape.job-store.ts`, served via the same `/api/inngest` handler): `startImportJob` creates an `import_jobs` row (storing `scrape_provider`) + sends `scrape/import.requested`; `initImportJob` resolves TOC chapter URLs for `twkan` via `parseTwkanToc` and `biquge` via `parseBiqugeToc`; one step per chapter (`nextNumber` is the resume cursor), scrape errors count as `failed` and continue, DB errors throw for step retry; `cancelImportJob` sets DB status (steps re-check) + best-effort cancel event. One active job per novel (enqueue cancels the previous). UI polls `getImportJobStatus` (2s) and re-attaches via `getActiveImportJob` on mount — refresh-safe.
 - Chapters imported this way land as `status: "raw"` drafts; `setAllChaptersPublished({ novelId, publishedAt })` bulk-publishes (novel detail toolbar → "Publish all").
 
-## Export and end-to-end verification
+## Export, backup, observability, and end-to-end verification
 
+- Admin job observability is at `/jobs` via `src/lib/job-observability.functions.ts`; keep it read-only and session-gated. It aggregates recent translation/import jobs, chunk latency, and token counts from existing job tables.
+- JSON backup/import lives in `src/lib/backup.functions.ts` and Settings → Data backup. Exports include novels, chapters, covers, and glossary terms; never include provider API keys. Imports always create new draft novels with new IDs and clear active job pointers.
 - Authenticated novel downloads are ordinary `GET|HEAD /api/exports/:novelId?format=txt|epub` responses. `src/lib/export/stream.ts` verifies ownership, reads translated chapters in numeric order through a PostgreSQL cursor, and streams TXT or EPUB bytes without base64 or whole-novel buffering.
 - `bun run test:integration` requires an isolated `TEST_DATABASE_URL` and covers migration backfill/idempotence, concurrent ownership, stale finalization, outbox recovery, and export ownership/order/headers/bytes. It must never fall back to `DATABASE_URL`.
 - `bun run test:e2e` requires an installed Chrome or Edge and Node for Playwright. The guarded supervisor owns a `*_e2e` database, app, Inngest dev server, and deterministic OpenAI-compatible stub; it drives login → novel/chapter creation → real translation → novel/chapter publication → logout → guest reading and tears down every child on success or failure.

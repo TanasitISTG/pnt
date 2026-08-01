@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as ProtectedJobsRouteImport } from './routes/_protected/jobs'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
@@ -61,6 +62,11 @@ const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ProtectedJobsRoute = ProtectedJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => ProtectedRoute,
 } as any)
 const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
   id: '/settings',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/terms': typeof TermsRoute
+  '/jobs': typeof ProtectedJobsRoute
   '/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/terms': typeof TermsRoute
+  '/jobs': typeof ProtectedJobsRoute
   '/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -174,6 +182,7 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/terms': typeof TermsRoute
+  '/_protected/jobs': typeof ProtectedJobsRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -196,6 +205,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/robots.txt'
     | '/terms'
+    | '/jobs'
     | '/settings'
     | '/api/inngest'
     | '/api/sitemap'
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/robots.txt'
     | '/terms'
+    | '/jobs'
     | '/settings'
     | '/api/inngest'
     | '/api/sitemap'
@@ -235,6 +246,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/robots.txt'
     | '/terms'
+    | '/_protected/jobs'
     | '/_protected/settings'
     | '/api/inngest'
     | '/api/sitemap'
@@ -314,6 +326,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_protected/jobs': {
+      id: '/_protected/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof ProtectedJobsRouteImport
+      parentRoute: typeof ProtectedRoute
     }
     '/_protected/settings': {
       id: '/_protected/settings'
@@ -403,6 +422,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface ProtectedRouteChildren {
+  ProtectedJobsRoute: typeof ProtectedJobsRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
   ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
   ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
@@ -410,6 +430,7 @@ interface ProtectedRouteChildren {
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
+  ProtectedJobsRoute: ProtectedJobsRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,
   ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
   ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,

@@ -79,13 +79,22 @@ export function AppShell({ user, children }: AppShellProps) {
                 Library
               </Link>
               {user && (
-                <Link
-                  to="/settings"
-                  className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
-                  activeProps={{ className: "font-semibold" }}
-                >
-                  Settings
-                </Link>
+                <>
+                  <Link
+                    to="/jobs"
+                    className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
+                    activeProps={{ className: "font-semibold" }}
+                  >
+                    Jobs
+                  </Link>
+                  <Link
+                    to="/settings"
+                    className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
+                    activeProps={{ className: "font-semibold" }}
+                  >
+                    Settings
+                  </Link>
+                </>
               )}
             </nav>
           </div>
@@ -126,13 +135,22 @@ export function AppShell({ user, children }: AppShellProps) {
                 Library
               </Link>
               {user && (
-                <Link
-                  to="/settings"
-                  className="text-body-lg text-foreground no-underline"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Settings
-                </Link>
+                <>
+                  <Link
+                    to="/jobs"
+                    className="text-body-lg text-foreground no-underline"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Jobs
+                  </Link>
+                  <Link
+                    to="/settings"
+                    className="text-body-lg text-foreground no-underline"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Settings
+                  </Link>
+                </>
               )}
             </nav>
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
@@ -235,6 +253,9 @@ function UserDropdown({
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          <DropdownMenuItem render={<Link to="/jobs" className="no-underline text-foreground" />}>
+            Jobs
+          </DropdownMenuItem>
           <DropdownMenuItem
             render={<Link to="/settings" className="no-underline text-foreground" />}
           >

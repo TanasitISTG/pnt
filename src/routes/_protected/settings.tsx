@@ -8,6 +8,7 @@ import {
   type ProviderTestResult,
 } from "@/components/settings/provider-settings-card";
 import { ChangePasswordCard } from "@/components/settings/change-password-card";
+import { BackupCard } from "@/components/settings/backup-card";
 import {
   getProviderSettings,
   saveProviderSettings,
@@ -130,6 +131,9 @@ function SettingsPage() {
         onSave={handleSaveProvider}
         onTest={handleTestConnection}
       />
+
+      {/* Backup Section */}
+      <BackupCard />
 
       {/* Account Section */}
       <ChangePasswordCard pending={changingPassword} onSubmit={handleChangePassword} />

@@ -10,6 +10,7 @@ import { NovelHeader } from "@/components/novel-header";
 import { ChaptersToolbar } from "@/components/chapters-toolbar";
 import { ChaptersTableSection } from "@/components/chapters-table-section";
 import { ChapterEditCard } from "@/components/chapter-edit-card";
+import { TranslationQualityPanel } from "@/components/translation-quality-panel";
 import { useChapterSelection } from "@/components/use-chapter-selection";
 import { useChapterEdit } from "@/components/use-chapter-edit";
 import { useNovelDetailMutations } from "@/components/use-novel-detail-mutations";
@@ -298,6 +299,8 @@ function NovelDetailPage() {
       />
 
       <hr className="border-border" />
+
+      {user && <TranslationQualityPanel novelId={novelId} />}
 
       {/* Chapters Table */}
       <div className="flex flex-col gap-4">

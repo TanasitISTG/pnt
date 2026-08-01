@@ -1,6 +1,7 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
@@ -16,6 +17,13 @@ import { ChapterTitleRow } from "@/components/reader/chapter-title-row";
 import { ReaderFooterNav } from "@/components/reader/reader-footer-nav";
 import { ReaderToolbar } from "@/components/reader/reader-toolbar";
 import { TranslationEditor } from "@/components/reader/translation-editor";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useChapterNav } from "@/components/reader/use-chapter-nav";
 import { useReaderScroll } from "@/components/reader/use-reader-scroll";
 
@@ -104,6 +112,7 @@ function ReaderPage() {
   const [editValue, setEditValue] = useState<string | null>(null);
   const editing = editValue !== null;
   const [retranslateConfirmOpen, setRetranslateConfirmOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const { start: startTranslate, activeJobs } = useTranslationJob(novelId, !!user);
   const activeJob = activeJobs.get(chapterId);
@@ -153,6 +162,32 @@ function ReaderPage() {
     () => (chapter?.translatedContent ? splitParagraphs(chapter.translatedContent) : []),
     [chapter],
   );
+
+  const cycleViewMode = () => {
+    const next = viewMode === "side" ? "translated" : viewMode === "translated" ? "raw" : "side";
+    update({ viewMode: next });
+  };
+  useHotkey("ArrowLeft", () => prevChapter && goToChapter(prevChapter.id), {
+    enabled: !!prevChapter,
+  });
+  useHotkey("H", () => prevChapter && goToChapter(prevChapter.id), { enabled: !!prevChapter });
+  useHotkey("ArrowRight", () => nextChapter && goToChapter(nextChapter.id), {
+    enabled: !!nextChapter,
+  });
+  useHotkey("L", () => nextChapter && goToChapter(nextChapter.id), { enabled: !!nextChapter });
+  useHotkey("V", cycleViewMode);
+  useHotkey("T", () => setTheme(theme === "dark" ? "light" : "dark"));
+  useHotkey("E", () => setEditValue(chapter?.translatedContent ?? ""), {
+    enabled: !!user && !editing && !!chapter,
+  });
+  useHotkey("Escape", () => (editing ? setEditValue(null) : setShortcutsOpen(false)), {
+    enabled: editing || shortcutsOpen,
+  });
+  useHotkey("Mod+S", () => editValue !== null && saveTranslation(editValue), {
+    enabled: editing && !!user,
+    preventDefault: true,
+  });
+  useHotkey("/", () => setShortcutsOpen(true));
 
   if (isChapterError || isChaptersError) {
     return (
@@ -257,6 +292,40 @@ function ReaderPage() {
           startTranslate(chapterId);
         }}
       />
+
+      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reader shortcuts</DialogTitle>
+            <DialogDescription>
+              Keyboard controls work when focus is outside form fields.
+            </DialogDescription>
+          </DialogHeader>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-caption">
+            <ShortcutKeys keys="← / h" label="Previous chapter" />
+            <ShortcutKeys keys="→ / l" label="Next chapter" />
+            <ShortcutKeys keys="v" label="Cycle view mode" />
+            <ShortcutKeys keys="t" label="Toggle theme" />
+            {user && <ShortcutKeys keys="e" label="Edit translation" />}
+            {user && <ShortcutKeys keys="Ctrl/⌘+S" label="Save edit" />}
+            <ShortcutKeys keys="Esc" label="Cancel edit or close help" />
+            <ShortcutKeys keys="/" label="Show this help" />
+          </dl>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function ShortcutKeys({ keys, label }: { keys: string; label: string }) {
+  return (
+    <>
+      <dt>
+        <kbd className="rounded-sm border border-border bg-muted px-1.5 py-0.5 font-semibold text-foreground">
+          {keys}
+        </kbd>
+      </dt>
+      <dd className="text-muted-foreground">{label}</dd>
+    </>
   );
 }

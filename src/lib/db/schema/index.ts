@@ -6,3 +6,4 @@ export * from "./translation-outbox";
 export * from "./import-jobs";
 export * from "./glossary-terms";
 export * from "./rate-limits";
+export * from "./eval-reports";
