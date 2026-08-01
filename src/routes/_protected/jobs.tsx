@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { DateCell } from "@/components/jobs/date-cell";
+import { Metric } from "@/components/jobs/metric";
+import { StatusBadge } from "@/components/jobs/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getJobDashboard } from "@/lib/job-observability.functions";
-import { formatLocalDateTime } from "@/lib/date-time";
 
 export const Route = createFileRoute("/_protected/jobs")({
   loader: async () => getJobDashboard(),
@@ -25,6 +26,18 @@ function JobsPage() {
     initialData: initial,
     refetchInterval: 5000,
   });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const totalTokens = Number(data.summary.promptTokens) + Number(data.summary.completionTokens);
+  const compactTokenCount = useMemo(
+    () =>
+      new Intl.NumberFormat(undefined, {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(totalTokens),
+    [totalTokens],
+  );
 
   return (
     <div className="space-y-6">
@@ -46,12 +59,7 @@ function JobsPage() {
         <Metric label="Active imports" value={data.summary.activeImportJobs} />
         <Metric label="Failed imports" value={data.summary.failedImportJobs} />
         <Metric label="Avg chunk latency" value={formatDuration(data.summary.avgChunkLatencyMs)} />
-        <Metric
-          label="Tokens"
-          value={formatCompactNumber(
-            Number(data.summary.promptTokens) + Number(data.summary.completionTokens),
-          )}
-        />
+        <Metric label="Tokens" value={mounted ? compactTokenCount : totalTokens} />
       </div>
 
       <Card>
@@ -178,56 +186,8 @@ function JobsPage() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <Card size="sm">
-      <CardContent>
-        <div
-          className="truncate font-semibold tabular-nums text-foreground text-[clamp(1.75rem,4vw,2.5rem)]"
-          title={String(value)}
-        >
-          {value}
-        </div>
-        <div className="mt-1 text-caption text-muted-foreground">{label}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const variant = status === "error" ? "destructive" : status === "done" ? "secondary" : "outline";
-  return <Badge variant={variant}>{formatLabel(status)}</Badge>;
-}
-
 function formatLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function DateCell({ value }: { value: Date | string }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const date = new Date(value);
-  return (
-    <time dateTime={date.toISOString()} title={date.toISOString()}>
-      {mounted
-        ? formatLocalDateTime(date, {
-            month: "numeric",
-            day: "numeric",
-            year: "2-digit",
-            hour: "numeric",
-            minute: "2-digit",
-          })
-        : "—"}
-    </time>
-  );
-}
-
-function formatCompactNumber(value: number) {
-  return new Intl.NumberFormat(undefined, {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
 }
 
 function formatDuration(value: number) {
