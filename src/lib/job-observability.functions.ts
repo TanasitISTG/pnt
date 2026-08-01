@@ -84,9 +84,9 @@ export const getJobDashboard = createServerFn({ method: "GET" }).handler(async (
         activeImportJobs: importRows.filter((j) => j.status === "pending" || j.status === "running")
           .length,
         failedImportJobs: importRows.filter((j) => j.status === "error").length,
-        avgChunkLatencyMs: chunkStats?.avgLatencyMs ?? 0,
-        promptTokens: chunkStats?.promptTokens ?? 0,
-        completionTokens: chunkStats?.completionTokens ?? 0,
+        avgChunkLatencyMs: Number(chunkStats?.avgLatencyMs ?? 0),
+        promptTokens: Number(chunkStats?.promptTokens ?? 0),
+        completionTokens: Number(chunkStats?.completionTokens ?? 0),
       },
       translationJobs: translationRows,
       importJobs: importRows,

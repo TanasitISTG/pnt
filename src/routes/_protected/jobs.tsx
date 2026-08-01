@@ -46,7 +46,9 @@ function JobsPage() {
         <Metric label="Avg chunk latency" value={formatDuration(data.summary.avgChunkLatencyMs)} />
         <Metric
           label="Tokens"
-          value={formatCompactNumber(data.summary.promptTokens + data.summary.completionTokens)}
+          value={formatCompactNumber(
+            Number(data.summary.promptTokens) + Number(data.summary.completionTokens),
+          )}
         />
       </div>
 
