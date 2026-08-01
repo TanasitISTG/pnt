@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,7 +104,7 @@ function JobsPage() {
                     {job.doneChunks}/{job.totalChunks}
                   </td>
                   <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
-                    {formatDate(job.updatedAt)}
+                    <DateCell value={job.updatedAt} />
                   </td>
                   <td className="truncate py-2 pr-3 text-muted-foreground" title={job.error || ""}>
                     {job.error || "—"}
@@ -161,7 +162,7 @@ function JobsPage() {
                     {job.added} / {job.skipped} / {job.failed}
                   </td>
                   <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
-                    {formatDate(job.updatedAt)}
+                    <DateCell value={job.updatedAt} />
                   </td>
                   <td className="truncate py-2 pr-3 text-muted-foreground" title={job.error || ""}>
                     {job.error || "—"}
@@ -201,8 +202,20 @@ function formatLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function formatDate(value: Date | string) {
-  return new Date(value).toLocaleString(undefined, {
+function DateCell({ value }: { value: Date | string }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const date = new Date(value);
+  return (
+    <time dateTime={date.toISOString()} title={date.toISOString()}>
+      {mounted ? formatLocalDate(date) : "—"}
+    </time>
+  );
+}
+
+function formatLocalDate(value: Date) {
+  return value.toLocaleString(undefined, {
     month: "numeric",
     day: "numeric",
     year: "2-digit",
