@@ -38,13 +38,16 @@ function JobsPage() {
         </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Metric label="Active translations" value={data.summary.activeTranslationJobs} />
         <Metric label="Failed translations" value={data.summary.failedTranslationJobs} />
         <Metric label="Active imports" value={data.summary.activeImportJobs} />
         <Metric label="Failed imports" value={data.summary.failedImportJobs} />
-        <Metric label="Avg chunk latency" value={`${data.summary.avgChunkLatencyMs}ms`} />
-        <Metric label="Tokens" value={data.summary.promptTokens + data.summary.completionTokens} />
+        <Metric label="Avg chunk latency" value={formatDuration(data.summary.avgChunkLatencyMs)} />
+        <Metric
+          label="Tokens"
+          value={formatCompactNumber(data.summary.promptTokens + data.summary.completionTokens)}
+        />
       </div>
 
       <Card>
@@ -53,7 +56,15 @@ function JobsPage() {
           <CardDescription>Latest 25 jobs across your novels.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-caption">
+          <table className="w-full min-w-[980px] table-fixed text-left text-caption">
+            <colgroup>
+              <col className="w-[86px]" />
+              <col className="w-[270px]" />
+              <col className="w-[230px]" />
+              <col className="w-[70px]" />
+              <col className="w-[150px]" />
+              <col />
+            </colgroup>
             <thead className="border-b border-border text-muted-foreground">
               <tr>
                 <th className="py-2 pr-3 font-semibold">Status</th>
@@ -70,23 +81,29 @@ function JobsPage() {
                   <td className="py-2 pr-3">
                     <StatusBadge status={job.status} />
                   </td>
-                  <td className="py-2 pr-3">
+                  <td className="truncate py-2 pr-3">
                     <Link
                       to="/novels/$novelId"
                       params={{ novelId: job.novelId }}
                       className="no-underline hover:text-muted-foreground"
+                      title={job.novelTitle}
                     >
                       {job.novelTitle}
                     </Link>
                   </td>
-                  <td className="py-2 pr-3">
+                  <td
+                    className="truncate py-2 pr-3"
+                    title={`Ch. ${job.chapterNumber} — ${job.chapterTitle}`}
+                  >
                     Ch. {job.chapterNumber} — {job.chapterTitle}
                   </td>
                   <td className="py-2 pr-3">
                     {job.doneChunks}/{job.totalChunks}
                   </td>
-                  <td className="py-2 pr-3 text-muted-foreground">{formatDate(job.updatedAt)}</td>
-                  <td className="max-w-[260px] truncate py-2 pr-3 text-muted-foreground">
+                  <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
+                    {formatDate(job.updatedAt)}
+                  </td>
+                  <td className="truncate py-2 pr-3 text-muted-foreground" title={job.error || ""}>
                     {job.error || "—"}
                   </td>
                 </tr>
@@ -102,14 +119,23 @@ function JobsPage() {
           <CardDescription>Bulk scrape/import runs.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-caption">
+          <table className="w-full min-w-[980px] table-fixed text-left text-caption">
+            <colgroup>
+              <col className="w-[86px]" />
+              <col />
+              <col className="w-[70px]" />
+              <col className="w-[100px]" />
+              <col className="w-[120px]" />
+              <col className="w-[150px]" />
+              <col className="w-[260px]" />
+            </colgroup>
             <thead className="border-b border-border text-muted-foreground">
               <tr>
                 <th className="py-2 pr-3 font-semibold">Status</th>
                 <th className="py-2 pr-3 font-semibold">Novel</th>
                 <th className="py-2 pr-3 font-semibold">Range</th>
                 <th className="py-2 pr-3 font-semibold">Provider</th>
-                <th className="py-2 pr-3 font-semibold">Added / skipped / failed</th>
+                <th className="py-2 pr-3 font-semibold">Result</th>
                 <th className="py-2 pr-3 font-semibold">Updated</th>
                 <th className="py-2 pr-3 font-semibold">Error</th>
               </tr>
@@ -120,16 +146,22 @@ function JobsPage() {
                   <td className="py-2 pr-3">
                     <StatusBadge status={job.status} />
                   </td>
-                  <td className="py-2 pr-3">{job.novelTitle}</td>
+                  <td className="truncate py-2 pr-3" title={job.novelTitle}>
+                    {job.novelTitle}
+                  </td>
                   <td className="py-2 pr-3">
                     {job.fromNumber}–{job.toNumber}
                   </td>
-                  <td className="py-2 pr-3">{job.scrapeProvider}</td>
-                  <td className="py-2 pr-3">
+                  <td className="truncate py-2 pr-3" title={job.scrapeProvider}>
+                    {job.scrapeProvider}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-3" title="added / skipped / failed">
                     {job.added} / {job.skipped} / {job.failed}
                   </td>
-                  <td className="py-2 pr-3 text-muted-foreground">{formatDate(job.updatedAt)}</td>
-                  <td className="max-w-[260px] truncate py-2 pr-3 text-muted-foreground">
+                  <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
+                    {formatDate(job.updatedAt)}
+                  </td>
+                  <td className="truncate py-2 pr-3 text-muted-foreground" title={job.error || ""}>
                     {job.error || "—"}
                   </td>
                 </tr>
@@ -146,7 +178,12 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <Card size="sm">
       <CardContent>
-        <div className="text-section font-semibold text-foreground">{value}</div>
+        <div
+          className="truncate font-semibold tabular-nums text-foreground text-[clamp(1.75rem,4vw,2.5rem)]"
+          title={String(value)}
+        >
+          {value}
+        </div>
         <div className="mt-1 text-caption text-muted-foreground">{label}</div>
       </CardContent>
     </Card>
@@ -154,10 +191,28 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const variant = status === "error" ? "destructive" : status === "done" ? "secondary" : "default";
+  const variant = status === "error" ? "destructive" : status === "done" ? "secondary" : "outline";
   return <Badge variant={variant}>{status}</Badge>;
 }
 
 function formatDate(value: Date | string) {
-  return new Date(value).toLocaleString();
+  return new Date(value).toLocaleString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatDuration(value: number) {
+  if (value < 1000) return `${value}ms`;
+  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}s`;
 }
