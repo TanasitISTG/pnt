@@ -11,6 +11,7 @@ import type {
   ChatCompletionOptions,
   ChatCompletionResult,
   ProviderType,
+  ReasoningEffort,
 } from "./translation.types";
 
 export class ProviderNotConfiguredError extends Error {
@@ -25,6 +26,7 @@ export class OpenAIProviderClient implements AIProviderClient {
   model: string;
   fastModel?: string | null;
   temperature: number;
+  reasoningEffort?: ReasoningEffort | null;
   baseUrl: string;
   requestTimeoutSec?: number | null;
   private client: OpenAI;
@@ -35,11 +37,13 @@ export class OpenAIProviderClient implements AIProviderClient {
     model: string;
     fastModel?: string | null;
     temperature: number;
+    reasoningEffort?: ReasoningEffort | null;
     requestTimeoutSec?: number | null;
   }) {
     this.model = config.model;
     this.fastModel = config.fastModel;
     this.temperature = config.temperature;
+    this.reasoningEffort = config.reasoningEffort;
     this.baseUrl = config.baseUrl;
     this.requestTimeoutSec = config.requestTimeoutSec;
     this.client = new OpenAI({
@@ -62,7 +66,7 @@ export class OpenAIProviderClient implements AIProviderClient {
       max_tokens: options.maxTokens ?? (isOpenCodeGoFlash ? 8192 : undefined),
       messages: options.messages,
       response_format: options.responseFormat,
-      reasoning_effort: isOpenCodeGoFlash ? "low" : undefined,
+      reasoning_effort: this.reasoningEffort ?? (isOpenCodeGoFlash ? "low" : undefined),
     });
 
     return {
@@ -176,6 +180,7 @@ export async function createProviderClient(userId: string): Promise<AIProviderCl
     baseUrl: settings.baseUrl,
     model: settings.model,
     fastModel: settings.fastModel,
+    reasoningEffort: settings.reasoningEffort as ReasoningEffort | null,
     temperature: settings.temperature,
     requestTimeoutSec: settings.requestTimeoutSec,
   });

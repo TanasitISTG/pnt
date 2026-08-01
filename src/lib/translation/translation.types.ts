@@ -98,6 +98,8 @@ export interface HanziSpan {
 
 export type ProviderType = "openai" | "gemini";
 
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;

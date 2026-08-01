@@ -5,6 +5,13 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ProviderSelectionSection } from "./provider-selection-section";
 import { ApiKeySection } from "./api-key-section";
 import { TimeoutPricingFields } from "./timeout-pricing-fields";
@@ -14,8 +21,21 @@ import type {
   SaveProviderSettingsInput,
   TestProviderConnectionInput,
 } from "@/lib/settings.schemas";
-import type { ProviderType } from "@/lib/translation/translation.types";
+import type { ProviderType, ReasoningEffort } from "@/lib/translation/translation.types";
 
+const REASONING_EFFORT_OPTIONS: Array<{
+  value: ReasoningEffort | "default";
+  label: string;
+}> = [
+  { value: "default", label: "Provider default" },
+  { value: "none", label: "None" },
+  { value: "minimal", label: "Minimal" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra high" },
+  { value: "max", label: "Maximum" },
+];
 export interface ProviderTestResult {
   success: boolean;
   latencyMs?: number;
@@ -43,6 +63,9 @@ export function ProviderSettingsCard({
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(initialSettings.model);
   const [fastModel, setFastModel] = useState(initialSettings.fastModel || "");
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort | null>(
+    initialSettings.reasoningEffort,
+  );
   const [temperature, setTemperature] = useState(initialSettings.temperature);
   const [requestTimeoutSec, setRequestTimeoutSec] = useState(
     () => initialSettings.requestTimeoutSec?.toString() ?? "",
@@ -98,6 +121,7 @@ export function ProviderSettingsCard({
       apiKey: apiKey ? apiKey.trim() : undefined,
       model,
       fastModel: fastModel ? fastModel.trim() : null,
+      reasoningEffort,
       temperature,
       requestTimeoutSec: requestTimeoutSec === "" ? null : Number(requestTimeoutSec),
       inputPricePer1M: inputPrice === "" ? null : Number(inputPrice),
@@ -120,6 +144,7 @@ export function ProviderSettingsCard({
       apiKey: apiKey ? apiKey.trim() : undefined,
       model,
       temperature,
+      reasoningEffort,
       requestTimeoutSec: requestTimeoutSec === "" ? null : Number(requestTimeoutSec),
     });
     setTestResult(result);
@@ -198,6 +223,37 @@ export function ProviderSettingsCard({
               context updates to reduce costs.
             </p>
           </div>
+
+          {provider === "openai" ? (
+            <div className="space-y-2">
+              <Label htmlFor="reasoningEffort">Reasoning Effort</Label>
+              <Select
+                value={reasoningEffort ?? "default"}
+                onValueChange={(value) =>
+                  setReasoningEffort(value === "default" ? null : (value as ReasoningEffort))
+                }
+              >
+                <SelectTrigger id="reasoningEffort" className="h-10 w-full px-3 sm:max-w-md">
+                  <SelectValue>
+                    {REASONING_EFFORT_OPTIONS.find(
+                      (option) => option.value === (reasoningEffort ?? "default"),
+                    )?.label ?? "Provider default"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="sm:max-w-md">
+                  {REASONING_EFFORT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="max-w-2xl text-caption text-muted-foreground">
+                OpenAI-compatible models only. Provider default omits the parameter; explicit levels
+                may be rejected by models that do not support reasoning effort.
+              </p>
+            </div>
+          ) : null}
 
           {/* Temperature */}
           <div className="space-y-3">

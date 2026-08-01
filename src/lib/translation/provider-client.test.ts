@@ -77,6 +77,47 @@ describe("provider-client module", () => {
     );
   });
 
+  it("applies the configured reasoning effort to OpenAI-compatible requests", async () => {
+    const client = new OpenAIProviderClient({
+      apiKey: "test-key",
+      baseUrl: "https://api.openai.com/v1",
+      model: "o4-mini",
+      temperature: 0.4,
+      reasoningEffort: "high",
+    });
+
+    await client.generateChatCompletion({
+      messages: [{ role: "user", content: "Translate this." }],
+    });
+
+    expect(createCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "o4-mini",
+        reasoning_effort: "high",
+      }),
+    );
+  });
+
+  it("lets an explicit reasoning setting override provider compatibility defaults", async () => {
+    const client = new OpenAIProviderClient({
+      apiKey: "test-key",
+      baseUrl: "https://opencode.ai/zen/go/v1",
+      model: "deepseek-v4-flash",
+      temperature: 0.4,
+      reasoningEffort: "none",
+    });
+
+    await client.generateChatCompletion({
+      messages: [{ role: "user", content: "Translate this." }],
+    });
+
+    expect(createCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasoning_effort: "none",
+      }),
+    );
+  });
+
   it("does not change compatibility options for other providers", async () => {
     const client = new OpenAIProviderClient({
       apiKey: "test-key",

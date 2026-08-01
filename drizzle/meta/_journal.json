@@ -169,6 +169,13 @@
       "when": 1785574018578,
       "tag": "0023_eval_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785620305819,
+      "tag": "0024_crazy_tyrannus",
+      "breakpoints": true
     }
   ]
 }

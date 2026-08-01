@@ -8,7 +8,7 @@ import { ensureSession } from "@/lib/auth.functions";
 import { auth } from "@/lib/auth";
 import { encrypt, decrypt } from "@/lib/translation/crypto";
 import { OpenAIProviderClient, GeminiProviderClient } from "@/lib/translation/provider-client";
-import type { ProviderType } from "@/lib/translation/translation.types";
+import type { ProviderType, ReasoningEffort } from "@/lib/translation/translation.types";
 import {
   saveProviderSettingsSchema,
   testProviderConnectionSchema,
@@ -40,6 +40,7 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
         model: "gpt-4o",
         fastModel: null,
         temperature: 0.3,
+        reasoningEffort: null,
         requestTimeoutSec: null,
         apiKeyMasked: "",
         hasApiKey: false,
@@ -67,6 +68,7 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
       model: row.model,
       fastModel: row.fastModel ?? null,
       temperature: row.temperature,
+      reasoningEffort: (row.reasoningEffort as ReasoningEffort | null) ?? null,
       requestTimeoutSec: row.requestTimeoutSec ?? null,
       apiKeyMasked,
       hasApiKey,
@@ -108,6 +110,7 @@ export const saveProviderSettings = createServerFn({ method: "POST" })
           model: data.model,
           fastModel: data.fastModel ?? null,
           temperature: data.temperature,
+          reasoningEffort: data.reasoningEffort ?? null,
           requestTimeoutSec: data.requestTimeoutSec ?? null,
           inputPricePer1M: data.inputPricePer1M ?? null,
           outputPricePer1M: data.outputPricePer1M ?? null,
@@ -122,6 +125,7 @@ export const saveProviderSettings = createServerFn({ method: "POST" })
             model: data.model,
             fastModel: data.fastModel ?? null,
             temperature: data.temperature,
+            reasoningEffort: data.reasoningEffort ?? null,
             requestTimeoutSec: data.requestTimeoutSec ?? null,
             inputPricePer1M: data.inputPricePer1M ?? null,
             outputPricePer1M: data.outputPricePer1M ?? null,
@@ -175,6 +179,7 @@ export const testProviderConnection = createServerFn({ method: "POST" })
                 baseUrl: data.baseUrl,
                 model: data.model,
                 temperature: data.temperature,
+                reasoningEffort: data.reasoningEffort,
                 requestTimeoutSec: data.requestTimeoutSec,
               });
 
