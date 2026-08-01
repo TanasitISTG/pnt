@@ -154,8 +154,8 @@ function JobsPage() {
                   <td className="py-2 pr-3">
                     {job.fromNumber}–{job.toNumber}
                   </td>
-                  <td className="truncate py-2 pr-3" title={job.scrapeProvider}>
-                    {job.scrapeProvider}
+                  <td className="truncate py-2 pr-3" title={formatLabel(job.scrapeProvider)}>
+                    {formatLabel(job.scrapeProvider)}
                   </td>
                   <td className="whitespace-nowrap py-2 pr-3" title="added / skipped / failed">
                     {job.added} / {job.skipped} / {job.failed}
@@ -194,7 +194,11 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 
 function StatusBadge({ status }: { status: string }) {
   const variant = status === "error" ? "destructive" : status === "done" ? "secondary" : "outline";
-  return <Badge variant={variant}>{status}</Badge>;
+  return <Badge variant={variant}>{formatLabel(status)}</Badge>;
+}
+
+function formatLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function formatDate(value: Date | string) {
