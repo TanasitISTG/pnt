@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getTranslationJobStatus } from "@/lib/translation/translation.functions";
+import { formatLocalDateTime, formatLocalTime, parseDateTime } from "@/lib/date-time";
 import type { LogEntry, SlimChunkProgress } from "@/lib/translation/translation.types";
 import { ChapterStatusBadge, type ChapterStatus } from "./chapter-status-badge";
 import { Loader2, Terminal, Cpu, Zap, XCircle } from "lucide-react";
@@ -36,6 +38,8 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
       return status === "running" || status === "pending" ? 1500 : false;
     },
   });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   if (!open || (!jobId && !chapterId)) return null;
 
@@ -151,30 +155,46 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
                 {logs.length === 0 ? (
                   <span className="text-cream/40 italic">No logs recorded yet.</span>
                 ) : (
-                  logs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="grid grid-cols-[auto_1fr] items-start gap-x-2.5 gap-y-1 leading-relaxed sm:grid-cols-[auto_auto_minmax(0,1fr)]"
-                    >
-                      <span className="shrink-0 font-mono text-cream/40">[{log.timestamp}]</span>
-                      <span
-                        className={
-                          log.level === "error"
-                            ? "font-semibold text-red-400"
-                            : log.level === "warn"
-                              ? "font-semibold text-amber-400"
-                              : log.level === "success"
-                                ? "font-semibold text-emerald-400"
-                                : "font-medium text-sky-300"
-                        }
+                  logs.map((log) => {
+                    const timestamp = parseDateTime(log.timestamp);
+                    const timestampLabel =
+                      timestamp && mounted
+                        ? formatLocalTime(timestamp)
+                        : timestamp
+                          ? "—"
+                          : log.timestamp;
+
+                    return (
+                      <div
+                        key={log.id}
+                        className="grid grid-cols-[auto_1fr] items-start gap-x-2.5 gap-y-1 leading-relaxed sm:grid-cols-[auto_auto_minmax(0,1fr)]"
                       >
-                        [{log.level.toUpperCase()}]
-                      </span>
-                      <span className="col-span-2 min-w-0 whitespace-pre-wrap break-words text-cream/90 sm:col-span-1">
-                        {log.message}
-                      </span>
-                    </div>
-                  ))
+                        <time
+                          className="shrink-0 font-mono text-cream/40"
+                          dateTime={timestamp?.toISOString()}
+                          title={timestamp && mounted ? formatLocalDateTime(timestamp) : undefined}
+                        >
+                          [{timestampLabel}]
+                        </time>
+                        <span
+                          className={
+                            log.level === "error"
+                              ? "font-semibold text-red-400"
+                              : log.level === "warn"
+                                ? "font-semibold text-amber-400"
+                                : log.level === "success"
+                                  ? "font-semibold text-emerald-400"
+                                  : "font-medium text-sky-300"
+                          }
+                        >
+                          [{log.level.toUpperCase()}]
+                        </span>
+                        <span className="col-span-2 min-w-0 whitespace-pre-wrap break-words text-cream/90 sm:col-span-1">
+                          {log.message}
+                        </span>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

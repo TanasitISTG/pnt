@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { listTranslationEvalReports, startTranslationEval } from "@/lib/translation/eval.functions";
-
+import { formatLocalDateTime } from "@/lib/date-time";
 export function TranslationQualityPanel({ novelId }: { novelId: string }) {
   const queryClient = useQueryClient();
   const [selector, setSelector] = useState("first3");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const { data: reports = [] } = useQuery({
     queryKey: ["translation-eval-reports", novelId],
     queryFn: () => listTranslationEvalReports({ data: { novelId } }),
@@ -83,7 +86,7 @@ export function TranslationQualityPanel({ novelId }: { novelId: string }) {
                 {reports.map((report) => (
                   <tr key={report.id}>
                     <td className="py-2 pr-3 text-muted-foreground">
-                      {new Date(report.createdAt).toLocaleString()}
+                      {mounted ? formatLocalDateTime(report.createdAt) : "—"}
                     </td>
                     <td className="py-2 pr-3">{report.chapterSelector}</td>
                     <td className="py-2 pr-3">

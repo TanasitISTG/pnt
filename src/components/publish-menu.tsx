@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatLocalDateTime } from "@/lib/date-time";
 import { publishState } from "@/lib/publish";
 
 interface PublishMenuProps {
@@ -44,8 +45,7 @@ export function PublishMenu({
   const state = publishState(publishedAt);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [value, setValue] = useState("");
-  // toLocaleString differs between server and browser timezones — format it
-  // only after mount so SSR and hydration render identical text.
+  // Locale-dependent formatting runs after mount so SSR and hydration render identical text.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -61,10 +61,7 @@ export function PublishMenu({
       : state === "live"
         ? "Live"
         : mounted
-          ? `Scheduled ${new Date(publishedAt as string).toLocaleString(undefined, {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}`
+          ? `Scheduled ${formatLocalDateTime(publishedAt as string)}`
           : "Scheduled";
 
   return (

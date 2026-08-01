@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getJobDashboard } from "@/lib/job-observability.functions";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 export const Route = createFileRoute("/_protected/jobs")({
   loader: async () => getJobDashboard(),
@@ -209,19 +210,17 @@ function DateCell({ value }: { value: Date | string }) {
   const date = new Date(value);
   return (
     <time dateTime={date.toISOString()} title={date.toISOString()}>
-      {mounted ? formatLocalDate(date) : "—"}
+      {mounted
+        ? formatLocalDateTime(date, {
+            month: "numeric",
+            day: "numeric",
+            year: "2-digit",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "—"}
     </time>
   );
-}
-
-function formatLocalDate(value: Date) {
-  return value.toLocaleString(undefined, {
-    month: "numeric",
-    day: "numeric",
-    year: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function formatCompactNumber(value: number) {
