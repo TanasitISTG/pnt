@@ -73,12 +73,12 @@ export function NovelHeader({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
         <Button variant="ghost" size="icon" render={<Link to="/" />} aria-label="Go to Library">
           <ArrowLeft className="size-4" />
         </Button>
         {isAdmin && (
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap justify-end gap-1.5 sm:ml-auto sm:w-auto sm:gap-2">
             <PublishMenu
               publishedAt={novel.publishedAt}
               pending={publishingNovel}

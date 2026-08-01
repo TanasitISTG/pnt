@@ -54,25 +54,25 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl sm:max-w-4xl lg:max-w-5xl w-[92vw] h-[85vh] max-h-[90vh] flex flex-col gap-5 p-6 overflow-hidden">
-        <DialogHeader className="flex flex-row items-center justify-between border-b border-border pb-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="size-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+      <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col gap-4 overflow-hidden p-4 sm:h-[85vh] sm:max-h-[90vh] sm:w-[92vw] sm:max-w-4xl sm:gap-5 sm:p-6 lg:max-w-5xl">
+        <DialogHeader className="flex shrink-0 flex-col items-start gap-3 border-b border-border pb-4 pr-8 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="size-9 shrink-0 rounded-lg border border-primary/20 bg-primary/10 flex items-center justify-center">
               <Terminal className="size-5 text-primary" />
             </div>
-            <div>
-              <DialogTitle className="text-section font-semibold tracking-tight">
+            <div className="min-w-0">
+              <DialogTitle className="text-body-lg font-semibold tracking-tight sm:text-section">
                 Translation Job Logs
               </DialogTitle>
               {jobData?.chapterTitle && (
-                <p className="text-body text-muted-foreground mt-0.5 font-medium">
+                <p className="mt-0.5 break-words text-body font-medium text-muted-foreground">
                   {jobData.chapterTitle}
                 </p>
               )}
             </div>
           </div>
           {jobData && (
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <ChapterStatusBadge status={jobData.status as ChapterStatus} />
               {(jobData.status === "running" || jobData.status === "pending") && (
                 <Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -91,9 +91,9 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
             Job details not found.
           </div>
         ) : (
-          <div className="flex flex-col gap-6 overflow-y-auto pr-2 flex-1">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6 sm:pr-2">
             {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+            <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
               <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col gap-1 min-w-0">
                 <span className="text-caption text-muted-foreground font-medium flex items-center gap-1.5 whitespace-nowrap">
                   <Cpu className="size-4 text-muted-foreground" /> Model
@@ -147,27 +147,32 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
               <h4 className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
                 Live Execution Console
               </h4>
-              <div className="bg-charcoal text-cream/90 font-mono text-xs rounded-xl p-4 h-64 overflow-y-auto flex flex-col gap-2 border border-border shadow-inner">
+              <div className="flex h-64 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-charcoal p-3 font-mono text-xs text-cream/90 shadow-inner sm:gap-2 sm:p-4">
                 {logs.length === 0 ? (
                   <span className="text-cream/40 italic">No logs recorded yet.</span>
                 ) : (
                   logs.map((log) => (
-                    <div key={log.id} className="flex items-start gap-2.5 leading-relaxed">
-                      <span className="text-cream/40 shrink-0 font-mono">[{log.timestamp}]</span>
+                    <div
+                      key={log.id}
+                      className="grid grid-cols-[auto_1fr] items-start gap-x-2.5 gap-y-1 leading-relaxed sm:grid-cols-[auto_auto_minmax(0,1fr)]"
+                    >
+                      <span className="shrink-0 font-mono text-cream/40">[{log.timestamp}]</span>
                       <span
                         className={
                           log.level === "error"
-                            ? "text-red-400 font-semibold"
+                            ? "font-semibold text-red-400"
                             : log.level === "warn"
-                              ? "text-amber-400 font-semibold"
+                              ? "font-semibold text-amber-400"
                               : log.level === "success"
-                                ? "text-emerald-400 font-semibold"
-                                : "text-sky-300 font-medium"
+                                ? "font-semibold text-emerald-400"
+                                : "font-medium text-sky-300"
                         }
                       >
                         [{log.level.toUpperCase()}]
                       </span>
-                      <span className="wrap-break-word text-cream/90">{log.message}</span>
+                      <span className="col-span-2 min-w-0 whitespace-pre-wrap break-words text-cream/90 sm:col-span-1">
+                        {log.message}
+                      </span>
                     </div>
                   ))
                 )}
@@ -180,8 +185,8 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
                 <h4 className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
                   Chunk Details & Metrics
                 </h4>
-                <div className="rounded-xl border border-border overflow-hidden bg-card">
-                  <Table>
+                <div className="overflow-x-auto rounded-xl border border-border bg-card">
+                  <Table className="min-w-[680px]">
                     <TableHeader>
                       <TableRow className="h-10 bg-muted/20">
                         <TableHead className="w-16 h-10 font-semibold">Chunk #</TableHead>
