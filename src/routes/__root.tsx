@@ -96,30 +96,35 @@ function DevelopmentDevtools() {
       import("@tanstack/react-devtools"),
       import("@tanstack/react-router-devtools"),
       import("../integrations/tanstack-query/devtools"),
-    ]).then(
-      ([reactDevtools, routerDevtools, queryDevtools]: [
-        DevtoolsModule,
-        RouterDevtoolsModule,
-        QueryDevtoolsModule,
-      ]) => {
+    ])
+      .then(
+        ([reactDevtools, routerDevtools, queryDevtools]: [
+          DevtoolsModule,
+          RouterDevtoolsModule,
+          QueryDevtoolsModule,
+        ]) => {
+          if (cancelled) return;
+          const TanStackDevtools = reactDevtools.TanStackDevtools;
+          const TanStackRouterDevtoolsPanel = routerDevtools.TanStackRouterDevtoolsPanel;
+          const TanStackQueryDevtools = queryDevtools.default;
+          setDevtools(
+            <TanStackDevtools
+              config={{ position: "bottom-right" }}
+              plugins={[
+                {
+                  name: "Tanstack Router",
+                  render: <TanStackRouterDevtoolsPanel />,
+                },
+                TanStackQueryDevtools,
+              ]}
+            />,
+          );
+        },
+      )
+      .catch((error: unknown) => {
         if (cancelled) return;
-        const TanStackDevtools = reactDevtools.TanStackDevtools;
-        const TanStackRouterDevtoolsPanel = routerDevtools.TanStackRouterDevtoolsPanel;
-        const TanStackQueryDevtools = queryDevtools.default;
-        setDevtools(
-          <TanStackDevtools
-            config={{ position: "bottom-right" }}
-            plugins={[
-              {
-                name: "Tanstack Router",
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-              TanStackQueryDevtools,
-            ]}
-          />,
-        );
-      },
-    );
+        captureException(error instanceof Error ? error : new Error(String(error)));
+      });
     return () => {
       cancelled = true;
     };

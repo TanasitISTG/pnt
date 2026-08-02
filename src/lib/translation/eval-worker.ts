@@ -63,12 +63,12 @@ export async function runTranslationEvalReport(reportId: string) {
 
     const pair = `${novel.sourceLang}->${novel.targetLang}`;
     const results = selectedChapters.map((chapter) => {
-      const translated = chapter.translatedContent || "";
+      const translatedText = chapter.translatedContent || "";
       const rawParagraphCount = splitParagraphs(chapter.rawContent).length;
-      const translatedParagraphCount = translated ? splitParagraphs(translated).length : 0;
-      const residual = translated ? findResidualSourceChars(pair, translated).length : 0;
+      const translatedParagraphCount = translatedText ? splitParagraphs(translatedText).length : 0;
+      const residual = translatedText ? findResidualSourceChars(pair, translatedText).length : 0;
       const matchedTerms = terms.filter((term) => chapter.rawContent.includes(term.source));
-      const adheredTerms = matchedTerms.filter((term) => translated.includes(term.target));
+      const adheredTerms = matchedTerms.filter((term) => translatedText.includes(term.target));
       return {
         chapterId: chapter.id,
         chapterNumber: chapter.number,
