@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run --exclude '**/*.integration.test.ts' --exclude 'e2e/**'",
-    "test:integration": "vitest run src/lib/translation/workflow.integration.test.ts src/lib/translation/outbox.integration.test.ts src/lib/translation/chunk-migration.integration.test.ts src/lib/export/stream.integration.test.ts --reporter=dot",
+    "test:integration": "vitest run src/lib/translation/workflow.integration.test.ts src/lib/translation/outbox.integration.test.ts src/lib/translation/chunk-migration.integration.test.ts src/lib/export/stream.integration.test.ts src/lib/content/novel-maintenance.integration.test.ts --reporter=dot",
     "test:e2e": "bun scripts/e2e/run.ts",
     "audit:release": "bun audit --audit-level=moderate",
     "lint": "oxlint",

@@ -1,4 +1,4 @@
-import { Check, Languages, Loader2, Play, X } from "lucide-react";
+import { Check, Languages, Loader2, Play, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -20,6 +20,9 @@ export interface ChaptersToolbarProps {
   missingTitleCount: number;
   onBackfillTitles: () => void;
   backfillingTitles: boolean;
+  chapterCount: number;
+  deletingAllTranslations: boolean;
+  onDeleteAllTranslations: () => void;
 }
 
 export function ChaptersToolbar({
@@ -40,6 +43,9 @@ export function ChaptersToolbar({
   missingTitleCount,
   onBackfillTitles,
   backfillingTitles,
+  chapterCount,
+  deletingAllTranslations,
+  onDeleteAllTranslations,
 }: ChaptersToolbarProps) {
   if (!isAdmin) return null;
 
@@ -98,6 +104,18 @@ export function ChaptersToolbar({
         <Button variant="outline" size="sm" onClick={onBackfillTitles} disabled={backfillingTitles}>
           <Languages className="size-4" />
           {backfillingTitles ? "Translating titles..." : `Translate titles (${missingTitleCount})`}
+        </Button>
+      )}
+      {chapterCount > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive border-destructive/40 hover:bg-destructive/10"
+          onClick={onDeleteAllTranslations}
+          disabled={deletingAllTranslations}
+        >
+          <Trash2 className="size-4" />
+          {deletingAllTranslations ? "Deleting..." : "Delete translations"}
         </Button>
       )}
     </div>

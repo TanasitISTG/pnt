@@ -74,3 +74,48 @@ export async function updateGlossaryTermAtomic(userId: string, data: UpdateTermD
     return { success: true as const };
   });
 }
+
+export async function deleteAllGlossaryTermsForUser(
+  userId: string,
+  novelId: string,
+): Promise<{ deleted: number }> {
+  return db.transaction(async (tx) => {
+    const [novel] = await tx
+      .select({ id: novels.id })
+      .from(novels)
+      .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+      .limit(1)
+      .for("update");
+
+    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+
+    const deleted = await tx
+      .delete(glossaryTerms)
+      .where(eq(glossaryTerms.novelId, novelId))
+      .returning({ id: glossaryTerms.id });
+    return { deleted: deleted.length };
+  });
+}
+
+export async function rejectAllPendingGlossaryTermsForUser(
+  userId: string,
+  novelId: string,
+): Promise<{ rejected: number }> {
+  return db.transaction(async (tx) => {
+    const [novel] = await tx
+      .select({ id: novels.id })
+      .from(novels)
+      .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+      .limit(1)
+      .for("update");
+
+    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+
+    const rejected = await tx
+      .update(glossaryTerms)
+      .set({ status: "rejected", updatedAt: new Date() })
+      .where(and(eq(glossaryTerms.novelId, novelId), eq(glossaryTerms.status, "pending")))
+      .returning({ id: glossaryTerms.id });
+    return { rejected: rejected.length };
+  });
+}

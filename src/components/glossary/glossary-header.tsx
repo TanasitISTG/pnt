@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, Trash2, Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ interface GlossaryHeaderProps {
   targetLang: string;
   stats: GlossaryStats | undefined;
   onImportClick: () => void;
+  deletingAllTerms: boolean;
+  onDeleteAllTerms: () => void;
 }
 
 export function GlossaryHeader({
@@ -27,10 +29,12 @@ export function GlossaryHeader({
   targetLang,
   stats,
   onImportClick,
+  deletingAllTerms,
+  onDeleteAllTerms,
 }: GlossaryHeaderProps) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <Button
           variant="ghost"
           size="icon"
@@ -39,10 +43,22 @@ export function GlossaryHeader({
         >
           <ArrowLeft className="size-4" />
         </Button>
-        <Button variant="outline" size="sm" onClick={onImportClick}>
-          <Upload className="size-4" />
-          Bulk Import (TSV)
-        </Button>
+        <div className="flex items-center justify-end flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={onImportClick}>
+            <Upload className="size-4" />
+            Bulk Import (TSV)
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive border-destructive/40 hover:bg-destructive/10"
+            onClick={onDeleteAllTerms}
+            disabled={(stats?.total ?? 0) === 0 || deletingAllTerms}
+          >
+            <Trash2 className="size-4" />
+            {deletingAllTerms ? "Deleting..." : "Delete all terms"}
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-start justify-between flex-wrap gap-4">

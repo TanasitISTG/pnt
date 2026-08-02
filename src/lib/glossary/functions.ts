@@ -17,7 +17,11 @@ import {
   previewTermReplacementSchema,
 } from "@/lib/glossary/schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
-import { updateGlossaryTermAtomic } from "@/lib/glossary/service";
+import {
+  deleteAllGlossaryTermsForUser,
+  rejectAllPendingGlossaryTermsForUser,
+  updateGlossaryTermAtomic,
+} from "@/lib/glossary/service";
 
 export const listGlossaryTerms = createServerFn({ method: "GET" })
   .validator(listTermsSchema)
@@ -363,6 +367,24 @@ export const approveAllPendingTerms = createServerFn({ method: "POST" })
         .where(and(eq(glossaryTerms.novelId, data.novelId), eq(glossaryTerms.status, "pending")));
 
       return { success: true };
+    }),
+  );
+
+export const rejectAllPendingTerms = createServerFn({ method: "POST" })
+  .validator(z.object({ novelId: z.string().min(1) }))
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+      return rejectAllPendingGlossaryTermsForUser(session.user.id, data.novelId);
+    }),
+  );
+
+export const deleteAllGlossaryTerms = createServerFn({ method: "POST" })
+  .validator(z.object({ novelId: z.string().min(1) }))
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+      return deleteAllGlossaryTermsForUser(session.user.id, data.novelId);
     }),
   );
 

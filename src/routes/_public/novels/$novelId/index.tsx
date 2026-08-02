@@ -157,6 +157,7 @@ function NovelDetailPage() {
   });
   const [retranslateChapterId, setRetranslateChapterId] = useState<string | null>(null);
   const [deleteNovelOpen, setDeleteNovelOpen] = useState(false);
+  const [deleteAllTranslationsOpen, setDeleteAllTranslationsOpen] = useState(false);
   const [logChapterId, setLogChapterId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -175,8 +176,14 @@ function NovelDetailPage() {
     startMany: startBatchTranslate,
     cancel: cancelTranslate,
     retry: retryTranslate,
+    clearActiveJobs,
     activeJobs,
   } = useTranslationJob(novelId, !!user);
+
+  const handleTranslationsDeleted = useCallback(() => {
+    clearActiveJobs();
+    setDeleteAllTranslationsOpen(false);
+  }, [clearActiveJobs]);
 
   const {
     selectedIds,
@@ -220,7 +227,9 @@ function NovelDetailPage() {
     publishingAll,
     backfillTitles,
     backfillingTitles,
-  } = useNovelDetailMutations(novelId);
+    deleteAllTranslations,
+    deletingAllTranslations,
+  } = useNovelDetailMutations(novelId, handleTranslationsDeleted);
 
   const invalidateChapters = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
@@ -337,6 +346,9 @@ function NovelDetailPage() {
             missingTitleCount={missingTitleCount}
             onBackfillTitles={() => backfillTitles()}
             backfillingTitles={backfillingTitles}
+            chapterCount={chapters.length}
+            deletingAllTranslations={deletingAllTranslations}
+            onDeleteAllTranslations={() => setDeleteAllTranslationsOpen(true)}
           />
         </div>
 
@@ -376,6 +388,15 @@ function NovelDetailPage() {
         onOpenChange={setDeleteNovelOpen}
         onConfirm={removeNovel}
         pending={deletingNovel}
+      />
+
+      <DeleteConfirmDialog
+        title="Delete All Translations"
+        description="This permanently deletes translated titles, chapter text, chapter summaries, and the story summary for this novel. Active translation jobs will be cancelled. Raw chapters, publishing settings, and translation job history are kept."
+        open={deleteAllTranslationsOpen}
+        onOpenChange={setDeleteAllTranslationsOpen}
+        onConfirm={() => deleteAllTranslations()}
+        pending={deletingAllTranslations}
       />
 
       <DeleteConfirmDialog

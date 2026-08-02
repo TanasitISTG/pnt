@@ -18,6 +18,10 @@ interface GlossaryDialogsProps {
   onDeleteOpenChange: (open: boolean) => void;
   onDeleteConfirm: () => void;
   deletingTerm: boolean;
+  deleteAllOpen: boolean;
+  onDeleteAllOpenChange: (open: boolean) => void;
+  onDeleteAllConfirm: () => void;
+  deletingAllTerms: boolean;
   replaceConfirm: { chapterCount: number; occurrences: number } | null;
   onReplaceOpenChange: (open: boolean) => void;
   originalTarget: string | undefined;
@@ -36,6 +40,10 @@ export function GlossaryDialogs({
   onDeleteOpenChange,
   onDeleteConfirm,
   deletingTerm,
+  deleteAllOpen,
+  onDeleteAllOpenChange,
+  onDeleteAllConfirm,
+  deletingAllTerms,
   replaceConfirm,
   onReplaceOpenChange,
   originalTarget,
@@ -58,6 +66,16 @@ export function GlossaryDialogs({
         onOpenChange={onDeleteOpenChange}
         onConfirm={onDeleteConfirm}
         pending={deletingTerm}
+      />
+
+      {/* Delete All Dialog */}
+      <DeleteConfirmDialog
+        title="Delete All Glossary Terms"
+        description="This permanently deletes every approved, pending, and rejected glossary term for this novel. Existing translated chapter text will not be changed."
+        open={deleteAllOpen}
+        onOpenChange={onDeleteAllOpenChange}
+        onConfirm={onDeleteAllConfirm}
+        pending={deletingAllTerms}
       />
 
       {/* Replace-in-chapters Confirm Dialog */}

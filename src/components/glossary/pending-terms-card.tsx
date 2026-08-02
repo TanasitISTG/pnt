@@ -15,9 +15,11 @@ import { CategoryBadge, type GlossaryTerm } from "@/components/glossary/glossary
 interface PendingTermsCardProps {
   terms: GlossaryTerm[];
   approvingAll: boolean;
+  rejectingAll: boolean;
   approvingTerm: boolean;
   rejectingTerm: boolean;
   onApproveAll: () => void;
+  onRejectAll: () => void;
   onApprove: (termId: string) => void;
   onReject: (termId: string) => void;
 }
@@ -25,9 +27,11 @@ interface PendingTermsCardProps {
 export function PendingTermsCard({
   terms,
   approvingAll,
+  rejectingAll,
   approvingTerm,
   rejectingTerm,
   onApproveAll,
+  onRejectAll,
   onApprove,
   onReject,
 }: PendingTermsCardProps) {
@@ -43,16 +47,28 @@ export function PendingTermsCard({
               AI Auto-Suggested Terms ({terms.length})
             </h2>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-amber-500/40 text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"
-            onClick={onApproveAll}
-            disabled={approvingAll}
-          >
-            <CheckCheck className="size-4" />
-            Approve All ({terms.length})
-          </Button>
+          <div className="flex items-center flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-amber-500/40 text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"
+              onClick={onApproveAll}
+              disabled={approvingAll || rejectingAll}
+            >
+              <CheckCheck className="size-4" />
+              {approvingAll ? "Approving..." : `Approve All (${terms.length})`}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
+              onClick={onRejectAll}
+              disabled={approvingAll || rejectingAll}
+            >
+              <X className="size-4" />
+              {rejectingAll ? "Rejecting..." : `Reject All (${terms.length})`}
+            </Button>
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           These terms were extracted automatically from your recent chapter translations. Approved
@@ -88,7 +104,7 @@ export function PendingTermsCard({
                         size="icon"
                         className="size-8 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-500/10"
                         onClick={() => onApprove(term.id)}
-                        disabled={approvingTerm}
+                        disabled={approvingAll || rejectingAll || approvingTerm}
                         aria-label="Approve suggestion"
                         title="Approve suggestion"
                       >
@@ -99,7 +115,7 @@ export function PendingTermsCard({
                         size="icon"
                         className="size-8 text-destructive hover:bg-destructive/10"
                         onClick={() => onReject(term.id)}
-                        disabled={rejectingTerm}
+                        disabled={approvingAll || rejectingAll || rejectingTerm}
                         aria-label="Reject suggestion"
                         title="Reject suggestion"
                       >

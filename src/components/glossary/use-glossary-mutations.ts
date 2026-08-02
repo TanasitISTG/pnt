@@ -5,10 +5,12 @@ import {
   createGlossaryTerm,
   updateGlossaryTerm,
   deleteGlossaryTerm,
+  deleteAllGlossaryTerms,
   bulkImportGlossaryTerms,
   approveGlossaryTerm,
   approveAllPendingTerms,
   rejectGlossaryTerm,
+  rejectAllPendingTerms,
 } from "@/lib/glossary/functions";
 import type { CreateTermInput, UpdateTermInput } from "@/lib/glossary/schemas";
 
@@ -21,11 +23,13 @@ export interface GlossaryMutationCallbacks {
   onDeleted: () => void;
   /** Close the import dialog after a successful import. */
   onImported: () => void;
+  /** Close the delete-all dialog after a successful delete. */
+  onAllDeleted: () => void;
 }
 
 export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutationCallbacks) {
   const queryClient = useQueryClient();
-  const { onAdded, onSaved, onDeleted, onImported } = callbacks;
+  const { onAdded, onSaved, onDeleted, onImported, onAllDeleted } = callbacks;
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["glossaryTerms", novelId] });
@@ -70,6 +74,18 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     },
   });
 
+  const { mutateAsync: deleteAllTerms, isPending: deletingAllTerms } = useMutation({
+    mutationFn: () => deleteAllGlossaryTerms({ data: { novelId } }),
+    onSuccess: ({ deleted }) => {
+      invalidateAll();
+      toast.success(`Deleted ${deleted} glossary term(s)`);
+      onAllDeleted();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete all terms");
+    },
+  });
+
   const { mutateAsync: approveTerm, isPending: approvingTerm } = useMutation({
     mutationFn: (termId: string) => approveGlossaryTerm({ data: { termId } }),
     onSuccess: () => {
@@ -89,6 +105,17 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     },
     onError: (error) => {
       toast.error(error.message || "Failed to approve all terms");
+    },
+  });
+
+  const { mutateAsync: rejectAll, isPending: rejectingAll } = useMutation({
+    mutationFn: () => rejectAllPendingTerms({ data: { novelId } }),
+    onSuccess: ({ rejected }) => {
+      invalidateAll();
+      toast.success(`Rejected ${rejected} suggestion(s)`);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to reject all suggestions");
     },
   });
 
@@ -127,12 +154,16 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     savingEdit,
     removeTerm,
     deletingTerm,
+    deleteAllTerms,
+    deletingAllTerms,
     approveTerm,
     approvingTerm,
     approveAll,
     approvingAll,
     rejectTerm,
     rejectingTerm,
+    rejectAll,
+    rejectingAll,
     doBulkImport,
     importing,
   };

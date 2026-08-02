@@ -9,6 +9,7 @@ import { createProviderClient } from "@/lib/translation/provider-client";
 import { translateChapterTitle } from "@/lib/translation/title";
 import { findResidualSourceChars, RESIDUAL_CJK_SQL_RE } from "@/lib/translation/prompts";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
+import { deleteAllNovelTranslationsForUser } from "@/lib/content/chapter-ops.service";
 
 /** Split items into consecutive fixed-size batches, preserving order. */
 export function batchesOf<T>(items: T[], batchSize: number): T[][] {
@@ -145,3 +146,12 @@ export const getResidualHanziChapters = createServerFn({ method: "GET" })
       return residualChapters;
     });
   });
+
+export const deleteAllNovelTranslations = createServerFn({ method: "POST" })
+  .validator(z.object({ novelId: z.string().min(1) }))
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+      return deleteAllNovelTranslationsForUser(session.user.id, data.novelId);
+    }),
+  );

@@ -46,6 +46,10 @@ export function useTranslationJob(novelId: string, enabled = true) {
     });
   }, []);
 
+  const clearActiveJobs = useCallback(() => {
+    setActiveJobs(new Map());
+  }, []);
+
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
@@ -284,6 +288,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     startMany,
     cancel,
     retry,
+    clearActiveJobs,
     activeJobs,
   };
 }

@@ -92,6 +92,7 @@ function NovelGlossaryPage() {
   const [editState, setEditState] = useState<EditState | null>(null);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [deleteTermId, setDeleteTermId] = useState<string | null>(null);
+  const [deleteAllTermsOpen, setDeleteAllTermsOpen] = useState(false);
   const [replaceConfirm, setReplaceConfirm] = useState<{
     chapterCount: number;
     occurrences: number;
@@ -119,12 +120,16 @@ function NovelGlossaryPage() {
     savingEdit,
     removeTerm,
     deletingTerm,
+    deleteAllTerms,
+    deletingAllTerms,
     approveTerm,
     approvingTerm,
     approveAll,
     approvingAll,
     rejectTerm,
     rejectingTerm,
+    rejectAll,
+    rejectingAll,
     doBulkImport,
     importing,
   } = useGlossaryMutations(novelId, {
@@ -139,6 +144,7 @@ function NovelGlossaryPage() {
       setEditErrors({});
     },
     onDeleted: () => setDeleteTermId(null),
+    onAllDeleted: () => setDeleteAllTermsOpen(false),
     onImported: () => {
       setImportDialogOpen(false);
       setTsvText("");
@@ -248,6 +254,8 @@ function NovelGlossaryPage() {
         targetLang={novel.targetLang}
         stats={stats}
         onImportClick={() => setImportDialogOpen(true)}
+        deletingAllTerms={deletingAllTerms}
+        onDeleteAllTerms={() => setDeleteAllTermsOpen(true)}
       />
 
       <hr className="border-border" />
@@ -256,11 +264,13 @@ function NovelGlossaryPage() {
       <PendingTermsCard
         terms={pendingTerms}
         approvingAll={approvingAll}
+        rejectingAll={rejectingAll}
         approvingTerm={approvingTerm}
         rejectingTerm={rejectingTerm}
         onApproveAll={() => approveAll()}
         onApprove={approveTerm}
         onReject={rejectTerm}
+        onRejectAll={() => rejectAll()}
       />
 
       {/* Filter & Search Controls */}
@@ -334,6 +344,10 @@ function NovelGlossaryPage() {
         onDeleteOpenChange={(open) => !open && setDeleteTermId(null)}
         onDeleteConfirm={() => deleteTermId && removeTerm(deleteTermId)}
         deletingTerm={deletingTerm}
+        deleteAllOpen={deleteAllTermsOpen}
+        onDeleteAllOpenChange={setDeleteAllTermsOpen}
+        onDeleteAllConfirm={() => deleteAllTerms()}
+        deletingAllTerms={deletingAllTerms}
         replaceConfirm={replaceConfirm}
         onReplaceOpenChange={(open) => !open && setReplaceConfirm(null)}
         originalTarget={editState?.originalTarget}

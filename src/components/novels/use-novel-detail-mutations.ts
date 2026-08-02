@@ -8,9 +8,12 @@ import {
   setChapterPublished,
   setAllChaptersPublished,
 } from "@/lib/content/chapter.functions";
-import { translateMissingTitles } from "@/lib/content/chapter-ops.functions";
+import {
+  deleteAllNovelTranslations,
+  translateMissingTitles,
+} from "@/lib/content/chapter-ops.functions";
 
-export function useNovelDetailMutations(novelId: string) {
+export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: () => void) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [deleteChapterId, setDeleteChapterId] = useState<string | null>(null);
@@ -88,6 +91,25 @@ export function useNovelDetailMutations(novelId: string) {
     },
   });
 
+  const { mutate: deleteAllTranslations, isPending: deletingAllTranslations } = useMutation({
+    mutationFn: () => deleteAllNovelTranslations({ data: { novelId } }),
+    onSuccess: ({ chaptersCleared }) => {
+      queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["novels"] });
+      queryClient.invalidateQueries({ queryKey: ["residualHanzi", novelId] });
+      onTranslationsDeleted();
+      toast.success(
+        chaptersCleared > 0
+          ? `Deleted translations from ${chaptersCleared} chapter(s)`
+          : "No translations to delete",
+      );
+    },
+    onError: () => {
+      toast.error("Failed to delete translations");
+    },
+  });
+
   return {
     removeNovel,
     deletingNovel,
@@ -103,5 +125,7 @@ export function useNovelDetailMutations(novelId: string) {
     publishingAll,
     backfillTitles,
     backfillingTitles,
+    deleteAllTranslations,
+    deletingAllTranslations,
   };
 }
