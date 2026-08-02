@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import { getReaderProgress, markChapterRead, saveScrollPosition } from "@/lib/reader-progress";
+import { getReaderProgress, markChapterRead, saveScrollPosition } from "@/lib/reader/progress";
 
 // Reader scroll lifecycle: marks the chapter read, restores the saved scroll
 // fraction on load, and persists scroll position while scrolling.

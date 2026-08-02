@@ -7,7 +7,7 @@ import {
   importOneChapter,
   finishImportJob,
   failImportJob,
-} from "@/lib/scrape.worker";
+} from "@/lib/scrape/worker";
 import { log } from "@/lib/log";
 import { dispatchPendingTranslationOutbox } from "@/lib/translation/outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/job-state";

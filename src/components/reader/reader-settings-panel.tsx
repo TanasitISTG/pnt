@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { ReaderFontSize, ReaderSettings, ReaderTypeface } from "@/lib/reader.types";
+import type { ReaderFontSize, ReaderSettings, ReaderTypeface } from "@/lib/reader/types";
 
 export interface ReaderSettingsPanelProps {
   settings: ReaderSettings;

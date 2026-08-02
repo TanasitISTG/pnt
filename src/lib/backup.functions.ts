@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
-import { ensureSession } from "@/lib/auth.functions";
+import { ensureSession } from "@/lib/auth/functions";
 import { db } from "@/lib/db";
 import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
 import { SafeServerError, withSafeHandler } from "@/lib/server-fn-error";

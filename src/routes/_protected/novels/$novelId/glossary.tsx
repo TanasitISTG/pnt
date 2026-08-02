@@ -3,13 +3,13 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { BookOpen } from "lucide-react";
 
-import { getNovel } from "@/lib/novel.functions";
+import { getNovel } from "@/lib/content/novel.functions";
 import {
   listGlossaryTerms,
   getGlossaryStats,
   previewTermReplacement,
-} from "@/lib/glossary.functions";
-import { createTermSchema, updateTermSchema, type UpdateTermInput } from "@/lib/glossary.schemas";
+} from "@/lib/glossary/functions";
+import { createTermSchema, updateTermSchema, type UpdateTermInput } from "@/lib/glossary/schemas";
 
 import { Button } from "@/components/ui/button";
 import {

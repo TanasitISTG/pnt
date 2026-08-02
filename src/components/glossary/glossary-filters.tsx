@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { TermCategory, TermStatus } from "@/lib/glossary.schemas";
+import type { TermCategory, TermStatus } from "@/lib/glossary/schemas";
 
 const CATEGORY_ITEMS: Record<string, string> = {
   all: "All Categories",

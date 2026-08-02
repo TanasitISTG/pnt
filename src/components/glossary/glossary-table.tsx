@@ -1,6 +1,6 @@
 import { Check, Edit, RotateCcw, Trash2, X } from "lucide-react";
 
-import { type TermCategory, type TermStatus } from "@/lib/glossary.schemas";
+import { type TermCategory, type TermStatus } from "@/lib/glossary/schemas";
 
 import { EDIT_CATEGORY_ITEMS } from "./category-items";
 

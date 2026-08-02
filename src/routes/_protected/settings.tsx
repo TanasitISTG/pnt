@@ -14,12 +14,12 @@ import {
   saveProviderSettings,
   testProviderConnection,
   changePassword,
-} from "@/lib/settings.functions";
+} from "@/lib/settings/functions";
 import type {
   SaveProviderSettingsInput,
   TestProviderConnectionInput,
   ChangePasswordInput,
-} from "@/lib/settings.schemas";
+} from "@/lib/settings/schemas";
 
 export const Route = createFileRoute("/_protected/settings")({
   loader: async () => {

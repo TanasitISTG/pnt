@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatLocalDateTime } from "@/lib/date-time";
-import { publishState } from "@/lib/publish";
+import { publishState } from "@/lib/content/publish";
 
 interface PublishMenuProps {
   publishedAt: Date | string | null | undefined;

@@ -5,13 +5,17 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
-import { getNovel } from "@/lib/novel.functions";
-import { getChapter, listChapters, updateChapterTranslation } from "@/lib/chapter.functions";
+import { getNovel } from "@/lib/content/novel.functions";
+import {
+  getChapter,
+  listChapters,
+  updateChapterTranslation,
+} from "@/lib/content/chapter.functions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { QueryErrorState } from "@/components/query-error-state";
-import { useTranslationJob } from "@/lib/translation/use-translation-job";
+import { useTranslationJob } from "@/components/translation/use-translation-job";
 import { alignParagraphs, splitParagraphs } from "@/lib/translation/paragraphs";
-import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader-settings";
+import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader/settings";
 import { ReaderContent } from "@/components/reader/chapter-content";
 import { ChapterTitleRow } from "@/components/reader/chapter-title-row";
 import { ReaderFooterNav } from "@/components/reader/reader-footer-nav";

@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles/globals.css?url";
 
-import { getSession } from "../lib/auth.functions";
+import { getSession } from "../lib/auth/functions";
 import { getConsent, useConsent } from "@/lib/consent";
 import { captureException, initPostHog, updatePostHogConsent } from "../lib/posthog";
 import { ConsentBanner } from "@/components/consent-banner";

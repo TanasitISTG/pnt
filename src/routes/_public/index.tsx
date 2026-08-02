@@ -2,8 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { BookOpen, Plus } from "lucide-react";
 
-import { listNovels } from "@/lib/novel.functions";
-import { NovelCard } from "@/components/novel-card";
+import { listNovels } from "@/lib/content/novel.functions";
+import { NovelCard } from "@/components/novels/novel-card";
 import { QueryErrorState } from "@/components/query-error-state";
 import { Button } from "@/components/ui/button";
 

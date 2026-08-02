@@ -3,9 +3,9 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
-import { getNovel, updateNovel, setNovelPublished } from "@/lib/novel.functions";
-import type { UpdateNovelInput } from "@/lib/novel.schemas";
-import { NovelForm } from "@/components/novel-form";
+import { getNovel, updateNovel, setNovelPublished } from "@/lib/content/novel.functions";
+import type { UpdateNovelInput } from "@/lib/content/novel.schemas";
+import { NovelForm } from "@/components/novels/novel-form";
 import { PublishMenu } from "@/components/publish-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

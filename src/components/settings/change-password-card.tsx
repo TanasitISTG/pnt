@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import type { ChangePasswordInput } from "@/lib/settings.schemas";
+import type { ChangePasswordInput } from "@/lib/settings/schemas";
 
 export interface ChangePasswordCardProps {
   pending: boolean;

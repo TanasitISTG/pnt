@@ -152,7 +152,7 @@ sizing the database connection limit or external pooler.
 - Novel TXT and EPUB downloads use authenticated `/api/exports/:novelId` responses. Chapters are
   read through a PostgreSQL cursor in numeric chapter order and streamed to the client rather
   than base64-encoding the complete export in a server-function payload.
-- `src/lib/scrape.ts` is a client-safe facade over pure parsers. DNS resolution and private-IP
+- `src/lib/scrape/index.ts` is a client-safe facade over pure parsers. DNS resolution and private-IP
   rejection live in the server-only `src/lib/scrape/network-policy.server.ts` boundary.
 
 ## Local verification

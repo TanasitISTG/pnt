@@ -3,7 +3,7 @@ import { eq, and, lte } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels } from "@/lib/db/schema";
-import { getSession } from "@/lib/auth.functions";
+import { getSession } from "@/lib/auth/functions";
 import { checkRateLimit, RateLimitError } from "@/lib/rate-limit";
 
 export const Route = createFileRoute("/api/covers/$")({

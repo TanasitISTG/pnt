@@ -9,8 +9,8 @@ import {
   approveGlossaryTerm,
   approveAllPendingTerms,
   rejectGlossaryTerm,
-} from "@/lib/glossary.functions";
-import type { CreateTermInput, UpdateTermInput } from "@/lib/glossary.schemas";
+} from "@/lib/glossary/functions";
+import type { CreateTermInput, UpdateTermInput } from "@/lib/glossary/schemas";
 
 export interface GlossaryMutationCallbacks {
   /** Reset the add-term form after a successful create. */

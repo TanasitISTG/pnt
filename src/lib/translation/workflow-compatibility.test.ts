@@ -42,7 +42,7 @@ describe("translation workflow compatibility contract", () => {
   it("cancels only the exact job generation", () => {
     const functions = source("../inngest/functions.ts");
     const translationFunctions = source("./translation.functions.ts");
-    const chapterFunctions = source("../chapter.functions.ts");
+    const chapterFunctions = source("../content/chapter.functions.ts");
 
     expect(functions).toContain("if: TRANSLATION_CANCEL_IF");
     expect(translationFunctions.match(/translationRunIdentity\(cancelled\)/g)).toHaveLength(2);

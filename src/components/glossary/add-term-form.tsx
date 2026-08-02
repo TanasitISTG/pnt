@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EDIT_CATEGORY_ITEMS } from "@/components/glossary/category-items";
-import type { TermCategory } from "@/lib/glossary.schemas";
+import type { TermCategory } from "@/lib/glossary/schemas";
 
 interface AddTermFormProps {
   newSource: string;

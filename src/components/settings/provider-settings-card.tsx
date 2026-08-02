@@ -16,11 +16,11 @@ import { ProviderSelectionSection } from "./provider-selection-section";
 import { ApiKeySection } from "./api-key-section";
 import { TimeoutPricingFields } from "./timeout-pricing-fields";
 import { TestResultBanner } from "./test-result-banner";
-import type { getProviderSettings } from "@/lib/settings.functions";
+import type { getProviderSettings } from "@/lib/settings/functions";
 import type {
   SaveProviderSettingsInput,
   TestProviderConnectionInput,
-} from "@/lib/settings.schemas";
+} from "@/lib/settings/schemas";
 import type { ProviderType, ReasoningEffort } from "@/lib/translation/translation.types";
 
 const REASONING_EFFORT_OPTIONS: Array<{

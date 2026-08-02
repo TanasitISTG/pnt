@@ -10,7 +10,7 @@ import {
   translationOutbox,
   providerSettings,
 } from "@/lib/db/schema";
-import { ensureSession } from "@/lib/auth.functions";
+import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
 import { createProviderClient } from "@/lib/translation/provider-client";
 import { chunkText } from "@/lib/translation/chunker";

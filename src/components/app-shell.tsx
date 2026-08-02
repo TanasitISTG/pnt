@@ -13,8 +13,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { signOut } from "@/lib/auth-client";
-import type { User as AuthUser } from "@/lib/auth";
+import { signOut } from "@/lib/auth/auth-client";
+import type { User as AuthUser } from "@/lib/auth/auth";
 import { useConsent } from "@/lib/consent";
 import { cn } from "@/lib/utils";
 

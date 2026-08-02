@@ -3,9 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
-import { createNovel } from "@/lib/novel.functions";
-import type { CreateNovelInput } from "@/lib/novel.schemas";
-import { NovelForm } from "@/components/novel-form";
+import { createNovel } from "@/lib/content/novel.functions";
+import type { CreateNovelInput } from "@/lib/content/novel.schemas";
+import { NovelForm } from "@/components/novels/novel-form";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_protected/novels/new")({

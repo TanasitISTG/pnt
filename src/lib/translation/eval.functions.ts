@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
-import { ensureSession } from "@/lib/auth.functions";
+import { ensureSession } from "@/lib/auth/functions";
 import { db } from "@/lib/db";
 import { novels, translationEvalReports } from "@/lib/db/schema";
 import { inngest } from "@/lib/inngest/client";

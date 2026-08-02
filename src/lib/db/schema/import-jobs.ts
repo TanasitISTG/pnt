@@ -9,7 +9,7 @@ export const importJobStatusEnum = pgEnum("import_job_status", [
   "cancelled",
 ]);
 
-// One bulk chapter-import run (Inngest-driven; see src/lib/scrape.worker.ts).
+// One bulk chapter-import run (Inngest-driven; see src/lib/scrape/worker.ts).
 // nextNumber is the resume cursor — chapters before it are already processed.
 export const importJobs = pgTable(
   "import_jobs",

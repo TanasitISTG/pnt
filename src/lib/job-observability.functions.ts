@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { desc, eq, sql } from "drizzle-orm";
 
-import { ensureSession } from "@/lib/auth.functions";
+import { ensureSession } from "@/lib/auth/functions";
 import { db } from "@/lib/db";
 import {
   chapters,

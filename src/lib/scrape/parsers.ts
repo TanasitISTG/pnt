@@ -3,7 +3,7 @@
 
 import { SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
-import type { ScrapeProviderMeta, ScrapedChapter } from "../scrape.types";
+import type { ScrapeProviderMeta, ScrapedChapter } from "./types";
 
 export const SCRAPE_PROVIDERS: ScrapeProviderMeta[] = [
   { id: "auto", label: "Automatic", description: "Default per-site proxy behavior" },
