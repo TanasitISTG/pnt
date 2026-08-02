@@ -10,7 +10,6 @@ export interface ReaderContentProps {
   translatedParagraphs: string[];
   fontSizePx: number;
   readerFontClass?: string;
-  hydrated: boolean;
   sourceLang?: string;
   targetLang?: string;
 }
@@ -29,14 +28,13 @@ export const ReaderContent = memo(function ReaderContent({
   translatedParagraphs,
   fontSizePx,
   readerFontClass,
-  hydrated,
   sourceLang = "zh",
   targetLang = "th",
 }: ReaderContentProps) {
   const sourceName = LANG_NAMES[sourceLang];
 
   return (
-    <div style={hydrated ? undefined : { visibility: "hidden" }}>
+    <div>
       {viewMode !== "raw" && hasTranslation && (
         <p className="text-caption text-muted-foreground mb-4">
           {sourceName

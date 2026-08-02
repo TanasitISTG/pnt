@@ -1,8 +1,10 @@
+import type { PostHog } from "posthog-js";
+
 import { getConsent, type ConsentState } from "@/lib/consent";
 
 let initialized = false;
-let clientPromise: Promise<typeof import("posthog-js").default | null> | null = null;
-let client: typeof import("posthog-js").default | null = null;
+let clientPromise: Promise<PostHog | null> | null = null;
+let client: PostHog | null = null;
 
 function canUsePostHog() {
   return typeof window !== "undefined" && import.meta.env.PROD && getConsent() === "granted";
@@ -28,7 +30,15 @@ async function getPostHogClient() {
       posthog.init(key, {
         api_host: host,
         capture_pageview: true,
-        capture_exceptions: true,
+        capture_exceptions: false,
+        capture_performance: false,
+        capture_dead_clicks: false,
+        capture_heatmaps: false,
+        disable_surveys: true,
+        disable_product_tours: true,
+        disable_web_experiments: true,
+        disable_external_dependency_loading: true,
+        advanced_disable_flags: true,
         persistence: "localStorage+cookie",
         autocapture: false,
         disable_session_recording: true,
@@ -40,10 +50,6 @@ async function getPostHogClient() {
   });
 
   return clientPromise;
-}
-
-export async function initPostHog() {
-  await getPostHogClient();
 }
 
 export async function updatePostHogConsent(consent: ConsentState) {

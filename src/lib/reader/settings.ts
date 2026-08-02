@@ -39,16 +39,13 @@ function load(): ReaderSettings {
 let cached: ReaderSettings | null = null;
 
 export function useReaderSettings() {
-  // First hydration must match SSR (DEFAULTS) — stored settings are applied
-  // after mount; `hydrated` lets the page hide settings-dependent content
-  // until then. Later SPA navigations read `cached` synchronously.
+  // The first render matches SSR defaults; stored settings are applied after
+  // mount. Later SPA navigations read the module cache synchronously.
   const [settings, setSettings] = useState<ReaderSettings>(() => cached ?? DEFAULTS);
-  const [hydrated, setHydrated] = useState(cached !== null);
 
   useEffect(() => {
     if (!cached) cached = load();
     setSettings(cached);
-    setHydrated(true);
   }, []);
 
   const update = useCallback((patch: Partial<ReaderSettings>) => {
@@ -65,5 +62,5 @@ export function useReaderSettings() {
     setSettings(next);
   }, []);
 
-  return { settings, update, hydrated };
+  return { settings, update };
 }

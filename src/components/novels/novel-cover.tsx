@@ -9,6 +9,7 @@ interface NovelCoverProps {
   coverVersion?: string | number | Date | null;
   alt: string;
   className?: string;
+  sizes: string;
   fallbackSize?: number;
   lazy?: boolean;
   priority?: boolean;
@@ -19,6 +20,7 @@ export function NovelCover({
   coverVersion,
   alt,
   className,
+  sizes,
   fallbackSize = 12,
   lazy = false,
   priority = false,
@@ -28,7 +30,14 @@ export function NovelCover({
   const [visible, setVisible] = useState(!lazy);
   const rootRef = useRef<HTMLDivElement>(null);
   const version = coverVersion instanceof Date ? coverVersion.getTime() : coverVersion;
-  const url = novelId ? `/api/covers/${novelId}${version ? `?v=${version}` : ""}` : null;
+  const coverBaseUrl = novelId ? `/api/covers/${novelId}` : null;
+  const versionParam = version ? `&v=${version}` : "";
+  const url = coverBaseUrl ? `${coverBaseUrl}?w=480${versionParam}` : null;
+  const srcSet = coverBaseUrl
+    ? [320, 480, 640]
+        .map((width) => `${coverBaseUrl}?w=${width}${versionParam} ${width}w`)
+        .join(", ")
+    : undefined;
   const directImage = import.meta.env.PROD;
 
   useEffect(() => {
@@ -80,6 +89,8 @@ export function NovelCover({
         {visible && (
           <img
             src={url}
+            srcSet={srcSet}
+            sizes={sizes}
             alt={alt}
             loading={lazy && !priority ? "lazy" : "eager"}
             fetchPriority={priority ? "high" : "auto"}
@@ -93,10 +104,7 @@ export function NovelCover({
   }
 
   return (
-    <div
-      ref={rootRef}
-      className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}
-    >
+    <div className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}>
       <div
         className={`absolute inset-0 bg-foreground/5 animate-pulse rounded-[inherit] transition-opacity duration-300 ${
           loaded ? "opacity-0" : "opacity-100"

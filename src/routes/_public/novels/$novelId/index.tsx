@@ -85,7 +85,10 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
         : novel.description
       : "Read translated web novel chapters.";
     const appUrl = import.meta.env.VITE_APP_URL;
-    const coverUrl = novel?.hasCover ? `${appUrl ?? ""}/api/covers/${novel.id}` : undefined;
+    const coverBaseUrl = novel?.hasCover ? `/api/covers/${novel.id}` : null;
+    const coverUrl = novel?.hasCover ? `${appUrl ?? ""}${coverBaseUrl}` : undefined;
+    const version = novel?.updatedAt ? new Date(novel.updatedAt).getTime() : null;
+    const versionParam = version ? `&v=${version}` : "";
 
     return {
       meta: [
@@ -98,6 +101,16 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
         { name: "twitter:description", content: description },
         ...(coverUrl ? [{ name: "twitter:image", content: coverUrl }] : []),
       ],
+      links: coverBaseUrl
+        ? [
+            {
+              rel: "preload",
+              as: "image",
+              href: `${coverBaseUrl}?w=480${versionParam}`,
+              fetchPriority: "high",
+            },
+          ]
+        : [],
     };
   },
   component: NovelDetailPage,

@@ -61,6 +61,7 @@ The reference system is light-only; this project extends it with an inverted war
 - **Text**: Cream (`#f7f4ed`) primary; secondary as cream at 82–83% opacity; muted captions `#a3a3a0`.
 - **Borders**: `rgba(247,244,237,0.10)` passive; `rgba(247,244,237,0.4)` interactive — the light border model flipped to cream-at-opacity.
 - **Primary buttons**: invert to cream surface (`#f7f4ed`) with charcoal text (`#1c1c1c`), keeping the same inset-shadow signature.
+- **Destructive buttons**: use terracotta (`#a8442f`) with cream text (`#fcfbf8`) for 5.74:1 contrast.
 - **Focus**: soft shadow lifted to `rgba(247,244,237,0.15) 0px 4px 12px`; inputs keep the blue ring.
 - **Unchanged**: radius scale, spacing scale, type scale, component geometry.
 

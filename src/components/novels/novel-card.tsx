@@ -50,6 +50,7 @@ export function NovelCard({
             coverVersion={novel.updatedAt}
             lazy={lazyCover}
             priority={priorityCover}
+            sizes="(max-width: 767px) calc(50vw - 34px), (max-width: 1023px) calc(33.333vw - 32px), 270px"
             alt={novel.title}
             className="h-full w-full object-cover transition-transform duration-300 group-hover/card-link:scale-[1.02]"
             fallbackSize={12}

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { listTranslationEvalReports, startTranslationEval } from "@/lib/translation/eval.functions";
 import { formatLocalDateTime } from "@/lib/date-time";
@@ -44,7 +45,14 @@ export function TranslationQualityPanel({ novelId }: { novelId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Input value={selector} onChange={(event) => setSelector(event.target.value)} />
+          <Label htmlFor="translationEvalSelector" className="sr-only">
+            Chapter selector
+          </Label>
+          <Input
+            id="translationEvalSelector"
+            value={selector}
+            onChange={(event) => setSelector(event.target.value)}
+          />
           <Button onClick={() => runEval()} disabled={isPending}>
             {isPending ? "Queueing…" : "Run eval"}
           </Button>

@@ -159,6 +159,8 @@ export function NovelHeader({
             novelId={novel.id}
             coverVersion={novel.updatedAt}
             alt={novel.title}
+            sizes="200px"
+            priority
             className="h-full w-full object-cover"
             fallbackSize={16}
           />

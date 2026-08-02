@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
+import sarabunThaiUrl from "@fontsource/sarabun/files/sarabun-thai-400-normal.woff2?url";
 
 import { getNovel } from "@/lib/content/novel.functions";
 import {
@@ -84,6 +85,15 @@ export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapter
         { name: "twitter:title", content: pageTitle },
         { name: "twitter:description", content: description },
       ],
+      links: [
+        {
+          rel: "preload",
+          as: "font",
+          type: "font/woff2",
+          href: sarabunThaiUrl,
+          crossOrigin: "anonymous",
+        },
+      ],
     };
   },
   component: ReaderPage,
@@ -110,7 +120,7 @@ function ReaderPage() {
 
   useReaderScroll(novelId, chapterId, chapter);
 
-  const { settings, update, hydrated } = useReaderSettings();
+  const { settings, update } = useReaderSettings();
   const { theme, setTheme } = useTheme();
   const viewMode = settings.viewMode;
   const [editValue, setEditValue] = useState<string | null>(null);
@@ -272,7 +282,6 @@ function ReaderPage() {
           translatedParagraphs={translatedParagraphs}
           fontSizePx={fontSizePx}
           readerFontClass={readerFontClass}
-          hydrated={hydrated}
           sourceLang={novel?.sourceLang}
           targetLang={novel?.targetLang}
         />

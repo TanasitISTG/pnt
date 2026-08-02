@@ -13,18 +13,37 @@ const novelsQueryOptions = queryOptions({
 });
 
 export const Route = createFileRoute("/_public/")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(novelsQueryOptions),
-  head: () => ({
-    meta: [
-      {
-        title: "Library | Pnt - Personal Novel Translator",
-      },
-      {
-        name: "description",
-        content: "Browse the translated web novel collection.",
-      },
-    ],
+  loader: async ({ context }) => ({
+    novels: await context.queryClient.ensureQueryData(novelsQueryOptions),
   }),
+  head: ({ loaderData }) => {
+    const firstNovel = loaderData?.novels?.[0];
+    const coverBaseUrl = firstNovel?.hasCover ? `/api/covers/${firstNovel.id}` : null;
+    const version = firstNovel?.updatedAt ? new Date(firstNovel.updatedAt).getTime() : null;
+    const versionParam = version ? `&v=${version}` : "";
+
+    return {
+      meta: [
+        {
+          title: "Library | Pnt - Personal Novel Translator",
+        },
+        {
+          name: "description",
+          content: "Browse the translated web novel collection.",
+        },
+      ],
+      links: coverBaseUrl
+        ? [
+            {
+              rel: "preload",
+              as: "image",
+              href: `${coverBaseUrl}?w=320${versionParam}`,
+              fetchPriority: "high",
+            },
+          ]
+        : [],
+    };
+  },
   component: LibraryPage,
 });
 
@@ -89,7 +108,7 @@ function LibraryPage() {
               key={novel.id}
               novel={novel}
               showPublishState={!!user}
-              lazyCover={index > 3}
+              lazyCover={index > 0}
               priorityCover={index === 0}
             />
           ))}

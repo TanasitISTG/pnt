@@ -101,7 +101,10 @@ export function ReaderToolbar({
         </Button>
 
         <Select value={chapterId} onValueChange={(id) => onGoToChapter(id as string)}>
-          <SelectTrigger className="min-w-0 flex-1 sm:max-w-md">
+          <SelectTrigger
+            className="min-w-0 flex-1 sm:max-w-md"
+            aria-label={`Current chapter: Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
+          >
             <SelectValue>
               {`Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
             </SelectValue>

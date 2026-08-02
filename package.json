@@ -58,6 +58,7 @@
     "posthog-js": "1.407.3",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "sharp": "0.35.3",
     "sonner": "2.0.7",
     "tailwind-merge": "3.6.0",
     "tailwindcss": "4.3.3",
@@ -99,6 +100,7 @@
     ]
   },
   "trustedDependencies": [
-    "inngest-cli"
+    "inngest-cli",
+    "sharp"
   ]
 }
