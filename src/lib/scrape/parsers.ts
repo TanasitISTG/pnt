@@ -35,7 +35,7 @@ const NAMED_ENTITIES: Record<string, string> = {
 };
 
 // Single pass so decoded text is never re-scanned (&amp;lt; stays "&lt;").
-function decodeEntities(text: string): string {
+export function decodeEntities(text: string): string {
   return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (m, body: string) => {
     if (body.startsWith("#")) {
       const isHex = body[1] === "x" || body[1] === "X";

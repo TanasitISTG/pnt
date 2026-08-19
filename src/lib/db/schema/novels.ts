@@ -8,8 +8,8 @@ import {
   numeric,
   unique,
   index,
-  customType,
 } from "drizzle-orm/pg-core";
+import { bytea } from "./bytea";
 import { user } from "./auth";
 import { translationJobs } from "./translation-jobs";
 import { glossaryTerms } from "./glossary-terms";
@@ -21,27 +21,6 @@ export const chapterStatusEnum = pgEnum("chapter_status", [
   "translated",
   "error",
 ]);
-
-// Custom type for bytea mapping to Buffer in JS/TS
-const bytea = customType<{ data: Buffer; driverData: unknown }>({
-  dataType() {
-    return "bytea";
-  },
-  toDriver(value: Buffer) {
-    return value;
-  },
-  fromDriver(value: unknown) {
-    if (Buffer.isBuffer(value)) return value;
-    if (value instanceof Uint8Array) return Buffer.from(value);
-    if (typeof value === "string") {
-      if (value.startsWith("\\x")) {
-        return Buffer.from(value.slice(2), "hex");
-      }
-      return Buffer.from(value, "hex");
-    }
-    return Buffer.from(value as ArrayBuffer);
-  },
-});
 
 export const novels = pgTable(
   "novels",

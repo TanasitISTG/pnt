@@ -162,10 +162,27 @@ function JobsPage() {
                     {job.novelTitle}
                   </td>
                   <td className="py-2 pr-3">
-                    {job.fromNumber}–{job.toNumber}
+                    {job.kind === "epub"
+                      ? job.toNumber === 0
+                        ? "Preparing…"
+                        : `1–${job.toNumber}`
+                      : `${job.fromNumber}–${job.toNumber}`}
                   </td>
-                  <td className="truncate py-2 pr-3" title={formatLabel(job.scrapeProvider)}>
-                    {formatLabel(job.scrapeProvider)}
+                  <td
+                    className="truncate py-2 pr-3"
+                    title={
+                      job.kind === "epub"
+                        ? job.sourceFileName
+                          ? `EPUB — ${job.sourceFileName}`
+                          : "EPUB"
+                        : formatLabel(job.scrapeProvider)
+                    }
+                  >
+                    {job.kind === "epub"
+                      ? job.sourceFileName
+                        ? `EPUB — ${job.sourceFileName}`
+                        : "EPUB"
+                      : formatLabel(job.scrapeProvider)}
                   </td>
                   <td className="whitespace-nowrap py-2 pr-3" title="added / skipped / failed">
                     {job.added} / {job.skipped} / {job.failed}

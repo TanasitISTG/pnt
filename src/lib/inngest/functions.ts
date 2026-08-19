@@ -8,6 +8,14 @@ import {
   finishImportJob,
   failImportJob,
 } from "@/lib/scrape/worker";
+import {
+  prepareEpubImportJob,
+  initEpubImportJob,
+  importOneEpubChapter,
+  finishEpubImportJob,
+  failEpubImportJob,
+  cleanupExpiredEpubUploads,
+} from "@/lib/epub/worker";
 import { log } from "@/lib/log";
 import { dispatchPendingTranslationOutbox } from "@/lib/translation/outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/job-state";
@@ -101,6 +109,49 @@ export const importChaptersFn = inngest.createFunction(
     return { done: true };
   },
 );
+export const importEpubChaptersFn = inngest.createFunction(
+  {
+    id: "import-epub-chapters",
+    triggers: { event: "epub/import.requested" },
+    retries: 3,
+    idempotency: "event.data.runKey",
+    cancelOn: [{ event: "epub/import.cancelled", match: "data.jobId" }],
+    onFailure: async ({ event, error }) => {
+      const jobId = (event.data as FailedRunEventData).event?.data?.jobId;
+      if (!jobId) {
+        log("error", "EPUB Import onFailure fired without jobId", { event, error: error.message });
+        return;
+      }
+      log("error", "EPUB Import job failed", { jobId, error: error.message });
+      await failEpubImportJob(jobId, error.message);
+    },
+  },
+  async ({ event, step }) => {
+    const { jobId } = event.data as { jobId: string };
+
+    const prep = await step.run("prepare", () => prepareEpubImportJob(jobId));
+    if (prep.skip) return { skipped: true };
+
+    const init = await step.run("init", () => initEpubImportJob(jobId));
+    if (init.skip || !init.next || !init.to) return { skipped: true };
+
+    for (let seq = init.next; seq <= init.to; seq++) {
+      const r = await step.run(`chapter-${seq}`, () => importOneEpubChapter(jobId, seq));
+      if (r.stop) return { stopped: true };
+    }
+
+    await step.run("finish", () => finishEpubImportJob(jobId));
+    return { done: true };
+  },
+);
+
+export const cleanupExpiredEpubUploadsFn = inngest.createFunction(
+  {
+    id: "cleanup-expired-epub-uploads",
+    triggers: { cron: "0 * * * *" },
+  },
+  async ({ step }) => step.run("cleanup", () => cleanupExpiredEpubUploads()),
+);
 
 export const translationEvalFn = inngest.createFunction(
   {
@@ -119,5 +170,7 @@ export const functions = [
   translateChapterFn,
   dispatchTranslationOutboxFn,
   importChaptersFn,
+  importEpubChaptersFn,
+  cleanupExpiredEpubUploadsFn,
   translationEvalFn,
 ];

@@ -11,6 +11,7 @@ import { findSource } from "@/lib/scrape";
 import { fetchAndParse } from "@/lib/scrape/server";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
+import { cancelActiveImportJobsForNovel, cancelImportJobById } from "@/lib/import/job-control";
 
 const providerEnum = z
   .enum(["auto", "direct", "zenrows", "scrapingbee", "firecrawl"])
@@ -96,31 +97,13 @@ export const startImportJob = createServerFn({ method: "POST" })
         .limit(1);
       if (!novel) throw new SafeServerError("Novel not found or unauthorized");
 
-      const active = await db
-        .select({ id: importJobs.id })
-        .from(importJobs)
-        .where(
-          and(
-            eq(importJobs.novelId, data.novelId),
-            sql`${importJobs.status} IN ('pending', 'running')`,
-          ),
-        );
-      await Promise.all(
-        active.map(async (j) => {
-          await db
-            .update(importJobs)
-            .set({ status: "cancelled", updatedAt: new Date() })
-            .where(eq(importJobs.id, j.id));
-          await inngest
-            .send({ name: "scrape/import.cancelled", data: { jobId: j.id } })
-            .catch(() => {});
-        }),
-      );
+      await cancelActiveImportJobsForNovel(data.novelId);
 
       const jobId = nanoid();
       await db.insert(importJobs).values({
         id: jobId,
         novelId: data.novelId,
+        kind: "scrape",
         baseUrl: data.baseUrl,
         fromNumber: data.from,
         toNumber: data.to,
@@ -132,11 +115,20 @@ export const startImportJob = createServerFn({ method: "POST" })
         await inngest.send({ name: "scrape/import.requested", data: { jobId, runKey: nanoid() } });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        const code =
-          err instanceof Error
-            ? ((err as { code?: string }).code ??
-              (err.cause as { code?: string } | undefined)?.code)
-            : undefined;
+        let code: string | undefined;
+        if (err && typeof err === "object") {
+          if ("code" in err && typeof err.code === "string") {
+            code = err.code;
+          } else if (
+            "cause" in err &&
+            err.cause &&
+            typeof err.cause === "object" &&
+            "code" in err.cause &&
+            typeof err.cause.code === "string"
+          ) {
+            code = err.cause.code;
+          }
+        }
         log("error", "Failed to send Inngest event in startImportJob", {
           jobId,
           error: msg,
@@ -158,33 +150,16 @@ export const cancelImportJob = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const [row] = await db
-        .select({ id: importJobs.id })
-        .from(importJobs)
-        .innerJoin(novels, eq(importJobs.novelId, novels.id))
-        .where(and(eq(importJobs.id, data.jobId), eq(novels.userId, session.user.id)))
-        .limit(1);
-      if (!row) throw new SafeServerError("Import job not found or unauthorized");
-
-      await db
-        .update(importJobs)
-        .set({ status: "cancelled", updatedAt: new Date() })
-        .where(eq(importJobs.id, row.id));
-
-      try {
-        await inngest.send({ name: "scrape/import.cancelled", data: { jobId: row.id } });
-      } catch {
-        // Inngest unreachable — the status check in each step still stops the job.
-      }
-
+      await cancelImportJobById(data.jobId, session.user.id);
       return { success: true };
     }),
   );
 
 const importJobStatusSelect = {
   id: importJobs.id,
+  kind: importJobs.kind,
   status: importJobs.status,
+  sourceFileName: importJobs.sourceFileName,
   fromNumber: importJobs.fromNumber,
   toNumber: importJobs.toNumber,
   nextNumber: importJobs.nextNumber,
@@ -213,7 +188,12 @@ export const getImportJobStatus = createServerFn({ method: "GET" })
   );
 
 export const getActiveImportJob = createServerFn({ method: "GET" })
-  .validator(z.object({ novelId: z.string().min(1) }))
+  .validator(
+    z.object({
+      novelId: z.string().min(1),
+      kind: z.enum(["scrape", "epub"]).default("scrape"),
+    }),
+  )
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
@@ -226,6 +206,7 @@ export const getActiveImportJob = createServerFn({ method: "GET" })
           and(
             eq(importJobs.novelId, data.novelId),
             eq(novels.userId, session.user.id),
+            eq(importJobs.kind, data.kind),
             sql`${importJobs.status} IN ('pending', 'running')`,
           ),
         )

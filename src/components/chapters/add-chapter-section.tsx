@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createChapter } from "@/lib/content/chapter.functions";
 import { createChapterSchema, type CreateChapterInput } from "@/lib/content/novel.schemas";
 import { ScrapeImportSection } from "@/components/chapters/scrape-import-section";
+import { EpubImportSection } from "@/components/chapters/epub-import-section";
 
 interface AddChapterSectionProps {
   novelId: string;
@@ -94,6 +95,8 @@ export function AddChapterSection({
         <h2 className="text-sub font-semibold text-foreground tracking-tight">Add Chapter</h2>
         <Card className="max-w-3xl">
           <CardContent className="p-6">
+            <EpubImportSection novelId={novelId} invalidateChapters={invalidateChapters} />
+
             <ScrapeImportSection
               novelId={novelId}
               invalidateChapters={invalidateChapters}

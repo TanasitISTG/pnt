@@ -18,7 +18,7 @@ import {
   insertRawChapter,
   markImportJobDone,
   markImportJobError,
-} from "@/lib/scrape/job-store";
+} from "@/lib/import/job-store";
 import { log } from "@/lib/log";
 
 // Step logic for the "import-chapters" Inngest function. One step per chapter:
@@ -32,7 +32,8 @@ export async function initImportJob(jobId: string) {
     return { skip: true as const };
   }
   if (job.status === "pending") {
-    await markImportJobRunning(jobId);
+    const started = await markImportJobRunning(jobId);
+    if (started === false) return { skip: true as const };
   }
 
   const source = findSource(job.baseUrl);

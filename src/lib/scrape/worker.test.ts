@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { initImportJob, importOneChapter } from "./worker";
-import * as jobStore from "./job-store";
+import * as jobStore from "@/lib/import/job-store";
 import type * as ScrapeModule from "./index";
 import * as scrapeServer from "./server";
 
-vi.mock("./job-store", () => ({
+vi.mock("@/lib/import/job-store", () => ({
   loadImportJob: vi.fn(),
   markImportJobRunning: vi.fn(),
   bumpImportJob: vi.fn(),
@@ -42,7 +42,9 @@ describe("scrape worker steps", () => {
   const quanbenJob = {
     id: "job-1",
     novelId: "novel-1",
+    kind: "scrape" as const,
     status: "running",
+    sourceFileName: null,
     baseUrl: "https://www.quanben.io/n/abc/1.html",
     fromNumber: 1,
     toNumber: 10,

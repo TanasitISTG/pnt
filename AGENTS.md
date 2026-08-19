@@ -17,20 +17,20 @@ Personal Novel Translator (PNT) is a single-admin novel translation app. It supp
 
 ## Key Directories
 
-| Directory | Purpose |
-| --- | --- |
-| `src/routes/` | File-based public/protected pages and API handlers. |
-| `src/components/` | Feature UI plus restyled shadcn/Base UI primitives in `ui/`. |
-| `src/lib/content/` | Novel/chapter CRUD, publishing, ownership, covers, and schemas. |
-| `src/lib/translation/` | Chunking, prompts, provider clients, job APIs/state/store, worker, outbox, and evaluation. |
-| `src/lib/scrape/` | Source registry, HTML parsers, safe fetches, network policy, and import worker. |
-| `src/lib/inngest/` | Inngest client and durable function registration. |
-| `src/lib/db/` | Server-only Drizzle connection and schema modules. |
+| Directory                                                       | Purpose                                                                                                                        |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `src/routes/`                                                   | File-based public/protected pages and API handlers.                                                                            |
+| `src/components/`                                               | Feature UI plus restyled shadcn/Base UI primitives in `ui/`.                                                                   |
+| `src/lib/content/`                                              | Novel/chapter CRUD, publishing, ownership, covers, and schemas.                                                                |
+| `src/lib/translation/`                                          | Chunking, prompts, provider clients, job APIs/state/store, worker, outbox, and evaluation.                                     |
+| `src/lib/scrape/`                                               | Source registry, HTML parsers, safe fetches, network policy, and import worker.                                                |
+| `src/lib/inngest/`                                              | Inngest client and durable function registration.                                                                              |
+| `src/lib/db/`                                                   | Server-only Drizzle connection and schema modules.                                                                             |
 | `src/lib/auth/`, `glossary/`, `reader/`, `export/`, `settings/` | Authentication, glossary propagation, persisted reader preferences/progress, streaming exports, and provider/account settings. |
-| `src/styles/globals.css` | Tailwind v4 CSS-first theme, semantic tokens, light/dark variables, and font stacks. |
-| `scripts/` | Migrations, seed user, postbuild Vercel patch, translation evaluation, and E2E supervisor. |
-| `e2e/` | Playwright browser workflow; integration tests are colocated under `src/**/*.integration.test.ts`. |
-| `drizzle/` | Generated PostgreSQL migrations and migration metadata. |
+| `src/styles/globals.css`                                        | Tailwind v4 CSS-first theme, semantic tokens, light/dark variables, and font stacks.                                           |
+| `scripts/`                                                      | Migrations, seed user, postbuild Vercel patch, translation evaluation, and E2E supervisor.                                     |
+| `e2e/`                                                          | Playwright browser workflow; integration tests are colocated under `src/**/*.integration.test.ts`.                             |
+| `drizzle/`                                                      | Generated PostgreSQL migrations and migration metadata.                                                                        |
 
 ## Development Commands
 
@@ -45,22 +45,22 @@ bun dev                 # http://localhost:3000
 bun run inngest         # second terminal, http://localhost:8288
 ```
 
-| Task | Command |
-| --- | --- |
-| Dev server | `bun dev` |
-| Inngest local server | `bun run inngest` |
-| Production build / preview | `bun run build` / `bun run preview` |
-| Regenerate TanStack route tree | `bun run generate-routes` |
-| Lint / auto-fix | `bun run lint` / `bun run lint:fix` |
-| Format / check | `bun run format` / `bun run format:check` |
-| Typecheck | `bun run typecheck` |
-| Unit tests | `bun run test` |
-| PostgreSQL integration tests | `TEST_DATABASE_URL=... bun run test:integration` |
-| Browser workflow | `bun run test:e2e` |
-| Generate/apply migrations | `bun run db:generate` / `bun run db:migrate` |
-| Seed admin | `bun run seed:user` |
-| Translation evaluation | `bun run eval:translation <novelId> [chapterNumbers]` |
-| React diagnostics / dependency audit | `bun run doctor` / `bun run audit:release` |
+| Task                                 | Command                                               |
+| ------------------------------------ | ----------------------------------------------------- |
+| Dev server                           | `bun dev`                                             |
+| Inngest local server                 | `bun run inngest`                                     |
+| Production build / preview           | `bun run build` / `bun run preview`                   |
+| Regenerate TanStack route tree       | `bun run generate-routes`                             |
+| Lint / auto-fix                      | `bun run lint` / `bun run lint:fix`                   |
+| Format / check                       | `bun run format` / `bun run format:check`             |
+| Typecheck                            | `bun run typecheck`                                   |
+| Unit tests                           | `bun run test`                                        |
+| PostgreSQL integration tests         | `TEST_DATABASE_URL=... bun run test:integration`      |
+| Browser workflow                     | `bun run test:e2e`                                    |
+| Generate/apply migrations            | `bun run db:generate` / `bun run db:migrate`          |
+| Seed admin                           | `bun run seed:user`                                   |
+| Translation evaluation               | `bun run eval:translation <novelId> [chapterNumbers]` |
+| React diagnostics / dependency audit | `bun run doctor` / `bun run audit:release`            |
 
 Database migrations are a release operation, not a Vercel build operation. Production Vercel builds use the frozen lockfile and `vercel.json` runs `bun run build && bun run postbuild`; `postbuild` sets the server function limit needed by long Inngest steps.
 

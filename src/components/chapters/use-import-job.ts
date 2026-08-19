@@ -11,7 +11,9 @@ import type { ScrapeProvider } from "@/lib/scrape/types";
 
 export interface ImportJobState {
   id: string;
+  kind?: "scrape" | "epub";
   status: string;
+  sourceFileName?: string | null;
   fromNumber: number;
   toNumber: number;
   nextNumber: number;
@@ -21,14 +23,18 @@ export interface ImportJobState {
   error: string | null;
 }
 
-export function useImportJob(novelId: string, invalidateChapters: () => void) {
+export function useImportJob(
+  novelId: string,
+  invalidateChapters: () => void,
+  kind: "scrape" | "epub" = "scrape",
+) {
   const [importJob, setImportJob] = useState<ImportJobState | null>(null);
   const importActive = importJob?.status === "pending" || importJob?.status === "running";
 
   // Re-attach to a running import after refresh
   useEffect(() => {
     let cancelled = false;
-    getActiveImportJob({ data: { novelId } })
+    getActiveImportJob({ data: { novelId, kind } })
       .then((job) => {
         if (!cancelled && job) setImportJob(job);
       })
@@ -36,7 +42,7 @@ export function useImportJob(novelId: string, invalidateChapters: () => void) {
     return () => {
       cancelled = true;
     };
-  }, [novelId]);
+  }, [novelId, kind]);
 
   // Poll active import job (read-only, idempotent)
   useEffect(() => {
@@ -82,7 +88,9 @@ export function useImportJob(novelId: string, invalidateChapters: () => void) {
       });
       setImportJob({
         id: jobId,
+        kind,
         status: "pending",
+        sourceFileName: null,
         fromNumber: from,
         toNumber: to,
         nextNumber: from,
@@ -108,6 +116,21 @@ export function useImportJob(novelId: string, invalidateChapters: () => void) {
       toast.error(e instanceof Error ? e.message : "Failed to cancel import");
     }
   };
+  const attachJob = (jobId: string, sourceFileName?: string) => {
+    setImportJob({
+      id: jobId,
+      kind,
+      status: "pending",
+      sourceFileName: sourceFileName ?? null,
+      fromNumber: 1,
+      toNumber: 0,
+      nextNumber: 1,
+      added: 0,
+      skipped: 0,
+      failed: 0,
+      error: null,
+    });
+  };
 
-  return { importJob, importActive, startImport, cancelImport };
+  return { importJob, importActive, startImport, cancelImport, attachJob };
 }

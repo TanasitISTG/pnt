@@ -42,8 +42,10 @@ export const getJobDashboard = createServerFn({ method: "GET" }).handler(async (
       db
         .select({
           id: importJobs.id,
+          kind: importJobs.kind,
           status: importJobs.status,
           baseUrl: importJobs.baseUrl,
+          sourceFileName: importJobs.sourceFileName,
           fromNumber: importJobs.fromNumber,
           toNumber: importJobs.toNumber,
           nextNumber: importJobs.nextNumber,
