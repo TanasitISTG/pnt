@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   prepareEpubImportJob,
   initEpubImportJob,
-  importOneEpubChapter,
+  importEpubChapterBatch,
+  planEpubImportBatches,
+  EPUB_IMPORT_CHAPTER_BATCH_SIZE,
+  EPUB_IMPORT_MAX_BATCHES_PER_RUN,
   finishEpubImportJob,
   failEpubImportJob,
   cleanupExpiredEpubUploads,
@@ -159,16 +162,55 @@ describe("EPUB worker steps", () => {
     });
   });
 
-  describe("importOneEpubChapter", () => {
-    it("delegates to importOneStagedChapter", async () => {
-      vi.mocked(epubJobStore.importOneStagedChapter).mockResolvedValueOnce({
+  describe("planEpubImportBatches", () => {
+    it("keeps a 1,014-chapter import below the step limit", () => {
+      const plan = planEpubImportBatches(1, 1014);
+
+      expect(plan.hasMore).toBe(false);
+      expect(plan.batches).toHaveLength(Math.ceil(1014 / EPUB_IMPORT_CHAPTER_BATCH_SIZE));
+      expect(plan.batches[plan.batches.length - 1]).toEqual({ from: 1001, to: 1014 });
+      expect(
+        plan.batches.every((batch) => batch.to - batch.from + 1 <= EPUB_IMPORT_CHAPTER_BATCH_SIZE),
+      ).toBe(true);
+    });
+
+    it("continues very large imports before reaching the step limit", () => {
+      const plan = planEpubImportBatches(
+        1,
+        EPUB_IMPORT_CHAPTER_BATCH_SIZE * EPUB_IMPORT_MAX_BATCHES_PER_RUN + 1,
+      );
+
+      expect(plan.batches).toHaveLength(EPUB_IMPORT_MAX_BATCHES_PER_RUN);
+      expect(plan.hasMore).toBe(true);
+      expect(plan.next).toBe(EPUB_IMPORT_CHAPTER_BATCH_SIZE * EPUB_IMPORT_MAX_BATCHES_PER_RUN + 1);
+    });
+  });
+
+  describe("importEpubChapterBatch", () => {
+    it("processes each sequence in the batch", async () => {
+      vi.mocked(epubJobStore.importOneStagedChapter).mockResolvedValue({
         stop: false,
         action: "added",
       });
 
-      const res = await importOneEpubChapter("job-1", 1);
-      expect(res).toEqual({ stop: false, action: "added" });
-      expect(epubJobStore.importOneStagedChapter).toHaveBeenCalledWith("job-1", 1);
+      const result = await importEpubChapterBatch("job-1", 4, 6);
+
+      expect(result).toEqual({ stop: false });
+      expect(epubJobStore.importOneStagedChapter).toHaveBeenCalledTimes(3);
+      expect(epubJobStore.importOneStagedChapter).toHaveBeenNthCalledWith(1, "job-1", 4);
+      expect(epubJobStore.importOneStagedChapter).toHaveBeenNthCalledWith(2, "job-1", 5);
+      expect(epubJobStore.importOneStagedChapter).toHaveBeenNthCalledWith(3, "job-1", 6);
+    });
+
+    it("stops the batch when the job is cancelled", async () => {
+      vi.mocked(epubJobStore.importOneStagedChapter)
+        .mockResolvedValueOnce({ stop: false, action: "added" })
+        .mockResolvedValueOnce({ stop: true });
+
+      const result = await importEpubChapterBatch("job-1", 4, 6);
+
+      expect(result).toEqual({ stop: true });
+      expect(epubJobStore.importOneStagedChapter).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -102,6 +102,30 @@ export async function prepareEpubImportJob(
   return { skip: false, total };
 }
 
+export const EPUB_IMPORT_CHAPTER_BATCH_SIZE = 25;
+export const EPUB_IMPORT_MAX_BATCHES_PER_RUN = 900;
+
+export interface EpubImportBatch {
+  from: number;
+  to: number;
+}
+
+export function planEpubImportBatches(
+  next: number,
+  to: number,
+): { batches: EpubImportBatch[]; next: number; hasMore: boolean } {
+  const batches: EpubImportBatch[] = [];
+  let cursor = next;
+
+  while (cursor <= to && batches.length < EPUB_IMPORT_MAX_BATCHES_PER_RUN) {
+    const batchEnd = Math.min(cursor + EPUB_IMPORT_CHAPTER_BATCH_SIZE - 1, to);
+    batches.push({ from: cursor, to: batchEnd });
+    cursor = batchEnd + 1;
+  }
+
+  return { batches, next: cursor, hasMore: cursor <= to };
+}
+
 export async function initEpubImportJob(
   jobId: string,
 ): Promise<{ skip: boolean; next?: number; to?: number }> {
@@ -120,12 +144,23 @@ export async function initEpubImportJob(
   return { skip: false, next: job.nextNumber, to: job.toNumber };
 }
 
-export async function importOneEpubChapter(
+export async function importEpubChapterBatch(
   jobId: string,
-  sequence: number,
-): Promise<{ stop: boolean; action?: "added" | "skipped" }> {
-  log("info", "EPUB worker step import chapter", { jobId, sequence });
-  return await importOneStagedChapter(jobId, sequence);
+  fromSequence: number,
+  toSequence: number,
+): Promise<{ stop: boolean }> {
+  log("info", "EPUB worker step import chapter batch", {
+    jobId,
+    fromSequence,
+    toSequence,
+  });
+
+  for (let sequence = fromSequence; sequence <= toSequence; sequence++) {
+    const result = await importOneStagedChapter(jobId, sequence);
+    if (result.stop) return { stop: true };
+  }
+
+  return { stop: false };
 }
 
 export async function finishEpubImportJob(jobId: string): Promise<void> {

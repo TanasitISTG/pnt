@@ -11,7 +11,8 @@ import {
 import {
   prepareEpubImportJob,
   initEpubImportJob,
-  importOneEpubChapter,
+  importEpubChapterBatch,
+  planEpubImportBatches,
   finishEpubImportJob,
   failEpubImportJob,
   cleanupExpiredEpubUploads,
@@ -114,6 +115,7 @@ export const importEpubChaptersFn = inngest.createFunction(
     id: "import-epub-chapters",
     triggers: { event: "epub/import.requested" },
     retries: 3,
+    concurrency: { limit: 1, key: "event.data.jobId" },
     idempotency: "event.data.runKey",
     cancelOn: [{ event: "epub/import.cancelled", match: "data.jobId" }],
     onFailure: async ({ event, error }) => {
@@ -135,9 +137,23 @@ export const importEpubChaptersFn = inngest.createFunction(
     const init = await step.run("init", () => initEpubImportJob(jobId));
     if (init.skip || !init.next || !init.to) return { skipped: true };
 
-    for (let seq = init.next; seq <= init.to; seq++) {
-      const r = await step.run(`chapter-${seq}`, () => importOneEpubChapter(jobId, seq));
-      if (r.stop) return { stopped: true };
+    const plan = planEpubImportBatches(init.next, init.to);
+    for (const batch of plan.batches) {
+      const result = await step.run(`chapters-${batch.from}-${batch.to}`, () =>
+        importEpubChapterBatch(jobId, batch.from, batch.to),
+      );
+      if (result.stop) return { stopped: true };
+    }
+
+    if (plan.hasMore) {
+      await step.sendEvent("continue", {
+        name: "epub/import.requested",
+        data: {
+          jobId,
+          runKey: `${jobId}:${plan.next}`,
+        },
+      });
+      return { continued: true, next: plan.next };
     }
 
     await step.run("finish", () => finishEpubImportJob(jobId));

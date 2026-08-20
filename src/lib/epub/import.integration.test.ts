@@ -2,17 +2,25 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
 import * as fflate from "fflate";
+import type {
+  prepareEpubImportJob as PrepareEpubImportJob,
+  initEpubImportJob as InitEpubImportJob,
+  importEpubChapterBatch as ImportEpubChapterBatch,
+  finishEpubImportJob as FinishEpubImportJob,
+  cleanupExpiredEpubUploads as CleanupExpiredEpubUploads,
+} from "./worker";
+import type { cancelEpubImportJob as CancelEpubImportJob } from "./job-store";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
-let prepareEpubImportJob: typeof import("./worker").prepareEpubImportJob;
-let initEpubImportJob: typeof import("./worker").initEpubImportJob;
-let importOneEpubChapter: typeof import("./worker").importOneEpubChapter;
-let finishEpubImportJob: typeof import("./worker").finishEpubImportJob;
-let cleanupExpiredEpubUploads: typeof import("./worker").cleanupExpiredEpubUploads;
-let cancelEpubImportJob: typeof import("./job-store").cancelEpubImportJob;
+let prepareEpubImportJob: typeof PrepareEpubImportJob;
+let initEpubImportJob: typeof InitEpubImportJob;
+let importEpubChapterBatch: typeof ImportEpubChapterBatch;
+let finishEpubImportJob: typeof FinishEpubImportJob;
+let cleanupExpiredEpubUploads: typeof CleanupExpiredEpubUploads;
+let cancelEpubImportJob: typeof CancelEpubImportJob;
 
 function createTestEpubBuffer(): Uint8Array {
   const containerXml = `<?xml version="1.0"?>
@@ -71,7 +79,7 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     ({
       prepareEpubImportJob,
       initEpubImportJob,
-      importOneEpubChapter,
+      importEpubChapterBatch,
       finishEpubImportJob,
       cleanupExpiredEpubUploads,
     } = await import("./worker"));
@@ -155,13 +163,12 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     const [jobRunning] = await sql`SELECT "status" FROM "import_jobs" WHERE "id" = ${jobId}`;
     expect(jobRunning.status).toBe("running");
 
-    // 5. Import chapter 1
-    const ch1Res = await importOneEpubChapter(jobId, 1);
-    expect(ch1Res).toEqual({ stop: false, action: "added" });
+    const ch1Res = await importEpubChapterBatch(jobId, 1, 1);
+    expect(ch1Res).toEqual({ stop: false });
 
     // 6. Import chapter 2
-    const ch2Res = await importOneEpubChapter(jobId, 2);
-    expect(ch2Res).toEqual({ stop: false, action: "added" });
+    const ch2Res = await importEpubChapterBatch(jobId, 2, 2);
+    expect(ch2Res).toEqual({ stop: false });
 
     // 7. Test duplicate skip: insert existing chapter with number 3 before running sequence 3
     const dupChapterId = `dup-${randomUUID()}`;
@@ -171,8 +178,8 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     `;
 
     // Sequence 3 should detect conflict and skip without failing
-    const ch3Res = await importOneEpubChapter(jobId, 3);
-    expect(ch3Res).toEqual({ stop: false, action: "skipped" });
+    const ch3Res = await importEpubChapterBatch(jobId, 3, 3);
+    expect(ch3Res).toEqual({ stop: false });
 
     // Verify job counters
     const [jobProgress] =
@@ -234,7 +241,7 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     `;
 
     expect(await cancelEpubImportJob(canceledJobId)).toBe(true);
-    expect(await importOneEpubChapter(canceledJobId, 1)).toEqual({ stop: true });
+    expect(await importEpubChapterBatch(canceledJobId, 1, 1)).toEqual({ stop: true });
 
     const [job] = await sql`SELECT "status" FROM "import_jobs" WHERE "id" = ${canceledJobId}`;
     expect(job.status).toBe("cancelled");
