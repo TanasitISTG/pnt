@@ -2,13 +2,15 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createCompletion } = vi.hoisted(() => ({
+const { createCompletion, createResponse } = vi.hoisted(() => ({
   createCompletion: vi.fn(),
+  createResponse: vi.fn(),
 }));
 
 vi.mock("openai", () => ({
   default: class {
     chat = { completions: { create: createCompletion } };
+    responses = { create: createResponse };
   },
 }));
 
@@ -21,9 +23,14 @@ const source = readFileSync(
 
 beforeEach(() => {
   createCompletion.mockReset();
+  createResponse.mockReset();
   createCompletion.mockResolvedValue({
     choices: [{ message: { content: "translated" } }],
     usage: { prompt_tokens: 12, completion_tokens: 34 },
+  });
+  createResponse.mockResolvedValue({
+    output_text: "translated",
+    usage: { input_tokens: 12, output_tokens: 34 },
   });
 });
 
@@ -75,6 +82,48 @@ describe("provider-client module", () => {
         reasoning_effort: "low",
       }),
     );
+  });
+  it.each([
+    "https://opencode.ai/zen/v1",
+    "https://opencode.ai/zen/go/v1",
+    "https://opencode.ai/zen/v1/responses",
+  ])("uses non-streaming Responses API for OpenCode Luna (%s)", async (baseUrl) => {
+    const client = new OpenAIProviderClient({
+      apiKey: "test-key",
+      baseUrl,
+      model: "gpt-5.6-luna",
+      temperature: 0.4,
+      reasoningEffort: "low",
+    });
+
+    const result = await client.generateChatCompletion({
+      messages: [
+        { role: "system", content: "Translate into Thai." },
+        { role: "user", content: "Translate this." },
+      ],
+      maxTokens: 128,
+      responseFormat: { type: "json_object" },
+    });
+
+    expect(createCompletion).not.toHaveBeenCalled();
+    expect(createResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5.6-luna",
+        input: [
+          { role: "system", content: "Translate into Thai." },
+          { role: "user", content: "Translate this." },
+        ],
+        temperature: 0.4,
+        max_output_tokens: 128,
+        reasoning: { effort: "low" },
+        text: { format: { type: "json_object" } },
+        stream: false,
+      }),
+    );
+    expect(result).toEqual({
+      content: "translated",
+      usage: { promptTokens: 12, completionTokens: 34 },
+    });
   });
 
   it("applies the configured reasoning effort to OpenAI-compatible requests", async () => {

@@ -20,6 +20,19 @@ export class ProviderNotConfiguredError extends Error {
     this.name = "ProviderNotConfiguredError";
   }
 }
+const OPEN_CODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1";
+const OPEN_CODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
+
+function normalizeOpenCodeBaseUrl(baseUrl: string): string {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  if (
+    normalized === `${OPEN_CODE_ZEN_BASE_URL}/responses` ||
+    normalized === `${OPEN_CODE_GO_BASE_URL}/responses`
+  ) {
+    return normalized.slice(0, -"/responses".length);
+  }
+  return normalized;
+}
 
 export class OpenAIProviderClient implements AIProviderClient {
   provider: ProviderType = "openai";
@@ -44,10 +57,10 @@ export class OpenAIProviderClient implements AIProviderClient {
     this.fastModel = config.fastModel;
     this.temperature = config.temperature;
     this.reasoningEffort = config.reasoningEffort;
-    this.baseUrl = config.baseUrl;
+    this.baseUrl = normalizeOpenCodeBaseUrl(config.baseUrl);
     this.requestTimeoutSec = config.requestTimeoutSec;
     this.client = new OpenAI({
-      baseURL: config.baseUrl,
+      baseURL: this.baseUrl,
       apiKey: config.apiKey,
       timeout: (config.requestTimeoutSec ?? 240) * 1000,
       maxRetries: 0,
@@ -56,10 +69,32 @@ export class OpenAIProviderClient implements AIProviderClient {
 
   async generateChatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
     const model = options.model ?? this.model;
+
+    if (
+      model === "gpt-5.6-luna" &&
+      (this.baseUrl === OPEN_CODE_ZEN_BASE_URL || this.baseUrl === OPEN_CODE_GO_BASE_URL)
+    ) {
+      const response = await this.client.responses.create({
+        model,
+        input: options.messages,
+        temperature: options.temperature ?? this.temperature,
+        max_output_tokens: options.maxTokens,
+        reasoning: this.reasoningEffort ? { effort: this.reasoningEffort } : undefined,
+        text: options.responseFormat ? { format: options.responseFormat } : undefined,
+        stream: false,
+      });
+
+      return {
+        content: response.output_text || "",
+        usage: {
+          promptTokens: response.usage?.input_tokens || 0,
+          completionTokens: response.usage?.output_tokens || 0,
+        },
+      };
+    }
+
     const isOpenCodeGoFlash =
-      model === "deepseek-v4-flash" &&
-      (this.baseUrl === "https://opencode.ai/zen/go/v1" ||
-        this.baseUrl === "https://opencode.ai/zen/go/v1/");
+      model === "deepseek-v4-flash" && this.baseUrl === OPEN_CODE_GO_BASE_URL;
     const completion = await this.client.chat.completions.create({
       model,
       temperature: options.temperature ?? this.temperature,
