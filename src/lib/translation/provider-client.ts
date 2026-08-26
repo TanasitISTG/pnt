@@ -13,25 +13,17 @@ import type {
   ProviderType,
   ReasoningEffort,
 } from "./translation.types";
+import {
+  OPEN_CODE_GO_BASE_URL,
+  isOpenCodeLunaModel,
+  normalizeOpenCodeBaseUrl,
+} from "./provider-compatibility";
 
 export class ProviderNotConfiguredError extends Error {
   constructor(message = "AI provider settings are not configured") {
     super(message);
     this.name = "ProviderNotConfiguredError";
   }
-}
-const OPEN_CODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1";
-const OPEN_CODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
-
-function normalizeOpenCodeBaseUrl(baseUrl: string): string {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (
-    normalized === `${OPEN_CODE_ZEN_BASE_URL}/responses` ||
-    normalized === `${OPEN_CODE_GO_BASE_URL}/responses`
-  ) {
-    return normalized.slice(0, -"/responses".length);
-  }
-  return normalized;
 }
 
 export class OpenAIProviderClient implements AIProviderClient {
@@ -70,14 +62,10 @@ export class OpenAIProviderClient implements AIProviderClient {
   async generateChatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
     const model = options.model ?? this.model;
 
-    if (
-      model === "gpt-5.6-luna" &&
-      (this.baseUrl === OPEN_CODE_ZEN_BASE_URL || this.baseUrl === OPEN_CODE_GO_BASE_URL)
-    ) {
+    if (isOpenCodeLunaModel(model, this.baseUrl)) {
       const response = await this.client.responses.create({
         model,
         input: options.messages,
-        temperature: options.temperature ?? this.temperature,
         max_output_tokens: options.maxTokens,
         reasoning: this.reasoningEffort ? { effort: this.reasoningEffort } : undefined,
         text: options.responseFormat ? { format: options.responseFormat } : undefined,

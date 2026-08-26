@@ -21,6 +21,7 @@ import type {
   SaveProviderSettingsInput,
   TestProviderConnectionInput,
 } from "@/lib/settings/schemas";
+import { isOpenCodeLunaModel } from "@/lib/translation/provider-compatibility";
 import type { ProviderType, ReasoningEffort } from "@/lib/translation/translation.types";
 
 const REASONING_EFFORT_OPTIONS: Array<{
@@ -82,6 +83,7 @@ export function ProviderSettingsCard({
 
   const [showFullError, setShowFullError] = useState(false);
   const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
+  const isTemperatureDisabled = provider === "openai" && isOpenCodeLunaModel(model, baseUrl);
 
   const handleProviderChange = (newProvider: ProviderType) => {
     setProvider(newProvider);
@@ -269,13 +271,15 @@ export function ProviderSettingsCard({
                 max="2"
                 step="0.1"
                 value={temperature}
+                disabled={isTemperatureDisabled}
                 onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-muted accent-foreground"
+                className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-muted accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
             <p className="text-caption text-muted-foreground">
-              Lower values (0.2–0.5) produce more accurate translations; higher values (0.7–1.0)
-              allow more creative flair.
+              {isTemperatureDisabled
+                ? "OpenCode Luna does not support a custom temperature."
+                : "Lower values (0.2–0.5) produce more accurate translations; higher values (0.7–1.0) allow more creative flair."}
             </p>
           </div>
 

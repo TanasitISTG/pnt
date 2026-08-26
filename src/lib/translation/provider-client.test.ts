@@ -113,13 +113,13 @@ describe("provider-client module", () => {
           { role: "system", content: "Translate into Thai." },
           { role: "user", content: "Translate this." },
         ],
-        temperature: 0.4,
         max_output_tokens: 128,
         reasoning: { effort: "low" },
         text: { format: { type: "json_object" } },
         stream: false,
       }),
     );
+    expect(createResponse.mock.calls[0]?.[0]).not.toHaveProperty("temperature");
     expect(result).toEqual({
       content: "translated",
       usage: { promptTokens: 12, completionTokens: 34 },
