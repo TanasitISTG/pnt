@@ -56,6 +56,10 @@ export class OpenAIProviderClient implements AIProviderClient {
       apiKey: config.apiKey,
       timeout: (config.requestTimeoutSec ?? 240) * 1000,
       maxRetries: 0,
+      defaultHeaders: {
+        'x-api-key': config.apiKey,
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
     });
   }
 
