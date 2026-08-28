@@ -1,26 +1,35 @@
 import "@tanstack/react-start/server-only";
 
-import type { novels, chapters, glossaryTerms } from "@/lib/db/schema";
+import type { novels, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
-import { loadTermSourcesForExclusion, findExistingTermSources } from "./job-store";
 import { createLog } from "./log-entry";
-import type { AIProviderClient, ChunkProgress, LogEntry } from "./translation.types";
 import { generateJsonCompletion } from "./json-completion";
 import {
+  applyGlossarySuggestionPolicy,
+  prepareGlossarySuggestionCandidates,
+  selectRelevantApprovedMappings,
+} from "./glossary-suggestion-policy";
+import {
+  buildGlossaryReviewPrompt,
+  buildGlossaryReviewUserMessage,
   buildTermSuggestionPrompt,
   buildTermSuggestionUserMessage,
-  parseTermSuggestions,
-  buildGlossaryReviewPrompt,
   parseGlossaryReviewResponse,
+  parseTermSuggestions,
 } from "./suggest-terms-prompt";
+import { loadTermSourcesForExclusion } from "./job-store";
+import type {
+  AIProviderClient,
+  ChunkProgress,
+  GlossaryReviewResult,
+  LogEntry,
+} from "./translation.types";
 
 export interface FinalizeGlossaryParams {
   providerConfig: AIProviderClient;
   novel: typeof novels.$inferSelect;
-  chapter: typeof chapters.$inferSelect;
   chunkList: ChunkProgress[];
   fullTranslation: string;
-  freshSummary?: string;
   logs: LogEntry[];
 }
 
@@ -34,17 +43,11 @@ export interface FinalizeGlossaryResult {
   rowsToInsert: (typeof glossaryTerms.$inferInsert)[];
 }
 
-function containsLiteralText(text: string, candidate: string): boolean {
-  return text.includes(candidate);
-}
-
 export async function suggestAndReviewTerms({
   providerConfig,
   novel,
-  chapter,
   chunkList,
   fullTranslation,
-  freshSummary,
   logs,
 }: FinalizeGlossaryParams): Promise<FinalizeGlossaryResult> {
   let promptTokens = 0;
@@ -58,31 +61,27 @@ export async function suggestAndReviewTerms({
   logs.push(createLog("info", "Extracting new glossary term suggestions..."));
 
   try {
-    const { approvedTerms, rejectedTerms } = await loadTermSourcesForExclusion(novel.id);
-
-    const excludedSources = [
-      ...approvedTerms.map((t) => t.source),
-      ...rejectedTerms.map((t) => t.source),
-    ];
-
+    const { approvedTerms, existingSources } = await loadTermSourcesForExclusion(novel.id);
     const fullRawSource = chunkList.map((c) => c.text || "").join("\n\n");
     const rawSourceExcerpt = fullRawSource.slice(0, 4000);
-    const translatedExcerpt = fullTranslation.slice(0, 8000);
+    const existingSourcesInChapter = existingSources.filter((source) =>
+      fullRawSource.includes(source),
+    );
+    const approvedMappingsInChapter = approvedTerms.filter(({ source }) =>
+      fullRawSource.includes(source),
+    );
 
-    const effectiveSummary = freshSummary || chapter.summary || undefined;
     const suggestPrompt = buildTermSuggestionPrompt(
       `${novel.sourceLang}->${novel.targetLang}`,
-      excludedSources,
+      existingSourcesInChapter,
       {
         rawSourceExcerpt,
-        chapterSummary: effectiveSummary,
-        approvedMappings: approvedTerms.map((t) => ({ source: t.source, target: t.target })),
+        approvedMappings: approvedMappingsInChapter,
       },
     );
 
-    const userMessage = buildTermSuggestionUserMessage(translatedExcerpt, {
+    const userMessage = buildTermSuggestionUserMessage(fullTranslation, {
       rawSourceExcerpt,
-      chapterSummary: effectiveSummary,
     });
 
     const suggestResult = await generateJsonCompletion(providerConfig, 0.3, [
@@ -93,30 +92,27 @@ export async function suggestAndReviewTerms({
     completionTokens += suggestResult.completionTokens;
 
     const suggestedTerms = parseTermSuggestions(suggestResult.content);
+    const reviewCandidates = prepareGlossarySuggestionCandidates(
+      suggestedTerms,
+      existingSources,
+    ).candidates;
+    let reviewResults: GlossaryReviewResult[] = [];
 
-    // AI review of extracted terms
-    let reviewResults: Awaited<ReturnType<typeof parseGlossaryReviewResponse>> = [];
-    if (suggestedTerms.length > 0) {
+    if (reviewCandidates.length > 0) {
       logs.push(
-        createLog("info", `Reviewing ${suggestedTerms.length} suggested term(s) with AI...`),
+        createLog("info", `Reviewing ${reviewCandidates.length} suggested term(s) with AI...`),
       );
 
       try {
         const reviewPrompt = buildGlossaryReviewPrompt(
           `${novel.sourceLang}->${novel.targetLang}`,
-          approvedTerms.map((t) => ({ source: t.source, target: t.target })),
+          selectRelevantApprovedMappings(reviewCandidates, approvedTerms),
         );
-
-        const reviewUserMessage = [
-          "Review these suggested glossary terms:",
-          JSON.stringify({ terms: suggestedTerms }, null, 2),
-          "",
-          "Source text excerpt:",
-          rawSourceExcerpt.slice(0, 3000),
-          "",
-          "Translated excerpt:",
-          translatedExcerpt.slice(0, 3000),
-        ].join("\n");
+        const reviewUserMessage = buildGlossaryReviewUserMessage(
+          reviewCandidates,
+          fullRawSource,
+          fullTranslation,
+        );
 
         const reviewResult = await generateJsonCompletion(providerConfig, 0.1, [
           { role: "system", content: reviewPrompt },
@@ -130,73 +126,38 @@ export async function suggestAndReviewTerms({
         logs.push(
           createLog(
             "warn",
-            `AI review failed (${reviewErr instanceof Error ? reviewErr.message : "error"}) — all terms stored as pending.`,
+            `AI review failed (${reviewErr instanceof Error ? reviewErr.message : "error"}) — no suggestions saved.`,
           ),
         );
       }
     }
 
-    const reviewBySource = new Map(reviewResults.map((r) => [r.source, r]));
+    const policyResult = applyGlossarySuggestionPolicy({
+      suggestions: suggestedTerms,
+      reviews: reviewResults,
+      fullRawSource,
+      fullTranslation,
+      existingSources,
+    });
 
-    const suggestedSources = suggestedTerms.map((st) => st.source.trim().toLowerCase());
-    const existingSources = await findExistingTermSources(novel.id, suggestedSources);
-
-    rowsToInsert = [];
-
-    for (const st of suggestedTerms) {
-      const review = reviewBySource.get(st.source);
-      const finalTarget =
-        review?.target && review.target.trim().length > 0 ? review.target : st.target;
-
-      // Validity guard: non-empty source, non-empty target, source !== target (case/whitespace-insensitive)
-      if (
-        !st.source.trim().length ||
-        !finalTarget.trim().length ||
-        finalTarget.trim().toLowerCase() === st.source.trim().toLowerCase()
-      ) {
-        rejectedCount++;
-        continue;
-      }
-
-      if (existingSources.has(st.source.trim().toLowerCase())) {
-        // Existing term (approved, pending, or rejected) — skip
-        conflictCount++;
-        continue;
-      }
-
-      // High-confidence reject → skip insertion
-      if (review?.action === "reject" && review.confidence === "high") {
-        rejectedCount++;
-        continue;
-      }
-
-      // High-confidence approve with valid evidence → insert as approved
-      // Deterministic validation: source must appear in raw text, target in translation
-      const sourceInRaw = containsLiteralText(fullRawSource, st.source);
-      const targetInTranslation = containsLiteralText(fullTranslation, finalTarget);
-      const approved =
-        review?.action === "approve" &&
-        review.confidence === "high" &&
-        sourceInRaw &&
-        targetInTranslation;
-
-      rowsToInsert.push({
-        id: nanoid(),
-        novelId: novel.id,
-        source: st.source,
-        target: finalTarget,
-        category: st.category,
-        note: st.note || null,
-        status: approved ? "approved" : "pending",
-      });
-      if (approved) approvedCount++;
-      else pendingCount++;
-    }
+    rowsToInsert = policyResult.accepted.map((term) => ({
+      id: nanoid(),
+      novelId: novel.id,
+      source: term.source,
+      target: term.target,
+      category: term.category,
+      note: term.note || null,
+      status: term.status,
+    }));
+    approvedCount = policyResult.accepted.filter((term) => term.status === "approved").length;
+    pendingCount = policyResult.accepted.filter((term) => term.status === "pending").length;
+    rejectedCount = policyResult.discardedCount;
+    conflictCount = policyResult.conflictCount;
 
     const summary: string[] = [];
     if (approvedCount > 0) summary.push(`${approvedCount} approved`);
     if (pendingCount > 0) summary.push(`${pendingCount} pending`);
-    if (rejectedCount > 0) summary.push(`${rejectedCount} rejected`);
+    if (rejectedCount > 0) summary.push(`${rejectedCount} discarded`);
     if (conflictCount > 0) summary.push(`${conflictCount} conflicts`);
 
     if (summary.length > 0) {

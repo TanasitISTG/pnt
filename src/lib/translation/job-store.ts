@@ -372,31 +372,21 @@ export async function loadPrevChapterForContext(novelId: string, chapterNumber: 
 }
 
 export async function loadTermSourcesForExclusion(novelId: string) {
-  const [approvedTerms, rejectedTerms] = await Promise.all([
-    db
-      .select({ source: glossaryTerms.source, target: glossaryTerms.target })
-      .from(glossaryTerms)
-      .where(and(eq(glossaryTerms.novelId, novelId), eq(glossaryTerms.status, "approved"))),
-    db
-      .select({ source: glossaryTerms.source })
-      .from(glossaryTerms)
-      .where(and(eq(glossaryTerms.novelId, novelId), eq(glossaryTerms.status, "rejected"))),
-  ]);
-  return { approvedTerms, rejectedTerms };
-}
-
-export async function findExistingTermSources(novelId: string, sources: string[]) {
-  if (sources.length === 0) return new Set<string>();
-  const existingRows = await db
-    .select({ source: glossaryTerms.source })
+  const rows = await db
+    .select({
+      source: glossaryTerms.source,
+      target: glossaryTerms.target,
+      status: glossaryTerms.status,
+    })
     .from(glossaryTerms)
-    .where(
-      and(
-        eq(glossaryTerms.novelId, novelId),
-        inArray(sql`lower(trim(${glossaryTerms.source}))`, sources),
-      ),
-    );
-  return new Set(existingRows.map((row) => row.source.trim().toLowerCase()));
+    .where(eq(glossaryTerms.novelId, novelId));
+
+  return {
+    approvedTerms: rows
+      .filter((row) => row.status === "approved")
+      .map(({ source, target }) => ({ source, target })),
+    existingSources: rows.map((row) => row.source),
+  };
 }
 
 export interface ApplyRelationshipAnalysisResult {

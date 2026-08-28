@@ -53,10 +53,12 @@ export interface SuggestedTerm {
 
 export type GlossaryReviewAction = "approve" | "reject" | "pending";
 export type GlossaryReviewConfidence = "high" | "medium" | "low";
+export type GlossaryReviewTermType = "named_entity" | "story_specific" | "generic";
 
 export interface GlossaryReviewResult {
   source: string;
   target: string;
+  termType: GlossaryReviewTermType;
   action: GlossaryReviewAction;
   confidence: GlossaryReviewConfidence;
   reason: string;
@@ -65,8 +67,6 @@ export interface GlossaryReviewResult {
 
 export interface TermSuggestionContext {
   rawSourceExcerpt?: string;
-  translatedExcerpt?: string;
-  chapterSummary?: string;
   approvedMappings?: { source: string; target: string }[];
 }
 

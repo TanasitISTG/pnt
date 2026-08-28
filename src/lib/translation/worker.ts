@@ -466,10 +466,8 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
   const glossaryRes = await suggestAndReviewTerms({
     providerConfig,
     novel,
-    chapter,
     chunkList,
     fullTranslation,
-    freshSummary: summaryRes.freshSummary,
     logs,
   });
   totalPromptTokens += glossaryRes.promptTokens;

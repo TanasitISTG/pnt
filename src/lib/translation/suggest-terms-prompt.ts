@@ -5,6 +5,7 @@ import type {
   GlossaryReviewAction,
   GlossaryReviewConfidence,
   GlossaryReviewResult,
+  GlossaryReviewTermType,
   SuggestedTerm,
   TermSuggestionContext,
 } from "./translation.types";
@@ -21,8 +22,11 @@ export function buildTermSuggestionPrompt(
 
   const parts: string[] = [
     `You are a terminology extraction assistant specializing in literary translation (${languagePair}).`,
-    `Analyze the provided translated chapter text and identify key terms: character names, place names, special skills, items, and other recurring novel concepts.`,
-    `For each term, extract its source text (original language), target translation (as used in the translated chapter), category ("character", "place", "skill", "item", or "other"), and an optional brief note written in ${LANG_LABELS[normalizePair(languagePair)].target}.`,
+    `Analyze the source and translated chapter excerpts and identify only terms whose stable rendering materially improves consistency across the novel.`,
+    `Eligible terms include character names, aliases, titles, named places or organizations, explicitly named skills, items, or systems, and coined story-specific concepts whose rendering must remain stable.`,
+    `Do NOT suggest common nouns, verbs, or adjectives; generic roles or locations; everyday objects or food; broad school or business topics; actions or events; dates or numbers; public brands or people without a story-specific rendering; one-off descriptions; or substring fragments.`,
+    `For each eligible term, extract its source text (original language), target translation (as used in the translated chapter), category ("character", "place", "skill", "item", or "other"), and an optional brief note written in ${LANG_LABELS[normalizePair(languagePair)].target}.`,
+    `Prefer an empty array when nothing qualifies. Return at most 8 candidates, ordered by the value of preserving their translation consistently.`,
     existingList,
   ];
 
@@ -59,20 +63,45 @@ export function buildTermSuggestionUserMessage(
 
   parts.push(`Translated chapter excerpt:\n${translatedExcerpt.slice(0, 8000)}`);
 
-  if (context?.chapterSummary) {
-    parts.push(`Chapter summary:\n${context.chapterSummary.slice(0, 2000)}`);
-  }
-
   return parts.join("\n\n");
 }
 
-const VALID_REVIEW_ACTIONS = new Set(["approve", "reject", "pending"]);
-const VALID_REVIEW_CONFIDENCES = new Set(["high", "medium", "low"]);
+export function buildGlossaryReviewUserMessage(
+  suggestions: SuggestedTerm[],
+  rawSourceExcerpt: string,
+  translatedExcerpt: string,
+): string {
+  return [
+    "Review these suggested glossary terms:",
+    JSON.stringify({ terms: suggestions }, null, 2),
+    "",
+    `Source text excerpt:\n${rawSourceExcerpt.slice(0, 4000)}`,
+    "",
+    `Translated chapter excerpt:\n${translatedExcerpt.slice(0, 8000)}`,
+  ].join("\n");
+}
+
+const VALID_REVIEW_ACTIONS: Record<string, true> = {
+  approve: true,
+  reject: true,
+  pending: true,
+};
+const VALID_REVIEW_CONFIDENCES: Record<string, true> = {
+  high: true,
+  medium: true,
+  low: true,
+};
+const VALID_REVIEW_TERM_TYPES: Record<string, true> = {
+  named_entity: true,
+  story_specific: true,
+  generic: true,
+};
 
 // LLM output is untrusted JSON — validate shape with zod before coercion.
 const reviewItemSchema = z.object({
   source: z.string().trim().min(1),
   target: z.string().trim().min(1),
+  termType: z.unknown().optional(),
   action: z.unknown().optional(),
   confidence: z.unknown().optional(),
   reason: z.unknown().optional(),
@@ -94,21 +123,16 @@ export function buildGlossaryReviewPrompt(
 
   return [
     `You are a glossary review assistant for literary translation (${languagePair}).`,
-    `You will receive a list of suggested glossary terms extracted from a newly translated chapter.`,
-    `For each term, decide whether to APPROVE, REJECT, or leave it PENDING.`,
+    `Review each suggested term against the supplied bilingual chapter evidence and classify its glossary value before choosing an action.`,
+    `Eligible terms include character names, aliases, titles, named places or organizations, explicitly named skills, items, or systems, and coined story-specific concepts whose rendering must remain stable.`,
+    `Common nouns, verbs, or adjectives; generic roles or locations; everyday objects or food; broad school or business topics; actions or events; dates or numbers; public brands or people without a story-specific rendering; one-off descriptions; and substring fragments are not glossary terms.`,
     ``,
-    `APPROVE only when ALL of these are true:`,
-    `- The term has clear source-language evidence (the original term is present in the source text).`,
-    `- The term has clear target-language evidence (the translation uses a consistent target form).`,
-    `- The term is not a duplicate or variant of an existing approved term.`,
-    `- The term represents a real recurring concept (character, place, skill, item).`,
+    `APPROVE only a high-confidence named_entity when the source and target are both literally evidenced, the term is not a duplicate or variant of an existing approved term, and stable naming matters across the novel.`,
+    `REJECT generic vocabulary, weak or unsupported candidates, duplicates, and terms without clear source or target evidence.`,
+    `Use PENDING only for a high-confidence named_entity or story_specific term that may need manual confirmation. Uncertain ordinary vocabulary must be rejected, not sent to manual review.`,
+    `Confidence measures confidence in both glossary eligibility and literal source/target evidence, not confidence in the chosen action alone.`,
     ``,
-    `REJECT when:`,
-    `- The term is a duplicate or case/spacing variant of an existing approved term.`,
-    `- The source or target is empty, generic, or not a real named entity.`,
-    `- The term is clearly not a recurring concept.`,
-    ``,
-    `Leave PENDING when uncertain — manual review is preferred over wrong automation.`,
+    `For every review, emit exactly one termType: "named_entity", "story_specific", or "generic". Generic terms must always be rejected.`,
     ``,
     `Existing approved glossary terms:\n${mappingLines.length > 0 ? mappingLines.join("\n") : "(none)"}`,
     ``,
@@ -118,6 +142,7 @@ export function buildGlossaryReviewPrompt(
     `    {`,
     `      "source": "Original Term",`,
     `      "target": "Translated Term",`,
+    `      "termType": "named_entity" | "story_specific" | "generic",`,
     `      "action": "approve" | "reject" | "pending",`,
     `      "confidence": "high" | "medium" | "low",`,
     `      "reason": "Brief explanation",`,
@@ -149,10 +174,13 @@ export function parseGlossaryReviewResponse(rawContent: string): GlossaryReviewR
     return rawArray.flatMap((item) => {
       const r = reviewItemSchema.safeParse(item);
       if (!r.success) return [];
-      const action = VALID_REVIEW_ACTIONS.has(String(r.data.action))
+      const termType = Object.hasOwn(VALID_REVIEW_TERM_TYPES, String(r.data.termType))
+        ? (String(r.data.termType) as GlossaryReviewTermType)
+        : "generic";
+      const action = Object.hasOwn(VALID_REVIEW_ACTIONS, String(r.data.action))
         ? (String(r.data.action) as GlossaryReviewAction)
         : "pending";
-      const confidence = VALID_REVIEW_CONFIDENCES.has(String(r.data.confidence))
+      const confidence = Object.hasOwn(VALID_REVIEW_CONFIDENCES, String(r.data.confidence))
         ? (String(r.data.confidence) as GlossaryReviewConfidence)
         : "low";
 
@@ -160,6 +188,7 @@ export function parseGlossaryReviewResponse(rawContent: string): GlossaryReviewR
         {
           source: r.data.source,
           target: r.data.target,
+          termType,
           action,
           confidence,
           reason: typeof r.data.reason === "string" ? r.data.reason.trim() : "",
@@ -196,12 +225,18 @@ export function parseTermSuggestions(rawContent: string): SuggestedTerm[] {
         ? container.terms
         : [];
 
-    const validCategories = new Set(["character", "place", "skill", "item", "other"]);
+    const validCategories: Record<string, true> = {
+      character: true,
+      place: true,
+      skill: true,
+      item: true,
+      other: true,
+    };
 
     return rawArray.flatMap((item) => {
       const r = suggestionItemSchema.safeParse(item);
       if (!r.success) return [];
-      const category = validCategories.has(String(r.data.category).toLowerCase())
+      const category = Object.hasOwn(validCategories, String(r.data.category).toLowerCase())
         ? (String(r.data.category).toLowerCase() as SuggestedTerm["category"])
         : "other";
       return [

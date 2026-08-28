@@ -1,17 +1,22 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+
 import {
+  buildGlossaryReviewPrompt,
+  buildGlossaryReviewUserMessage,
   buildTermSuggestionPrompt,
   buildTermSuggestionUserMessage,
-  buildGlossaryReviewPrompt,
-  parseTermSuggestions,
   parseGlossaryReviewResponse,
+  parseTermSuggestions,
 } from "./suggest-terms-prompt";
 
 describe("suggest-terms-prompt", () => {
-  it("builds prompt including existing terms", () => {
+  it("builds prompt including existing terms and eligibility limits", () => {
     const prompt = buildTermSuggestionPrompt("en->th", ["Lin Fan", "Sun Peak"]);
     expect(prompt).toContain("Lin Fan, Sun Peak");
     expect(prompt).toContain("en->th");
+    expect(prompt).toContain("at most 8 candidates");
+    expect(prompt).toContain("common nouns");
+    expect(prompt).toContain("one-off descriptions");
   });
 
   it("requests notes in the target language", () => {
@@ -31,16 +36,26 @@ describe("suggest-terms-prompt", () => {
     expect(prompt).toContain("Approved glossary mappings");
   });
 
-  it("builds user message with source, translation, and summary", () => {
+  it("builds user message with bounded bilingual evidence and no summary", () => {
     const msg = buildTermSuggestionUserMessage("translated text here", {
       rawSourceExcerpt: "original source text",
-      chapterSummary: "A summary of the chapter",
     });
     expect(msg).toContain("Source text excerpt");
     expect(msg).toContain("original source text");
     expect(msg).toContain("translated text here");
-    expect(msg).toContain("Chapter summary");
-    expect(msg).toContain("A summary of the chapter");
+    expect(msg).not.toContain("Chapter summary");
+  });
+
+  it("builds review user message with the same bounded bilingual evidence", () => {
+    const msg = buildGlossaryReviewUserMessage(
+      [{ source: "Lin Fan", target: "หลินฟาน", category: "character" }],
+      "original source text",
+      "translated text here",
+    );
+    expect(msg).toContain('"source": "Lin Fan"');
+    expect(msg).toContain("original source text");
+    expect(msg).toContain("translated text here");
+    expect(msg).not.toContain("Chapter summary");
   });
 
   it("parses clean JSON response", () => {
@@ -78,12 +93,18 @@ describe("suggest-terms-prompt", () => {
 });
 
 describe("glossary review", () => {
-  it("builds review prompt with approved mappings", () => {
+  it("builds review prompt with eligibility and approved mappings", () => {
     const prompt = buildGlossaryReviewPrompt("en->th", [{ source: "Lin Fan", target: "หลินฟาน" }]);
     expect(prompt).toContain("APPROVE");
     expect(prompt).toContain("REJECT");
     expect(prompt).toContain("PENDING");
     expect(prompt).toContain("Lin Fan -> หลินฟาน");
+    expect(prompt).toContain('"termType": "named_entity" | "story_specific" | "generic"');
+    expect(prompt).toContain("generic vocabulary");
+    expect(prompt).toContain("Uncertain ordinary vocabulary must be rejected");
+    expect(prompt).toContain(
+      "Confidence measures confidence in both glossary eligibility and literal source/target evidence",
+    );
   });
 
   it("parses valid review response", () => {
@@ -92,6 +113,7 @@ describe("glossary review", () => {
         {
           source: "New Character",
           target: "ตัวละครใหม่",
+          termType: "named_entity",
           action: "approve",
           confidence: "high",
           reason: "Clear character name with consistent usage",
@@ -99,6 +121,7 @@ describe("glossary review", () => {
         {
           source: "Maybe Term",
           target: "ศัพท์ที่อาจใช้",
+          termType: "story_specific",
           action: "pending",
           confidence: "low",
           reason: "Unclear if recurring",
@@ -107,12 +130,13 @@ describe("glossary review", () => {
     });
     const result = parseGlossaryReviewResponse(json);
     expect(result).toHaveLength(2);
+    expect(result[0].termType).toBe("named_entity");
     expect(result[0].action).toBe("approve");
     expect(result[0].confidence).toBe("high");
     expect(result[1].action).toBe("pending");
   });
 
-  it("falls back to pending for invalid action/confidence", () => {
+  it("falls back to pending, low confidence, and generic for invalid review fields", () => {
     const json = JSON.stringify({
       reviews: [
         {
@@ -120,21 +144,35 @@ describe("glossary review", () => {
           target: "Term",
           action: "invalid_action",
           confidence: "invalid_confidence",
+          termType: "invalid_type",
           reason: "test",
         },
       ],
     });
     const result = parseGlossaryReviewResponse(json);
     expect(result).toHaveLength(1);
+    expect(result[0].termType).toBe("generic");
     expect(result[0].action).toBe("pending");
     expect(result[0].confidence).toBe("low");
   });
 
+  it("defaults missing termType to generic", () => {
+    const result = parseGlossaryReviewResponse(
+      JSON.stringify({
+        reviews: [
+          { source: "Old Schema", target: "ศัพท์เก่า", action: "approve", confidence: "high" },
+        ],
+      }),
+    );
+    expect(result[0].termType).toBe("generic");
+  });
+
   it("parses markdown-fenced review response", () => {
     const md =
-      '```json\n{"reviews": [{"source": "X", "target": "Y", "action": "reject", "confidence": "high", "reason": "duplicate", "matchingApprovedTerm": "X Original"}]}\n```';
+      '```json\n{"reviews": [{"source": "X", "target": "Y", "termType": "named_entity", "action": "reject", "confidence": "high", "reason": "duplicate", "matchingApprovedTerm": "X Original"}]}\n```';
     const result = parseGlossaryReviewResponse(md);
     expect(result).toHaveLength(1);
+    expect(result[0].termType).toBe("named_entity");
     expect(result[0].action).toBe("reject");
     expect(result[0].matchingApprovedTerm).toBe("X Original");
   });

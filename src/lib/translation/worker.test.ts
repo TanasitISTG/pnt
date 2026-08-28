@@ -19,9 +19,8 @@ vi.mock("./job-store", () => ({
   loadPrevChapterForContext: vi.fn().mockResolvedValue(null),
   loadTermSourcesForExclusion: vi.fn().mockResolvedValue({
     approvedTerms: [],
-    rejectedTerms: [],
+    existingSources: [],
   }),
-  findExistingTermSources: vi.fn().mockResolvedValue(new Set()),
 }));
 
 vi.mock("./provider-client", () => ({ createProviderClient: vi.fn() }));
@@ -198,6 +197,26 @@ describe("translation worker guarded state transitions", () => {
         completionTokens: 20,
       },
     ] as never);
+    const glossaryRows = [
+      {
+        id: "term-1",
+        novelId: "novel-1",
+        source: "许野",
+        target: "สวี่เหยี่ย",
+        category: "character" as const,
+        note: null,
+        status: "approved" as const,
+      },
+    ];
+    vi.mocked(finalizeGlossaryModule.suggestAndReviewTerms).mockResolvedValue({
+      approvedCount: 1,
+      pendingCount: 0,
+      rejectedCount: 0,
+      conflictCount: 0,
+      promptTokens: 5,
+      completionTokens: 10,
+      rowsToInsert: glossaryRows,
+    });
 
     await finalizeJob("job-1", generation);
 
@@ -209,10 +228,11 @@ describe("translation worker guarded state transitions", () => {
         translatedTitle: "Translated Title",
         chapterSummary: "Chapter summary",
         storySummary: "Updated story",
-        glossaryRows: [],
+        glossaryRows,
         usageJson: JSON.stringify({ totalPromptTokens: 30, totalCompletionTokens: 60 }),
       }),
     );
+    expect(jobStore.completeJob).toHaveBeenCalledTimes(1);
     expect(jobStore.loadJobChunks).toHaveBeenCalledWith("job-1");
   });
 
