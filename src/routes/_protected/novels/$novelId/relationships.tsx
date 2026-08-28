@@ -438,7 +438,7 @@ function RelationshipsPage() {
                     </TableCell>
                     <TableCell
                       data-label="Notes / evidence"
-                      className={`${MOBILE_TABLE_CELL_CLASS} max-w-72 align-top text-sm text-muted-foreground max-md:max-w-none`}
+                      className={`${MOBILE_TABLE_CELL_CLASS} max-w-72 whitespace-normal break-words align-top text-sm text-muted-foreground max-md:max-w-none`}
                     >
                       <p>{character.notes || "—"}</p>
                       {character.evidence && <p className="mt-1 italic">“{character.evidence}”</p>}
@@ -609,7 +609,7 @@ function RelationshipsPage() {
                     </TableCell>
                     <TableCell
                       data-label="Notes / evidence"
-                      className={`${MOBILE_TABLE_CELL_CLASS} max-w-72 align-top text-sm text-muted-foreground max-md:max-w-none`}
+                      className={`${MOBILE_TABLE_CELL_CLASS} max-w-72 whitespace-normal break-words align-top text-sm text-muted-foreground max-md:max-w-none`}
                     >
                       <p>{relationship.notes || "—"}</p>
                       {relationship.evidence && (
