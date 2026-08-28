@@ -32,24 +32,68 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
     .map((message) => message.content)
     .join("\n");
 
+  if (system.includes("dialogue-continuity analyst")) {
+    return JSON.stringify({
+      characters: [
+        {
+          sourceName: "父亲",
+          targetName: "พ่อ",
+          aliases: [],
+          gender: "male",
+          role: "father",
+          notes: null,
+          evidence: "父亲",
+        },
+        {
+          sourceName: "儿子",
+          targetName: "ลูกชาย",
+          aliases: [],
+          gender: "male",
+          role: "son",
+          notes: null,
+          evidence: "儿子",
+        },
+      ],
+      relationships: [
+        {
+          speaker: "儿子",
+          listener: "父亲",
+          relationship: "son",
+          speakerStatus: "lower",
+          familiarity: "close",
+          selfPronoun: "ฉัน",
+          addresseeTerm: "พ่อ",
+          sentenceParticles: null,
+          register: "respectful",
+          notes: null,
+          evidence: "儿子",
+        },
+      ],
+      activePairs: [{ speaker: "儿子", listener: "父亲" }],
+    });
+  }
   if (jsonResponse || system.includes("Return ONLY a JSON object")) {
     return system.includes('single key "reviews"') ? '{"reviews":[]}' : '{"terms":[]}';
   }
-  if (system.includes("chapter title")) return "The Open Gate";
+  if (system.includes("chapter title")) return "ยามรุ่งอรุณ";
   if (user.includes("Please summarize this chapter")) {
-    return "Lin opens an old gate at dawn and finds a silent road beyond it.";
+    return "The son speaks to his father at dawn and promises to return.\nDIALOGUE CONTINUITY: The son addresses his father as a lower-status speaker.";
   }
   if (system.includes("novel continuity editor")) {
-    return "Lin begins a journey by opening an old gate onto a silent road.";
+    return "The son promises to return after speaking respectfully to his father.";
   }
 
   const sourceMatch = user.match(/<<<BEGIN_TEXT>>>\s*([\s\S]*?)\s*<<<END_TEXT>>>/);
   if (sourceMatch) {
     const markerCount = (sourceMatch[1].match(/\|*\u00b6+\|*/g) ?? []).length;
-    const paragraphs = ["At dawn, Lin opened the old gate.", "Beyond it, the silent road waited."];
+    const hasFatherSon = sourceMatch[1].includes("儿子") || sourceMatch[1].includes("父亲");
+    const selfPronoun = system.includes('"selfPronoun":"ผม"') ? "ผม" : "ฉัน";
+    const paragraphs = hasFatherSon
+      ? [`“${selfPronoun}จะกลับมา” ลูกชายบอกพ่อ`]
+      : ["At dawn, Lin opened the old gate.", "Beyond it, the silent road waited."];
     return Array.from(
       { length: markerCount + 1 },
-      (_, index) => paragraphs[index] ?? paragraphs[1],
+      (_, index) => paragraphs[index] ?? paragraphs[paragraphs.length - 1],
     ).join("\n||\u00b6||\n");
   }
   return "Hello.";

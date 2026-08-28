@@ -152,8 +152,11 @@ function HeadContentWithoutModulePreloads() {
     <>
       {tags
         .filter((tag) => tag.tag !== "link" || tag.attrs?.rel !== "modulepreload")
-        .map((tag, index) => (
-          <Asset key={`${tag.tag}-${index}`} {...tag} />
+        .map((tag) => (
+          <Asset
+            key={`${tag.tag}-${tag.attrs?.rel ?? ""}-${tag.attrs?.href ?? ""}-${tag.attrs?.name ?? ""}-${tag.attrs?.property ?? ""}`}
+            {...tag}
+          />
         ))}
     </>
   );

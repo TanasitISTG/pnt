@@ -2,16 +2,22 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
 
+import { relationshipAnalysisSchema } from "@/lib/relationships/schemas";
+
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
 let completeChunk: typeof import("./job-store").completeChunk;
 let completeJob: typeof import("./job-store").completeJob;
+let applyRelationshipAnalysis: typeof import("./job-store").applyRelationshipAnalysis;
 let enqueueTranslationJob: typeof import("./translation.functions").enqueueTranslationJob;
 const skipEagerDispatch = async () => {};
 
-async function seedChapter(rawContent = "First paragraph.\n\nSecond paragraph.") {
+async function seedChapter(
+  rawContent = "First paragraph.\n\nSecond paragraph.",
+  targetLang = "en",
+) {
   const userId = `user-${randomUUID()}`;
   const novelId = `novel-${randomUUID()}`;
   const chapterId = `chapter-${randomUUID()}`;
@@ -23,7 +29,7 @@ async function seedChapter(rawContent = "First paragraph.\n\nSecond paragraph.")
   await sql`
     INSERT INTO "novels" (
       "id", "user_id", "title", "source_lang", "target_lang", "created_at", "updated_at"
-    ) VALUES (${novelId}, ${userId}, 'Integration Novel', 'zh', 'en', now(), now())
+    ) VALUES (${novelId}, ${userId}, 'Integration Novel', 'zh', ${targetLang}, now(), now())
   `;
   await sql`
     INSERT INTO "chapters" (
@@ -38,6 +44,72 @@ async function deleteFixture(userId: string) {
   await sql`DELETE FROM "user" WHERE "id" = ${userId}`;
 }
 
+function relationshipAnalysisFixture() {
+  return relationshipAnalysisSchema.parse({
+    characters: [
+      {
+        sourceName: "父亲",
+        targetName: "พ่อ",
+        aliases: [],
+        gender: "male",
+        role: "father",
+        notes: null,
+        evidence: "父亲",
+      },
+      {
+        sourceName: "儿子",
+        targetName: "ลูกชาย",
+        aliases: [],
+        gender: "male",
+        role: "son",
+        notes: null,
+        evidence: "儿子",
+      },
+    ],
+    relationships: [
+      {
+        speaker: "儿子",
+        listener: "父亲",
+        relationship: "son",
+        speakerStatus: "lower",
+        familiarity: "close",
+        selfPronoun: "ฉัน",
+        addresseeTerm: "พ่อ",
+        sentenceParticles: null,
+        register: "respectful",
+        notes: null,
+        evidence: "儿子",
+      },
+    ],
+    activePairs: [{ speaker: "儿子", listener: "父亲" }],
+  });
+}
+
+async function seedRunningAnalysisJob(
+  fixture: { chapterId: string },
+  jobId: string,
+  generation = 1,
+  sourceRevision = 1,
+) {
+  await sql`
+    INSERT INTO "translation_jobs" (
+      "id", "chapter_id", "status", "source_revision", "generation",
+      "total_chunks", "done_chunks"
+    ) VALUES (${jobId}, ${fixture.chapterId}, 'running', ${sourceRevision}, ${generation}, 1, 0)
+  `;
+  await sql`
+    INSERT INTO "translation_job_chunks" ("job_id", "chunk_index", "source_text", "text_length")
+    VALUES (${jobId}, 0, '儿子对父亲说：我会回来的。', 16)
+  `;
+  await sql`
+    UPDATE "chapters"
+    SET "active_translation_job_id" = ${jobId},
+        "translation_generation" = ${generation},
+        "source_revision" = ${sourceRevision},
+        "status" = 'translating'
+    WHERE "id" = ${fixture.chapterId}
+  `;
+}
 integrationDescribe("translation workflow PostgreSQL invariants", () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = testDatabaseUrl!;
@@ -47,7 +119,7 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     process.env.INNGEST_DEV ||= "1";
 
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
-    ({ completeChunk, completeJob } = await import("./job-store"));
+    ({ completeChunk, completeJob, applyRelationshipAnalysis } = await import("./job-store"));
     ({ enqueueTranslationJob } = await import("./translation.functions"));
   });
 
@@ -306,6 +378,139 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
       `;
       expect(job.doneChunks).toBe(1);
       expect(chunk.translation).toBe("Translated once.");
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("persists one analyzed relationship under the active job owner", async () => {
+    const fixture = await seedChapter("儿子对父亲说：我会回来的。", "th");
+    const jobId = `job-${randomUUID()}`;
+    try {
+      await seedRunningAnalysisJob(fixture, jobId);
+      const result = await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
+      expect(result.applied).toBe(true);
+      expect(result.map?.relationships).toHaveLength(1);
+
+      const [novel] = await sql<{ relationshipMap: { relationships: unknown[] } }[]>`
+        SELECT "relationship_map_json"::jsonb AS "relationshipMap"
+        FROM "novels" WHERE "id" = ${fixture.novelId}
+      `;
+      expect(novel.relationshipMap.relationships).toHaveLength(1);
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("replaying a context result is idempotent", async () => {
+    const fixture = await seedChapter("儿子对父亲说：我会回来的。", "th");
+    const jobId = `job-${randomUUID()}`;
+    try {
+      await seedRunningAnalysisJob(fixture, jobId);
+      await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
+      const replay = await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
+      expect(replay.applied).toBe(true);
+      expect(replay.map?.characters).toHaveLength(2);
+      expect(replay.map?.relationships).toHaveLength(1);
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("rejects stale generation, source revision, or active pointer map writes", async () => {
+    const fixture = await seedChapter("儿子对父亲说：我会回来的。", "th");
+    const jobId = `job-${randomUUID()}`;
+    try {
+      await seedRunningAnalysisJob(fixture, jobId);
+      await sql`
+        UPDATE "chapters"
+        SET "source_revision" = 2
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      const result = await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
+      expect(result.applied).toBe(false);
+      const [novel] = await sql<
+        { relationshipMap: { characters: unknown[]; relationships: unknown[] } }[]
+      >`
+        SELECT "relationship_map_json"::jsonb AS "relationshipMap"
+        FROM "novels" WHERE "id" = ${fixture.novelId}
+      `;
+      expect(novel.relationshipMap).toEqual({
+        version: 1,
+        characters: [],
+        relationships: [],
+      });
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("preserves a manual locked edit committed before automatic merge", async () => {
+    const fixture = await seedChapter("儿子对父亲说：我会回来的。", "th");
+    const jobId = `job-${randomUUID()}`;
+    const manualMap = {
+      version: 1,
+      characters: [
+        {
+          id: "father",
+          sourceName: "父亲",
+          targetName: "พ่อ",
+          aliases: [],
+          gender: "male",
+          role: "father",
+          notes: null,
+          enabled: true,
+          locked: true,
+          evidence: "manual",
+          lastSeenChapter: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "son",
+          sourceName: "儿子",
+          targetName: "ลูกชาย",
+          aliases: [],
+          gender: "male",
+          role: "son",
+          notes: null,
+          enabled: true,
+          locked: true,
+          evidence: "manual",
+          lastSeenChapter: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      relationships: [
+        {
+          id: "son-to-father",
+          speakerId: "son",
+          listenerId: "father",
+          relationship: "son",
+          speakerStatus: "lower",
+          familiarity: "close",
+          selfPronoun: "ผม",
+          addresseeTerm: "พ่อ",
+          sentenceParticles: null,
+          register: "respectful",
+          notes: null,
+          enabled: true,
+          locked: true,
+          evidence: "manual",
+          lastSeenChapter: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    try {
+      await sql`
+        UPDATE "novels"
+        SET "relationship_map_json" = ${JSON.stringify(manualMap)}
+        WHERE "id" = ${fixture.novelId}
+      `;
+      await seedRunningAnalysisJob(fixture, jobId);
+      const result = await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
+      expect(result.map?.relationships[0]?.selfPronoun).toBe("ผม");
+      expect(result.map?.relationships[0]?.locked).toBe(true);
     } finally {
       await deleteFixture(fixture.userId);
     }

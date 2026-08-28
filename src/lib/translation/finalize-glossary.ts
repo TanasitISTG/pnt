@@ -4,7 +4,8 @@ import type { novels, chapters, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
 import { loadTermSourcesForExclusion, findExistingTermSources } from "./job-store";
 import { createLog } from "./log-entry";
-import type { AIProviderClient, ChatMessage, ChunkProgress, LogEntry } from "./translation.types";
+import type { AIProviderClient, ChunkProgress, LogEntry } from "./translation.types";
+import { generateJsonCompletion } from "./json-completion";
 import {
   buildTermSuggestionPrompt,
   buildTermSuggestionUserMessage,
@@ -35,37 +36,6 @@ export interface FinalizeGlossaryResult {
 
 function containsLiteralText(text: string, candidate: string): boolean {
   return text.includes(candidate);
-}
-
-async function generateJsonWithFallback(
-  providerConfig: AIProviderClient,
-  temperature: number,
-  messages: ChatMessage[],
-) {
-  try {
-    const res = await providerConfig.generateChatCompletion({
-      temperature,
-      model: providerConfig.fastModel ?? undefined,
-      messages,
-      responseFormat: { type: "json_object" },
-    });
-    return {
-      content: res.content || "",
-      promptTokens: res.usage?.promptTokens || 0,
-      completionTokens: res.usage?.completionTokens || 0,
-    };
-  } catch {
-    const res = await providerConfig.generateChatCompletion({
-      temperature,
-      model: providerConfig.fastModel ?? undefined,
-      messages,
-    });
-    return {
-      content: res.content || "",
-      promptTokens: res.usage?.promptTokens || 0,
-      completionTokens: res.usage?.completionTokens || 0,
-    };
-  }
 }
 
 export async function suggestAndReviewTerms({
@@ -115,7 +85,7 @@ export async function suggestAndReviewTerms({
       chapterSummary: effectiveSummary,
     });
 
-    const suggestResult = await generateJsonWithFallback(providerConfig, 0.3, [
+    const suggestResult = await generateJsonCompletion(providerConfig, 0.3, [
       { role: "system", content: suggestPrompt },
       { role: "user", content: userMessage },
     ]);
@@ -148,7 +118,7 @@ export async function suggestAndReviewTerms({
           translatedExcerpt.slice(0, 3000),
         ].join("\n");
 
-        const reviewResult = await generateJsonWithFallback(providerConfig, 0.1, [
+        const reviewResult = await generateJsonCompletion(providerConfig, 0.1, [
           { role: "system", content: reviewPrompt },
           { role: "user", content: reviewUserMessage },
         ]);

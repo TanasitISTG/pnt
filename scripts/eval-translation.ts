@@ -9,6 +9,7 @@ import {
   buildSystemPrompt,
   buildUserMessage,
   findResidualSourceChars,
+  normalizePair,
 } from "@/lib/translation/prompts";
 import {
   injectParagraphMarkers,
@@ -18,6 +19,8 @@ import {
 } from "@/lib/translation/paragraphs";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "@/lib/translation/glossary";
 import { createProviderClient } from "@/lib/translation/provider-client";
+import { analyzeRelationshipSourceChunk } from "@/lib/relationships/analyzer";
+import { emptyRelationshipMap, parseRelationshipMap } from "@/lib/relationships/map";
 
 interface ChapterEvalResult {
   chapterNumber: string;
@@ -117,6 +120,12 @@ async function runEval() {
     .from(glossaryTerms)
     .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved")));
 
+  let relationshipMap = parseRelationshipMap(novel.relationshipMapJson) ?? emptyRelationshipMap();
+  const approvedCharacterMappings = allApprovedTerms
+    .filter((term) => term.category === "character")
+    .map((term) => ({ source: term.source, target: term.target }));
+  const normalizedPair = normalizePair(pair);
+
   const evalResults: ChapterEvalResult[] = [];
 
   for (const chapter of targetChapters) {
@@ -135,6 +144,7 @@ async function runEval() {
       const [prevChapter] = await db
         .select({
           summary: chapters.summary,
+          rawContent: chapters.rawContent,
           translatedContent: chapters.translatedContent,
         })
         .from(chapters)
@@ -153,6 +163,9 @@ async function runEval() {
       let previousChunkTail: string | null = prevChapter?.translatedContent
         ? prevChapter.translatedContent.slice(-tailLen)
         : null;
+      let previousSourceTail: string | null = prevChapter?.rawContent
+        ? prevChapter.rawContent.slice(-tailLen)
+        : null;
 
       let totalLatencyMs = 0;
       let promptTokens = 0;
@@ -168,10 +181,37 @@ async function runEval() {
         const matchedTerms = filterGlossaryForChunk(allApprovedTerms, chunk.text);
         const glossaryBlock = formatGlossaryBlock(matchedTerms);
 
+        const relationshipAnalysis =
+          normalizedPair === "zh->th"
+            ? await analyzeRelationshipSourceChunk({
+                pair: normalizedPair,
+                providerConfig,
+                existingMap: relationshipMap,
+                approvedMappings: approvedCharacterMappings,
+                storySummary: previousSummary,
+                previousSourceTail,
+                currentChunk: chunk.text,
+                chapterNumber: chapter.number,
+              })
+            : null;
+        if (relationshipAnalysis) {
+          relationshipMap = relationshipAnalysis.map;
+          promptTokens += relationshipAnalysis.promptTokens;
+          completionTokens += relationshipAnalysis.completionTokens;
+          if (relationshipAnalysis.warning) {
+            console.warn(
+              `Chapter ${chapter.number}, chunk ${i + 1}: ${relationshipAnalysis.warning}`,
+            );
+          }
+        }
+
         const systemPrompt = buildSystemPrompt(
           pair,
           glossaryBlock,
-          { previousSummary },
+          {
+            previousSummary,
+            relationshipContext: relationshipAnalysis?.context ?? null,
+          },
           novel.customPrompt,
         );
 
@@ -213,6 +253,7 @@ async function runEval() {
         }
 
         previousChunkTail = normalizedChunkOutput.slice(-tailLen);
+        previousSourceTail = chunk.text.slice(-tailLen);
         completedChunksCount++;
       }
 

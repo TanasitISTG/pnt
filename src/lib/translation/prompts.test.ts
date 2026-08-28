@@ -38,11 +38,13 @@ describe("prompts module", () => {
 
   // -- Priority ordering -----------------------------------------------------
 
-  it("includes numbered priority order", () => {
-    const prompt = buildSystemPrompt("en->th");
-    expect(prompt).toContain("## Translation Priorities");
-    expect(prompt).toContain("1. Glossary accuracy");
-    expect(prompt).toContain("5. Style preservation");
+  it("includes directed relationship precedence", () => {
+    const prompt = buildSystemPrompt("zh->th");
+    expect(prompt).toContain("1. Exact glossary names and source → target spellings");
+    expect(prompt).toContain("2. Facts explicitly shown in the current source");
+    expect(prompt).toContain("3. Locked admin speech choices for the directed pair");
+    expect(prompt).toContain("4. Automatic current-scene relationship guidance");
+    expect(prompt).toContain("5. Custom instructions and global style defaults");
   });
 
   // -- Hard rules ------------------------------------------------------------
@@ -135,10 +137,17 @@ describe("prompts module", () => {
     }
   });
 
-  it("includes ellipsis conversion in zh->th few-shot example", () => {
+  it("includes four directional zh->th dialogue examples", () => {
     const prompt = buildSystemPrompt("zh->th");
-    expect(prompt).toContain("你以为你是谁……");
-    expect(prompt).toContain("แกคิดว่าแกเป็นใคร…");
+    expect(prompt).toContain("男人对女人");
+    expect(prompt).toContain("เธอ");
+    expect(prompt).toContain("儿子对父亲");
+    expect(prompt).toContain("ผม");
+    expect(prompt).toContain("亲密的男性朋友");
+    expect(prompt).toContain("ฉัน");
+    expect(prompt).toContain("นาย");
+    expect(prompt).toContain("男主对女主");
+    expect(prompt).toContain("Do not add ครับ/ค่ะ/คะ by default");
   });
 
   // -- Glossary --------------------------------------------------------------

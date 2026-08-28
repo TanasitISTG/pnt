@@ -7,6 +7,7 @@ import {
   FileText,
   FileType,
   Loader2,
+  Network,
   Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +104,18 @@ export function NovelHeader({
                 <span className="size-2 rounded-full bg-amber-500 animate-pulse ml-0.5" />
               )}
             </Button>
+            {novel.sourceLang === "zh" && novel.targetLang === "th" && (
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link to="/novels/$novelId/relationships" params={{ novelId }} />}
+                aria-label="Relationships"
+                title="Character and relationship map"
+              >
+                <Network className="size-4" />
+                <span className="hidden sm:inline">Relationships</span>
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={<Button variant="outline" size="sm" disabled={exporting !== null} />}

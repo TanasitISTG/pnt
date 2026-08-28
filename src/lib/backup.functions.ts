@@ -6,6 +6,12 @@ import { z } from "zod";
 import { ensureSession } from "@/lib/auth/functions";
 import { db } from "@/lib/db";
 import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
+import {
+  emptyRelationshipMap,
+  parseRelationshipMap,
+  serializeRelationshipMap,
+} from "@/lib/relationships/map";
+import { relationshipMapSchema } from "@/lib/relationships/schemas";
 import { SafeServerError, withSafeHandler } from "@/lib/server-fn-error";
 
 const exportBackupSchema = z.object({ novelId: z.string().optional() }).optional();
@@ -53,6 +59,7 @@ const backupNovelSchema = z.object({
   targetLang: z.string(),
   customPrompt: z.string().nullable(),
   storySummary: z.string().nullable(),
+  relationshipMap: relationshipMapSchema.optional(),
   chunkSize: z.number(),
   contextTailLength: z.number(),
   publishedAt: z.string().nullable(),
@@ -142,6 +149,8 @@ export const exportBackup = createServerFn({ method: "POST" })
           targetLang: novel.targetLang,
           customPrompt: novel.customPrompt,
           storySummary: novel.storySummary,
+          relationshipMap:
+            parseRelationshipMap(novel.relationshipMapJson) ?? emptyRelationshipMap(),
           chunkSize: novel.chunkSize,
           contextTailLength: novel.contextTailLength,
           publishedAt: iso(novel.publishedAt),
@@ -214,6 +223,9 @@ export const importBackup = createServerFn({ method: "POST" })
               targetLang: sourceNovel.targetLang,
               customPrompt: sourceNovel.customPrompt,
               storySummary: sourceNovel.storySummary,
+              relationshipMapJson: serializeRelationshipMap(
+                sourceNovel.relationshipMap ?? emptyRelationshipMap(),
+              ),
               chunkSize: sourceNovel.chunkSize,
               contextTailLength: sourceNovel.contextTailLength,
               publishedAt: null,

@@ -11,6 +11,16 @@ import {
   translationJobs,
 } from "@/lib/db/schema";
 import { canRunJob } from "./job-state";
+import {
+  mergeAutomaticRelationshipAnalysis,
+  parseRelationshipMap,
+  serializeRelationshipMap,
+} from "@/lib/relationships/map";
+import type {
+  ApprovedCharacterMapping,
+  RelationshipAnalysis,
+  RelationshipMapV1,
+} from "@/lib/relationships/schemas";
 
 export async function loadJob(jobId: string) {
   const [row] = await db
@@ -107,9 +117,10 @@ async function lockRunnableJob(
   expectedDoneChunks: number,
 ) {
   const [row] = await tx
-    .select({ job: translationJobs, chapter: chapters })
+    .select({ job: translationJobs, chapter: chapters, novel: novels })
     .from(translationJobs)
     .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+    .innerJoin(novels, eq(chapters.novelId, novels.id))
     .where(eq(translationJobs.id, jobId))
     .limit(1)
     .for("update");
@@ -342,7 +353,11 @@ export async function loadApprovedTermsForContext(novelId: string) {
 
 export async function loadPrevChapterForContext(novelId: string, chapterNumber: string) {
   const [prevChapter] = await db
-    .select({ summary: chapters.summary, translatedContent: chapters.translatedContent })
+    .select({
+      summary: chapters.summary,
+      rawContent: chapters.rawContent,
+      translatedContent: chapters.translatedContent,
+    })
     .from(chapters)
     .where(
       and(
@@ -382,4 +397,62 @@ export async function findExistingTermSources(novelId: string, sources: string[]
       ),
     );
   return new Set(existingRows.map((row) => row.source.trim().toLowerCase()));
+}
+
+export interface ApplyRelationshipAnalysisResult {
+  applied: boolean;
+  map: RelationshipMapV1 | null;
+  warnings: string[];
+}
+
+/** Persist automatic facts only while this chunk still owns the runnable job. */
+export async function applyRelationshipAnalysis(
+  jobId: string,
+  generation: number,
+  chunkIndex: number,
+  analysis: RelationshipAnalysis,
+): Promise<ApplyRelationshipAnalysisResult> {
+  return db.transaction(async (tx) => {
+    const row = await lockRunnableJob(tx, jobId, generation, chunkIndex);
+    if (!row) return { applied: false, map: null, warnings: [] };
+
+    const currentMap = parseRelationshipMap(row.novel.relationshipMapJson);
+    if (!currentMap) {
+      return {
+        applied: false,
+        map: null,
+        warnings: ["Stored relationship map is invalid; automatic update skipped."],
+      };
+    }
+
+    const glossaryRows = await tx
+      .select({ source: glossaryTerms.source, target: glossaryTerms.target })
+      .from(glossaryTerms)
+      .where(
+        and(
+          eq(glossaryTerms.novelId, row.novel.id),
+          eq(glossaryTerms.status, "approved"),
+          eq(glossaryTerms.category, "character"),
+        ),
+      );
+    const mappings: ApprovedCharacterMapping[] = glossaryRows.map((term) => ({
+      source: term.source,
+      target: term.target,
+    }));
+    const merged = mergeAutomaticRelationshipAnalysis(
+      currentMap,
+      analysis,
+      mappings,
+      row.chapter.number,
+      new Date().toISOString(),
+    );
+    const serialized = serializeRelationshipMap(merged.map);
+    if (serialized !== row.novel.relationshipMapJson) {
+      await tx
+        .update(novels)
+        .set({ relationshipMapJson: serialized, updatedAt: new Date() })
+        .where(eq(novels.id, row.novel.id));
+    }
+    return { applied: true, map: merged.map, warnings: merged.warnings };
+  });
 }

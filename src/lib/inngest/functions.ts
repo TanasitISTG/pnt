@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { inngest } from "./client";
 import { initJob, translateChunk, finalizeJob, failJob } from "@/lib/translation/worker";
+import { analyzeChunkRelationships } from "@/lib/relationships/analyzer";
 import {
   initImportJob,
   importOneChapter,
@@ -57,7 +58,10 @@ export const translateChapterFn = inngest.createFunction(
     if (init.skip) return { skipped: true };
 
     for (let i = init.doneChunks; i < init.totalChunks; i++) {
-      await step.run(`chunk-${i}`, () => translateChunk(jobId, i, generation));
+      const dialogueAnalysis = await step.run(`context-${i}`, () =>
+        analyzeChunkRelationships(jobId, i, generation),
+      );
+      await step.run(`chunk-${i}`, () => translateChunk(jobId, i, generation, dialogueAnalysis));
     }
 
     await step.run("finalize", () => finalizeJob(jobId, generation));

@@ -1,0 +1,1 @@
+ALTER TABLE "novels" ADD COLUMN "relationship_map_json" text DEFAULT '{"version":1,"characters":[],"relationships":[]}' NOT NULL;

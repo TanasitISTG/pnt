@@ -39,6 +39,9 @@ export const novels = pgTable(
     targetLang: text("target_lang").notNull(),
     customPrompt: text("custom_prompt"),
     storySummary: text("story_summary"),
+    relationshipMapJson: text("relationship_map_json")
+      .notNull()
+      .default('{"version":1,"characters":[],"relationships":[]}'),
     chunkSize: integer("chunk_size").notNull().default(4000),
     contextTailLength: integer("context_tail_length").notNull().default(500),
     // null = draft (admin-only); <= now = live for guests; > now = scheduled

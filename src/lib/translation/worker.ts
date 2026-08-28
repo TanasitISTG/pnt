@@ -14,6 +14,7 @@ import {
 import { extractHanziSpans, spliceSpans } from "./residual-repair";
 import { createLog } from "./log-entry";
 import type { ChunkProgress, LogEntry } from "./translation.types";
+import type { ChunkRelationshipAnalysis } from "@/lib/relationships/analyzer";
 import { log } from "@/lib/log";
 import {
   beginJob,
@@ -263,7 +264,12 @@ async function repairResidualHanzi(
   return { translation: text, promptTokens, completionTokens };
 }
 
-export async function translateChunk(jobId: string, i: number, generation: number): Promise<void> {
+export async function translateChunk(
+  jobId: string,
+  i: number,
+  generation: number,
+  dialogueAnalysis?: ChunkRelationshipAnalysis,
+): Promise<void> {
   log("info", "step transition", { jobId, step: "translateChunk", chunk: i });
   const row = await loadJobChunk(jobId, i);
   if (!row) throw new Error(`Job ${jobId} not found`);
@@ -277,6 +283,12 @@ export async function translateChunk(jobId: string, i: number, generation: numbe
   const providerConfig = await createProviderClient(novel.userId);
 
   const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
+
+  if (dialogueAnalysis?.warning) {
+    logs.push(createLog("warn", dialogueAnalysis.warning));
+  } else if (dialogueAnalysis?.context) {
+    logs.push(createLog("success", "Relationship context analyzed for this scene."));
+  }
 
   logs.push(
     createLog(
@@ -315,7 +327,10 @@ export async function translateChunk(jobId: string, i: number, generation: numbe
   const systemPrompt = buildSystemPrompt(
     `${novel.sourceLang}->${novel.targetLang}`,
     glossaryBlock,
-    { previousSummary },
+    {
+      previousSummary,
+      relationshipContext: dialogueAnalysis?.context ?? null,
+    },
     novel.customPrompt,
   );
 
@@ -382,8 +397,8 @@ export async function translateChunk(jobId: string, i: number, generation: numbe
 
   const elapsedMs = Date.now() - startTime;
   const translation = result.translation;
-  const promptTokens = result.promptTokens;
-  const completionTokens = result.completionTokens;
+  const promptTokens = result.promptTokens + (dialogueAnalysis?.promptTokens ?? 0);
+  const completionTokens = result.completionTokens + (dialogueAnalysis?.completionTokens ?? 0);
 
   logs.push(
     createLog(

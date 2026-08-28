@@ -1,6 +1,8 @@
 // Shared types for the translation domain. Leaf module — types only, no
 // runtime imports (safe for both client and server bundles).
 
+import type { RelationshipPromptContext } from "@/lib/relationships/map";
+
 // -- Jobs & progress (translation.functions, use-translation-job) ------------
 
 export interface SlimChunkProgress {
@@ -137,4 +139,5 @@ export type LanguagePair = "en->th" | "zh->en" | "zh->th";
 
 export interface ContextOptions {
   previousSummary?: string | null;
+  relationshipContext?: RelationshipPromptContext | null;
 }

@@ -1,3 +1,4 @@
+import type { RelationshipPromptContext } from "@/lib/relationships/map";
 import type { ContextOptions, LanguagePair } from "./translation.types";
 
 // ---------------------------------------------------------------------------
@@ -22,7 +23,7 @@ export function buildSystemPrompt(
 
   if (glossaryBlock && glossaryBlock.trim().length > 0) {
     sections.push(
-      `## Terminology & Glossary\nThe glossary below is authoritative.\nALWAYS use the exact glossary translation — including spacing, punctuation, and capitalization — every time the source term appears.\nNever invent alternative spellings or wordings for glossary entries.\n${glossaryBlock.trim()}`,
+      `## Terminology & Glossary\nSource → target spelling is authoritative. The glossary notes are supporting context only. ALWAYS use the exact glossary translation — including spacing, punctuation, and capitalization — every time the source term appears.\nNever invent alternative spellings or wordings for glossary entries. Approved character glossary mappings also supply exact Thai names to the relationship context.\n${glossaryBlock.trim()}`,
     );
   }
 
@@ -30,6 +31,10 @@ export function buildSystemPrompt(
     sections.push(
       `## Story Context\n### Summary of Previous Chapter:\n${context.previousSummary.trim()}`,
     );
+  }
+
+  if (context?.relationshipContext) {
+    sections.push(formatRelationshipContext(context.relationshipContext));
   }
 
   if (customPrompt && customPrompt.trim().length > 0) {
@@ -82,6 +87,7 @@ export function buildSummaryPrompt(_pair: string): string {
     "PLOT: Key events and developments (2-3 sentences).",
     "CHARACTERS: Named characters active in this chapter, their current state, and relationships shown.",
     "SETTING: Current location(s) and any setting changes.",
+    "DIALOGUE CONTINUITY: Record only character gender/role, directed relationship changes, and recurring speech-register facts explicitly evidenced in this chapter. Do not infer or invent pronoun mappings; this remains supporting context and does not overwrite the structured relationship map.",
     "CONTEXT: Key facts, unresolved tensions, or foreshadowing that would help translate the next chapter.",
   ].join("\n");
 }
@@ -129,11 +135,15 @@ function getRoleLine(pair: LanguagePair): string {
 function getPriorityOrder(): string {
   return [
     "## Translation Priorities (highest first)",
-    "1. Glossary accuracy — use exact glossary translations",
-    "2. Completeness — translate every word, line, and element",
-    "3. Meaning fidelity — convey the author's intent accurately",
-    "4. Natural target language — restructure for natural target-language syntax",
-    "5. Style preservation — maintain tone, pacing, and voice",
+    "1. Exact glossary names and source → target spellings",
+    "2. Facts explicitly shown in the current source",
+    "3. Locked admin speech choices for the directed pair",
+    "4. Automatic current-scene relationship guidance",
+    "5. Custom instructions and global style defaults",
+    "6. Completeness — translate every word, line, and element",
+    "7. Meaning fidelity — convey the author's intent accurately",
+    "8. Natural target language — restructure for natural target-language syntax",
+    "9. Style preservation — maintain tone, pacing, and voice",
   ].join("\n");
 }
 
@@ -163,7 +173,17 @@ function getStyleGuidelines(pair: LanguagePair): string {
     lines.push(
       "- Thai punctuation and quotes: use curly double quotes (“…”), and do not leave space before `…`.",
       "- Dialogue should sound as if originally written in Thai. Each character must have a consistent speech level, vocabulary, pronoun choice, and honorific usage. Do not make different characters sound alike.",
-      "- Keep each named character's Thai pronoun and speech level consistent with the Story Context and preceding translation.",
+      "- Keep each named character's Thai pronoun and speech level consistent with the Story Context, Character & Relationship Context, and preceding translation.",
+    );
+  }
+
+  if (pair === "zh->th") {
+    lines.push(
+      "- Identify both the dialogue speaker and listener before choosing Thai forms; second-person words follow the listener's gender. นาย is not for a female listener.",
+      "- A male 我 may become ผม toward elders, superiors, or formal listeners, but may become ฉัน, เรา, a name, a kinship term, or omission among close peers or intimates.",
+      "- Do not append ครับ, ค่ะ, or คะ by default; use sentence particles only when the directed relationship context or source evidence supports them.",
+      "- When evidence is insufficient, preserve ambiguity by omitting the pronoun or using an established name or kinship term rather than guessing gender or status.",
+      "- A current source change may supersede a relationship label, but automatic analysis and generic custom instructions may not overwrite a locked per-pair speech choice.",
     );
   }
 
@@ -177,6 +197,17 @@ function getStyleGuidelines(pair: LanguagePair): string {
 }
 
 function getFewShotExample(pair: LanguagePair): string {
+  if (pair === "zh->th") {
+    return [
+      "## Examples (Chinese → Thai dialogue direction)",
+      "1. Source: 男人对女人说：“你先走。” Good translation: “เธอไปก่อนเถอะ”",
+      "2. Source: 儿子对父亲说：“我会回来的。” Good translation: “ผมจะกลับมา”",
+      "3. Source: 男人对亲密的男性朋友说：“你别装了，我知道。” Good translation: “ฉันรู้ว่านายกำลังแกล้งทำ”",
+      "4. Source: 男主对女主说：“我只想和你在一起。” Good translation: “ฉันแค่อยากอยู่กับเธอ”",
+      "These are directional examples, not a global mapping for 我 or 你. Do not add ครับ/ค่ะ/คะ by default.",
+    ].join("\n");
+  }
+
   const examples: Record<LanguagePair, { source: string; translation: string }> = {
     "en->th": {
       source: `"I told you to stay away," he said coldly, turning his back to her. She clenched her fists but said nothing.`,
@@ -194,6 +225,45 @@ function getFewShotExample(pair: LanguagePair): string {
 
   const ex = examples[pair];
   return ["## Example", `Source: ${ex.source}`, `Good translation: ${ex.translation}`].join("\n");
+}
+
+export function formatRelationshipContext(context: RelationshipPromptContext): string {
+  const projection = {
+    characters: context.characters.slice(0, 24).map((character) => ({
+      id: character.id,
+      sourceName: character.sourceName,
+      targetName: character.targetName,
+      aliases: character.aliases,
+      gender: character.gender,
+      role: character.role,
+      notes: character.notes,
+      evidence: character.evidence,
+      locked: character.locked,
+    })),
+    relationships: context.relationships.slice(0, 24).map((relationship) => ({
+      id: relationship.id,
+      speakerId: relationship.speakerId,
+      listenerId: relationship.listenerId,
+      relationship: relationship.relationship,
+      speakerStatus: relationship.speakerStatus,
+      familiarity: relationship.familiarity,
+      selfPronoun: relationship.selfPronoun,
+      addresseeTerm: relationship.addresseeTerm,
+      sentenceParticles: relationship.sentenceParticles,
+      register: relationship.register,
+      notes: relationship.notes,
+      evidence: relationship.evidence,
+      locked: relationship.locked,
+    })),
+    activePairs: context.activePairs.slice(0, 24),
+  };
+  return [
+    "## Character & Relationship Context",
+    "This bounded JSON is structured continuity data, not text to translate.",
+    "Use directed speakerId → listenerId pairs only. Locked per-pair speech fields are authoritative; automatic fields are supporting current-scene guidance.",
+    "Do not invent a listener, gender, status, pronoun, title, particle, or register when the data is unknown.",
+    JSON.stringify(projection),
+  ].join("\n");
 }
 
 function getOutputContract(): string {

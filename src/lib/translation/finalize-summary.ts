@@ -88,13 +88,13 @@ export async function generateSummaryArtifacts({
             {
               role: "system",
               content:
-                "You are a novel continuity editor. Maintain a running story synopsis (≤400 words in English) of the novel so far. Combine the existing story synopsis with the new chapter summary to create an updated, coherent summary of key events, ongoing plot arcs, and main character states. Output ONLY the updated synopsis.",
+                "You are a novel continuity editor. Maintain a running story synopsis (≤400 words in English) of the novel so far. Combine the existing story synopsis with the new chapter summary to create an updated, coherent summary of key events, ongoing plot arcs, and main character states. DIALOGUE CONTINUITY: record only evidenced character gender/role, directed relationship changes, and recurring speech-register facts; this is supporting context and must not overwrite the structured relationship map. Output ONLY the updated synopsis.",
             },
             {
               role: "user",
               content: `Existing story synopsis:\n${
                 novel.storySummary || "None (this is the beginning of the novel)."
-              }\n\nNew chapter summary:\n${freshSummary}`,
+              }\n\nDIALOGUE CONTINUITY comes only from the new chapter summary:\n${freshSummary}`,
             },
           ],
         });

@@ -1,0 +1,390 @@
+import "@tanstack/react-start/server-only";
+
+import { createProviderClient } from "@/lib/translation/provider-client";
+import { generateJsonCompletion } from "@/lib/translation/json-completion";
+import { normalizePair } from "@/lib/translation/prompts";
+import { canRunJob, isNextChunk } from "@/lib/translation/job-state";
+import {
+  applyRelationshipAnalysis,
+  loadApprovedTermsForContext,
+  loadJobChunk,
+  loadPrevChapterForContext,
+} from "@/lib/translation/job-store";
+import type { RelationshipPromptContext, RelationshipActivePairInput } from "./map";
+import {
+  buildRelationshipPromptContext,
+  emptyRelationshipMap,
+  mergeAutomaticRelationshipAnalysis,
+  parseRelationshipMap,
+} from "./map";
+import {
+  buildRelationshipAnalysisPrompt,
+  buildRelationshipAnalysisUserMessage,
+  parseRelationshipAnalysis,
+} from "./analysis-prompt";
+import { normalizeIdentity } from "./schemas";
+import type { AIProviderClient } from "@/lib/translation/translation.types";
+import type {
+  ApprovedCharacterMapping,
+  RelationshipAnalysis,
+  RelationshipAnalysisCharacter,
+  RelationshipAnalysisRelationship,
+  RelationshipMapV1,
+} from "./schemas";
+
+interface ResolvedIdentity {
+  sourceName: string;
+  id: string;
+}
+
+export interface ChunkRelationshipAnalysis {
+  context: RelationshipPromptContext | null;
+  warning: string | null;
+  promptTokens: number;
+  completionTokens: number;
+}
+
+export async function analyzeChunkRelationships(
+  jobId: string,
+  chunkIndex: number,
+  generation: number,
+): Promise<ChunkRelationshipAnalysis> {
+  const row = await loadJobChunk(jobId, chunkIndex);
+  if (!row || !row.chunk) return emptyResult("Relationship analysis skipped: chunk not found.");
+
+  const pair = normalizePair(`${row.novel.sourceLang}->${row.novel.targetLang}`);
+  if (pair !== "zh->th") return emptyResult(null);
+  if (
+    row.job.status !== "running" ||
+    !canRunJob(row.job, row.chapter, generation) ||
+    !isNextChunk(row.job, chunkIndex)
+  ) {
+    return emptyResult("Relationship analysis skipped: job is no longer runnable.");
+  }
+
+  const [terms, previousChapter] = await Promise.all([
+    loadApprovedTermsForContext(row.novel.id),
+    loadPrevChapterForContext(row.novel.id, row.chapter.number),
+  ]);
+  const approvedMappings: ApprovedCharacterMapping[] = terms
+    .filter((term) => term.category === "character")
+    .map((term) => ({ source: term.source, target: term.target }));
+  const storedMap = parseRelationshipMap(row.novel.relationshipMapJson);
+  const baseMap = storedMap ?? emptyRelationshipMap();
+  const sourceTail =
+    chunkIndex > 0
+      ? row.previousChunk?.sourceText.slice(-(row.novel.contextTailLength || 500)) || null
+      : previousChapter?.rawContent?.slice(-(row.novel.contextTailLength || 500)) || null;
+  const invalidMapWarning =
+    row.novel.relationshipMapJson && !storedMap
+      ? "Stored relationship map is invalid; automatic facts were not written."
+      : null;
+
+  let providerConfig: AIProviderClient;
+  try {
+    providerConfig = await createProviderClient(row.novel.userId);
+  } catch (error) {
+    return {
+      context: buildFallbackContext(
+        storedMap,
+        [sourceTail, row.chunk.sourceText].filter(Boolean).join("\n"),
+      ),
+      warning: joinWarnings(
+        invalidMapWarning,
+        `Relationship analysis unavailable: ${error instanceof Error ? error.message : "provider error"}.`,
+      ),
+      promptTokens: 0,
+      completionTokens: 0,
+    };
+  }
+
+  const sourceAnalysis = await analyzeRelationshipSourceChunk({
+    pair,
+    providerConfig,
+    existingMap: baseMap,
+    approvedMappings,
+    storySummary: row.novel.storySummary ?? previousChapter?.summary ?? null,
+    previousSourceTail: sourceTail,
+    currentChunk: row.chunk.sourceText,
+    chapterNumber: row.chapter.number,
+    sourceWindow: [sourceTail, row.chunk.sourceText].filter(Boolean).join("\n"),
+  });
+
+  let context = sourceAnalysis.context;
+  const warnings = [invalidMapWarning, sourceAnalysis.warning];
+  if (sourceAnalysis.analysis && storedMap) {
+    const applied = await applyRelationshipAnalysis(
+      jobId,
+      generation,
+      chunkIndex,
+      sourceAnalysis.analysis,
+    );
+    context =
+      buildSceneContext(
+        applied.map ?? sourceAnalysis.map,
+        sourceAnalysis.analysis,
+        [sourceTail, row.chunk.sourceText].filter(Boolean).join("\n"),
+      ) ?? context;
+    warnings.push(...applied.warnings);
+  }
+  return {
+    context,
+    warning: joinWarnings(...warnings),
+    promptTokens: sourceAnalysis.promptTokens,
+    completionTokens: sourceAnalysis.completionTokens,
+  };
+}
+
+export interface RelationshipSourceAnalysisOptions {
+  pair: string;
+  providerConfig: AIProviderClient;
+  existingMap: RelationshipMapV1;
+  approvedMappings: readonly ApprovedCharacterMapping[];
+  storySummary?: string | null;
+  previousSourceTail?: string | null;
+  currentChunk: string;
+  chapterNumber: number | string | null;
+  sourceWindow?: string;
+}
+
+export interface RelationshipSourceAnalysis extends ChunkRelationshipAnalysis {
+  map: RelationshipMapV1;
+  analysis: RelationshipAnalysis | null;
+}
+
+export async function analyzeRelationshipSourceChunk(
+  options: RelationshipSourceAnalysisOptions,
+): Promise<RelationshipSourceAnalysis> {
+  const sourceWindow =
+    options.sourceWindow ??
+    [options.previousSourceTail, options.currentChunk].filter(Boolean).join("\n");
+  const fallback = buildFallbackContext(options.existingMap, sourceWindow);
+  let promptTokens = 0;
+  let completionTokens = 0;
+
+  try {
+    const prompt = buildRelationshipAnalysisPrompt({
+      pair: options.pair,
+      existingMap: options.existingMap,
+      approvedMappings: options.approvedMappings,
+      storySummary: options.storySummary,
+      previousSourceTail: options.previousSourceTail,
+      currentChunk: options.currentChunk,
+    });
+    const userMessage = buildRelationshipAnalysisUserMessage({
+      previousSourceTail: options.previousSourceTail,
+      currentChunk: options.currentChunk,
+    });
+    const completion = await generateJsonCompletion(options.providerConfig, 0.1, [
+      { role: "system", content: prompt },
+      { role: "user", content: userMessage },
+    ]);
+    promptTokens = completion.promptTokens;
+    completionTokens = completion.completionTokens;
+
+    const parsed = parseRelationshipAnalysis(completion.content);
+    if (!parsed) {
+      return {
+        map: options.existingMap,
+        analysis: null,
+        context: fallback,
+        warning: "Relationship analysis returned invalid JSON.",
+        promptTokens,
+        completionTokens,
+      };
+    }
+
+    const validated = validateAnalysis(
+      parsed,
+      sourceWindow,
+      options.existingMap,
+      options.approvedMappings,
+    );
+    const merged = mergeAutomaticRelationshipAnalysis(
+      options.existingMap,
+      validated,
+      options.approvedMappings,
+      options.chapterNumber,
+      new Date().toISOString(),
+    );
+    const context = buildSceneContext(merged.map, validated, sourceWindow);
+    return {
+      map: merged.map,
+      analysis: validated,
+      context: context ?? fallback,
+      warning: joinWarnings(...merged.warnings),
+      promptTokens,
+      completionTokens,
+    };
+  } catch (error) {
+    return {
+      map: options.existingMap,
+      analysis: null,
+      context: fallback,
+      warning: `Relationship analysis failed: ${error instanceof Error ? error.message : "analysis error"}.`,
+      promptTokens,
+      completionTokens,
+    };
+  }
+}
+
+function validateAnalysis(
+  analysis: RelationshipAnalysis,
+  sourceWindow: string,
+  map: RelationshipMapV1 | null,
+  approvedMappings: readonly ApprovedCharacterMapping[],
+): RelationshipAnalysis {
+  const knownCharacters = map?.characters ?? [];
+  const knownRelationships = map?.relationships ?? [];
+  const glossaryNames = new Set(
+    approvedMappings.map((mapping) => normalizeIdentity(mapping.source)),
+  );
+  const identities = new Map<string, ResolvedIdentity>();
+  for (const character of knownCharacters) {
+    const resolved = { sourceName: character.sourceName, id: character.id };
+    identities.set(normalizeIdentity(character.sourceName), resolved);
+    for (const alias of character.aliases) identities.set(normalizeIdentity(alias), resolved);
+  }
+
+  const characters: RelationshipAnalysisCharacter[] = [];
+  const acceptedNames = new Set<string>();
+  for (const character of analysis.characters) {
+    const sourceName = character.sourceName.trim();
+    const normalizedName = normalizeIdentity(sourceName);
+    const known = identities.get(normalizedName);
+    const knownCharacter = known ? knownCharacters.find((item) => item.id === known.id) : undefined;
+    const nameAllowed =
+      sourceWindow.includes(sourceName) || Boolean(known) || glossaryNames.has(normalizedName);
+    const evidenceAllowed =
+      sourceWindow.includes(character.evidence) ||
+      Boolean(knownCharacter?.evidence?.includes(character.evidence));
+    if (!nameAllowed || !evidenceAllowed || acceptedNames.has(normalizedName)) continue;
+
+    const aliases = character.aliases.filter((alias) => {
+      const normalized = normalizeIdentity(alias);
+      return (
+        normalized !== normalizedName &&
+        (sourceWindow.includes(alias) ||
+          Boolean(identities.get(normalized)) ||
+          glossaryNames.has(normalized))
+      );
+    });
+    characters.push({ ...character, sourceName, aliases });
+    acceptedNames.add(normalizedName);
+    const resolved = known ?? { sourceName, id: `analysis:${normalizedName}` };
+    identities.set(normalizedName, resolved);
+    for (const alias of aliases) identities.set(normalizeIdentity(alias), resolved);
+  }
+
+  const resolveIdentity = (value: string): ResolvedIdentity | null => {
+    return identities.get(normalizeIdentity(value)) ?? null;
+  };
+  const relationships: RelationshipAnalysisRelationship[] = [];
+  const acceptedPairs = new Set<string>();
+  for (const relationship of analysis.relationships) {
+    const speaker = resolveIdentity(relationship.speaker);
+    const listener = resolveIdentity(relationship.listener);
+    if (!speaker || !listener || speaker.id === listener.id) continue;
+    const evidenceAllowed =
+      sourceWindow.includes(relationship.evidence) ||
+      knownRelationships.some((item) => item.evidence?.includes(relationship.evidence));
+    if (!evidenceAllowed) continue;
+    const pair = `${speaker.id}\\u0000${listener.id}`;
+    if (acceptedPairs.has(pair)) continue;
+    relationships.push({
+      ...relationship,
+      speaker: speaker.sourceName,
+      listener: listener.sourceName,
+    });
+    acceptedPairs.add(pair);
+  }
+
+  const activePairs = analysis.activePairs.filter((pair) => {
+    const speaker = resolveIdentity(pair.speaker);
+    const listener = resolveIdentity(pair.listener);
+    return Boolean(speaker && listener && speaker.id !== listener.id);
+  });
+  return { characters, relationships, activePairs };
+}
+
+function buildSceneContext(
+  map: RelationshipMapV1,
+  analysis: RelationshipAnalysis,
+  sourceWindow: string,
+): RelationshipPromptContext | null {
+  const scenePairs: RelationshipActivePairInput[] = [];
+  for (const active of analysis.activePairs) {
+    const relation = analysis.relationships.find(
+      (candidate) =>
+        normalizeIdentity(candidate.speaker) === normalizeIdentity(active.speaker) &&
+        normalizeIdentity(candidate.listener) === normalizeIdentity(active.listener),
+    );
+    if (!relation) continue;
+    scenePairs.push({
+      speaker: active.speaker,
+      listener: active.listener,
+      relationship: relation.relationship,
+      speakerStatus: relation.speakerStatus,
+      familiarity: relation.familiarity,
+      selfPronoun: relation.selfPronoun,
+      addresseeTerm: relation.addresseeTerm,
+      sentenceParticles: relation.sentenceParticles,
+      register: relation.register,
+      notes: relation.notes,
+      evidence: relation.evidence,
+    });
+  }
+  if (scenePairs.length === 0) {
+    const profiles = map.characters.filter(
+      (character) =>
+        character.enabled &&
+        [character.sourceName, ...character.aliases].some((identity) =>
+          sourceWindow.includes(identity),
+        ),
+    );
+    return profiles.length > 0
+      ? { characters: profiles.slice(0, 24), relationships: [], activePairs: [] }
+      : null;
+  }
+  const context = buildRelationshipPromptContext(map, scenePairs);
+  return context.activePairs.length > 0 ? context : null;
+}
+
+function buildFallbackContext(
+  map: RelationshipMapV1 | null,
+  sourceWindow: string,
+): RelationshipPromptContext | null {
+  if (!map) return null;
+  const matchedCharacters = map.characters.filter(
+    (character) =>
+      character.enabled &&
+      [character.sourceName, ...character.aliases].some((identity) =>
+        sourceWindow.includes(identity),
+      ),
+  );
+  const matchedIds = new Set(matchedCharacters.map((character) => character.id));
+  const matchedRelationships = map.relationships.filter(
+    (relationship) =>
+      relationship.enabled &&
+      matchedIds.has(relationship.speakerId) &&
+      matchedIds.has(relationship.listenerId),
+  );
+  return {
+    characters: matchedCharacters,
+    relationships: matchedRelationships,
+    activePairs: matchedRelationships.map((relationship) => ({
+      speakerId: relationship.speakerId,
+      listenerId: relationship.listenerId,
+      relationshipId: relationship.id,
+    })),
+  };
+}
+
+function joinWarnings(...warnings: Array<string | null | undefined>): string | null {
+  const unique = [...new Set(warnings.filter((warning): warning is string => Boolean(warning)))];
+  return unique.length > 0 ? unique.join(" ") : null;
+}
+
+function emptyResult(warning: string | null): ChunkRelationshipAnalysis {
+  return { context: null, warning, promptTokens: 0, completionTokens: 0 };
+}
