@@ -1,4 +1,4 @@
-import { relationshipAnalysisSchema } from "./schemas";
+import { MAX_RELATIONSHIP_PROMPT_ITEMS, relationshipAnalysisSchema } from "./schemas";
 import type { ApprovedCharacterMapping, RelationshipAnalysis, RelationshipMapV1 } from "./schemas";
 import { normalizePair } from "@/lib/translation/prompts";
 
@@ -15,22 +15,45 @@ export function buildRelationshipAnalysisPrompt(
   options: RelationshipAnalysisPromptOptions,
 ): string {
   const pair = normalizePair(options.pair);
+  const relevanceText = [options.currentChunk, options.previousSourceTail]
+    .filter((value): value is string => Boolean(value))
+    .join("\n");
+  const relevantCharacters = options.existingMap.characters
+    .filter(
+      (character) =>
+        character.enabled &&
+        [character.sourceName, ...character.aliases].some((identity) =>
+          relevanceText.includes(identity),
+        ),
+    )
+    .toSorted((left, right) => {
+      const positionDifference =
+        firstIdentityOccurrence(relevanceText, [left.sourceName, ...left.aliases]) -
+        firstIdentityOccurrence(relevanceText, [right.sourceName, ...right.aliases]);
+      if (positionDifference !== 0) return positionDifference;
+      return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+    })
+    .slice(0, MAX_RELATIONSHIP_PROMPT_ITEMS);
+  const selectedCharacterIds = new Set(relevantCharacters.map((character) => character.id));
   const enabledMap = {
     version: options.existingMap.version,
-    characters: options.existingMap.characters
-      .filter((character) => character.enabled)
-      .map((character) => ({
-        id: character.id,
-        sourceName: character.sourceName,
-        targetName: character.targetName,
-        aliases: character.aliases,
-        gender: character.gender,
-        role: character.role,
-        notes: character.notes,
-        locked: character.locked,
-      })),
+    characters: relevantCharacters.map((character) => ({
+      id: character.id,
+      sourceName: character.sourceName,
+      targetName: character.targetName,
+      aliases: character.aliases,
+      gender: character.gender,
+      role: character.role,
+      locked: character.locked,
+    })),
     relationships: options.existingMap.relationships
-      .filter((relationship) => relationship.enabled)
+      .filter(
+        (relationship) =>
+          relationship.enabled &&
+          selectedCharacterIds.has(relationship.speakerId) &&
+          selectedCharacterIds.has(relationship.listenerId),
+      )
+      .slice(0, MAX_RELATIONSHIP_PROMPT_ITEMS)
       .map((relationship) => ({
         id: relationship.id,
         speakerId: relationship.speakerId,
@@ -42,18 +65,22 @@ export function buildRelationshipAnalysisPrompt(
         addresseeTerm: relationship.addresseeTerm,
         sentenceParticles: relationship.sentenceParticles,
         register: relationship.register,
+        notes: relationship.notes,
         locked: relationship.locked,
       })),
   };
+  const approvedMappings = options.approvedMappings
+    .filter((mapping) => relevanceText.includes(mapping.source))
+    .slice(0, MAX_RELATIONSHIP_PROMPT_ITEMS);
 
   return [
     `You are a careful dialogue-continuity analyst for the ${pair} language pair.`,
     "Analyze only the supplied source window and the enabled stored facts below.",
     "Do not invent a character, relationship, gender, role, or speech choice.",
-    "Every character and relationship item must include a short literal source evidence excerpt copied exactly from the source window.",
+    "Every character, relationship, and active-pair item must include a short literal source evidence excerpt copied exactly from currentChunk; never use the preceding tail as evidence.",
     "Use source-language names as sourceName and as relationship speaker/listener values.",
     "Resolve aliases to the established source identity when possible; do not create a second identity for the same person.",
-    "Distinguish the speaker from the listener. activePairs must contain only directed pairs shown or clearly addressed in this source window.",
+    "Distinguish the speaker from the listener. activePairs must contain only directed pairs shown or clearly addressed in currentChunk.",
     "Leave gender, status, familiarity, Thai pronouns, addressee terms, particles, and register as unknown/null when the source does not establish them.",
     "Never infer a global Thai mapping for Chinese 我 or 你. Those words depend on the directed speaker and listener in the current scene.",
     "Approved character glossary mappings supply exact Thai names and take precedence over any other target spelling.",
@@ -61,13 +88,22 @@ export function buildRelationshipAnalysisPrompt(
     "Return JSON only with exactly these top-level arrays: characters, relationships, activePairs.",
     "Character item shape: {sourceName,targetName,aliases,gender,role,notes,evidence}.",
     "Relationship item shape: {speaker,listener,relationship,speakerStatus,familiarity,selfPronoun,addresseeTerm,sentenceParticles,register,notes,evidence}.",
-    "activePairs item shape: {speaker,listener}.",
+    "activePairs item shape: {speaker,listener,evidence}.",
     "Do not output IDs; the application assigns stable IDs after validating source identities.",
     "",
     `Existing enabled relationship map:\n${JSON.stringify(enabledMap)}`,
-    `Approved character glossary mappings:\n${JSON.stringify(options.approvedMappings)}`,
+    `Approved character glossary mappings:\n${JSON.stringify(approvedMappings)}`,
     `Rolling story summary (supporting context only):\n${options.storySummary?.trim() || "None"}`,
   ].join("\n");
+}
+
+function firstIdentityOccurrence(text: string, identities: readonly string[]): number {
+  let first = Number.POSITIVE_INFINITY;
+  for (const identity of identities) {
+    const position = text.indexOf(identity);
+    if (position >= 0 && position < first) first = position;
+  }
+  return first;
 }
 
 export function buildRelationshipAnalysisUserMessage(options: {
@@ -148,6 +184,7 @@ function normalizeAnalysisShape(value: unknown): unknown {
         return {
           speaker: item.speaker ?? item.speakerName ?? item.speakerSourceName,
           listener: item.listener ?? item.listenerName ?? item.listenerSourceName,
+          evidence: item.evidence,
         };
       })
     : value.activePairs;

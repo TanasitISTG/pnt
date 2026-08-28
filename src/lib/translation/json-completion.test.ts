@@ -1,3 +1,4 @@
+import { APIConnectionTimeoutError } from "openai";
 import { describe, expect, it, vi } from "vitest";
 
 import { generateJsonCompletion } from "./json-completion";
@@ -53,6 +54,28 @@ describe("generateJsonCompletion", () => {
       model: "fast-model",
       messages: [{ role: "system", content: "terms" }],
     });
+  });
+
+  it("does not retry connection timeouts", async () => {
+    const timeout = new APIConnectionTimeoutError({ message: "request timed out" });
+    const client = provider([timeout]);
+
+    await expect(
+      generateJsonCompletion(client, 0.3, [{ role: "system", content: "terms" }]),
+    ).rejects.toBe(timeout);
+    expect(client.generateChatCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry authentication failures", async () => {
+    const authentication = Object.assign(new Error("response_format unsupported"), {
+      status: 401,
+    });
+    const client = provider([authentication]);
+
+    await expect(
+      generateJsonCompletion(client, 0.3, [{ role: "system", content: "terms" }]),
+    ).rejects.toBe(authentication);
+    expect(client.generateChatCompletion).toHaveBeenCalledTimes(1);
   });
 
   it("uses the main model when no fast model is configured", async () => {

@@ -6,6 +6,7 @@ import {
   parseRelationshipAnalysis,
 } from "./analysis-prompt";
 import { emptyRelationshipMap } from "./map";
+import { relationshipMapSchema } from "./schemas";
 
 const validResponse = JSON.stringify({
   characters: [
@@ -34,7 +35,7 @@ const validResponse = JSON.stringify({
       evidence: "儿子说",
     },
   ],
-  activePairs: [{ speaker: "儿子", listener: "父亲" }],
+  activePairs: [{ speaker: "儿子", listener: "父亲", evidence: "儿子说" }],
 });
 
 describe("relationship analysis prompt", () => {
@@ -64,7 +65,7 @@ describe("relationship analysis prompt", () => {
 
   it("parses plain and fenced JSON while requiring evidence", () => {
     expect(parseRelationshipAnalysis(validResponse)?.activePairs).toEqual([
-      { speaker: "儿子", listener: "父亲" },
+      { speaker: "儿子", listener: "父亲", evidence: "儿子说" },
     ]);
     expect(
       parseRelationshipAnalysis(`analysis:\n\`\`\`json\n${validResponse}\n\`\`\``)?.characters,
@@ -122,10 +123,112 @@ describe("relationship analysis prompt", () => {
             evidence: "儿子",
           },
         ],
-        activePairs: [{ speakerName: "儿子", listenerName: "父亲" }],
+        activePairs: [{ speakerName: "儿子", listenerName: "父亲", evidence: "儿子" }],
       }),
     );
     expect(result?.characters[0]?.aliases).toEqual(["小儿"]);
     expect(result?.relationships[0]?.selfPronoun).toBe("ผม");
+  });
+
+  it("bounds analysis context to relevant entries with referential relationships", () => {
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const makeCharacter = (id: string, sourceName: string) => ({
+      id,
+      sourceName,
+      targetName: null,
+      aliases: [],
+      gender: "unknown" as const,
+      role: null,
+      notes: "stored-note-sentinel",
+      enabled: true,
+      locked: false,
+      evidence: null,
+      lastSeenChapter: null,
+      updatedAt: timestamp,
+    });
+    const makeRelationship = (id: string, speakerId: string, listenerId: string) => ({
+      id,
+      speakerId,
+      listenerId,
+      relationship: "friend",
+      speakerStatus: "peer" as const,
+      familiarity: "close" as const,
+      selfPronoun: null,
+      addresseeTerm: null,
+      sentenceParticles: null,
+      register: null,
+      notes: null,
+      enabled: true,
+      locked: false,
+      evidence: null,
+      lastSeenChapter: null,
+      updatedAt: timestamp,
+    });
+    const currentNames = Array.from(
+      { length: 30 },
+      (_, index) => `current-${String(index).padStart(2, "0")}`,
+    );
+    const tailNames = Array.from(
+      { length: 6 },
+      (_, index) => `tail-${String(index).padStart(2, "0")}`,
+    );
+    const irrelevantNames = Array.from(
+      { length: 12 },
+      (_, index) => `irrelevant-${String(index).padStart(2, "0")}`,
+    );
+    const characters = [
+      ...currentNames.map((name, index) => makeCharacter(`current-${index}`, name)),
+      ...tailNames.map((name, index) => makeCharacter(`tail-${index}`, name)),
+      ...irrelevantNames.map((name, index) => makeCharacter(`irrelevant-${index}`, name)),
+    ];
+    const relationships = [
+      ...Array.from({ length: 24 }, (_, index) =>
+        makeRelationship(
+          `current-relation-${index}`,
+          `current-${index}`,
+          `current-${(index + 1) % 24}`,
+        ),
+      ),
+      makeRelationship("unselected-relation", "current-24", "current-25"),
+      makeRelationship("irrelevant-relation", "irrelevant-0", "irrelevant-1"),
+    ];
+    const map = relationshipMapSchema.parse({ version: 1, characters, relationships });
+    const prompt = buildRelationshipAnalysisPrompt({
+      pair: "zh->th",
+      existingMap: map,
+      approvedMappings: [
+        ...currentNames.map((source) => ({ source, target: `${source}-th` })),
+        ...tailNames.map((source) => ({ source, target: `${source}-th` })),
+        { source: "irrelevant-00", target: "irrelevant-th" },
+      ],
+      previousSourceTail: tailNames.join(" "),
+      currentChunk: currentNames.join(" "),
+    });
+    const mapPrefix = "Existing enabled relationship map:\n";
+    const mappingsPrefix = "\nApproved character glossary mappings:";
+    const mapStart = prompt.indexOf(mapPrefix) + mapPrefix.length;
+    const mapEnd = prompt.indexOf(mappingsPrefix, mapStart);
+    const projected = JSON.parse(prompt.slice(mapStart, mapEnd)) as {
+      characters: Array<{ id: string }>;
+      relationships: Array<{ speakerId: string; listenerId: string }>;
+    };
+    const mappingsStart = mapEnd + mappingsPrefix.length;
+    const summaryPrefix = "\nRolling story summary";
+    const mappings = JSON.parse(
+      prompt.slice(mappingsStart, prompt.indexOf(summaryPrefix, mappingsStart)),
+    );
+
+    expect(projected.characters).toHaveLength(24);
+    expect(projected.relationships).toHaveLength(24);
+    expect(mappings).toHaveLength(24);
+    expect(projected.characters.every((item) => item.id.startsWith("current-"))).toBe(true);
+    const characterIds = new Set(projected.characters.map((item) => item.id));
+    expect(
+      projected.relationships.every(
+        (item) => characterIds.has(item.speakerId) && characterIds.has(item.listenerId),
+      ),
+    ).toBe(true);
+    expect(prompt).not.toContain("stored-note-sentinel");
+    expect(prompt).not.toContain("irrelevant-00");
   });
 });

@@ -69,7 +69,7 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
           evidence: "儿子",
         },
       ],
-      activePairs: [{ speaker: "儿子", listener: "父亲" }],
+      activePairs: [{ speaker: "儿子", listener: "父亲", evidence: "儿子" }],
     });
   }
   if (jsonResponse || system.includes("Return ONLY a JSON object")) {

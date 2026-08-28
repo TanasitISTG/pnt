@@ -12,6 +12,8 @@ let completeChunk: typeof import("./job-store").completeChunk;
 let completeJob: typeof import("./job-store").completeJob;
 let applyRelationshipAnalysis: typeof import("./job-store").applyRelationshipAnalysis;
 let enqueueTranslationJob: typeof import("./translation.functions").enqueueTranslationJob;
+let setRelationshipEntryEnabledForUser: typeof import("@/lib/relationships/service").setRelationshipEntryEnabledForUser;
+let upsertCharacterProfileForUser: typeof import("@/lib/relationships/service").upsertCharacterProfileForUser;
 const skipEagerDispatch = async () => {};
 
 async function seedChapter(
@@ -81,7 +83,7 @@ function relationshipAnalysisFixture() {
         evidence: "儿子",
       },
     ],
-    activePairs: [{ speaker: "儿子", listener: "父亲" }],
+    activePairs: [{ speaker: "儿子", listener: "父亲", evidence: "儿子" }],
   });
 }
 
@@ -121,6 +123,8 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
     ({ completeChunk, completeJob, applyRelationshipAnalysis } = await import("./job-store"));
     ({ enqueueTranslationJob } = await import("./translation.functions"));
+    ({ setRelationshipEntryEnabledForUser, upsertCharacterProfileForUser } =
+      await import("@/lib/relationships/service"));
   });
 
   afterAll(async () => {
@@ -408,15 +412,164 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     try {
       await seedRunningAnalysisJob(fixture, jobId);
       await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
+      const [beforeReplay] = await sql<{ relationshipMap: unknown }[]>`
+        SELECT "relationship_map_json"::jsonb AS "relationshipMap"
+        FROM "novels" WHERE "id" = ${fixture.novelId}
+      `;
       const replay = await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
+      const [afterReplay] = await sql<{ relationshipMap: unknown }[]>`
+        SELECT "relationship_map_json"::jsonb AS "relationshipMap"
+        FROM "novels" WHERE "id" = ${fixture.novelId}
+      `;
       expect(replay.applied).toBe(true);
-      expect(replay.map?.characters).toHaveLength(2);
-      expect(replay.map?.relationships).toHaveLength(1);
+      expect(afterReplay.relationshipMap).toEqual(beforeReplay.relationshipMap);
     } finally {
       await deleteFixture(fixture.userId);
     }
   });
 
+  it("disabling and restoring an automatic entry preserves its management mode", async () => {
+    const fixture = await seedChapter("儿子对父亲说：我会回来的。", "th");
+    const automaticMap = {
+      version: 1 as const,
+      characters: [
+        {
+          id: "father",
+          sourceName: "父亲",
+          targetName: "พ่อ",
+          aliases: [],
+          gender: "male" as const,
+          role: "father",
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "son",
+          sourceName: "儿子",
+          targetName: "ลูกชาย",
+          aliases: [],
+          gender: "male" as const,
+          role: "son",
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      relationships: [
+        {
+          id: "son-to-father",
+          speakerId: "son",
+          listenerId: "father",
+          relationship: "son",
+          speakerStatus: "lower" as const,
+          familiarity: "close" as const,
+          selfPronoun: "ผม",
+          addresseeTerm: "พ่อ",
+          sentenceParticles: null,
+          register: "respectful",
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    try {
+      await sql`
+        UPDATE "novels"
+        SET "relationship_map_json" = ${JSON.stringify(automaticMap)}
+        WHERE "id" = ${fixture.novelId}
+      `;
+      const disabled = await setRelationshipEntryEnabledForUser(fixture.userId, {
+        novelId: fixture.novelId,
+        entryType: "relationship",
+        entryId: "son-to-father",
+        enabled: false,
+      });
+      expect(disabled.relationships[0]).toMatchObject({ enabled: false, locked: false });
+
+      const restored = await setRelationshipEntryEnabledForUser(fixture.userId, {
+        novelId: fixture.novelId,
+        entryType: "relationship",
+        entryId: "son-to-father",
+        enabled: true,
+      });
+      expect(restored.relationships[0]).toMatchObject({ enabled: true, locked: false });
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("returns a safe error for conflicting character aliases", async () => {
+    const fixture = await seedChapter("儿子对父亲说：我会回来的。", "th");
+    const map = {
+      version: 1 as const,
+      characters: [
+        {
+          id: "father",
+          sourceName: "父亲",
+          targetName: null,
+          aliases: [],
+          gender: "unknown" as const,
+          role: null,
+          notes: null,
+          enabled: true,
+          locked: true,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "son",
+          sourceName: "儿子",
+          targetName: null,
+          aliases: [],
+          gender: "unknown" as const,
+          role: null,
+          notes: null,
+          enabled: true,
+          locked: true,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      relationships: [],
+    };
+    try {
+      await sql`
+        UPDATE "novels"
+        SET "relationship_map_json" = ${JSON.stringify(map)}
+        WHERE "id" = ${fixture.novelId}
+      `;
+      await expect(
+        upsertCharacterProfileForUser(fixture.userId, {
+          novelId: fixture.novelId,
+          id: "son",
+          sourceName: "儿子",
+          targetName: null,
+          aliases: ["父亲"],
+          gender: "unknown",
+          role: null,
+          notes: null,
+          evidence: null,
+        }),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining("Relationship map update is invalid:"),
+      });
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
   it("rejects stale generation, source revision, or active pointer map writes", async () => {
     const fixture = await seedChapter("儿子对父亲说：我会回来的。", "th");
     const jobId = `job-${randomUUID()}`;

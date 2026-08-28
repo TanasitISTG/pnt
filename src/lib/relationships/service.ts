@@ -7,6 +7,7 @@ import { novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import {
   deleteRelationshipEntrySchema,
+  relationshipMapSchema,
   setRelationshipEntryAutoManagedSchema,
   setRelationshipEntryEnabledSchema,
   upsertCharacterProfileSchema,
@@ -16,9 +17,9 @@ import {
   type SetRelationshipEntryEnabledInput,
   type UpsertCharacterProfileInput,
   type UpsertCharacterRelationshipInput,
+  type RelationshipMapV1,
 } from "./schemas";
 import { parseRelationshipMap, serializeRelationshipMap } from "./map";
-import type { RelationshipMapV1 } from "./schemas";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -144,7 +145,6 @@ export async function setRelationshipEntryEnabledForUser(
     const next = updateEntry(map, data.entryType, data.entryId, (entry) => ({
       ...entry,
       enabled: data.enabled,
-      locked: data.enabled ? entry.locked : true,
       updatedAt: now,
     }));
     return saveValidatedMap(tx, novel.id, next);
@@ -219,12 +219,17 @@ async function saveValidatedMap(
   novelId: string,
   map: RelationshipMapV1,
 ): Promise<RelationshipMapV1> {
-  const serialized = serializeRelationshipMap(map);
+  const validated = relationshipMapSchema.safeParse(map);
+  if (!validated.success) {
+    const issue = validated.error.issues[0]?.message ?? "invalid relationship map";
+    throw new SafeServerError(`Relationship map update is invalid: ${issue}`);
+  }
+  const serialized = serializeRelationshipMap(validated.data);
   await tx
     .update(novels)
     .set({ relationshipMapJson: serialized, updatedAt: new Date() })
     .where(eq(novels.id, novelId));
-  return map;
+  return validated.data;
 }
 
 function parseStoredMap(json: string): RelationshipMapV1 {

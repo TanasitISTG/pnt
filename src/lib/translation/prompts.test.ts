@@ -5,9 +5,12 @@ import {
   buildSummaryPrompt,
   buildTitlePrompt,
   findResidualSourceChars,
+  formatRelationshipContext,
   RESIDUAL_CJK_CLASS,
   RESIDUAL_CJK_SQL_RE,
 } from "./prompts";
+import { buildRelationshipPromptContext } from "@/lib/relationships/map";
+import { relationshipMapSchema } from "@/lib/relationships/schemas";
 
 describe("prompts module", () => {
   // -- System prompt structure -----------------------------------------------
@@ -290,5 +293,73 @@ describe("prompts module", () => {
     for (const s of samples) {
       expect(sqlRe.test(s)).toBe(findResidualSourceChars("zh->th", s).length > 0);
     }
+  });
+  it("keeps relationship context pairs referentially closed at the shared cap", () => {
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const characters = Array.from({ length: 26 }, (_, index) => ({
+      id: `character-${index}`,
+      sourceName: `character-${String(index).padStart(2, "0")}`,
+      targetName: null,
+      aliases: [],
+      gender: "unknown" as const,
+      role: null,
+      notes: null,
+      enabled: true,
+      locked: false,
+      evidence: null,
+      lastSeenChapter: null,
+      updatedAt: timestamp,
+    }));
+    const relationships = Array.from({ length: 13 }, (_, index) => ({
+      id: `relationship-${index}`,
+      speakerId: `character-${index * 2}`,
+      listenerId: `character-${index * 2 + 1}`,
+      relationship: "friend",
+      speakerStatus: "peer" as const,
+      familiarity: "close" as const,
+      selfPronoun: null,
+      addresseeTerm: null,
+      sentenceParticles: null,
+      register: null,
+      notes: null,
+      enabled: true,
+      locked: false,
+      evidence: null,
+      lastSeenChapter: null,
+      updatedAt: timestamp,
+    }));
+    const map = relationshipMapSchema.parse({ version: 1, characters, relationships });
+    const context = buildRelationshipPromptContext(
+      map,
+      relationships.map((relationship) => ({
+        speaker: characters.find((character) => character.id === relationship.speakerId)!
+          .sourceName,
+        listener: characters.find((character) => character.id === relationship.listenerId)!
+          .sourceName,
+      })),
+    );
+    const prompt = formatRelationshipContext(context);
+    const projection = JSON.parse(prompt.slice(prompt.lastIndexOf("\n") + 1)) as {
+      characters: Array<{ id: string }>;
+      relationships: Array<{ id: string; speakerId: string; listenerId: string }>;
+      activePairs: Array<{ speakerId: string; listenerId: string; relationshipId?: string }>;
+    };
+    const characterIds = new Set(projection.characters.map((character) => character.id));
+
+    expect(projection.characters).toHaveLength(24);
+    expect(projection.relationships).toHaveLength(12);
+    expect(projection.activePairs).toHaveLength(12);
+    expect(projection.relationships.some((item) => item.id === "relationship-12")).toBe(false);
+    expect(
+      projection.relationships.every(
+        (item) => characterIds.has(item.speakerId) && characterIds.has(item.listenerId),
+      ),
+    ).toBe(true);
+    expect(
+      projection.activePairs.every(
+        (item) => characterIds.has(item.speakerId) && characterIds.has(item.listenerId),
+      ),
+    ).toBe(true);
+    expect(prompt).not.toContain('"evidence"');
   });
 });

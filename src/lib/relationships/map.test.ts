@@ -92,7 +92,7 @@ function analysis() {
         evidence: "儿子",
       },
     ],
-    activePairs: [{ speaker: "儿子", listener: "父亲" }],
+    activePairs: [{ speaker: "儿子", listener: "父亲", evidence: "儿子" }],
   });
 }
 
@@ -146,6 +146,45 @@ describe("relationship map", () => {
     expect(result.map.relationships[0]?.listenerId).toBe(
       result.map.characters.find((item) => item.sourceName === "父亲")?.id,
     );
+  });
+
+  it("keeps automatic replay byte-identical", () => {
+    const initial = mergeAutomaticRelationshipAnalysis(
+      emptyRelationshipMap(),
+      analysis(),
+      [],
+      3,
+      updatedAt,
+    ).map;
+    const replay = mergeAutomaticRelationshipAnalysis(
+      initial,
+      analysis(),
+      [],
+      3,
+      "2026-01-02T00:00:00.000Z",
+    ).map;
+
+    expect(serializeRelationshipMap(replay)).toBe(serializeRelationshipMap(initial));
+  });
+
+  it("keeps the highest chapter after an earlier retranslation", () => {
+    const initial = mergeAutomaticRelationshipAnalysis(
+      emptyRelationshipMap(),
+      analysis(),
+      [],
+      3,
+      updatedAt,
+    ).map;
+    const earlier = mergeAutomaticRelationshipAnalysis(
+      initial,
+      analysis(),
+      [],
+      1,
+      "2026-01-02T00:00:00.000Z",
+    ).map;
+
+    expect(earlier.characters.every((item) => item.lastSeenChapter === 3)).toBe(true);
+    expect(earlier.relationships.every((item) => item.lastSeenChapter === 3)).toBe(true);
   });
 
   it("keeps locked and disabled entries against conflicting analysis", () => {

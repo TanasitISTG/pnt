@@ -2,6 +2,7 @@ import {
   MAX_CHARACTER_ALIASES,
   MAX_RELATIONSHIPS,
   MAX_RELATIONSHIP_CHARACTERS,
+  MAX_RELATIONSHIP_PROMPT_ITEMS,
   normalizeIdentity,
   normalizeOptionalText,
   relationshipMapSchema,
@@ -56,7 +57,6 @@ export interface RelationshipPromptContext {
 const UNKNOWN_GENDER: RelationshipGender = "unknown";
 const UNKNOWN_STATUS: SpeakerStatus = "unknown";
 const UNKNOWN_FAMILIARITY: Familiarity = "unknown";
-const MAX_FALLBACK_PROFILES = 24;
 
 export function emptyRelationshipMap(): RelationshipMapV1 {
   return { version: 1, characters: [], relationships: [] };
@@ -149,15 +149,45 @@ export function mergeAutomaticRelationshipAnalysis(
     if (existing.locked || !existing.enabled) continue;
 
     const glossaryTarget = glossaryBySource.get(normalizeIdentity(existing.sourceName));
-    existing.targetName = glossaryTarget ?? knownText(existing.targetName, suggestion.targetName);
-    existing.gender = knownEnum(existing.gender, suggestion.gender, UNKNOWN_GENDER);
-    existing.role = knownText(existing.role, suggestion.role);
-    existing.notes = knownText(existing.notes, suggestion.notes);
-    existing.evidence = knownText(existing.evidence, suggestion.evidence);
-    existing.lastSeenChapter = chapter ?? existing.lastSeenChapter;
-    existing.enabled = true;
-    existing.updatedAt = timestamp;
-    addAutomaticAliases(existing, suggestion.aliases, characterByIdentity, warnings);
+    const targetName = glossaryTarget ?? knownText(existing.targetName, suggestion.targetName);
+    const gender = knownEnum(existing.gender, suggestion.gender, UNKNOWN_GENDER);
+    const role = knownText(existing.role, suggestion.role);
+    const notes = knownText(existing.notes, suggestion.notes);
+    const evidence = knownText(existing.evidence, suggestion.evidence);
+    const lastSeenChapter = maxChapterNumber(existing.lastSeenChapter, chapter);
+    let changed = false;
+    if (existing.targetName !== targetName) {
+      existing.targetName = targetName;
+      changed = true;
+    }
+    if (existing.gender !== gender) {
+      existing.gender = gender;
+      changed = true;
+    }
+    if (existing.role !== role) {
+      existing.role = role;
+      changed = true;
+    }
+    if (existing.notes !== notes) {
+      existing.notes = notes;
+      changed = true;
+    }
+    if (existing.evidence !== evidence) {
+      existing.evidence = evidence;
+      changed = true;
+    }
+    if (existing.lastSeenChapter !== lastSeenChapter) {
+      existing.lastSeenChapter = lastSeenChapter;
+      changed = true;
+    }
+    const aliasesChanged = addAutomaticAliases(
+      existing,
+      suggestion.aliases,
+      characterByIdentity,
+      warnings,
+    );
+    changed ||= aliasesChanged;
+    if (changed) existing.updatedAt = timestamp;
     indexCharacter(existing, characterByIdentity);
   }
 
@@ -242,6 +272,9 @@ export function buildRelationshipPromptContext(
   activePairs: readonly (RelationshipAnalysisActivePair | RelationshipActivePairInput)[],
 ): RelationshipPromptContext {
   const charactersByIdentity = buildCharacterIdentityIndex(map.characters);
+  const relationshipsById = new Map(
+    map.relationships.map((relationship) => [relationship.id, relationship]),
+  );
   const relationshipsByPair = new Map(
     map.relationships.map((relationship) => [
       pairKey(relationship.speakerId, relationship.listenerId),
@@ -266,7 +299,7 @@ export function buildRelationshipPromptContext(
     }
     const activeRelationshipId = "relationshipId" in active ? active.relationshipId : undefined;
     const stored = activeRelationshipId
-      ? map.relationships.find((relationship) => relationship.id === activeRelationshipId)
+      ? relationshipsById.get(activeRelationshipId)
       : relationshipsByPair.get(pairKey(speaker.id, listener.id));
     if (
       stored &&
@@ -292,7 +325,7 @@ export function buildRelationshipPromptContext(
     return {
       characters: map.characters
         .filter((character) => character.enabled)
-        .slice(0, MAX_FALLBACK_PROFILES),
+        .slice(0, MAX_RELATIONSHIP_PROMPT_ITEMS),
       relationships: [],
       activePairs: [],
     };
@@ -310,19 +343,60 @@ function mergeAutomaticRelationship(
   suggestion: RelationshipAnalysisRelationship,
   chapter: number | null,
   updatedAt: string,
-): void {
-  target.relationship = knownRequiredText(target.relationship, suggestion.relationship, "unknown");
-  target.speakerStatus = knownEnum(target.speakerStatus, suggestion.speakerStatus, UNKNOWN_STATUS);
-  target.familiarity = knownEnum(target.familiarity, suggestion.familiarity, UNKNOWN_FAMILIARITY);
-  target.selfPronoun = knownText(target.selfPronoun, suggestion.selfPronoun);
-  target.addresseeTerm = knownText(target.addresseeTerm, suggestion.addresseeTerm);
-  target.sentenceParticles = knownText(target.sentenceParticles, suggestion.sentenceParticles);
-  target.register = knownText(target.register, suggestion.register);
-  target.notes = knownText(target.notes, suggestion.notes);
-  target.evidence = knownText(target.evidence, suggestion.evidence);
-  target.lastSeenChapter = chapter ?? target.lastSeenChapter;
-  target.enabled = true;
-  target.updatedAt = updatedAt;
+): boolean {
+  const relationship = knownRequiredText(target.relationship, suggestion.relationship, "unknown");
+  const speakerStatus = knownEnum(target.speakerStatus, suggestion.speakerStatus, UNKNOWN_STATUS);
+  const familiarity = knownEnum(target.familiarity, suggestion.familiarity, UNKNOWN_FAMILIARITY);
+  const selfPronoun = knownText(target.selfPronoun, suggestion.selfPronoun);
+  const addresseeTerm = knownText(target.addresseeTerm, suggestion.addresseeTerm);
+  const sentenceParticles = knownText(target.sentenceParticles, suggestion.sentenceParticles);
+  const register = knownText(target.register, suggestion.register);
+  const notes = knownText(target.notes, suggestion.notes);
+  const evidence = knownText(target.evidence, suggestion.evidence);
+  const lastSeenChapter = maxChapterNumber(target.lastSeenChapter, chapter);
+  let changed = false;
+  if (target.relationship !== relationship) {
+    target.relationship = relationship;
+    changed = true;
+  }
+  if (target.speakerStatus !== speakerStatus) {
+    target.speakerStatus = speakerStatus;
+    changed = true;
+  }
+  if (target.familiarity !== familiarity) {
+    target.familiarity = familiarity;
+    changed = true;
+  }
+  if (target.selfPronoun !== selfPronoun) {
+    target.selfPronoun = selfPronoun;
+    changed = true;
+  }
+  if (target.addresseeTerm !== addresseeTerm) {
+    target.addresseeTerm = addresseeTerm;
+    changed = true;
+  }
+  if (target.sentenceParticles !== sentenceParticles) {
+    target.sentenceParticles = sentenceParticles;
+    changed = true;
+  }
+  if (target.register !== register) {
+    target.register = register;
+    changed = true;
+  }
+  if (target.notes !== notes) {
+    target.notes = notes;
+    changed = true;
+  }
+  if (target.evidence !== evidence) {
+    target.evidence = evidence;
+    changed = true;
+  }
+  if (target.lastSeenChapter !== lastSeenChapter) {
+    target.lastSeenChapter = lastSeenChapter;
+    changed = true;
+  }
+  if (changed) target.updatedAt = updatedAt;
+  return changed;
 }
 
 function addAutomaticAliases(
@@ -330,7 +404,8 @@ function addAutomaticAliases(
   aliases: readonly string[],
   index: Map<string, CharacterProfile>,
   warnings: string[],
-): void {
+): boolean {
+  let changed = false;
   for (const alias of aliases) {
     const trimmed = alias.trim();
     const normalized = normalizeIdentity(trimmed);
@@ -346,7 +421,9 @@ function addAutomaticAliases(
     }
     character.aliases.push(trimmed);
     index.set(normalized, character);
+    changed = true;
   }
+  return changed;
 }
 
 function overlayRelationship(
@@ -449,6 +526,11 @@ function normalizeChapterNumber(value: number | string | null): number | null {
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
+function maxChapterNumber(current: number | null, incoming: number | null): number | null {
+  if (current === null) return incoming;
+  if (incoming === null) return current;
+  return Math.max(current, incoming);
+}
 function validTimestamp(value: string): string {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
     Number.isFinite(Date.parse(value))

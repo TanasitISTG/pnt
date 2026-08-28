@@ -1,6 +1,6 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, Edit, Network, Plus, RotateCcw, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -136,6 +136,11 @@ const EMPTY_RELATIONSHIP_FORM: RelationshipFormState = {
   evidence: "",
 };
 
+const MOBILE_TABLE_CELL_CLASS =
+  "max-md:flex max-md:flex-col max-md:items-start max-md:gap-1 max-md:border-b max-md:border-border max-md:px-0 max-md:py-2 max-md:whitespace-normal max-md:break-words max-md:before:block max-md:before:text-xs max-md:before:font-semibold max-md:before:uppercase max-md:before:tracking-wide max-md:before:text-muted-foreground max-md:before:content-[attr(data-label)]";
+const MOBILE_TABLE_ACTIONS_CELL_CLASS =
+  "max-md:block max-md:border-0 max-md:px-0 max-md:pt-3 max-md:pb-0 max-md:whitespace-normal max-md:before:block max-md:before:text-xs max-md:before:font-semibold max-md:before:uppercase max-md:before:tracking-wide max-md:before:text-muted-foreground max-md:before:content-[attr(data-label)]";
+
 function RelationshipsPage() {
   const { novelId } = Route.useParams();
   const queryClient = useQueryClient();
@@ -238,9 +243,9 @@ function RelationshipsPage() {
     );
   }
 
-  const characterLabel = (id: string) =>
-    map.characters.find((character) => character.id === id)?.sourceName ?? "Unknown character";
-
+  const charactersById = new Map(map.characters.map((character) => [character.id, character]));
+  const characterLabel = (id: string) => charactersById.get(id)?.sourceName ?? "Unknown character";
+  const characterIsEnabled = (id: string) => charactersById.get(id)?.enabled ?? false;
   const submitCharacter = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!characterForm) return;
@@ -387,9 +392,9 @@ function RelationshipsPage() {
             this map, or you can add a profile manually above.
           </EmptyState>
         ) : (
-          <div className="max-w-full overflow-x-auto rounded-xl border border-border">
-            <Table className="min-w-[980px]">
-              <TableHeader>
+          <div className="rounded-xl border border-border">
+            <Table className="min-w-0 md:min-w-[980px]">
+              <TableHeader className="max-md:sr-only">
                 <TableRow>
                   <TableHead>Source name</TableHead>
                   <TableHead>Thai name</TableHead>
@@ -400,23 +405,48 @@ function RelationshipsPage() {
                   <TableHead className="w-56 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody className="max-md:block">
                 {map.characters.map((character) => (
-                  <TableRow key={character.id}>
-                    <TableCell className="align-top font-semibold text-foreground">
+                  <TableRow
+                    key={character.id}
+                    className="max-md:mb-3 max-md:block max-md:rounded-lg max-md:border max-md:border-border max-md:p-3 max-md:last:mb-0"
+                  >
+                    <TableCell
+                      data-label="Source name"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top font-semibold text-foreground`}
+                    >
                       {character.sourceName}
                     </TableCell>
-                    <TableCell className="align-top">{character.targetName || "—"}</TableCell>
-                    <TableCell className="align-top text-sm">
+                    <TableCell
+                      data-label="Thai name"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top`}
+                    >
+                      {character.targetName || "—"}
+                    </TableCell>
+                    <TableCell
+                      data-label="Aliases / gender"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top text-sm`}
+                    >
                       <p>{character.aliases.length > 0 ? character.aliases.join(", ") : "—"}</p>
                       <p className="mt-1 capitalize text-muted-foreground">{character.gender}</p>
                     </TableCell>
-                    <TableCell className="align-top text-sm">{character.role || "—"}</TableCell>
-                    <TableCell className="max-w-72 align-top text-sm text-muted-foreground">
+                    <TableCell
+                      data-label="Role"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top text-sm`}
+                    >
+                      {character.role || "—"}
+                    </TableCell>
+                    <TableCell
+                      data-label="Notes / evidence"
+                      className={`${MOBILE_TABLE_CELL_CLASS} max-w-72 align-top text-sm text-muted-foreground max-md:max-w-none`}
+                    >
                       <p>{character.notes || "—"}</p>
                       {character.evidence && <p className="mt-1 italic">“{character.evidence}”</p>}
                     </TableCell>
-                    <TableCell className="align-top">
+                    <TableCell
+                      data-label="State"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top`}
+                    >
                       <div className="flex flex-col items-start gap-1">
                         <ManagementBadge locked={character.locked} />
                         <Badge variant={character.enabled ? "secondary" : "outline"}>
@@ -424,7 +454,10 @@ function RelationshipsPage() {
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell className="align-top text-right">
+                    <TableCell
+                      data-label="Actions"
+                      className={`${MOBILE_TABLE_ACTIONS_CELL_CLASS} align-top text-right`}
+                    >
                       <EntryActions
                         label={`character ${character.sourceName}`}
                         enabled={character.enabled}
@@ -491,28 +524,35 @@ function RelationshipsPage() {
               facts.
             </p>
           </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              setRelationshipErrors({});
-              setRelationshipForm({ ...EMPTY_RELATIONSHIP_FORM });
-            }}
-            aria-label="Add directed relationship"
-          >
-            <Plus className="size-4" />
-            Add relationship
-          </Button>
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            <Button
+              size="sm"
+              onClick={() => {
+                setRelationshipErrors({});
+                setRelationshipForm({ ...EMPTY_RELATIONSHIP_FORM });
+              }}
+              aria-label="Add directed relationship"
+              disabled={map.characters.length < 2}
+            >
+              <Plus className="size-4" />
+              Add relationship
+            </Button>
+            {map.characters.length < 2 && (
+              <p className="text-caption text-muted-foreground">
+                Add at least 2 character profiles first.
+              </p>
+            )}
+          </div>
         </div>
-
         {map.relationships.length === 0 ? (
           <EmptyState icon={<Network className="size-7" />}>
             No directed relationships yet. They are generated from evidenced dialogue during the
             next ZH→TH translation or retranslation, or can be added manually above.
           </EmptyState>
         ) : (
-          <div className="max-w-full overflow-x-auto rounded-xl border border-border">
-            <Table className="min-w-[1280px]">
-              <TableHeader>
+          <div className="rounded-xl border border-border">
+            <Table className="min-w-0 md:min-w-[1280px]">
+              <TableHeader className="max-md:sr-only">
                 <TableRow>
                   <TableHead>Speaker → listener</TableHead>
                   <TableHead>Relationship</TableHead>
@@ -524,44 +564,78 @@ function RelationshipsPage() {
                   <TableHead className="w-56 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody className="max-md:block">
                 {map.relationships.map((relationship) => (
-                  <TableRow key={relationship.id}>
-                    <TableCell className="align-top font-semibold text-foreground">
+                  <TableRow
+                    key={relationship.id}
+                    className="max-md:mb-3 max-md:block max-md:rounded-lg max-md:border max-md:border-border max-md:p-3 max-md:last:mb-0"
+                  >
+                    <TableCell
+                      data-label="Speaker → listener"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top font-semibold text-foreground`}
+                    >
                       <span>{characterLabel(relationship.speakerId)}</span>
                       <span className="mx-1 text-muted-foreground">→</span>
                       <span>{characterLabel(relationship.listenerId)}</span>
                     </TableCell>
-                    <TableCell className="align-top">{relationship.relationship}</TableCell>
-                    <TableCell className="align-top text-sm">
+                    <TableCell
+                      data-label="Relationship"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top`}
+                    >
+                      {relationship.relationship}
+                    </TableCell>
+                    <TableCell
+                      data-label="Status / familiarity"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top text-sm`}
+                    >
                       <p className="capitalize">{relationship.speakerStatus}</p>
                       <p className="mt-1 capitalize text-muted-foreground">
                         {relationship.familiarity}
                       </p>
                     </TableCell>
-                    <TableCell className="align-top text-sm">
+                    <TableCell
+                      data-label="Speech choices"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top text-sm`}
+                    >
                       <p>Self: {relationship.selfPronoun || "—"}</p>
                       <p>Addressee: {relationship.addresseeTerm || "—"}</p>
                       <p>Particles: {relationship.sentenceParticles || "—"}</p>
                     </TableCell>
-                    <TableCell className="align-top text-sm">
+                    <TableCell
+                      data-label="Register"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top text-sm`}
+                    >
                       {relationship.register || "—"}
                     </TableCell>
-                    <TableCell className="max-w-72 align-top text-sm text-muted-foreground">
+                    <TableCell
+                      data-label="Notes / evidence"
+                      className={`${MOBILE_TABLE_CELL_CLASS} max-w-72 align-top text-sm text-muted-foreground max-md:max-w-none`}
+                    >
                       <p>{relationship.notes || "—"}</p>
                       {relationship.evidence && (
                         <p className="mt-1 italic">“{relationship.evidence}”</p>
                       )}
                     </TableCell>
-                    <TableCell className="align-top">
+                    <TableCell
+                      data-label="State"
+                      className={`${MOBILE_TABLE_CELL_CLASS} align-top`}
+                    >
                       <div className="flex flex-col items-start gap-1">
                         <ManagementBadge locked={relationship.locked} />
                         <Badge variant={relationship.enabled ? "secondary" : "outline"}>
-                          {relationship.enabled ? "Enabled" : "Disabled"}
+                          {relationship.enabled
+                            ? characterIsEnabled(relationship.speakerId) &&
+                              characterIsEnabled(relationship.listenerId)
+                              ? "Enabled"
+                              : "Inactive — character disabled"
+                            : "Disabled"}
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell className="align-top text-right">
+                    <TableCell
+                      data-label="Actions"
+                      className={`${MOBILE_TABLE_ACTIONS_CELL_CLASS} align-top text-right`}
+                    >
                       <EntryActions
                         label={`relationship ${characterLabel(relationship.speakerId)} to ${characterLabel(relationship.listenerId)}`}
                         enabled={relationship.enabled}
@@ -672,11 +746,20 @@ function CharacterForm({
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
   return (
     <div className="rounded-xl border border-border bg-card/40 p-4 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-foreground">
+          <h3
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-semibold text-foreground outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
             {form.id ? "Edit character profile" : "Add character profile"}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -689,14 +772,15 @@ function CharacterForm({
       </div>
       <form className="grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
         <FormField id="character-source" label="Source name" error={errors.sourceName}>
-          <Input
-            id="character-source"
-            value={form.sourceName}
-            maxLength={120}
-            onChange={(event) => onChange({ ...form, sourceName: event.target.value })}
-            aria-invalid={Boolean(errors.sourceName)}
-            autoFocus
-          />
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.sourceName}
+              maxLength={120}
+              onChange={(event) => onChange({ ...form, sourceName: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField
           id="character-target"
@@ -704,55 +788,70 @@ function CharacterForm({
           hint="An approved character glossary mapping wins at translation time."
           error={errors.targetName}
         >
-          <Input
-            id="character-target"
-            value={form.targetName}
-            maxLength={120}
-            onChange={(event) => onChange({ ...form, targetName: event.target.value })}
-            aria-invalid={Boolean(errors.targetName)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.targetName}
+              maxLength={120}
+              onChange={(event) => onChange({ ...form, targetName: event.target.value })}
+            />
+          )}
         </FormField>
-        <FormField id="character-aliases" label="Aliases" hint="Comma-separated; up to eight.">
-          <Input
-            id="character-aliases"
-            value={form.aliases}
-            onChange={(event) => onChange({ ...form, aliases: event.target.value })}
-            aria-invalid={Boolean(errors.aliases)}
-          />
+        <FormField
+          id="character-aliases"
+          label="Aliases"
+          hint="Comma-separated; up to eight."
+          error={errors.aliases}
+        >
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.aliases}
+              onChange={(event) => onChange({ ...form, aliases: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField id="character-gender" label="Gender" error={errors.gender}>
-          <Select
-            value={form.gender}
-            onValueChange={(value) => onChange({ ...form, gender: value as RelationshipGender })}
-          >
-            <SelectTrigger id="character-gender">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="male">Male</SelectItem>
-              <SelectItem value="female">Female</SelectItem>
-              <SelectItem value="nonbinary">Nonbinary</SelectItem>
-              <SelectItem value="unknown">Unknown</SelectItem>
-            </SelectContent>
-          </Select>
+          {({ id, ...fieldProps }) => (
+            <Select
+              value={form.gender}
+              onValueChange={(value) => onChange({ ...form, gender: value as RelationshipGender })}
+            >
+              <SelectTrigger {...fieldProps} id={id}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="nonbinary">Nonbinary</SelectItem>
+                <SelectItem value="unknown">Unknown</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </FormField>
         <FormField id="character-role" label="Role" error={errors.role}>
-          <Input
-            id="character-role"
-            value={form.role}
-            maxLength={160}
-            onChange={(event) => onChange({ ...form, role: event.target.value })}
-            aria-invalid={Boolean(errors.role)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.role}
+              maxLength={160}
+              onChange={(event) => onChange({ ...form, role: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField id="character-notes" label="Notes" error={errors.notes}>
-          <Textarea
-            id="character-notes"
-            value={form.notes}
-            maxLength={500}
-            onChange={(event) => onChange({ ...form, notes: event.target.value })}
-            aria-invalid={Boolean(errors.notes)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Textarea
+              {...fieldProps}
+              id={id}
+              value={form.notes}
+              maxLength={500}
+              onChange={(event) => onChange({ ...form, notes: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField
           id="character-evidence"
@@ -760,13 +859,15 @@ function CharacterForm({
           hint="Optional source excerpt for the fact."
           error={errors.evidence}
         >
-          <Textarea
-            id="character-evidence"
-            value={form.evidence}
-            maxLength={300}
-            onChange={(event) => onChange({ ...form, evidence: event.target.value })}
-            aria-invalid={Boolean(errors.evidence)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Textarea
+              {...fieldProps}
+              id={id}
+              value={form.evidence}
+              maxLength={300}
+              onChange={(event) => onChange({ ...form, evidence: event.target.value })}
+            />
+          )}
         </FormField>
         <div className="flex items-end justify-end gap-2 sm:col-span-2">
           <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
@@ -799,11 +900,20 @@ function RelationshipForm({
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
   return (
     <div className="rounded-xl border border-border bg-card/40 p-4 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-foreground">
+          <h3
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-semibold text-foreground outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
             {form.id ? "Edit directed relationship" : "Add directed relationship"}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -821,124 +931,150 @@ function RelationshipForm({
       </div>
       <form className="grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
         <FormField id="relationship-speaker" label="Speaker" error={errors.speakerId}>
-          <CharacterSelect
-            id="relationship-speaker"
-            value={form.speakerId}
-            characters={characters}
-            onValueChange={(value) => onChange({ ...form, speakerId: value })}
-          />
+          {({ id, ...fieldProps }) => (
+            <CharacterSelect
+              id={id}
+              {...fieldProps}
+              value={form.speakerId}
+              characters={characters}
+              onValueChange={(value) => onChange({ ...form, speakerId: value })}
+            />
+          )}
         </FormField>
         <FormField id="relationship-listener" label="Listener" error={errors.listenerId}>
-          <CharacterSelect
-            id="relationship-listener"
-            value={form.listenerId}
-            characters={characters}
-            onValueChange={(value) => onChange({ ...form, listenerId: value })}
-          />
+          {({ id, ...fieldProps }) => (
+            <CharacterSelect
+              id={id}
+              {...fieldProps}
+              value={form.listenerId}
+              characters={characters}
+              onValueChange={(value) => onChange({ ...form, listenerId: value })}
+            />
+          )}
         </FormField>
         <FormField id="relationship-label" label="Relationship" error={errors.relationship}>
-          <Input
-            id="relationship-label"
-            value={form.relationship}
-            maxLength={160}
-            onChange={(event) => onChange({ ...form, relationship: event.target.value })}
-            aria-invalid={Boolean(errors.relationship)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.relationship}
+              maxLength={160}
+              onChange={(event) => onChange({ ...form, relationship: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField id="relationship-status" label="Speaker status" error={errors.speakerStatus}>
-          <Select
-            value={form.speakerStatus}
-            onValueChange={(value) => onChange({ ...form, speakerStatus: value as SpeakerStatus })}
-          >
-            <SelectTrigger id="relationship-status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="lower">Lower</SelectItem>
-              <SelectItem value="peer">Peer</SelectItem>
-              <SelectItem value="higher">Higher</SelectItem>
-              <SelectItem value="unknown">Unknown</SelectItem>
-            </SelectContent>
-          </Select>
+          {({ id, ...fieldProps }) => (
+            <Select
+              value={form.speakerStatus}
+              onValueChange={(value) =>
+                onChange({ ...form, speakerStatus: value as SpeakerStatus })
+              }
+            >
+              <SelectTrigger {...fieldProps} id={id}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lower">Lower</SelectItem>
+                <SelectItem value="peer">Peer</SelectItem>
+                <SelectItem value="higher">Higher</SelectItem>
+                <SelectItem value="unknown">Unknown</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </FormField>
         <FormField id="relationship-familiarity" label="Familiarity" error={errors.familiarity}>
-          <Select
-            value={form.familiarity}
-            onValueChange={(value) => onChange({ ...form, familiarity: value as Familiarity })}
-          >
-            <SelectTrigger id="relationship-familiarity">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="intimate">Intimate</SelectItem>
-              <SelectItem value="close">Close</SelectItem>
-              <SelectItem value="familiar">Familiar</SelectItem>
-              <SelectItem value="distant">Distant</SelectItem>
-              <SelectItem value="unknown">Unknown</SelectItem>
-            </SelectContent>
-          </Select>
+          {({ id, ...fieldProps }) => (
+            <Select
+              value={form.familiarity}
+              onValueChange={(value) => onChange({ ...form, familiarity: value as Familiarity })}
+            >
+              <SelectTrigger {...fieldProps} id={id}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="intimate">Intimate</SelectItem>
+                <SelectItem value="close">Close</SelectItem>
+                <SelectItem value="familiar">Familiar</SelectItem>
+                <SelectItem value="distant">Distant</SelectItem>
+                <SelectItem value="unknown">Unknown</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </FormField>
         <FormField id="relationship-self" label="Preferred self-pronoun" error={errors.selfPronoun}>
-          <Input
-            id="relationship-self"
-            value={form.selfPronoun}
-            maxLength={80}
-            onChange={(event) => onChange({ ...form, selfPronoun: event.target.value })}
-            aria-invalid={Boolean(errors.selfPronoun)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.selfPronoun}
+              maxLength={80}
+              onChange={(event) => onChange({ ...form, selfPronoun: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField
           id="relationship-addressee"
           label="Addressee term / title"
           error={errors.addresseeTerm}
         >
-          <Input
-            id="relationship-addressee"
-            value={form.addresseeTerm}
-            maxLength={80}
-            onChange={(event) => onChange({ ...form, addresseeTerm: event.target.value })}
-            aria-invalid={Boolean(errors.addresseeTerm)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.addresseeTerm}
+              maxLength={80}
+              onChange={(event) => onChange({ ...form, addresseeTerm: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField
           id="relationship-particles"
           label="Sentence particles"
           error={errors.sentenceParticles}
         >
-          <Input
-            id="relationship-particles"
-            value={form.sentenceParticles}
-            maxLength={80}
-            onChange={(event) => onChange({ ...form, sentenceParticles: event.target.value })}
-            aria-invalid={Boolean(errors.sentenceParticles)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.sentenceParticles}
+              maxLength={80}
+              onChange={(event) => onChange({ ...form, sentenceParticles: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField id="relationship-register" label="Register" error={errors.register}>
-          <Input
-            id="relationship-register"
-            value={form.register}
-            maxLength={160}
-            onChange={(event) => onChange({ ...form, register: event.target.value })}
-            aria-invalid={Boolean(errors.register)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Input
+              {...fieldProps}
+              id={id}
+              value={form.register}
+              maxLength={160}
+              onChange={(event) => onChange({ ...form, register: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField id="relationship-notes" label="Notes" error={errors.notes}>
-          <Textarea
-            id="relationship-notes"
-            value={form.notes}
-            maxLength={500}
-            onChange={(event) => onChange({ ...form, notes: event.target.value })}
-            aria-invalid={Boolean(errors.notes)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Textarea
+              {...fieldProps}
+              id={id}
+              value={form.notes}
+              maxLength={500}
+              onChange={(event) => onChange({ ...form, notes: event.target.value })}
+            />
+          )}
         </FormField>
         <FormField id="relationship-evidence" label="Evidence" error={errors.evidence}>
-          <Textarea
-            id="relationship-evidence"
-            value={form.evidence}
-            maxLength={300}
-            onChange={(event) => onChange({ ...form, evidence: event.target.value })}
-            aria-invalid={Boolean(errors.evidence)}
-          />
+          {({ id, ...fieldProps }) => (
+            <Textarea
+              {...fieldProps}
+              id={id}
+              value={form.evidence}
+              maxLength={300}
+              onChange={(event) => onChange({ ...form, evidence: event.target.value })}
+            />
+          )}
         </FormField>
         <div className="flex items-end justify-end gap-2 sm:col-span-2">
           <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
@@ -959,15 +1095,19 @@ function CharacterSelect({
   value,
   characters,
   onValueChange,
+  "aria-describedby": ariaDescribedby,
+  "aria-invalid": ariaInvalid,
 }: {
   id: string;
   value: string;
   characters: CharacterProfile[];
   onValueChange: (value: string) => void;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }) {
   return (
     <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue ?? "")}>
-      <SelectTrigger id={id}>
+      <SelectTrigger id={id} aria-describedby={ariaDescribedby} aria-invalid={ariaInvalid}>
         <SelectValue placeholder="Select character" />
       </SelectTrigger>
       <SelectContent>
@@ -1002,7 +1142,7 @@ function EntryActions({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex flex-wrap justify-end gap-1">
+    <div className="flex flex-wrap justify-start gap-1 md:justify-end">
       <Button
         variant="outline"
         size="sm"
@@ -1065,6 +1205,12 @@ function EmptyState({ icon, children }: { icon: ReactNode; children: ReactNode }
   );
 }
 
+type FieldControlProps = {
+  id: string;
+  "aria-describedby"?: string;
+  "aria-invalid": boolean;
+};
+
 function FormField({
   id,
   label,
@@ -1076,14 +1222,31 @@ function FormField({
   label: string;
   hint?: string;
   error?: string;
-  children: ReactNode;
+  children: (props: FieldControlProps) => ReactNode;
 }) {
+  const hintId = hint ? `${id}-hint` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy =
+    [hintId, errorId].filter((value): value is string => Boolean(value)).join(" ") || undefined;
+
   return (
     <div className="min-w-0 space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
-      {children}
-      {hint && <p className="text-caption text-muted-foreground">{hint}</p>}
-      {error && <p className="text-caption text-destructive">{error}</p>}
+      {children({
+        id,
+        "aria-describedby": describedBy,
+        "aria-invalid": Boolean(error),
+      })}
+      {hint && (
+        <p id={hintId} className="text-caption text-muted-foreground">
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p id={errorId} role="alert" className="text-caption text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

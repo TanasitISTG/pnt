@@ -9,6 +9,7 @@ export const MAX_RELATIONSHIP_TEXT_LENGTH = 160;
 export const MAX_SPEECH_FIELD_LENGTH = 80;
 export const MAX_NOTES_LENGTH = 500;
 export const MAX_EVIDENCE_LENGTH = 300;
+export const MAX_RELATIONSHIP_PROMPT_ITEMS = 24;
 
 export const relationshipGenderSchema = z.enum(["male", "female", "nonbinary", "unknown"]);
 export const speakerStatusSchema = z.enum(["lower", "peer", "higher", "unknown"]);
@@ -188,6 +189,7 @@ const relationshipAnalysisRelationshipSchema = z.object({
 const relationshipAnalysisActivePairSchema = z.object({
   speaker: boundedNameSchema,
   listener: boundedNameSchema,
+  evidence: z.string().trim().min(1).max(MAX_EVIDENCE_LENGTH),
 });
 
 export const relationshipAnalysisSchema = z.object({

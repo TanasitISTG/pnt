@@ -52,6 +52,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
     queryClient.invalidateQueries({ queryKey: ["costs", novelId] });
   }, [novelId, queryClient]);

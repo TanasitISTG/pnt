@@ -11,11 +11,21 @@ async function waitForReactHydration(page: import("@playwright/test").Page) {
   });
 }
 
+async function rejectOptionalAnalytics(page: import("@playwright/test").Page) {
+  const rejectButton = page.getByRole("button", { name: "Reject optional" });
+  if (await rejectButton.isVisible()) await rejectButton.click();
+}
+
+async function waitForTransientToastsToClear(page: import("@playwright/test").Page) {
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 15_000 });
+}
+
 test("admin translates and publishes a chapter that a signed-out guest can read", async ({
   page,
 }) => {
   await page.goto("/login");
   await waitForReactHydration(page);
+  await rejectOptionalAnalytics(page);
   await page.getByLabel("Email").fill(adminEmail);
   await page.getByLabel("Password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -36,6 +46,23 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await page.getByLabel("Raw Content *").fill("儿子对父亲说：“我会回来的。”\n父亲点了点头。");
   await page.getByRole("button", { name: "Add Chapter" }).click();
 
+  await page.getByRole("button", { name: "Relationships", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
+  const addRelationshipButton = page.getByRole("button", { name: "Add directed relationship" });
+  await expect(addRelationshipButton).toBeDisabled();
+  await expect(
+    page.getByText("Add at least 2 character profiles first.", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Add character profile" }).click();
+  await expect(page.getByRole("heading", { name: "Add character profile" })).toBeFocused();
+  await page.getByRole("button", { name: "Save character" }).click();
+  const sourceNameInput = page.getByLabel("Source name");
+  await expect(sourceNameInput).toHaveAttribute("aria-invalid", "true");
+  await expect(sourceNameInput).toHaveAttribute("aria-describedby", /character-source-error/);
+  await expect(page.locator("#character-source-error")).toHaveAttribute("role", "alert");
+  await page.getByRole("button", { name: "Cancel character form" }).click();
+  await page.getByRole("button", { name: "Back to novel" }).click();
+
   const sourceChapterRow = page.getByRole("row", { name: new RegExp(chapterTitle) });
   await expect(sourceChapterRow).toBeVisible();
   await sourceChapterRow.getByRole("button", { name: "Translate chapter" }).click();
@@ -44,6 +71,10 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     .getByRole("link", { name: "ยามรุ่งอรุณ", exact: true })
     .filter({ visible: true });
   await expect(translatedTitle).toBeVisible({ timeout: 60_000 });
+  const completionToast = page.getByText(/Translation: \d+ completed/);
+  await expect(completionToast).toBeVisible({ timeout: 15_000 });
+  await expect(completionToast).toBeHidden({ timeout: 15_000 });
+  await waitForTransientToastsToClear(page);
 
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
@@ -59,10 +90,35 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
+  const relationshipTableContainer = page.locator(
+    'section[aria-labelledby="relationships-heading"] [data-slot="table-container"]',
+  );
+  await expect(
+    relationshipTableContainer.getByRole("button", {
+      name: "Edit relationship 儿子 to 父亲",
+    }),
+  ).toBeVisible();
+  await expect(
+    relationshipTableContainer.evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).resolves.toBe(true);
   await expect(
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);
   await page.screenshot({ path: ".tura/e2e/relationships-mobile.png", fullPage: true });
+  const relationshipRow = page
+    .getByRole("row")
+    .filter({ hasText: "儿子" })
+    .filter({ hasText: "父亲" })
+    .last();
+  await expect(relationshipRow).toBeVisible();
+  await relationshipRow.getByRole("button", { name: "Disable relationship 儿子 to 父亲" }).click();
+  await expect(page.getByText("Relationship entry disabled", { exact: true })).toBeVisible();
+  await expect(relationshipRow.getByText("Disabled", { exact: true })).toBeVisible();
+  await expect(relationshipRow.getByText("Auto-managed", { exact: true })).toBeVisible();
+  await relationshipRow.getByRole("button", { name: "Restore relationship 儿子 to 父亲" }).click();
+  await expect(page.getByText("Relationship entry restored", { exact: true })).toBeVisible();
+  await expect(relationshipRow.getByText("Enabled", { exact: true })).toBeVisible();
+  await expect(relationshipRow.getByText("Auto-managed", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: /Edit relationship 儿子 to 父亲/ }).click();
   await page.getByLabel("Preferred self-pronoun").fill("ผม");
