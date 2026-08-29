@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -37,7 +37,7 @@ export function useChapterTitleEdit(novelId: string) {
     },
   });
 
-  const handleStartEdit = (chapter: ChapterRow) => {
+  const handleStartEdit = useCallback((chapter: ChapterRow) => {
     const translatedTitle = normalizeTitle(chapter.translatedTitle);
     setEditState({
       chapterId: chapter.id,
@@ -45,9 +45,9 @@ export function useChapterTitleEdit(novelId: string) {
       initialTranslatedTitle: translatedTitle,
     });
     setEditErrors({});
-  };
+  }, []);
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = useCallback(async () => {
     if (!editState) return;
     setEditErrors({});
 
@@ -66,12 +66,12 @@ export function useChapterTitleEdit(novelId: string) {
     }
 
     await saveTitle(payload).catch(() => {});
-  };
+  }, [editState, saveTitle]);
 
-  const handleTitleChange = (translatedTitle: string) => {
+  const handleTitleChange = useCallback((translatedTitle: string) => {
     setEditState((current) => (current ? { ...current, translatedTitle } : current));
     setEditErrors((current) => ({ ...current, translatedTitle: "" }));
-  };
+  }, []);
 
   return {
     editState,

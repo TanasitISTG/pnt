@@ -41,6 +41,20 @@ export interface ActiveJobState {
   totalChunks: number;
   error?: string | null;
 }
+export interface NovelCostEntry {
+  promptTokens: number;
+  completionTokens: number;
+  cost: number | null;
+}
+
+export interface NovelCostData {
+  costs: Record<string, NovelCostEntry>;
+  totals: {
+    promptTokens: number;
+    completionTokens: number;
+    cost: number | null;
+  };
+}
 
 // -- Glossary term suggestion & review (suggest-terms-prompt) ----------------
 

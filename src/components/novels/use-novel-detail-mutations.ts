@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -13,11 +13,16 @@ import {
   deleteAllNovelTranslations,
   translateMissingTitles,
 } from "@/lib/content/chapter-ops.functions";
+type ChapterPublishInput = {
+  chapterId: string;
+  publishedAt: Date | null;
+};
 
 export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: () => void) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [deleteChapterId, setDeleteChapterId] = useState<string | null>(null);
+  const publishChapterInFlightRef = useRef(false);
 
   const { mutateAsync: removeNovel, isPending: deletingNovel } = useMutation({
     mutationFn: () => deleteNovel({ data: { novelId } }),
@@ -56,9 +61,12 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     },
   });
 
-  const { mutate: publishChapter, isPending: publishingChapter } = useMutation({
-    mutationFn: (vars: { chapterId: string; publishedAt: Date | null }) =>
-      setChapterPublished({ data: vars }),
+  const {
+    mutate: runPublishChapter,
+    isPending: publishChapterPending,
+    variables: publishChapterVariables,
+  } = useMutation({
+    mutationFn: (vars: ChapterPublishInput) => setChapterPublished({ data: vars }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
       toast.success("Publish state updated");
@@ -66,7 +74,24 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     onError: (error) => {
       toast.error(error.message || "Failed to update publish state");
     },
+    onSettled: () => {
+      publishChapterInFlightRef.current = false;
+    },
   });
+  const publishChapter = useCallback(
+    (vars: ChapterPublishInput) => {
+      if (publishChapterInFlightRef.current) {
+        toast.info("Wait for the current publish update to finish");
+        return;
+      }
+      publishChapterInFlightRef.current = true;
+      runPublishChapter(vars);
+    },
+    [runPublishChapter],
+  );
+  const publishingChapterId = publishChapterPending
+    ? (publishChapterVariables?.chapterId ?? null)
+    : null;
 
   const { mutate: publishAllChapters, isPending: publishingAll } = useMutation({
     mutationFn: () => setAllChaptersPublished({ data: { novelId, publishedAt: new Date() } }),
@@ -134,7 +159,7 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     deleteChapterId,
     setDeleteChapterId,
     publishChapter,
-    publishingChapter,
+    publishingChapterId,
     publishAllChapters,
     publishingAll,
     backfillTitles,

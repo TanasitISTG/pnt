@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { ChapterRow } from "@/components/chapters/types";
 import type { ActiveJobState } from "@/lib/translation/translation.types";
@@ -13,40 +13,55 @@ export function useChapterSelection(
   const [batchRangeFrom, setBatchRangeFrom] = useState("");
   const [batchRangeTo, setBatchRangeTo] = useState("");
 
-  const isRowTranslating = (chapterId: string, status: string) => {
-    const job = activeJobs.get(chapterId);
-    return (
-      job?.status === "running" ||
-      job?.status === "pending" ||
-      status === "translating" ||
-      status === "queued"
-    );
-  };
+  const isRowTranslating = useCallback(
+    (chapterId: string, status: string) => {
+      const job = activeJobs.get(chapterId);
+      return (
+        job?.status === "running" ||
+        job?.status === "pending" ||
+        status === "translating" ||
+        status === "queued"
+      );
+    },
+    [activeJobs],
+  );
 
-  const selectableIds = chapters.flatMap((c) => (isRowTranslating(c.id, c.status) ? [] : [c.id]));
-  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+  const selectableIds = useMemo(
+    () =>
+      chapters.flatMap((chapter) =>
+        isRowTranslating(chapter.id, chapter.status) ? [] : [chapter.id],
+      ),
+    [chapters, isRowTranslating],
+  );
+  const allSelected = useMemo(
+    () => selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id)),
+    [selectableIds, selectedIds],
+  );
 
-  const toggleSelect = (id: string, checked: boolean) =>
+  const toggleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (checked) next.add(id);
       else next.delete(id);
       return next;
     });
+  }, []);
 
-  const toggleSelectAll = (checked: boolean) =>
-    setSelectedIds(checked ? new Set(selectableIds) : new Set());
+  const toggleSelectAll = useCallback(
+    (checked: boolean) => setSelectedIds(checked ? new Set(selectableIds) : new Set()),
+    [selectableIds],
+  );
 
-  const selectByRange = () => {
+  const selectByRange = useCallback(() => {
     const from = Number(batchRangeFrom);
     const to = Number(batchRangeTo);
     if (!Number.isFinite(from) || !Number.isFinite(to) || from < 1 || from > to) {
       toast.error("Enter a valid range (from ≥ 1, from ≤ to)");
       return;
     }
-    const inRange = chapters.filter((c) => {
-      const num = Number(c.number);
-      return num >= from && num <= to && !isRowTranslating(c.id, c.status);
+    const inRange = chapters.filter((chapter) => {
+      const num = Number(chapter.number);
+      return num >= from && num <= to && !isRowTranslating(chapter.id, chapter.status);
     });
     if (inRange.length === 0) {
       toast.info("No eligible chapters in that range");
@@ -54,13 +69,13 @@ export function useChapterSelection(
     }
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      for (const c of inRange) next.add(c.id);
+      for (const chapter of inRange) next.add(chapter.id);
       return next;
     });
     toast.info(`Selected ${inRange.length} chapter(s) in range ${from}–${to}`);
-  };
+  }, [batchRangeFrom, batchRangeTo, chapters, isRowTranslating]);
 
-  const handleBatchTranslate = async () => {
+  const handleBatchTranslate = useCallback(async () => {
     setBatchStarting(true);
     try {
       const count = await startBatchTranslate([...selectedIds]);
@@ -68,7 +83,7 @@ export function useChapterSelection(
     } finally {
       setBatchStarting(false);
     }
-  };
+  }, [selectedIds, startBatchTranslate]);
 
   return {
     selectedIds,

@@ -154,6 +154,10 @@ function NovelDetailPage() {
     lastChapterId: null,
     readChapterIds: [],
   });
+  const readChapterIdSet = useMemo(
+    () => new Set(readerProgress.readChapterIds),
+    [readerProgress.readChapterIds],
+  );
   const [retranslateChapterId, setRetranslateChapterId] = useState<string | null>(null);
   const [deleteNovelOpen, setDeleteNovelOpen] = useState(false);
   const [deleteAllTranslationsOpen, setDeleteAllTranslationsOpen] = useState(false);
@@ -221,7 +225,7 @@ function NovelDetailPage() {
     deleteChapterId,
     setDeleteChapterId,
     publishChapter,
-    publishingChapter,
+    publishingChapterId,
     publishAllChapters,
     publishingAll,
     backfillTitles,
@@ -231,7 +235,9 @@ function NovelDetailPage() {
     saveChapterOrder,
     reorderingChapters,
   } = useNovelDetailMutations(novelId, handleTranslationsDeleted);
-
+  const handleCancelEdit = useCallback(() => {
+    setEditState(null);
+  }, [setEditState]);
   const invalidateChapters = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
@@ -279,7 +285,7 @@ function NovelDetailPage() {
     novelId,
     isAdmin: !!user,
     activeJobs,
-    readChapterIds: readerProgress.readChapterIds,
+    readChapterIdSet,
     residualHanziMap,
     costData,
     selectedIds,
@@ -287,7 +293,7 @@ function NovelDetailPage() {
     isTranslating: isRowTranslating,
     onToggleSelect: toggleSelect,
     onToggleSelectAll: toggleSelectAll,
-    publishingChapter,
+    publishingChapterId,
     onPublishChapter: publishChapter,
     onCancelTranslate: cancelTranslate,
     onRetryTranslate: retryTranslate,
@@ -301,7 +307,7 @@ function NovelDetailPage() {
     onTitleChange: handleTitleChange,
     onSaveTitle: handleSaveEdit,
     onStartEdit: handleStartEdit,
-    onCancelEdit: () => setEditState(null),
+    onCancelEdit: handleCancelEdit,
     onDeleteChapter: setDeleteChapterId,
     reorderingChapters,
     onReorderChapters: saveChapterOrder,

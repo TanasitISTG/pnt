@@ -24,7 +24,12 @@ import {
   getJobsTerminalStatusSchema,
 } from "@/lib/translation/translation.schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
-import type { ChunkProgress, LogEntry, SlimChunkProgress } from "./translation.types";
+import type {
+  ChunkProgress,
+  LogEntry,
+  NovelCostData,
+  SlimChunkProgress,
+} from "./translation.types";
 import { createLog } from "./log-entry";
 import type { AIProviderClient } from "./translation.types";
 import { translationRunIdentity } from "./job-state";
@@ -438,10 +443,7 @@ export const getNovelCosts = createServerFn({ method: "GET" })
             1_000_000
           : null;
 
-      const costs: Record<
-        string,
-        { promptTokens: number; completionTokens: number; cost: number | null }
-      > = {};
+      const costs: NovelCostData["costs"] = {};
       let totalPrompt = 0;
       let totalCompletion = 0;
       for (const [chapterId, usage] of Object.entries(perChapter)) {
@@ -457,7 +459,7 @@ export const getNovelCosts = createServerFn({ method: "GET" })
           completionTokens: totalCompletion,
           cost: costOf(totalPrompt, totalCompletion),
         },
-      };
+      } satisfies NovelCostData;
     }),
   );
 

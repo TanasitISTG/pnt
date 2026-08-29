@@ -1,0 +1,130 @@
+// @vitest-environment jsdom
+
+import { render, screen } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+import { ChapterTable, type ChapterTableProps } from "./chapter-table";
+import type { ChapterRow } from "./types";
+import type { ActiveJobState } from "@/lib/translation/translation.types";
+
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children }: { children: ReactNode }) => createElement("a", null, children),
+}));
+
+vi.mock("@/components/publish-menu", () => ({
+  PublishMenu: () => createElement("button", { type: "button" }, "Publishing options"),
+}));
+
+const CHAPTER: ChapterRow = {
+  id: "chapter-1",
+  number: "1",
+  title: "Chapter One",
+  translatedTitle: "บทที่หนึ่ง",
+  status: "translated",
+  rawCharCount: 1200,
+
+  publishedAt: null,
+  editedAt: null,
+};
+beforeAll(() => {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+});
+
+const ACTIVE_JOB: ActiveJobState = {
+  jobId: "job-1",
+  chapterId: CHAPTER.id,
+  status: "running",
+  doneChunks: 1,
+  totalChunks: 3,
+};
+
+function createProps(overrides: Partial<ChapterTableProps> = {}): ChapterTableProps {
+  return {
+    chapters: [CHAPTER],
+    novelId: "novel-1",
+    isAdmin: true,
+    activeJobs: new Map(),
+    readChapterIdSet: new Set(),
+    residualHanziMap: new Map(),
+    costData: undefined,
+    selectedIds: new Set(),
+    allSelected: false,
+    isTranslating: () => false,
+    onToggleSelect: vi.fn(),
+    onToggleSelectAll: vi.fn(),
+    publishingChapterId: null,
+    onPublishChapter: vi.fn(),
+    onCancelTranslate: vi.fn(),
+    onRetryTranslate: vi.fn(),
+    onStartTranslate: vi.fn(),
+    onRequestRetranslate: vi.fn(),
+    onViewLogs: vi.fn(),
+    editingChapterId: null,
+    titleEdit: null,
+    editErrors: {},
+    onSaveTitle: vi.fn(),
+    savingTitle: false,
+    onTitleChange: vi.fn(),
+    onStartEdit: vi.fn(),
+    onCancelEdit: vi.fn(),
+    onDeleteChapter: vi.fn(),
+    reorderingChapters: false,
+    onReorderChapters: vi.fn().mockResolvedValue(undefined),
+    refetchChapters: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+describe("ChapterTable sorting availability", () => {
+  it("declaratively disables and re-enables drag handles across edit and translation state", () => {
+    const { rerender } = render(<ChapterTable {...createProps()} />);
+    const handle = screen.getByRole("button", {
+      name: "Reorder chapter 1: บทที่หนึ่ง",
+    }) as HTMLButtonElement;
+
+    expect(handle.disabled).toBe(false);
+
+    rerender(
+      <ChapterTable
+        {...createProps({
+          editingChapterId: CHAPTER.id,
+          titleEdit: {
+            chapterId: CHAPTER.id,
+            translatedTitle: CHAPTER.translatedTitle ?? "",
+            initialTranslatedTitle: CHAPTER.translatedTitle ?? "",
+          },
+        })}
+      />,
+    );
+    expect(handle.disabled).toBe(true);
+
+    rerender(<ChapterTable {...createProps()} />);
+    expect(handle.disabled).toBe(false);
+
+    rerender(
+      <ChapterTable
+        {...createProps({
+          activeJobs: new Map([[CHAPTER.id, ACTIVE_JOB]]),
+          isTranslating: () => true,
+        })}
+      />,
+    );
+    expect(handle.disabled).toBe(true);
+
+    rerender(<ChapterTable {...createProps()} />);
+    expect(handle.disabled).toBe(false);
+  });
+});
