@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { deleteNovel, setNovelPublished } from "@/lib/content/novel.functions";
 import {
   deleteChapter,
+  reorderChapters,
   setChapterPublished,
   setAllChaptersPublished,
 } from "@/lib/content/chapter.functions";
@@ -109,6 +110,19 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       toast.error("Failed to delete translations");
     },
   });
+  const { mutateAsync: saveChapterOrder, isPending: reorderingChapters } = useMutation({
+    mutationFn: (chapterIds: string[]) => reorderChapters({ data: { novelId, chapterIds } }),
+    onSuccess: async (_result, chapterIds) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
+        queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
+        ...chapterIds.map((chapterId) =>
+          queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] }),
+        ),
+      ]);
+      toast.success("Chapter order saved");
+    },
+  });
 
   return {
     removeNovel,
@@ -127,5 +141,7 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     backfillingTitles,
     deleteAllTranslations,
     deletingAllTranslations,
+    saveChapterOrder,
+    reorderingChapters,
   };
 }

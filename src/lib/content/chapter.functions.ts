@@ -1,28 +1,25 @@
-import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
+import { createServerFn } from "@tanstack/react-start";
 import { eq, and, sql, asc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
-import { novels, chapters, translationJobs, translationOutbox } from "@/lib/db/schema";
+import { novels, chapters } from "@/lib/db/schema";
 import { ensureSession, getSession } from "@/lib/auth/functions";
 import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { novelLive, chapterLive } from "@/lib/content/publish";
 import { normalizePunctuation } from "@/lib/translation/paragraphs";
-import { translationRunIdentity } from "@/lib/translation/job-state";
 import {
   createChapterSchema,
+  editChapterSchema,
+  reorderChaptersSchema,
   updateChapterSchema,
   updateChapterTranslationSchema,
   setNovelPublishedSchema,
   setChapterPublishedSchema,
 } from "@/lib/content/novel.schemas";
-
-const dispatchOutboxBestEffort = createServerOnlyFn(async (outboxId: string) => {
-  const { dispatchTranslationOutboxEventBestEffort } = await import("@/lib/translation/outbox");
-  await dispatchTranslationOutboxEventBestEffort(outboxId);
-});
+import { reorderChaptersForUser, updateChapterForUser } from "@/lib/content/chapter-edit.service";
 
 export const listChapters = createServerFn({ method: "GET" })
   .validator(z.object({ novelId: z.string() }))
@@ -151,74 +148,33 @@ export const createChapter = createServerFn({ method: "POST" })
     });
   });
 
+export const updateChapter = createServerFn({ method: "POST" })
+  .validator(editChapterSchema)
+  .handler(async ({ data }) => {
+    return withSafeHandler(async () => {
+      const session = await ensureSession();
+      return updateChapterForUser(session.user.id, data);
+    });
+  });
+
+export const reorderChapters = createServerFn({ method: "POST" })
+  .validator(reorderChaptersSchema)
+  .handler(async ({ data }) => {
+    return withSafeHandler(async () => {
+      const session = await ensureSession();
+      return reorderChaptersForUser(session.user.id, data);
+    });
+  });
+
 export const updateChapterRaw = createServerFn({ method: "POST" })
   .validator(updateChapterSchema)
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const outboxId = await db.transaction(async (tx) => {
-        const [existing] = await tx
-          .select({ chapter: chapters })
-          .from(chapters)
-          .innerJoin(novels, eq(chapters.novelId, novels.id))
-          .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
-          .limit(1)
-          .for("update");
-
-        if (!existing) throw new SafeServerError("Chapter not found or unauthorized");
-
-        const activeJobId = existing.chapter.activeTranslationJobId;
-        const [cancelledJob] = activeJobId
-          ? await tx
-              .update(translationJobs)
-              .set({ status: "cancelled", updatedAt: new Date() })
-              .where(
-                and(
-                  eq(translationJobs.id, activeJobId),
-                  sql`${translationJobs.status} IN ('pending', 'running')`,
-                ),
-              )
-              .returning({ id: translationJobs.id, generation: translationJobs.generation })
-          : [];
-
-        const updateValues: Record<string, unknown> = {
-          status: "raw",
-          translatedContent: null,
-          translatedTitle: null,
-          summary: null,
-          translatedAt: null,
-          editedAt: null,
-          activeTranslationJobId: null,
-          sourceRevision: sql`${chapters.sourceRevision} + 1`,
-          updatedAt: new Date(),
-        };
-        if (data.number !== undefined) updateValues.number = data.number.toString();
-        if (data.title !== undefined) updateValues.title = data.title;
-        if (data.rawContent !== undefined) {
-          updateValues.rawContent = data.rawContent;
-          updateValues.rawCharCount = data.rawContent.length;
-        }
-
-        await tx.update(chapters).set(updateValues).where(eq(chapters.id, data.chapterId));
-        await tx
-          .update(novels)
-          .set({ storySummary: null, updatedAt: new Date() })
-          .where(eq(novels.id, existing.chapter.novelId));
-
-        if (!cancelledJob) return null;
-        const id = nanoid();
-        await tx.insert(translationOutbox).values({
-          id,
-          eventName: "translation/job.cancelled",
-          payloadJson: JSON.stringify(translationRunIdentity(cancelledJob)),
-        });
-        return id;
+      return updateChapterForUser(session.user.id, {
+        ...data,
+        sourceChangePolicy: "clear",
       });
-
-      if (outboxId) await dispatchOutboxBestEffort(outboxId);
-
-      return { id: data.chapterId };
     });
   });
 
@@ -227,62 +183,7 @@ export const updateChapterTranslation = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const outboxId = await db.transaction(async (tx) => {
-        const [existing] = await tx
-          .select({ chapter: chapters })
-          .from(chapters)
-          .innerJoin(novels, eq(chapters.novelId, novels.id))
-          .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
-          .limit(1)
-          .for("update");
-
-        if (!existing) throw new SafeServerError("Chapter not found or unauthorized");
-        const activeJobId = existing.chapter.activeTranslationJobId;
-        const [cancelledJob] = activeJobId
-          ? await tx
-              .update(translationJobs)
-              .set({ status: "cancelled", updatedAt: new Date() })
-              .where(
-                and(
-                  eq(translationJobs.id, activeJobId),
-                  sql`${translationJobs.status} IN ('pending', 'running')`,
-                ),
-              )
-              .returning({ id: translationJobs.id, generation: translationJobs.generation })
-          : [];
-
-        const now = new Date();
-        await tx
-          .update(chapters)
-          .set({
-            translatedContent: data.translatedContent,
-            summary: null,
-            status: "translated",
-            activeTranslationJobId: null,
-            translatedAt: now,
-            editedAt: now,
-            updatedAt: now,
-          })
-          .where(eq(chapters.id, data.chapterId));
-        await tx
-          .update(novels)
-          .set({ storySummary: null, updatedAt: now })
-          .where(eq(novels.id, existing.chapter.novelId));
-
-        if (!cancelledJob) return null;
-        const id = nanoid();
-        await tx.insert(translationOutbox).values({
-          id,
-          eventName: "translation/job.cancelled",
-          payloadJson: JSON.stringify(translationRunIdentity(cancelledJob)),
-        });
-        return id;
-      });
-
-      if (outboxId) await dispatchOutboxBestEffort(outboxId);
-
-      return { id: data.chapterId };
+      return updateChapterForUser(session.user.id, data);
     });
   });
 

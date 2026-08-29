@@ -41,7 +41,9 @@ export function ChaptersTableSection({ chapters, isAdmin, tableProps }: Chapters
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
-      {chapterGroups.length <= 1 ? (
+      {isAdmin ? (
+        <ChapterTable chapters={chapters} {...tableProps} />
+      ) : chapterGroups.length <= 1 ? (
         <ChapterTable chapters={chapters} {...tableProps} />
       ) : (
         <Accordion multiple defaultValue={[0]}>

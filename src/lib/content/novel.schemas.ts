@@ -55,6 +55,44 @@ export const updateChapterTranslationSchema = z.object({
   chapterId: z.string().min(1),
   translatedContent: z.string().min(1, "Translation cannot be empty"),
 });
+export const editChapterSchema = z
+  .object({
+    chapterId: z.string().min(1),
+    title: z
+      .string()
+      .max(500)
+      .refine((value) => value.trim().length > 0, "Source title is required")
+      .optional(),
+    translatedTitle: z.string().max(500).nullable().optional(),
+    rawContent: z
+      .string()
+      .refine((value) => value.trim().length > 0, "Source content is required")
+      .optional(),
+    translatedContent: z
+      .string()
+      .refine((value) => value.trim().length > 0, "Translation cannot be empty")
+      .nullable()
+      .optional(),
+    sourceChangePolicy: z.enum(["keep", "clear"]).optional(),
+  })
+  .refine(
+    (data) =>
+      data.title !== undefined ||
+      data.translatedTitle !== undefined ||
+      data.rawContent !== undefined ||
+      data.translatedContent !== undefined,
+    { message: "At least one chapter field is required", path: ["chapterId"] },
+  );
+
+export const reorderChaptersSchema = z
+  .object({
+    novelId: z.string().min(1),
+    chapterIds: z.array(z.string().min(1)).min(1),
+  })
+  .refine((data) => new Set(data.chapterIds).size === data.chapterIds.length, {
+    message: "Chapter IDs must be unique",
+    path: ["chapterIds"],
+  });
 
 // publishedAt: null = unpublish (draft), any date = live at that time (past = now, future = scheduled)
 export const setNovelPublishedSchema = z.object({
@@ -71,3 +109,5 @@ export type CreateNovelInput = z.input<typeof createNovelSchema>;
 export type UpdateNovelInput = z.input<typeof updateNovelSchema>;
 export type CreateChapterInput = z.input<typeof createChapterSchema>;
 export type UpdateChapterInput = z.input<typeof updateChapterSchema>;
+export type EditChapterInput = z.input<typeof editChapterSchema>;
+export type ReorderChaptersInput = z.input<typeof reorderChaptersSchema>;

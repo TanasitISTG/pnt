@@ -180,13 +180,13 @@ export function ReaderToolbar({
           setTheme={setTheme}
         />
 
-        {isAdmin && hasTranslation && !editing && !jobRunning && (
+        {isAdmin && !editing && !jobRunning && (
           <Button
             variant="outline"
             size="sm"
             onClick={onEditRequest}
-            aria-label="Edit translation"
-            title="Edit translation"
+            aria-label="Edit chapter"
+            title="Edit chapter"
           >
             <Pencil className="size-4" />
             <span className="hidden sm:inline">Edit</span>
@@ -212,23 +212,29 @@ export function ReaderToolbar({
         )}
 
         {isAdmin &&
-          (jobRunning && activeJob ? (
-            <div className="flex min-w-36 flex-col gap-1">
-              <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                <span>Translating...</span>
-                <span>
-                  {activeJob.doneChunks}/{activeJob.totalChunks}
-                </span>
+          (jobRunning ? (
+            activeJob ? (
+              <div className="flex min-w-36 flex-col gap-1">
+                <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                  <span>Translating...</span>
+                  <span>
+                    {activeJob.doneChunks}/{activeJob.totalChunks}
+                  </span>
+                </div>
+                <Progress
+                  value={
+                    activeJob.totalChunks > 0
+                      ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
+                      : 0
+                  }
+                  className="h-1.5"
+                />
               </div>
-              <Progress
-                value={
-                  activeJob.totalChunks > 0
-                    ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
-                    : 0
-                }
-                className="h-1.5"
-              />
-            </div>
+            ) : (
+              <span className="text-caption text-muted-foreground" role="status">
+                Translation in progress
+              </span>
+            )
           ) : (
             !editing && (
               <Button

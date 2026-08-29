@@ -9,10 +9,9 @@ import { QueryErrorState } from "@/components/query-error-state";
 import { NovelHeader } from "@/components/novels/novel-header";
 import { ChaptersToolbar } from "@/components/chapters/chapters-toolbar";
 import { ChaptersTableSection } from "@/components/chapters/chapters-table-section";
-import { ChapterEditCard } from "@/components/chapters/chapter-edit-card";
 import { TranslationQualityPanel } from "@/components/translation/translation-quality-panel";
 import { useChapterSelection } from "@/components/chapters/use-chapter-selection";
-import { useChapterEdit } from "@/components/chapters/use-chapter-edit";
+import { useChapterTitleEdit } from "@/components/chapters/use-chapter-title-edit";
 import { useNovelDetailMutations } from "@/components/novels/use-novel-detail-mutations";
 import { useNovelExport } from "@/components/novels/use-novel-export";
 import { getReaderProgress } from "@/lib/reader/progress";
@@ -206,11 +205,11 @@ function NovelDetailPage() {
     editState,
     setEditState,
     editErrors,
-    setEditErrors,
-    savingEdit,
+    savingTitle,
     handleStartEdit,
     handleSaveEdit,
-  } = useChapterEdit(novelId);
+    handleTitleChange,
+  } = useChapterTitleEdit(novelId);
 
   const {
     removeNovel,
@@ -229,6 +228,8 @@ function NovelDetailPage() {
     backfillingTitles,
     deleteAllTranslations,
     deletingAllTranslations,
+    saveChapterOrder,
+    reorderingChapters,
   } = useNovelDetailMutations(novelId, handleTranslationsDeleted);
 
   const invalidateChapters = useCallback(() => {
@@ -274,8 +275,6 @@ function NovelDetailPage() {
     );
   }
 
-  const editingChapter = editState ? chapters.find((c) => c.id === editState.chapterId) : null;
-
   const chapterTableProps = {
     novelId,
     isAdmin: !!user,
@@ -296,9 +295,17 @@ function NovelDetailPage() {
     onRequestRetranslate: setRetranslateChapterId,
     onViewLogs: setLogChapterId,
     editingChapterId: editState?.chapterId ?? null,
+    titleEdit: editState,
+    editErrors,
+    savingTitle,
+    onTitleChange: handleTitleChange,
+    onSaveTitle: handleSaveEdit,
     onStartEdit: handleStartEdit,
     onCancelEdit: () => setEditState(null),
     onDeleteChapter: setDeleteChapterId,
+    reorderingChapters,
+    onReorderChapters: saveChapterOrder,
+    refetchChapters,
   };
 
   return (
@@ -353,23 +360,6 @@ function NovelDetailPage() {
         </div>
 
         <ChaptersTableSection chapters={chapters} isAdmin={!!user} tableProps={chapterTableProps} />
-
-        {/* Inline chapter editor (below table) */}
-        {editState && editingChapter && (
-          <ChapterEditCard
-            chapterTitle={editingChapter.title}
-            editState={editState}
-            setEditState={setEditState}
-            editErrors={editErrors}
-            setEditErrors={setEditErrors}
-            savingEdit={savingEdit}
-            onSave={handleSaveEdit}
-            onClose={() => {
-              setEditState(null);
-              setEditErrors({});
-            }}
-          />
-        )}
       </div>
 
       {user && (

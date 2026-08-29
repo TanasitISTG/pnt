@@ -42,11 +42,11 @@ describe("translation workflow compatibility contract", () => {
   it("cancels only the exact job generation", () => {
     const functions = source("../inngest/functions.ts");
     const translationFunctions = source("./translation.functions.ts");
-    const chapterFunctions = source("../content/chapter.functions.ts");
+    const chapterEditService = source("../content/chapter-edit.service.ts");
 
     expect(functions).toContain("if: TRANSLATION_CANCEL_IF");
     expect(translationFunctions.match(/translationRunIdentity\(cancelled\)/g)).toHaveLength(2);
     expect(translationFunctions).toContain("translationRunIdentity(row.job)");
-    expect(chapterFunctions.match(/translationRunIdentity\(cancelledJob\)/g)).toHaveLength(2);
+    expect(chapterEditService.match(/translationRunIdentity\(cancelledJob\)/g)).toHaveLength(1);
   });
 });
