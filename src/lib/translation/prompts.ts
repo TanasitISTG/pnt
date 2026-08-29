@@ -24,9 +24,7 @@ export function buildSystemPrompt(
   ];
 
   if (glossaryBlock && glossaryBlock.trim().length > 0) {
-    sections.push(
-      `## Terminology & Glossary\nSource → target spelling is authoritative. The glossary notes are supporting context only. ALWAYS use the exact glossary translation — including spacing, punctuation, and capitalization — every time the source term appears.\nNever invent alternative spellings or wordings for glossary entries. Approved character glossary mappings also supply exact Thai names to the relationship context.\n${glossaryBlock.trim()}`,
-    );
+    sections.push(formatGlossarySection(glossaryBlock, true));
   }
 
   if (context?.previousSummary && context.previousSummary.trim().length > 0) {
@@ -40,7 +38,7 @@ export function buildSystemPrompt(
   }
 
   if (customPrompt && customPrompt.trim().length > 0) {
-    sections.push(`## Custom Instructions\n${customPrompt.trim()}`);
+    sections.push(formatCustomInstructions(customPrompt));
   }
 
   sections.push(getOutputContract());
@@ -66,17 +64,30 @@ export function buildUserMessage(markedText: string, previousChunkTail?: string 
   return parts.join("\n\n");
 }
 
-export function buildTitlePrompt(pair: string): string {
+export function buildTitlePrompt(
+  pair: string,
+  glossaryBlock?: string | null,
+  customPrompt?: string | null,
+): string {
   const normalizedPair = normalizePair(pair);
   const langs: Record<LanguagePair, string> = {
     "en->th": "English to Thai",
     "zh->en": "Chinese to English",
     "zh->th": "Chinese to Thai",
   };
-  return [
+  const sections = [
     `You are a professional literary translator. Translate the chapter title from ${langs[normalizedPair]}.`,
+  ];
+  if (glossaryBlock && glossaryBlock.trim().length > 0) {
+    sections.push(formatGlossarySection(glossaryBlock, false));
+  }
+  if (customPrompt && customPrompt.trim().length > 0) {
+    sections.push(formatCustomInstructions(customPrompt));
+  }
+  sections.push(
     "Output ONLY the translated title — no quotes, no explanation, no chapter numbers.",
-  ].join("\n");
+  );
+  return sections.join("\n\n");
 }
 
 export function buildSummaryPrompt(_pair: string): string {
@@ -92,6 +103,25 @@ export function buildSummaryPrompt(_pair: string): string {
     "DIALOGUE CONTINUITY: Record only character gender/role, directed relationship changes, and recurring speech-register facts explicitly evidenced in this chapter. Do not infer or invent pronoun mappings; this remains supporting context and does not overwrite the structured relationship map.",
     "CONTEXT: Key facts, unresolved tensions, or foreshadowing that would help translate the next chapter.",
   ].join("\n");
+}
+
+function formatGlossarySection(glossaryBlock: string, includeRelationshipNote: boolean): string {
+  const lines = [
+    "## Terminology & Glossary",
+    "Source → target spelling is authoritative. The glossary notes are supporting context only. ALWAYS use the exact glossary translation — including spacing, punctuation, and capitalization — every time the source term appears.",
+    "Never invent alternative spellings or wordings for glossary entries.",
+  ];
+  if (includeRelationshipNote) {
+    lines.push(
+      "Approved character glossary mappings also supply exact Thai names to the relationship context.",
+    );
+  }
+  lines.push(glossaryBlock.trim());
+  return lines.join("\n");
+}
+
+function formatCustomInstructions(customPrompt: string): string {
+  return `## Custom Instructions\n${customPrompt.trim()}`;
 }
 
 // ---------------------------------------------------------------------------

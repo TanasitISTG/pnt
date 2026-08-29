@@ -153,8 +153,8 @@ export function buildGlossaryReviewPrompt(
   ].join("\n");
 }
 
-export function parseGlossaryReviewResponse(rawContent: string): GlossaryReviewResult[] {
-  if (!rawContent || !rawContent.trim()) return [];
+export function parseGlossaryReviewResponse(rawContent: string): GlossaryReviewResult[] | null {
+  if (!rawContent || !rawContent.trim()) return null;
 
   let jsonString = rawContent.trim();
   const codeBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
@@ -164,12 +164,14 @@ export function parseGlossaryReviewResponse(rawContent: string): GlossaryReviewR
 
   try {
     const parsed: unknown = JSON.parse(jsonString);
-    const container = parsed as { reviews?: unknown };
-    const rawArray: unknown[] = Array.isArray(parsed)
+    const container =
+      parsed && typeof parsed === "object" ? (parsed as { reviews?: unknown }) : null;
+    const rawArray: unknown[] | null = Array.isArray(parsed)
       ? parsed
       : Array.isArray(container?.reviews)
         ? container.reviews
-        : [];
+        : null;
+    if (rawArray === null) return null;
 
     return rawArray.flatMap((item) => {
       const r = reviewItemSchema.safeParse(item);
@@ -201,12 +203,12 @@ export function parseGlossaryReviewResponse(rawContent: string): GlossaryReviewR
       ];
     });
   } catch {
-    return [];
+    return null;
   }
 }
 
-export function parseTermSuggestions(rawContent: string): SuggestedTerm[] {
-  if (!rawContent || !rawContent.trim()) return [];
+export function parseTermSuggestions(rawContent: string): SuggestedTerm[] | null {
+  if (!rawContent || !rawContent.trim()) return null;
 
   let jsonString = rawContent.trim();
 
@@ -218,12 +220,13 @@ export function parseTermSuggestions(rawContent: string): SuggestedTerm[] {
 
   try {
     const parsed: unknown = JSON.parse(jsonString);
-    const container = parsed as { terms?: unknown };
-    const rawArray: unknown[] = Array.isArray(parsed)
+    const container = parsed && typeof parsed === "object" ? (parsed as { terms?: unknown }) : null;
+    const rawArray: unknown[] | null = Array.isArray(parsed)
       ? parsed
       : Array.isArray(container?.terms)
         ? container.terms
-        : [];
+        : null;
+    if (rawArray === null) return null;
 
     const validCategories: Record<string, true> = {
       character: true,
@@ -233,7 +236,7 @@ export function parseTermSuggestions(rawContent: string): SuggestedTerm[] {
       other: true,
     };
 
-    return rawArray.flatMap((item) => {
+    const suggestions = rawArray.flatMap((item) => {
       const r = suggestionItemSchema.safeParse(item);
       if (!r.success) return [];
       const category = Object.hasOwn(validCategories, String(r.data.category).toLowerCase())
@@ -248,7 +251,8 @@ export function parseTermSuggestions(rawContent: string): SuggestedTerm[] {
         },
       ];
     });
+    return rawArray.length > 0 && suggestions.length === 0 ? null : suggestions;
   } catch {
-    return [];
+    return null;
   }
 }

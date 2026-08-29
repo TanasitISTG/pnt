@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { chapters, novels, translationJobs, translationOutbox } from "@/lib/db/schema";
@@ -9,6 +9,84 @@ import { SafeServerError } from "@/lib/server-fn-error";
 import { nanoid } from "@/lib/utils";
 import { dispatchTranslationOutboxEventBestEffort } from "@/lib/translation/outbox";
 import { translationRunIdentity } from "@/lib/translation/job-state";
+import { loadApprovedTermsForContext } from "@/lib/translation/job-store";
+import { createProviderClient } from "@/lib/translation/provider-client";
+import { retryTranslationOperation } from "@/lib/translation/retry";
+import { translateChapterTitle } from "@/lib/translation/title";
+
+/** Split items into consecutive fixed-size batches, preserving order. */
+export function batchesOf<T>(items: T[], batchSize: number): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    batches.push(items.slice(i, i + batchSize));
+  }
+  return batches;
+}
+
+export async function translateMissingTitlesForUser(
+  userId: string,
+  novelId: string,
+): Promise<{ translated: number }> {
+  const [novel] = await db
+    .select()
+    .from(novels)
+    .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+    .limit(1);
+
+  if (!novel) {
+    throw new SafeServerError("Novel not found or unauthorized");
+  }
+
+  const missing = await db
+    .select({ id: chapters.id, title: chapters.title })
+    .from(chapters)
+    .where(
+      and(
+        eq(chapters.novelId, novelId),
+        eq(chapters.status, "translated"),
+        isNull(chapters.translatedTitle),
+      ),
+    )
+    .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`))
+    // One serverless request can't hold a big backlog of sequential
+    // LLM calls — cap per click; the UI re-clicks for the next batch.
+    .limit(20);
+
+  if (missing.length === 0) {
+    return { translated: 0 };
+  }
+
+  const [providerConfig, approvedTerms] = await Promise.all([
+    retryTranslationOperation(() => createProviderClient(userId)),
+    loadApprovedTermsForContext(novel.id),
+  ]);
+  const pair = `${novel.sourceLang}->${novel.targetLang}`;
+
+  // Small parallel batches: 20 sequential LLM calls is slow, 20 parallel
+  // is a provider rate-limit burst. 5 at a time.
+  let translated = 0;
+  for (const batch of batchesOf(missing, 5)) {
+    const results = await Promise.all(
+      batch.map(async (chapter) => {
+        const { translated: title } = await translateChapterTitle(
+          providerConfig,
+          pair,
+          chapter.title,
+          { glossaryTerms: approvedTerms, customPrompt: novel.customPrompt },
+        );
+        if (!title) return false;
+        await db
+          .update(chapters)
+          .set({ translatedTitle: title, updatedAt: new Date() })
+          .where(eq(chapters.id, chapter.id));
+        return true;
+      }),
+    );
+    translated += results.filter(Boolean).length;
+  }
+
+  return { translated };
+}
 
 export async function deleteAllNovelTranslationsForUser(
   userId: string,

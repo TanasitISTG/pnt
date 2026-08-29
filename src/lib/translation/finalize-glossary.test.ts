@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as jobStore from "./job-store";
 import { suggestAndReviewTerms } from "./finalize-glossary";
 import * as jsonCompletion from "./json-completion";
-import type { AIProviderClient, ChunkProgress } from "./translation.types";
+import type { AIProviderClient, ChunkProgress, LogEntry } from "./translation.types";
 
 vi.mock("./job-store", () => ({
   loadTermSourcesForExclusion: vi.fn(),
@@ -92,8 +92,74 @@ describe("suggestAndReviewTerms", () => {
     expect(result.approvedCount).toBe(1);
     expect(result.rejectedCount).toBe(1);
   });
+  it("retries malformed extraction before reviewing terms", async () => {
+    vi.mocked(jsonCompletion.generateJsonCompletion)
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ terms: [{ source: "Missing target" }] }),
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      })
+      .mockResolvedValueOnce({
+        content: "not json",
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ unexpected: [] }),
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      })
+      .mockResolvedValueOnce({
+        content: extractionResponse,
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      })
+      .mockResolvedValueOnce({
+        content: approvedReviewResponse,
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      });
 
-  it("saves no rows when review fails", async () => {
+    const result = await suggestAndReviewTerms({
+      providerConfig,
+      novel,
+      chunkList,
+      fullTranslation,
+      logs: [],
+    });
+
+    expect(jsonCompletion.generateJsonCompletion).toHaveBeenCalledTimes(5);
+    expect(result.rowsToInsert).toHaveLength(1);
+    expect(result.approvedCount).toBe(1);
+  });
+
+  it("does not retry a valid empty extraction", async () => {
+    vi.mocked(jsonCompletion.generateJsonCompletion).mockResolvedValueOnce({
+      content: JSON.stringify({ terms: [] }),
+      promptTokens: 10,
+      completionTokens: 5,
+      usedPlainFallback: false,
+    });
+
+    const result = await suggestAndReviewTerms({
+      providerConfig,
+      novel,
+      chunkList,
+      fullTranslation,
+      logs: [],
+    });
+
+    expect(jsonCompletion.generateJsonCompletion).toHaveBeenCalledTimes(1);
+    expect(result.rowsToInsert).toEqual([]);
+    expect(result.rejectedCount).toBe(0);
+  });
+
+  it("saves no rows when review fails after four retries", async () => {
     vi.mocked(jsonCompletion.generateJsonCompletion)
       .mockResolvedValueOnce({
         content: extractionResponse,
@@ -101,17 +167,21 @@ describe("suggestAndReviewTerms", () => {
         completionTokens: 5,
         usedPlainFallback: false,
       })
+      .mockRejectedValueOnce(new Error("review unavailable"))
+      .mockRejectedValueOnce(new Error("review unavailable"))
+      .mockRejectedValueOnce(new Error("review unavailable"))
       .mockRejectedValueOnce(new Error("review unavailable"));
+    const logs: LogEntry[] = [];
 
-    await expect(
-      suggestAndReviewTerms({
-        providerConfig,
-        novel,
-        chunkList,
-        fullTranslation,
-        logs: [],
-      }),
-    ).resolves.toEqual(
+    const result = await suggestAndReviewTerms({
+      providerConfig,
+      novel,
+      chunkList,
+      fullTranslation,
+      logs,
+    });
+
+    expect(result).toEqual(
       expect.objectContaining({
         rowsToInsert: [],
         approvedCount: 0,
@@ -119,6 +189,8 @@ describe("suggestAndReviewTerms", () => {
         rejectedCount: 2,
       }),
     );
+    expect(jsonCompletion.generateJsonCompletion).toHaveBeenCalledTimes(5);
+    expect(logs.some((entry) => entry.message.includes("no suggestions saved"))).toBe(true);
   });
   it("saves no rows when review returns malformed JSON", async () => {
     vi.mocked(jsonCompletion.generateJsonCompletion)
@@ -130,6 +202,24 @@ describe("suggestAndReviewTerms", () => {
       })
       .mockResolvedValueOnce({
         content: "not json",
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      })
+      .mockResolvedValueOnce({
+        content: "still not json",
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      })
+      .mockResolvedValueOnce({
+        content: "{}",
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      })
+      .mockResolvedValueOnce({
+        content: "[]",
         promptTokens: 10,
         completionTokens: 5,
         usedPlainFallback: false,
@@ -145,6 +235,7 @@ describe("suggestAndReviewTerms", () => {
 
     expect(result.rowsToInsert).toEqual([]);
     expect(result.rejectedCount).toBe(2);
+    expect(jsonCompletion.generateJsonCompletion).toHaveBeenCalledTimes(5);
   });
 
   it("saves no rows for review output from the old schema", async () => {

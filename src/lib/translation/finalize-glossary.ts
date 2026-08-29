@@ -4,6 +4,7 @@ import type { novels, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
 import { createLog } from "./log-entry";
 import { generateJsonCompletion } from "./json-completion";
+import { retryTranslationOperation } from "./retry";
 import {
   applyGlossarySuggestionPolicy,
   prepareGlossarySuggestionCandidates,
@@ -84,14 +85,18 @@ export async function suggestAndReviewTerms({
       rawSourceExcerpt,
     });
 
-    const suggestResult = await generateJsonCompletion(providerConfig, 0.3, [
-      { role: "system", content: suggestPrompt },
-      { role: "user", content: userMessage },
-    ]);
-    promptTokens += suggestResult.promptTokens;
-    completionTokens += suggestResult.completionTokens;
+    const suggestedTerms = await retryTranslationOperation(async () => {
+      const suggestResult = await generateJsonCompletion(providerConfig, 0.3, [
+        { role: "system", content: suggestPrompt },
+        { role: "user", content: userMessage },
+      ]);
+      promptTokens += suggestResult.promptTokens;
+      completionTokens += suggestResult.completionTokens;
 
-    const suggestedTerms = parseTermSuggestions(suggestResult.content);
+      const parsed = parseTermSuggestions(suggestResult.content);
+      if (parsed === null) throw new Error("Term suggestion returned invalid JSON");
+      return parsed;
+    });
     const reviewCandidates = prepareGlossarySuggestionCandidates(
       suggestedTerms,
       existingSources,
@@ -114,14 +119,20 @@ export async function suggestAndReviewTerms({
           fullTranslation,
         );
 
-        const reviewResult = await generateJsonCompletion(providerConfig, 0.1, [
-          { role: "system", content: reviewPrompt },
-          { role: "user", content: reviewUserMessage },
-        ]);
-        promptTokens += reviewResult.promptTokens;
-        completionTokens += reviewResult.completionTokens;
+        reviewResults = await retryTranslationOperation(async () => {
+          const reviewResult = await generateJsonCompletion(providerConfig, 0.1, [
+            { role: "system", content: reviewPrompt },
+            { role: "user", content: reviewUserMessage },
+          ]);
+          promptTokens += reviewResult.promptTokens;
+          completionTokens += reviewResult.completionTokens;
 
-        reviewResults = parseGlossaryReviewResponse(reviewResult.content);
+          const parsed = parseGlossaryReviewResponse(reviewResult.content);
+          if (!parsed || parsed.length === 0) {
+            throw new Error("Glossary review returned no valid reviews");
+          }
+          return parsed;
+        });
       } catch (reviewErr) {
         logs.push(
           createLog(

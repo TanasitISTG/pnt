@@ -2,7 +2,8 @@ import "@tanstack/react-start/server-only";
 
 import type { novels, chapters } from "@/lib/db/schema";
 import { createLog } from "./log-entry";
-import type { AIProviderClient, LogEntry } from "./translation.types";
+import { retryTranslationOperation } from "./retry";
+import type { AIProviderClient, GlossaryTermInput, LogEntry } from "./translation.types";
 import { translateChapterTitle } from "./title";
 import { buildSummaryPrompt } from "./prompts";
 
@@ -11,6 +12,7 @@ export interface FinalizeSummaryParams {
   novel: typeof novels.$inferSelect;
   chapter: typeof chapters.$inferSelect;
   fullTranslation: string;
+  approvedTerms: GlossaryTermInput[];
   logs: LogEntry[];
 }
 
@@ -27,6 +29,7 @@ export async function generateSummaryArtifacts({
   novel,
   chapter,
   fullTranslation,
+  approvedTerms,
   logs,
 }: FinalizeSummaryParams): Promise<FinalizeSummaryResult> {
   let promptTokens = 0;
@@ -38,6 +41,7 @@ export async function generateSummaryArtifacts({
     providerConfig,
     `${novel.sourceLang}->${novel.targetLang}`,
     chapter.title,
+    { glossaryTerms: approvedTerms, customPrompt: novel.customPrompt },
   );
   promptTokens += titleRes.promptTokens;
   completionTokens += titleRes.completionTokens;
@@ -56,32 +60,34 @@ export async function generateSummaryArtifacts({
   let updatedStorySummary: string | undefined;
   try {
     const summarySystemPrompt = buildSummaryPrompt(`${novel.sourceLang}->${novel.targetLang}`);
-    const summaryCompletion = await providerConfig.generateChatCompletion({
-      model: providerConfig.fastModel ?? undefined,
-      messages: [
-        { role: "system", content: summarySystemPrompt },
-        {
-          role: "user",
-          content: `Please summarize this chapter:\n\n${
-            fullTranslation.length > 10000
-              ? `${fullTranslation.slice(0, 6000)}\n[...]\n${fullTranslation.slice(-4000)}`
-              : fullTranslation
-          }`,
-        },
-      ],
+    const summaryContent = await retryTranslationOperation(async () => {
+      const summaryCompletion = await providerConfig.generateChatCompletion({
+        model: providerConfig.fastModel ?? undefined,
+        messages: [
+          { role: "system", content: summarySystemPrompt },
+          {
+            role: "user",
+            content: `Please summarize this chapter:\n\n${
+              fullTranslation.length > 10000
+                ? `${fullTranslation.slice(0, 6000)}\n[...]\n${fullTranslation.slice(-4000)}`
+                : fullTranslation
+            }`,
+          },
+        ],
+      });
+      promptTokens += summaryCompletion.usage?.promptTokens || 0;
+      completionTokens += summaryCompletion.usage?.completionTokens || 0;
+      const content = summaryCompletion.content?.trim() || "";
+      if (!content) throw new Error("Empty chapter summary completion");
+      return content;
     });
-    promptTokens += summaryCompletion.usage?.promptTokens || 0;
-    completionTokens += summaryCompletion.usage?.completionTokens || 0;
-    const content = summaryCompletion.content || null;
-    if (content) {
-      freshSummary = content;
-    }
+    freshSummary = summaryContent;
     const summaryTime = ((Date.now() - summaryStartTime) / 1000).toFixed(1);
     logs.push(createLog("success", `Summary generated in ${summaryTime}s.`));
 
-    if (freshSummary) {
-      // Update rolling story summary on novel (non-fatal)
-      try {
+    // Update rolling story summary on novel (non-fatal)
+    try {
+      updatedStorySummary = await retryTranslationOperation(async () => {
         const storySummaryCompletion = await providerConfig.generateChatCompletion({
           model: providerConfig.fastModel ?? undefined,
           messages: [
@@ -100,18 +106,18 @@ export async function generateSummaryArtifacts({
         });
         promptTokens += storySummaryCompletion.usage?.promptTokens || 0;
         completionTokens += storySummaryCompletion.usage?.completionTokens || 0;
-        updatedStorySummary = storySummaryCompletion.content?.trim() || undefined;
-        if (updatedStorySummary) {
-          logs.push(createLog("info", "Updated rolling story summary."));
-        }
-      } catch (storyErr) {
-        logs.push(
-          createLog(
-            "warn",
-            `Rolling story summary update skipped: ${storyErr instanceof Error ? storyErr.message : "Failed"}`,
-          ),
-        );
-      }
+        const content = storySummaryCompletion.content?.trim() || "";
+        if (!content) throw new Error("Empty story summary completion");
+        return content;
+      });
+      logs.push(createLog("info", "Updated rolling story summary."));
+    } catch (storyErr) {
+      logs.push(
+        createLog(
+          "warn",
+          `Rolling story summary update skipped: ${storyErr instanceof Error ? storyErr.message : "Failed"}`,
+        ),
+      );
     }
   } catch (sumErr) {
     logs.push(

@@ -31,6 +31,7 @@ import {
 import { canRunJob, isCompletedChunk, isNextChunk } from "./job-state";
 import { generateSummaryArtifacts } from "./finalize-summary";
 import { suggestAndReviewTerms } from "./finalize-glossary";
+import { retryTranslationOperation } from "./retry";
 
 // Execution is driven by Inngest (see src/lib/inngest/functions.ts): one event
 // per job, each chunk a memoized step with its own invocation + retries — so no
@@ -142,11 +143,11 @@ async function translatePiece(
 // ---------------------------------------------------------------------------
 // Residual hanzi repair
 // ---------------------------------------------------------------------------
-
 // Surgical splice first (cheap, precise — the common case is short spans like
 // bracketed system lines and names). Whole-chunk retry only when a long span
 // signals a passage-level failure: spliced prose would have incoherent seams.
-// Never loops — whatever survives is kept and surfaced via the admin badge.
+// Both repair strategies have bounded auxiliary retries; whatever survives is
+// kept and surfaced via the admin badge.
 const LONG_SPAN_LIMIT = 200;
 
 async function repairResidualHanzi(
@@ -170,24 +171,31 @@ async function repairResidualHanzi(
 
   if (extractHanziSpans(text).some((s) => s.text.length > LONG_SPAN_LIMIT)) {
     try {
-      const fix = await providerConfig.generateChatCompletion({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-          { role: "assistant", content: text },
-          {
-            role: "user",
-            content:
-              "Your translation still contains untranslated Chinese text. Re-output the COMPLETE translation with every Chinese word translated or transliterated — including bracketed lines, notifications, and all names. Preserve every ||¶|| marker exactly. Output only the corrected translation.",
-          },
-        ],
+      const repaired = await retryTranslationOperation(async () => {
+        const fix = await providerConfig.generateChatCompletion({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+            { role: "assistant", content: text },
+            {
+              role: "user",
+              content:
+                "Your translation still contains untranslated Chinese text. Re-output the COMPLETE translation with every Chinese word translated or transliterated — including bracketed lines, notifications, and all names. Preserve every ||¶|| marker exactly. Output only the corrected translation.",
+            },
+          ],
+        });
+        promptTokens += fix.usage?.promptTokens || 0;
+        completionTokens += fix.usage?.completionTokens || 0;
+
+        const fixed = fix.content || "";
+        if (!fixed.trim()) throw new Error("Empty Hanzi repair completion");
+        if (extractHanziSpans(fixed).some((s) => s.text.length > LONG_SPAN_LIMIT)) {
+          throw new Error("Hanzi repair still contains a long span");
+        }
+        return fixed;
       });
-      promptTokens += fix.usage?.promptTokens || 0;
-      completionTokens += fix.usage?.completionTokens || 0;
-      if ((fix.content || "").trim()) {
-        text = fix.content;
-        logs.push(createLog("info", `${chunkLabel} re-requested for untranslated passage.`));
-      }
+      text = repaired;
+      logs.push(createLog("info", `${chunkLabel} re-requested for untranslated passage.`));
     } catch (fixErr) {
       logs.push(
         createLog(
@@ -203,47 +211,51 @@ async function repairResidualHanzi(
   const stillDirty = findResidualSourceChars(langPair, text).length > 0;
   if (stillDirty && spans.length > 0 && spans.every((s) => s.text.length <= LONG_SPAN_LIMIT)) {
     try {
-      const targetLang = langPair.toLowerCase().endsWith("th") ? "Thai" : "English";
-      const repair = await providerConfig.generateChatCompletion({
-        temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content: `You translate Chinese web-novel fragments into ${targetLang}. Translate or transliterate every Chinese word, including names — no Chinese characters in the output. Reply with JSON: {"translations": [...]} — one translated string per input segment, same order and count.`,
-          },
-          { role: "user", content: JSON.stringify({ segments: spans.map((s) => s.text) }) },
-        ],
-        responseFormat: { type: "json_object" },
+      const repaired = await retryTranslationOperation(async () => {
+        const targetLang = langPair.toLowerCase().endsWith("th") ? "Thai" : "English";
+        const repair = await providerConfig.generateChatCompletion({
+          temperature: 0.2,
+          messages: [
+            {
+              role: "system",
+              content: `You translate Chinese web-novel fragments into ${targetLang}. Translate or transliterate every Chinese word, including names — no Chinese characters in the output. Reply with JSON: {"translations": [...]} — one translated string per input segment, same order and count.`,
+            },
+            { role: "user", content: JSON.stringify({ segments: spans.map((s) => s.text) }) },
+          ],
+          responseFormat: { type: "json_object" },
+        });
+        promptTokens += repair.usage?.promptTokens || 0;
+        completionTokens += repair.usage?.completionTokens || 0;
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(repair.content || "{}") as unknown;
+        } catch {
+          throw new Error("Invalid Hanzi span repair response");
+        }
+        const replacements = Array.isArray(parsed)
+          ? parsed
+          : parsed && typeof parsed === "object" && "translations" in parsed
+            ? parsed.translations
+            : null;
+        if (
+          !Array.isArray(replacements) ||
+          replacements.length !== spans.length ||
+          !replacements.every(
+            (replacement): replacement is string => typeof replacement === "string",
+          )
+        ) {
+          throw new Error("Invalid Hanzi span repair response");
+        }
+
+        const spliced = spliceSpans(text, spans, replacements);
+        if (spliced === null || findResidualSourceChars(langPair, spliced).length > 0) {
+          throw new Error("Invalid Hanzi span repair response");
+        }
+        return spliced;
       });
-      promptTokens += repair.usage?.promptTokens || 0;
-      completionTokens += repair.usage?.completionTokens || 0;
-
-      const parsed = JSON.parse(repair.content || "{}");
-      const replacements: unknown = Array.isArray(parsed) ? parsed : parsed?.translations;
-      const spliced =
-        Array.isArray(replacements) && replacements.every((r): r is string => typeof r === "string")
-          ? spliceSpans(text, spans, replacements)
-          : null;
-
-      if (spliced) {
-        const left = findResidualSourceChars(langPair, spliced).length;
-        text = spliced;
-        logs.push(
-          createLog(
-            left > 0 ? "warn" : "success",
-            left > 0
-              ? `${chunkLabel} still has ${left} hanzi after span repair — keeping anyway.`
-              : `${chunkLabel} hanzi spans repaired.`,
-          ),
-        );
-      } else {
-        logs.push(
-          createLog(
-            "warn",
-            `${chunkLabel} span repair returned mismatched segments — keeping original.`,
-          ),
-        );
-      }
+      text = repaired;
+      logs.push(createLog("success", `${chunkLabel} hanzi spans repaired.`));
     } catch (spanErr) {
       logs.push(
         createLog(
@@ -424,10 +436,13 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
 
   if (job.status !== "running" || !canRunJob(job, chapter, generation)) return;
 
-  const providerConfig = await createProviderClient(novel.userId);
+  const [providerConfig, chunkRows, approvedTerms] = await Promise.all([
+    createProviderClient(novel.userId),
+    loadJobChunks(jobId),
+    loadApprovedTermsForContext(novel.id),
+  ]);
 
   const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
-  const chunkRows = await loadJobChunks(jobId);
   if (job.doneChunks < chunkRows.length || chunkRows.length !== job.totalChunks) {
     throw new Error(
       `Job ${jobId} finalize called with ${job.doneChunks}/${job.totalChunks} chunks`,
@@ -457,6 +472,7 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
     novel,
     chapter,
     fullTranslation,
+    approvedTerms,
     logs,
   });
   totalPromptTokens += summaryRes.promptTokens;

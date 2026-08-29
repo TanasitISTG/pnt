@@ -1,8 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as jobStore from "@/lib/translation/job-store";
+import * as providerClientModule from "@/lib/translation/provider-client";
 import type { AIProviderClient } from "@/lib/translation/translation.types";
-import { analyzeRelationshipSourceChunk } from "./analyzer";
+import { analyzeChunkRelationships, analyzeRelationshipSourceChunk } from "./analyzer";
 import { relationshipMapSchema } from "./schemas";
+
+vi.mock("@/lib/translation/job-store", () => ({
+  applyRelationshipAnalysis: vi.fn(),
+  loadApprovedTermsForContext: vi.fn(),
+  loadJobChunk: vi.fn(),
+  loadPrevChapterForContext: vi.fn(),
+}));
+vi.mock("@/lib/translation/provider-client", () => ({ createProviderClient: vi.fn() }));
 
 const updatedAt = "2026-01-01T00:00:00.000Z";
 
@@ -71,6 +81,38 @@ function provider(response: unknown): AIProviderClient {
     }),
   };
 }
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([]);
+  vi.mocked(jobStore.loadPrevChapterForContext).mockResolvedValue(null as never);
+});
+const runnableChunkRow = {
+  job: {
+    id: "job-1",
+    status: "running",
+    generation: 3,
+    sourceRevision: 7,
+    doneChunks: 0,
+  },
+  chapter: {
+    number: "1",
+    activeTranslationJobId: "job-1",
+    translationGeneration: 3,
+    sourceRevision: 7,
+  },
+  novel: {
+    id: "novel-1",
+    userId: "user-1",
+    sourceLang: "zh",
+    targetLang: "th",
+    contextTailLength: 500,
+    relationshipMapJson: null,
+    storySummary: null,
+  },
+  chunk: { sourceText: "甲走进房间。" },
+  previousChunk: null,
+};
 
 describe("relationship source analyzer", () => {
   it("canonicalizes aliases in returned active pairs", async () => {
@@ -183,5 +225,118 @@ describe("relationship source analyzer", () => {
     expect(result.map.relationships).toEqual([]);
     expect(result.analysis?.relationships).toEqual([]);
     expect(result.analysis?.activePairs).toEqual([]);
+  });
+  it("retries invalid relationship output through the fourth attempt", async () => {
+    const generateChatCompletion = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporary provider failure"))
+      .mockResolvedValueOnce({
+        content: "not json",
+        usage: { promptTokens: 3, completionTokens: 2 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ unexpected: [] }),
+        usage: { promptTokens: 3, completionTokens: 2 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ characters: [], relationships: [], activePairs: [] }),
+        usage: { promptTokens: 3, completionTokens: 2 },
+      });
+    const providerConfig = { ...provider(null), generateChatCompletion } as AIProviderClient;
+
+    const result = await analyzeRelationshipSourceChunk({
+      pair: "zh->th",
+      providerConfig,
+      existingMap: mapWith([]),
+      approvedMappings: [],
+      previousSourceTail: null,
+      currentChunk: "甲走进房间。",
+      chapterNumber: 1,
+    });
+
+    expect(generateChatCompletion).toHaveBeenCalledTimes(4);
+    expect(result.analysis).toEqual({ characters: [], relationships: [], activePairs: [] });
+    expect(result.warning).toBeNull();
+    expect(result.promptTokens).toBe(9);
+    expect(result.completionTokens).toBe(6);
+  });
+  it("keeps stored relationship context after retry exhaustion", async () => {
+    const map = mapWith(
+      [character("a", "甲"), character("b", "乙")],
+      [relationship("pair", "a", "b")],
+    );
+    const generateChatCompletion = vi.fn().mockRejectedValue(new Error("provider unavailable"));
+    const providerConfig = { ...provider(null), generateChatCompletion } as AIProviderClient;
+
+    const result = await analyzeRelationshipSourceChunk({
+      pair: "zh->th",
+      providerConfig,
+      existingMap: map,
+      approvedMappings: [],
+      previousSourceTail: null,
+      currentChunk: "甲和乙一起走。",
+      chapterNumber: 1,
+    });
+
+    expect(generateChatCompletion).toHaveBeenCalledTimes(4);
+    expect(result.analysis).toBeNull();
+    expect(result.context?.activePairs).toEqual([
+      { speakerId: "a", listenerId: "b", relationshipId: "pair" },
+    ]);
+    expect(result.warning).toBe("Relationship analysis failed: provider unavailable.");
+    expect(result.promptTokens).toBe(0);
+    expect(result.completionTokens).toBe(0);
+  });
+});
+
+describe("chunk relationship provider setup", () => {
+  it("uses the provider created on the fourth attempt", async () => {
+    const providerConfig = provider({
+      characters: [],
+      relationships: [],
+      activePairs: [],
+    });
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue(runnableChunkRow as never);
+    vi.mocked(providerClientModule.createProviderClient)
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockResolvedValueOnce(providerConfig);
+
+    const result = await analyzeChunkRelationships("job-1", 0, 3);
+
+    expect(providerClientModule.createProviderClient).toHaveBeenCalledTimes(4);
+    expect(providerClientModule.createProviderClient).toHaveBeenCalledWith("user-1");
+    expect(result.warning).toBeNull();
+    expect(result.promptTokens).toBe(3);
+    expect(result.completionTokens).toBe(2);
+  });
+
+  it("returns stored context when provider creation exhausts its retries", async () => {
+    const storedMap = mapWith(
+      [character("a", "甲"), character("b", "乙")],
+      [relationship("pair", "a", "b")],
+    );
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...runnableChunkRow,
+      novel: {
+        ...runnableChunkRow.novel,
+        relationshipMapJson: JSON.stringify(storedMap),
+      },
+      chunk: { sourceText: "甲和乙一起走。" },
+    } as never);
+    vi.mocked(providerClientModule.createProviderClient).mockRejectedValue(
+      new Error("provider unavailable"),
+    );
+
+    const result = await analyzeChunkRelationships("job-1", 0, 3);
+
+    expect(providerClientModule.createProviderClient).toHaveBeenCalledTimes(4);
+    expect(result.context?.activePairs).toEqual([
+      { speakerId: "a", listenerId: "b", relationshipId: "pair" },
+    ]);
+    expect(result.warning).toBe("Relationship analysis unavailable: provider unavailable.");
+    expect(result.promptTokens).toBe(0);
+    expect(result.completionTokens).toBe(0);
   });
 });

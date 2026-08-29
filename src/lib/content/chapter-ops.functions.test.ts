@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { batchesOf } from "@/lib/content/chapter-ops.functions";
+import { batchesOf } from "@/lib/content/chapter-ops.service";
 
 const source = readFileSync(
   fileURLToPath(new URL("./chapter-ops.functions.ts", import.meta.url)),

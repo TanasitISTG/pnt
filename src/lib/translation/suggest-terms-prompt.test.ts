@@ -67,13 +67,29 @@ describe("suggest-terms-prompt", () => {
     });
     const result = parseTermSuggestions(json);
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({
+    expect(result?.[0]).toEqual({
       source: "Lin Fan",
       target: "หลินฟาน",
       category: "character",
       note: "MC",
     });
-    expect(result[1].category).toBe("place");
+    expect(result?.[1]?.category).toBe("place");
+  });
+  it("parses a top-level array and preserves a valid empty array", () => {
+    const result = parseTermSuggestions(
+      JSON.stringify([{ source: "Sword", target: "กระบี่", category: "item" }]),
+    );
+    expect(result).toEqual([{ source: "Sword", target: "กระบี่", category: "item" }]);
+    expect(parseTermSuggestions('{"terms":[]}')).toEqual([]);
+  });
+  it("rejects a non-empty array when every term is schema-invalid", () => {
+    expect(
+      parseTermSuggestions(
+        JSON.stringify({
+          terms: [{ source: "Missing target" }, { target: "Missing source" }],
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("parses JSON inside markdown code block", () => {
@@ -81,14 +97,14 @@ describe("suggest-terms-prompt", () => {
       'Here are the extracted terms:\n```json\n{\n  "terms": [\n    { "source": "Sword", "target": "กระบี่", "category": "item" }\n  ]\n}\n```';
     const result = parseTermSuggestions(md);
     expect(result).toHaveLength(1);
-    expect(result[0].source).toBe("Sword");
-    expect(result[0].category).toBe("item");
+    expect(result?.[0]?.source).toBe("Sword");
+    expect(result?.[0]?.category).toBe("item");
   });
 
   it("handles invalid or empty inputs gracefully", () => {
-    expect(parseTermSuggestions("")).toEqual([]);
-    expect(parseTermSuggestions("not json")).toEqual([]);
-    expect(parseTermSuggestions("{}")).toEqual([]);
+    expect(parseTermSuggestions("")).toBeNull();
+    expect(parseTermSuggestions("not json")).toBeNull();
+    expect(parseTermSuggestions("{}")).toBeNull();
   });
 });
 
@@ -130,10 +146,10 @@ describe("glossary review", () => {
     });
     const result = parseGlossaryReviewResponse(json);
     expect(result).toHaveLength(2);
-    expect(result[0].termType).toBe("named_entity");
-    expect(result[0].action).toBe("approve");
-    expect(result[0].confidence).toBe("high");
-    expect(result[1].action).toBe("pending");
+    expect(result?.[0]?.termType).toBe("named_entity");
+    expect(result?.[0]?.action).toBe("approve");
+    expect(result?.[0]?.confidence).toBe("high");
+    expect(result?.[1]?.action).toBe("pending");
   });
 
   it("falls back to pending, low confidence, and generic for invalid review fields", () => {
@@ -151,9 +167,9 @@ describe("glossary review", () => {
     });
     const result = parseGlossaryReviewResponse(json);
     expect(result).toHaveLength(1);
-    expect(result[0].termType).toBe("generic");
-    expect(result[0].action).toBe("pending");
-    expect(result[0].confidence).toBe("low");
+    expect(result?.[0]?.termType).toBe("generic");
+    expect(result?.[0]?.action).toBe("pending");
+    expect(result?.[0]?.confidence).toBe("low");
   });
 
   it("defaults missing termType to generic", () => {
@@ -164,7 +180,7 @@ describe("glossary review", () => {
         ],
       }),
     );
-    expect(result[0].termType).toBe("generic");
+    expect(result?.[0]?.termType).toBe("generic");
   });
 
   it("parses markdown-fenced review response", () => {
@@ -172,14 +188,15 @@ describe("glossary review", () => {
       '```json\n{"reviews": [{"source": "X", "target": "Y", "termType": "named_entity", "action": "reject", "confidence": "high", "reason": "duplicate", "matchingApprovedTerm": "X Original"}]}\n```';
     const result = parseGlossaryReviewResponse(md);
     expect(result).toHaveLength(1);
-    expect(result[0].termType).toBe("named_entity");
-    expect(result[0].action).toBe("reject");
-    expect(result[0].matchingApprovedTerm).toBe("X Original");
+    expect(result?.[0]?.termType).toBe("named_entity");
+    expect(result?.[0]?.action).toBe("reject");
+    expect(result?.[0]?.matchingApprovedTerm).toBe("X Original");
   });
 
   it("handles empty and invalid inputs", () => {
-    expect(parseGlossaryReviewResponse("")).toEqual([]);
-    expect(parseGlossaryReviewResponse("not json")).toEqual([]);
-    expect(parseGlossaryReviewResponse("{}")).toEqual([]);
+    expect(parseGlossaryReviewResponse("")).toBeNull();
+    expect(parseGlossaryReviewResponse("not json")).toBeNull();
+    expect(parseGlossaryReviewResponse("{}")).toBeNull();
+    expect(parseGlossaryReviewResponse('{"reviews":[]}')).toEqual([]);
   });
 });

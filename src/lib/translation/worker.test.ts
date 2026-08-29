@@ -132,6 +132,102 @@ describe("translation worker guarded state transitions", () => {
       expect.objectContaining({ translation: "Translated Chunk 1" }),
     );
   });
+  it("repairs short residual spans after four surgical attempts", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion
+      .mockResolvedValueOnce({
+        content: "Translated 许野",
+        usage: { promptTokens: 10, completionTokens: 20 },
+      })
+      .mockRejectedValueOnce(new Error("temporary span failure"))
+      .mockResolvedValueOnce({
+        content: "not json",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ translations: [] }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ translations: ["สวี่เหยี่ย"] }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(5);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "Translated สวี่เหยี่ย" }),
+    );
+  });
+
+  it("retries long residual passages before surgical cleanup", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion
+      .mockResolvedValueOnce({
+        content: `Translated ${"许".repeat(201)}`,
+        usage: { promptTokens: 10, completionTokens: 20 },
+      })
+      .mockRejectedValueOnce(new Error("temporary passage failure"))
+      .mockRejectedValueOnce(new Error("temporary passage failure"))
+      .mockRejectedValueOnce(new Error("temporary passage failure"))
+      .mockResolvedValueOnce({
+        content: "Translated 许野",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ translations: ["สวี่เหยี่ย"] }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(6);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "Translated สวี่เหยี่ย" }),
+    );
+  });
+
+  it("keeps the pre-repair translation after repair retries are exhausted", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion
+      .mockResolvedValueOnce({
+        content: "Translated 许野",
+        usage: { promptTokens: 10, completionTokens: 20 },
+      })
+      .mockRejectedValue(new Error("span repair unavailable"));
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(5);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "Translated 许野" }),
+    );
+  });
 
   it("does not call the provider for a stale event generation", async () => {
     vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
@@ -208,6 +304,8 @@ describe("translation worker guarded state transitions", () => {
         status: "approved" as const,
       },
     ];
+    const approvedTerms = [{ source: "许野", target: "สวี่เหยี่ย", category: "character", note: null }];
+    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue(approvedTerms as never);
     vi.mocked(finalizeGlossaryModule.suggestAndReviewTerms).mockResolvedValue({
       approvedCount: 1,
       pendingCount: 0,
@@ -219,6 +317,9 @@ describe("translation worker guarded state transitions", () => {
     });
 
     await finalizeJob("job-1", generation);
+    expect(finalizeSummaryModule.generateSummaryArtifacts).toHaveBeenCalledWith(
+      expect.objectContaining({ approvedTerms }),
+    );
 
     expect(jobStore.completeJob).toHaveBeenCalledWith(
       expect.objectContaining({

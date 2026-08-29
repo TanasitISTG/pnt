@@ -271,6 +271,33 @@ describe("prompts module", () => {
     expect(prompt).toContain("Chinese to Thai");
     expect(prompt).toContain("ONLY the translated title");
   });
+  it("adds glossary and custom sections before the title-only contract", () => {
+    const prompt = buildTitlePrompt(
+      "zh->th",
+      "- 许野 -> สวี่เหยี่ย (character)",
+      "Use the approved title style.",
+    );
+
+    expect(prompt).toContain("## Terminology & Glossary");
+    expect(prompt).toContain("许野 -> สวี่เหยี่ย");
+    expect(prompt).toContain("## Custom Instructions");
+    expect(prompt).toContain("Use the approved title style.");
+    expect(prompt).not.toContain("relationship context");
+
+    const glossaryIndex = prompt.indexOf("## Terminology & Glossary");
+    const customIndex = prompt.indexOf("## Custom Instructions");
+    const outputIndex = prompt.indexOf("Output ONLY the translated title");
+    expect(glossaryIndex).toBeLessThan(customIndex);
+    expect(customIndex).toBeLessThan(outputIndex);
+    expect(prompt.slice(outputIndex)).not.toContain("\n## ");
+  });
+
+  it("omits empty optional title prompt sections", () => {
+    const prompt = buildTitlePrompt("en->th", "  ", "\n");
+    expect(prompt).not.toContain("## Terminology & Glossary");
+    expect(prompt).not.toContain("## Custom Instructions");
+    expect(prompt).toContain("Output ONLY the translated title");
+  });
 
   // -- Shared residual CJK class (JS scanner ↔ SQL pre-filter) ---------------
 

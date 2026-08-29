@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createProviderClient } from "@/lib/translation/provider-client";
 import { generateJsonCompletion } from "@/lib/translation/json-completion";
+import { retryTranslationOperation } from "@/lib/translation/retry";
 import { normalizePair } from "@/lib/translation/prompts";
 import { canRunJob, isNextChunk } from "@/lib/translation/job-state";
 import {
@@ -82,7 +83,7 @@ export async function analyzeChunkRelationships(
 
   let providerConfig: AIProviderClient;
   try {
-    providerConfig = await createProviderClient(row.novel.userId);
+    providerConfig = await retryTranslationOperation(() => createProviderClient(row.novel.userId));
   } catch (error) {
     return {
       context: buildFallbackContext(storedMap, row.chunk.sourceText),
@@ -167,27 +168,21 @@ export async function analyzeRelationshipSourceChunk(
       previousSourceTail: options.previousSourceTail,
       currentChunk: options.currentChunk,
     });
-    const completion = await generateJsonCompletion(options.providerConfig, 0.1, [
-      { role: "system", content: prompt },
-      { role: "user", content: userMessage },
-    ]);
-    promptTokens = completion.promptTokens;
-    completionTokens = completion.completionTokens;
+    const analysis = await retryTranslationOperation(async () => {
+      const completion = await generateJsonCompletion(options.providerConfig, 0.1, [
+        { role: "system", content: prompt },
+        { role: "user", content: userMessage },
+      ]);
+      promptTokens += completion.promptTokens;
+      completionTokens += completion.completionTokens;
 
-    const parsed = parseRelationshipAnalysis(completion.content);
-    if (!parsed) {
-      return {
-        map: options.existingMap,
-        analysis: null,
-        context: fallback,
-        warning: "Relationship analysis returned invalid JSON.",
-        promptTokens,
-        completionTokens,
-      };
-    }
+      const parsed = parseRelationshipAnalysis(completion.content);
+      if (!parsed) throw new Error("Relationship analysis returned invalid JSON");
+      return parsed;
+    });
 
     const validated = validateAnalysis(
-      parsed,
+      analysis,
       options.currentChunk,
       options.existingMap,
       options.approvedMappings,
@@ -209,11 +204,15 @@ export async function analyzeRelationshipSourceChunk(
       completionTokens,
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "analysis error";
     return {
       map: options.existingMap,
       analysis: null,
       context: fallback,
-      warning: `Relationship analysis failed: ${error instanceof Error ? error.message : "analysis error"}.`,
+      warning:
+        message === "Relationship analysis returned invalid JSON"
+          ? "Relationship analysis returned invalid JSON."
+          : `Relationship analysis failed: ${message}.`,
       promptTokens,
       completionTokens,
     };
