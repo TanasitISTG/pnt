@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import * as jobStore from "@/lib/translation/job-store";
-import * as providerClientModule from "@/lib/translation/provider-client";
-import type { AIProviderClient } from "@/lib/translation/translation.types";
+import * as jobStore from "@/lib/translation/workflow/job-store";
+import * as providerClientModule from "@/lib/translation/providers/provider-client";
+import type { AIProviderClient } from "@/lib/translation/types/provider";
 import { analyzeChunkRelationships, analyzeRelationshipSourceChunk } from "./analyzer";
 import { relationshipMapSchema } from "./schemas";
 
-vi.mock("@/lib/translation/job-store", () => ({
+vi.mock("@/lib/translation/workflow/job-store", () => ({
   applyRelationshipAnalysis: vi.fn(),
   loadApprovedTermsForContext: vi.fn(),
   loadJobChunk: vi.fn(),
   loadPrevChapterForContext: vi.fn(),
 }));
-vi.mock("@/lib/translation/provider-client", () => ({ createProviderClient: vi.fn() }));
+vi.mock("@/lib/translation/providers/provider-client", () => ({ createProviderClient: vi.fn() }));
 
 const updatedAt = "2026-01-01T00:00:00.000Z";
 

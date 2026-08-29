@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ChapterTable, type ChapterTableProps } from "./chapter-table";
 import type { ChapterRow } from "./types";
-import type { ActiveJobState } from "@/lib/translation/translation.types";
+import type { ActiveJobState } from "@/lib/translation/types/api";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => createElement("a", null, children),

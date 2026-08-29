@@ -6,7 +6,7 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components
 import type { TitleEditState } from "@/components/chapters/use-chapter-title-edit";
 import { ChapterTableRow } from "./chapter-table-row";
 import type { ChapterRow } from "./types";
-import type { NovelCostData, ActiveJobState } from "@/lib/translation/translation.types";
+import type { NovelCostData, ActiveJobState } from "@/lib/translation/types/api";
 
 type OptimisticChapterOrder = {
   version: string;

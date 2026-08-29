@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { QueryErrorState } from "@/components/query-error-state";
 import { useTranslationJob } from "@/components/translation/use-translation-job";
-import { alignParagraphs, splitParagraphs } from "@/lib/translation/paragraphs";
+import { alignParagraphs, splitParagraphs } from "@/lib/translation/text/paragraphs";
 import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader/settings";
 import { ReaderContent } from "@/components/reader/chapter-content";
 import { ChapterTitleRow } from "@/components/reader/chapter-title-row";

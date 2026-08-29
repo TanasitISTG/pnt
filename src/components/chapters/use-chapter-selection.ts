@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { ChapterRow } from "@/components/chapters/types";
-import type { ActiveJobState } from "@/lib/translation/translation.types";
+import type { ActiveJobState } from "@/lib/translation/types/api";
 
 export function useChapterSelection(
   chapters: ChapterRow[],

@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { downloadText, sanitizeFilename } from "@/lib/download";
 import type { ReaderSettings, ReaderViewMode } from "@/lib/reader/types";
-import type { ActiveJobState } from "@/lib/translation/translation.types";
+import type { ActiveJobState } from "@/lib/translation/types/api";
 import { cn } from "@/lib/utils";
 import { ReaderSettingsPanel } from "./reader-settings-panel";
 

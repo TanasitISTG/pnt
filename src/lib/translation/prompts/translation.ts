@@ -1,0 +1,244 @@
+import type { RelationshipPromptContext } from "@/lib/relationships/map";
+import { formatRelationshipContext } from "./relationship-context";
+import { LANG_LABELS, normalizePair, type LanguagePair } from "./language";
+
+export interface ContextOptions {
+  previousSummary?: string | null;
+  relationshipContext?: RelationshipPromptContext | null;
+}
+
+// ---------------------------------------------------------------------------
+// Public builders
+// ---------------------------------------------------------------------------
+
+export function buildSystemPrompt(
+  pair: string,
+  glossaryBlock?: string | null,
+  context?: ContextOptions | null,
+  customPrompt?: string | null,
+): string {
+  const p = normalizePair(pair);
+
+  const sections: string[] = [
+    getRoleLine(p),
+    getPriorityOrder(),
+    getHardRules(),
+    getStyleGuidelines(p),
+    getFewShotExample(p),
+  ];
+
+  if (glossaryBlock && glossaryBlock.trim().length > 0) {
+    sections.push(formatGlossarySection(glossaryBlock, true));
+  }
+
+  if (context?.previousSummary && context.previousSummary.trim().length > 0) {
+    sections.push(
+      `## Story Context\n### Summary of Previous Chapter:\n${context.previousSummary.trim()}`,
+    );
+  }
+
+  if (context?.relationshipContext) {
+    sections.push(formatRelationshipContext(context.relationshipContext));
+  }
+
+  if (customPrompt && customPrompt.trim().length > 0) {
+    sections.push(formatCustomInstructions(customPrompt));
+  }
+
+  sections.push(getOutputContract());
+
+  return sections.join("\n\n");
+}
+
+/**
+ * Builds the user message with optional preceding-translation context and
+ * <<<BEGIN_TEXT>>> / <<<END_TEXT>>> delimiters around the translatable chunk.
+ */
+export function buildUserMessage(markedText: string, previousChunkTail?: string | null): string {
+  const parts: string[] = [];
+
+  if (previousChunkTail && previousChunkTail.trim().length > 0) {
+    parts.push(
+      `[Preceding translation for continuity — do not translate this]\n...${previousChunkTail.trim()}`,
+    );
+  }
+
+  parts.push(`<<<BEGIN_TEXT>>>\n${markedText}\n<<<END_TEXT>>>`);
+
+  return parts.join("\n\n");
+}
+
+export function buildTitlePrompt(
+  pair: string,
+  glossaryBlock?: string | null,
+  customPrompt?: string | null,
+): string {
+  const normalizedPair = normalizePair(pair);
+  const langs: Record<LanguagePair, string> = {
+    "en->th": "English to Thai",
+    "zh->en": "Chinese to English",
+    "zh->th": "Chinese to Thai",
+  };
+  const sections = [
+    `You are a professional literary translator. Translate the chapter title from ${langs[normalizedPair]}.`,
+  ];
+  if (glossaryBlock && glossaryBlock.trim().length > 0) {
+    sections.push(formatGlossarySection(glossaryBlock, false));
+  }
+  if (customPrompt && customPrompt.trim().length > 0) {
+    sections.push(formatCustomInstructions(customPrompt));
+  }
+  sections.push(
+    "Output ONLY the translated title — no quotes, no explanation, no chapter numbers.",
+  );
+  return sections.join("\n\n");
+}
+
+export function buildSummaryPrompt(_pair: string): string {
+  return [
+    "You are an expert novel editor and summarizer.",
+    "Provide a concise summary (~150-250 words) of the chapter.",
+    "CRITICAL REQUIREMENT: Always write the summary in ENGLISH, regardless of the source or target language of the novel.",
+    "",
+    "Structure your summary with these sections:",
+    "PLOT: Key events and developments (2-3 sentences).",
+    "CHARACTERS: Named characters active in this chapter, their current state, and relationships shown.",
+    "SETTING: Current location(s) and any setting changes.",
+    "DIALOGUE CONTINUITY: Record only character gender/role, directed relationship changes, and recurring speech-register facts explicitly evidenced in this chapter. Do not infer or invent pronoun mappings; this remains supporting context and does not overwrite the structured relationship map.",
+    "CONTEXT: Key facts, unresolved tensions, or foreshadowing that would help translate the next chapter.",
+  ].join("\n");
+}
+
+function formatGlossarySection(glossaryBlock: string, includeRelationshipNote: boolean): string {
+  const lines = [
+    "## Terminology & Glossary",
+    "Source → target spelling is authoritative. The glossary notes are supporting context only. ALWAYS use the exact glossary translation — including spacing, punctuation, and capitalization — every time the source term appears.",
+    "Never invent alternative spellings or wordings for glossary entries.",
+  ];
+  if (includeRelationshipNote) {
+    lines.push(
+      "Approved character glossary mappings also supply exact Thai names to the relationship context.",
+    );
+  }
+  lines.push(glossaryBlock.trim());
+  return lines.join("\n");
+}
+
+function formatCustomInstructions(customPrompt: string): string {
+  return `## Custom Instructions\n${customPrompt.trim()}`;
+}
+
+// ---------------------------------------------------------------------------
+// Internals
+// ---------------------------------------------------------------------------
+
+function getRoleLine(pair: LanguagePair): string {
+  const { source, target } = LANG_LABELS[pair];
+  return `You translate ${source} web novels into ${target}.`;
+}
+
+function getPriorityOrder(): string {
+  return [
+    "## Translation Priorities (highest first)",
+    "1. Exact glossary names and source → target spellings",
+    "2. Facts explicitly shown in the current source",
+    "3. Locked admin speech choices for the directed pair",
+    "4. Automatic current-scene relationship guidance",
+    "5. Custom instructions and global style defaults",
+    "6. Completeness — translate every word, line, and element",
+    "7. Meaning fidelity — convey the author's intent accurately",
+    "8. Natural target language — restructure for natural target-language syntax",
+    "9. Style preservation — maintain tone, pacing, and voice",
+  ].join("\n");
+}
+
+function getHardRules(): string {
+  return [
+    "## Hard Rules",
+    "- Translate everything: narration, dialogue, system messages, internal thoughts, status windows, sound effects, bracketed text (【】[]), notifications, names, and usernames. Transliterate names into the target script. No source-language text may remain.",
+    "- Do not add information absent from the source. Do not explain terms. Do not infer omitted context.",
+    "- Do not rewrite for literary improvement. Preserve pacing, repetition, and stylistic quirks when intentional.",
+    "- Do not summarize or skip content.",
+    "- If HTML/XML-like tags appear in the source, preserve them verbatim. Translate only visible text content.",
+    "- Preserve every ||¶|| paragraph marker exactly as-is in your translation output, in the same position relative to the surrounding paragraphs. Do not add, remove, or reorder markers.",
+  ].join("\n");
+}
+
+function getStyleGuidelines(pair: LanguagePair): string {
+  const { target } = LANG_LABELS[pair];
+  const lines = [
+    "## Style Guidelines",
+    `- Translate the meaning of each sentence. Restructure for natural ${target} syntax — do not mirror source sentence structure.`,
+    "- When the source is intentionally ambiguous, preserve the ambiguity. Do not resolve uncertain pronouns unless the original does.",
+    "- Render every ellipsis or hesitation pause as a single `…`. Never output runs of dots or middle dots (`......`, `······`, `……`).",
+    "- For names not in the glossary, transliterate consistently. If a proper noun appears multiple times, use the same translation every time.",
+  ];
+
+  if (pair === "en->th" || pair === "zh->th") {
+    lines.push(
+      "- Thai punctuation and quotes: use curly double quotes (“…”), and do not leave space before `…`.",
+      "- Dialogue should sound as if originally written in Thai. Each character must have a consistent speech level, vocabulary, pronoun choice, and honorific usage. Do not make different characters sound alike.",
+      "- Keep each named character's Thai pronoun and speech level consistent with the Story Context, Character & Relationship Context, and preceding translation.",
+    );
+  }
+
+  if (pair === "zh->th") {
+    lines.push(
+      "- Identify both the dialogue speaker and listener before choosing Thai forms; second-person words follow the listener's gender. นาย is not for a female listener.",
+      "- A male 我 may become ผม toward elders, superiors, or formal listeners, but may become ฉัน, เรา, a name, a kinship term, or omission among close peers or intimates.",
+      "- Do not append ครับ, ค่ะ, or คะ by default; use sentence particles only when the directed relationship context or source evidence supports them.",
+      "- When evidence is insufficient, preserve ambiguity by omitting the pronoun or using an established name or kinship term rather than guessing gender or status.",
+      "- A current source change may supersede a relationship label, but automatic analysis and generic custom instructions may not overwrite a locked per-pair speech choice.",
+    );
+  }
+
+  if (pair === "zh->en") {
+    lines.push(
+      "- Properly localize cultivation ranks, techniques, and honorific idioms while preserving the genre's distinct atmosphere.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function getFewShotExample(pair: LanguagePair): string {
+  if (pair === "zh->th") {
+    return [
+      "## Examples (Chinese → Thai dialogue direction)",
+      "1. Source: 男人对女人说：“你先走。” Good translation: “เธอไปก่อนเถอะ”",
+      "2. Source: 儿子对父亲说：“我会回来的。” Good translation: “ผมจะกลับมา”",
+      "3. Source: 男人对亲密的男性朋友说：“你别装了，我知道。” Good translation: “ฉันรู้ว่านายกำลังแกล้งทำ”",
+      "4. Source: 男主对女主说：“我只想和你在一起。” Good translation: “ฉันแค่อยากอยู่กับเธอ”",
+      "These are directional examples, not a global mapping for 我 or 你. Do not add ครับ/ค่ะ/คะ by default.",
+    ].join("\n");
+  }
+
+  const examples: Record<LanguagePair, { source: string; translation: string }> = {
+    "en->th": {
+      source: `"I told you to stay away," he said coldly, turning his back to her. She clenched her fists but said nothing.`,
+      translation: `“บอกแล้วไงว่าอย่าเข้ามาใกล้” เขาพูดเสียงเย็นชาพลางหันหลังให้เธอ เธอกำหมัดแน่นแต่ไม่ได้เอ่ยอะไร`,
+    },
+    "zh->en": {
+      source: `"你以为你是谁？"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
+      translation: `"Who do you think you are?" he sneered. Behind him, the girl trembled yet said nothing.`,
+    },
+    "zh->th": {
+      source: `"你以为你是谁……"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
+      translation: `“แกคิดว่าแกเป็นใคร…” เขายิ้มเยาะ สาวน้อยด้านหลังตัวสั่นแต่ไม่เอ่ยสักคำ`,
+    },
+  };
+
+  const ex = examples[pair];
+  return ["## Example", `Source: ${ex.source}`, `Good translation: ${ex.translation}`].join("\n");
+}
+
+function getOutputContract(): string {
+  return [
+    "## Output Requirements",
+    "- Translate ONLY the text between the <<<BEGIN_TEXT>>> and <<<END_TEXT>>> markers.",
+    "- Output only the translated text.",
+    "- Do not wrap output in Markdown code fences.",
+    "- Do not include explanations, notes, or commentary.",
+    "- This text is a segment of a longer chapter. It may begin or end mid-sentence. Translate it completely without adding introductory or concluding remarks.",
+  ].join("\n");
+}

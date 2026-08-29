@@ -10,9 +10,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getTranslationJobStatus } from "@/lib/translation/translation.functions";
+import { getTranslationJobStatus } from "@/lib/translation/api/queries";
 import { formatLocalDateTime, formatLocalTime, parseDateTime } from "@/lib/date-time";
-import type { LogEntry, SlimChunkProgress } from "@/lib/translation/translation.types";
+import type { LogEntry } from "@/lib/translation/types/workflow";
+import type { SlimChunkProgress } from "@/lib/translation/types/api";
 import { ChapterStatusBadge } from "@/components/chapters/chapter-status-badge";
 import type { ChapterStatus } from "@/components/chapters/types";
 import { Loader2, Terminal, Cpu, Zap, XCircle } from "lucide-react";

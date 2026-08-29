@@ -4,21 +4,18 @@ import { eq, and, inArray, lt, sql, desc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels, chapters, glossaryTerms } from "@/lib/db/schema";
-import { chunkText } from "@/lib/translation/chunker";
-import {
-  buildSystemPrompt,
-  buildUserMessage,
-  findResidualSourceChars,
-  normalizePair,
-} from "@/lib/translation/prompts";
+import { chunkText } from "@/lib/translation/text/chunker";
+import { buildSystemPrompt, buildUserMessage } from "@/lib/translation/prompts/translation";
+import { normalizePair } from "@/lib/translation/prompts/language";
+import { findResidualSourceChars } from "@/lib/translation/text/residual";
 import {
   injectParagraphMarkers,
   restoreParagraphMarkers,
   countParagraphMarkers,
   normalizeTranslationOutput,
-} from "@/lib/translation/paragraphs";
-import { filterGlossaryForChunk, formatGlossaryBlock } from "@/lib/translation/glossary";
-import { createProviderClient } from "@/lib/translation/provider-client";
+} from "@/lib/translation/text/paragraphs";
+import { filterGlossaryForChunk, formatGlossaryBlock } from "@/lib/translation/glossary/terms";
+import { createProviderClient } from "@/lib/translation/providers/provider-client";
 import { analyzeRelationshipSourceChunk } from "@/lib/relationships/analyzer";
 import { emptyRelationshipMap, parseRelationshipMap } from "@/lib/relationships/map";
 

@@ -5,8 +5,8 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { chapters, novels, translationJobs, translationOutbox } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { dispatchTranslationOutboxEventBestEffort } from "@/lib/translation/outbox";
-import { translationRunIdentity } from "@/lib/translation/job-state";
+import { dispatchTranslationOutboxEventBestEffort } from "@/lib/translation/workflow/outbox";
+import { translationRunIdentity } from "@/lib/translation/workflow/job-state";
 import { nanoid } from "@/lib/utils";
 import type { ReorderChaptersInput } from "@/lib/content/novel.schemas";
 

@@ -1,16 +1,16 @@
 import "@tanstack/react-start/server-only";
 
-import { createProviderClient } from "@/lib/translation/provider-client";
-import { generateJsonCompletion } from "@/lib/translation/json-completion";
-import { retryTranslationOperation } from "@/lib/translation/retry";
-import { normalizePair } from "@/lib/translation/prompts";
-import { canRunJob, isNextChunk } from "@/lib/translation/job-state";
+import { createProviderClient } from "@/lib/translation/providers/provider-client";
+import { generateJsonCompletion } from "@/lib/translation/providers/json-completion";
+import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
+import { normalizePair } from "@/lib/translation/prompts/language";
+import { canRunJob, isNextChunk } from "@/lib/translation/workflow/job-state";
 import {
   applyRelationshipAnalysis,
   loadApprovedTermsForContext,
   loadJobChunk,
   loadPrevChapterForContext,
-} from "@/lib/translation/job-store";
+} from "@/lib/translation/workflow/job-store";
 import type { RelationshipPromptContext, RelationshipActivePairInput } from "./map";
 import {
   buildRelationshipPromptContext,
@@ -24,7 +24,7 @@ import {
   parseRelationshipAnalysis,
 } from "./analysis-prompt";
 import { MAX_RELATIONSHIP_PROMPT_ITEMS, normalizeIdentity } from "./schemas";
-import type { AIProviderClient } from "@/lib/translation/translation.types";
+import type { AIProviderClient } from "@/lib/translation/types/provider";
 import type {
   ApprovedCharacterMapping,
   RelationshipAnalysis,

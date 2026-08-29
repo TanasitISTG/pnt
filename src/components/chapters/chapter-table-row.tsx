@@ -22,7 +22,7 @@ import { ChapterStatusBadge } from "@/components/chapters/chapter-status-badge";
 import type { TitleEditState } from "@/components/chapters/use-chapter-title-edit";
 import { PublishMenu } from "@/components/publish-menu";
 import { cn, formatCost, formatTokens } from "@/lib/utils";
-import type { ActiveJobState, NovelCostData } from "@/lib/translation/translation.types";
+import type { ActiveJobState, NovelCostData } from "@/lib/translation/types/api";
 import type { ChapterRow } from "./types";
 
 export type ChapterCost = NovelCostData["costs"][string];

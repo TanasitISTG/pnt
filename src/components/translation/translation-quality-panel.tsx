@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { listTranslationEvalReports, startTranslationEval } from "@/lib/translation/eval.functions";
+import {
+  listTranslationEvalReports,
+  startTranslationEval,
+} from "@/lib/translation/evaluation/eval.functions";
 import { formatLocalDateTime } from "@/lib/date-time";
 export function TranslationQualityPanel({ novelId }: { novelId: string }) {
   const queryClient = useQueryClient();

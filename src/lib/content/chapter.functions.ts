@@ -9,7 +9,7 @@ import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { novelLive, chapterLive } from "@/lib/content/publish";
-import { normalizePunctuation } from "@/lib/translation/paragraphs";
+import { normalizePunctuation } from "@/lib/translation/text/paragraphs";
 import {
   createChapterSchema,
   editChapterSchema,

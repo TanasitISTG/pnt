@@ -6,7 +6,7 @@ import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { useTranslationJob } from "./use-translation-job";
-import * as translationFns from "@/lib/translation/translation.functions";
+import * as translationFns from "@/lib/translation/api/mutations";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -17,16 +17,19 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/translation/translation.functions", async (importOriginal) => {
+vi.mock("@/lib/translation/api/mutations", async (importOriginal) => {
   const actual = await importOriginal<typeof translationFns>();
   return {
     ...actual,
     startTranslationJob: vi.fn(),
     startTranslationJobs: vi.fn(),
-    listActiveTranslationJobs: vi.fn().mockResolvedValue([]),
-    getTranslationJobsTerminalStatus: vi.fn().mockResolvedValue([]),
   };
 });
+
+vi.mock("@/lib/translation/api/queries", () => ({
+  listActiveTranslationJobs: vi.fn().mockResolvedValue([]),
+  getTranslationJobsTerminalStatus: vi.fn().mockResolvedValue([]),
+}));
 
 describe("useTranslationJob", () => {
   let queryClient: QueryClient;

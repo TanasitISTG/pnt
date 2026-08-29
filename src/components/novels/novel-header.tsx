@@ -26,7 +26,7 @@ import type { ChapterRow } from "@/components/chapters/types";
 import { formatCost, formatTokens } from "@/lib/utils";
 import type { getNovel } from "@/lib/content/novel.functions";
 import type { getGlossaryStats } from "@/lib/glossary/functions";
-import type { getNovelCosts } from "@/lib/translation/translation.functions";
+import type { getNovelCosts } from "@/lib/translation/api/queries";
 
 type Novel = NonNullable<Awaited<ReturnType<typeof getNovel>>>;
 type GlossaryStats = Awaited<ReturnType<typeof getGlossaryStats>> | undefined;

@@ -6,10 +6,12 @@ import {
   startTranslationJobs,
   cancelTranslationJob,
   retryTranslationJob,
+} from "@/lib/translation/api/mutations";
+import {
   listActiveTranslationJobs,
   getTranslationJobsTerminalStatus,
-} from "@/lib/translation/translation.functions";
-import type { ActiveJobState } from "@/lib/translation/translation.types";
+} from "@/lib/translation/api/queries";
+import type { ActiveJobState } from "@/lib/translation/types/api";
 
 // This hook is a read-only observer: translation work is executed by Inngest
 // (see src/lib/inngest/functions.ts), never by the browser — so page

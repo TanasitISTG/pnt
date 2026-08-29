@@ -6,9 +6,12 @@ import { db } from "@/lib/db";
 import { providerSettings } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth/functions";
 import { auth } from "@/lib/auth/auth";
-import { encrypt, decrypt } from "@/lib/translation/crypto";
-import { OpenAIProviderClient, GeminiProviderClient } from "@/lib/translation/provider-client";
-import type { ProviderType, ReasoningEffort } from "@/lib/translation/translation.types";
+import { encrypt, decrypt } from "@/lib/settings/crypto";
+import {
+  OpenAIProviderClient,
+  GeminiProviderClient,
+} from "@/lib/translation/providers/provider-client";
+import type { ProviderType, ReasoningEffort } from "@/lib/translation/types/provider";
 import {
   saveProviderSettingsSchema,
   testProviderConnectionSchema,

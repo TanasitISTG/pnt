@@ -66,7 +66,7 @@ Database migrations are a release operation, not a Vercel build operation. Produ
 
 ## Code Conventions & Common Patterns
 
-- **TypeScript:** Strict compiler settings, no unused locals/parameters, no explicit `any`, no unchecked side-effect imports, and no fallthrough. Prefer named exports, descriptive camelCase symbols, and colocated leaf types such as `translation.types.ts`, `reader/types.ts`, and `*.schemas.ts` for Zod-inferred inputs. Use `@/` (or `#/`) aliases instead of long relative imports.
+- **TypeScript:** Strict compiler settings, no unused locals/parameters, no explicit `any`, no unchecked side-effect imports, and no fallthrough. Prefer named exports, descriptive camelCase symbols, and colocated leaf types such as `translation/types/*.ts`, `reader/types.ts`, and `*.schemas.ts` for Zod-inferred inputs. Use `@/` (or `#/`) aliases instead of long relative imports.
 - **Server functions:** Follow `createServerFn({ method })` + `.validator(schema)` + `.handler(...)`. Use `ensureSession()` for mutations, verify resource ownership through the novel/user join, apply guest publication filters and `checkRateLimit` to public reads, and return safe errors through `withSafeHandler`/`SafeServerError`.
 - **Errors and untrusted data:** Catch variables are `unknown`; narrow with `instanceof Error`. Validate request/form/JSON input with Zod. Unknown server failures are logged and exposed as a generic safe message. Do not leak provider keys or internal database details.
 - **Database/state:** Drizzle properties are camelCase over snake_case columns. Use `nanoid()` IDs, transactions, and `for('update')` locks for job ownership/state changes. Keep source revisions, translation generations, active job IDs, and outbox intent consistent; do not implement worker validity rules in route handlers.
@@ -83,7 +83,7 @@ Database migrations are a release operation, not a Vercel build operation. Produ
 - `src/routes/__root.tsx`, `src/routes/_public.tsx`, `src/routes/_protected.tsx` — app shell/session context and route access boundaries.
 - `src/lib/env.ts`, `src/lib/db/index.ts`, `src/lib/db/schema/index.ts` — validated server environment and database wiring.
 - `src/lib/auth/functions.ts`, `src/lib/content/*.functions.ts` — session helpers and authenticated content operations.
-- `src/lib/translation/translation.functions.ts`, `worker.ts`, `job-store.ts`, `job-state.ts`, `outbox.ts` — translation enqueue/read APIs, durable execution, invariants, and delivery.
+- `src/lib/translation/api/mutations.ts`, `api/queries.ts`, `workflow/worker.ts`, `workflow/job-store.ts`, `workflow/job-state.ts`, `workflow/outbox.ts` — translation enqueue/read APIs, durable execution, invariants, and delivery.
 - `src/lib/inngest/functions.ts` — translation, import, evaluation, and outbox Inngest functions.
 - `src/lib/scrape/index.ts`, `parsers.ts`, `server.ts`, `network-policy.server.ts`, `worker.ts` — scraping boundaries and bulk import.
 - `src/styles/globals.css`, `vite.config.ts`, `tsconfig.json`, `.oxlintrc.json`, `drizzle.config.ts` — UI tokens, build, compiler, lint, and migration configuration.

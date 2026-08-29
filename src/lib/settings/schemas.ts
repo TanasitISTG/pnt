@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { ReasoningEffort } from "@/lib/translation/translation.types";
+import type { ReasoningEffort } from "@/lib/translation/types/provider";
 
 const reasoningEffortValues = [
   "none",

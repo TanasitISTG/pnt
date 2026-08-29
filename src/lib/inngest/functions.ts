@@ -1,7 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { inngest } from "./client";
-import { initJob, translateChunk, finalizeJob, failJob } from "@/lib/translation/worker";
+import { initJob, translateChunk, finalizeJob, failJob } from "@/lib/translation/workflow/worker";
 import { analyzeChunkRelationships } from "@/lib/relationships/analyzer";
 import {
   initImportJob,
@@ -19,10 +19,10 @@ import {
   cleanupExpiredEpubUploads,
 } from "@/lib/epub/worker";
 import { log } from "@/lib/log";
-import { dispatchPendingTranslationOutbox } from "@/lib/translation/outbox";
-import { TRANSLATION_CANCEL_IF } from "@/lib/translation/job-state";
-import { TRANSLATION_RETRY_COUNT } from "@/lib/translation/retry";
-import { runTranslationEvalReport } from "@/lib/translation/eval-worker";
+import { dispatchPendingTranslationOutbox } from "@/lib/translation/workflow/outbox";
+import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
+import { TRANSLATION_RETRY_COUNT } from "@/lib/translation/workflow/retry";
+import { runTranslationEvalReport } from "@/lib/translation/evaluation/eval-worker";
 
 // onFailure wraps the original trigger event: event.data.event.data.jobId.
 type FailedRunEventData = { event?: { data?: { jobId?: string; generation?: number } } };

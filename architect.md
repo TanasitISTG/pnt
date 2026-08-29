@@ -73,12 +73,12 @@ Locked admin entries are authoritative and survive conflicting automatic evidenc
 
 ## Boundaries
 
-- `translation/job-state.ts`: pure transition predicates and compatibility helpers.
-- `translation/job-store.ts`: conditional persistence and atomic worker commits, including job-owned relationship-map analysis writes.
+- `translation/workflow/job-state.ts`: pure transition predicates and compatibility helpers.
+- `translation/workflow/job-store.ts`: conditional persistence and atomic worker commits, including job-owned relationship-map analysis writes.
 - `relationships/map.ts` and `relationships/schemas.ts`: bounded versioned documents, fail-closed parsing, directional merge rules, and prompt projections.
 - `relationships/analyzer.ts`: non-fatal ZH→TH source-window analysis and fallback context.
 - `relationships/functions.ts` and `relationships/service.ts`: authenticated ownership-checked relationship-map mutations.
-- `translation/outbox.ts`: durable event delivery; due rows compare against PostgreSQL `CURRENT_TIMESTAMP` so database visibility and eligibility use one clock.
+- `translation/workflow/outbox.ts`: durable event delivery; due rows compare against PostgreSQL `CURRENT_TIMESTAMP` so database visibility and eligibility use one clock.
 - `export/stream.ts` and `/api/exports/$`: authenticated cursor-backed TXT/EPUB response streaming with numeric chapter ordering and `HEAD` support.
 - `scrape.ts` and `scrape/parsers.ts`: client-safe source metadata and pure HTML parsing; `scrape/network-policy.server.ts` exclusively owns DNS resolution and private-address rejection.
 - Route-facing server functions authenticate and delegate state transitions; they do not implement worker validity rules.

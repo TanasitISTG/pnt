@@ -5,7 +5,7 @@ import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { db, queryClient } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { contentDisposition, sanitizeFilename } from "@/lib/filename";
-import { splitParagraphs } from "@/lib/translation/paragraphs";
+import { splitParagraphs } from "@/lib/translation/text/paragraphs";
 import { createEpubStream, type EpubChapter, type EpubMetadata } from "./epub";
 
 interface ExportChapterRow {

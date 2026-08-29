@@ -7,12 +7,12 @@ import { chapters, novels, translationJobs, translationOutbox } from "@/lib/db/s
 import { mapWithConcurrency } from "@/lib/async";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { nanoid } from "@/lib/utils";
-import { dispatchTranslationOutboxEventBestEffort } from "@/lib/translation/outbox";
-import { translationRunIdentity } from "@/lib/translation/job-state";
-import { loadApprovedTermsForContext } from "@/lib/translation/job-store";
-import { createProviderClient } from "@/lib/translation/provider-client";
-import { retryTranslationOperation } from "@/lib/translation/retry";
-import { translateChapterTitle } from "@/lib/translation/title";
+import { dispatchTranslationOutboxEventBestEffort } from "@/lib/translation/workflow/outbox";
+import { translationRunIdentity } from "@/lib/translation/workflow/job-state";
+import { loadApprovedTermsForContext } from "@/lib/translation/workflow/job-store";
+import { createProviderClient } from "@/lib/translation/providers/provider-client";
+import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
+import { translateChapterTitle } from "@/lib/translation/workflow/title";
 
 /** Split items into consecutive fixed-size batches, preserving order. */
 export function batchesOf<T>(items: T[], batchSize: number): T[][] {

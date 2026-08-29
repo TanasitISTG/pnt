@@ -11,7 +11,7 @@ if (!databaseUrl || !new URL(databaseUrl).pathname.endsWith("_e2e")) {
 const [{ db, queryClient }, schema, { encrypt }] = await Promise.all([
   import("../../src/lib/db/index.ts"),
   import("../../src/lib/db/schema/index.ts"),
-  import("../../src/lib/translation/crypto.ts"),
+  import("../../src/lib/settings/crypto.ts"),
 ]);
 
 const userId = "e2e-admin";

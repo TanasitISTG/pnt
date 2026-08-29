@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { novels, chapters } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth/functions";
-import { findResidualSourceChars, RESIDUAL_CJK_SQL_RE } from "@/lib/translation/prompts";
+import { findResidualSourceChars, RESIDUAL_CJK_SQL_RE } from "@/lib/translation/text/residual";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import {
   deleteAllNovelTranslationsForUser,

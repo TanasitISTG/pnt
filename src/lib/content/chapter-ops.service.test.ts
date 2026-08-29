@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/lib/db";
-import * as jobStore from "@/lib/translation/job-store";
-import * as providerClientModule from "@/lib/translation/provider-client";
-import * as titleModule from "@/lib/translation/title";
-import type { AIProviderClient } from "@/lib/translation/translation.types";
+import * as jobStore from "@/lib/translation/workflow/job-store";
+import * as providerClientModule from "@/lib/translation/providers/provider-client";
+import * as titleModule from "@/lib/translation/workflow/title";
+import type { AIProviderClient } from "@/lib/translation/types/provider";
 import { translateMissingTitlesForUser } from "./chapter-ops.service";
 
 vi.mock("@/lib/db", () => ({
@@ -14,10 +14,10 @@ vi.mock("@/lib/db", () => ({
     transaction: vi.fn(),
   },
 }));
-vi.mock("@/lib/translation/job-store", () => ({ loadApprovedTermsForContext: vi.fn() }));
-vi.mock("@/lib/translation/provider-client", () => ({ createProviderClient: vi.fn() }));
-vi.mock("@/lib/translation/title", () => ({ translateChapterTitle: vi.fn() }));
-vi.mock("@/lib/translation/outbox", () => ({
+vi.mock("@/lib/translation/workflow/job-store", () => ({ loadApprovedTermsForContext: vi.fn() }));
+vi.mock("@/lib/translation/providers/provider-client", () => ({ createProviderClient: vi.fn() }));
+vi.mock("@/lib/translation/workflow/title", () => ({ translateChapterTitle: vi.fn() }));
+vi.mock("@/lib/translation/workflow/outbox", () => ({
   dispatchTranslationOutboxEventBestEffort: vi.fn(),
 }));
 

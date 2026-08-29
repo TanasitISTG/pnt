@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import type { ProviderType } from "@/lib/translation/translation.types";
+import type { ProviderType } from "@/lib/translation/types/provider";
 
 interface ProviderSelectionSectionProps {
   provider: ProviderType;

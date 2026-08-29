@@ -21,7 +21,7 @@ import { getNovel } from "@/lib/content/novel.functions";
 import { listChapters } from "@/lib/content/chapter.functions";
 import { getResidualHanziChapters } from "@/lib/content/chapter-ops.functions";
 import { getGlossaryStats } from "@/lib/glossary/functions";
-import { getNovelCosts } from "@/lib/translation/translation.functions";
+import { getNovelCosts } from "@/lib/translation/api/queries";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 
