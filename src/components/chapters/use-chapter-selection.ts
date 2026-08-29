@@ -33,10 +33,6 @@ export function useChapterSelection(
       ),
     [chapters, isRowTranslating],
   );
-  const allSelected = useMemo(
-    () => selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id)),
-    [selectableIds, selectedIds],
-  );
 
   const toggleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -47,10 +43,16 @@ export function useChapterSelection(
     });
   }, []);
 
-  const toggleSelectAll = useCallback(
-    (checked: boolean) => setSelectedIds(checked ? new Set(selectableIds) : new Set()),
-    [selectableIds],
-  );
+  const toggleSelectMany = useCallback((chapterIds: string[], checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const chapterId of chapterIds) {
+        if (checked) next.add(chapterId);
+        else next.delete(chapterId);
+      }
+      return next;
+    });
+  }, []);
 
   const selectByRange = useCallback(() => {
     const from = Number(batchRangeFrom);
@@ -89,9 +91,8 @@ export function useChapterSelection(
     selectedIds,
     setSelectedIds,
     selectableIds,
-    allSelected,
     toggleSelect,
-    toggleSelectAll,
+    toggleSelectMany,
     selectByRange,
     batchStarting,
     batchRangeFrom,

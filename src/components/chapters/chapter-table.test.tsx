@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ChapterTable, type ChapterTableProps } from "./chapter-table";
 import type { ChapterRow } from "./types";
@@ -43,6 +43,7 @@ beforeAll(() => {
   });
 });
 
+afterEach(cleanup);
 const ACTIVE_JOB: ActiveJobState = {
   jobId: "job-1",
   chapterId: CHAPTER.id,
@@ -61,7 +62,6 @@ function createProps(overrides: Partial<ChapterTableProps> = {}): ChapterTablePr
     residualHanziMap: new Map(),
     costData: undefined,
     selectedIds: new Set(),
-    allSelected: false,
     isTranslating: () => false,
     onToggleSelect: vi.fn(),
     onToggleSelectAll: vi.fn(),
@@ -72,7 +72,6 @@ function createProps(overrides: Partial<ChapterTableProps> = {}): ChapterTablePr
     onStartTranslate: vi.fn(),
     onRequestRetranslate: vi.fn(),
     onViewLogs: vi.fn(),
-    editingChapterId: null,
     titleEdit: null,
     editErrors: {},
     onSaveTitle: vi.fn(),
@@ -81,26 +80,27 @@ function createProps(overrides: Partial<ChapterTableProps> = {}): ChapterTablePr
     onStartEdit: vi.fn(),
     onCancelEdit: vi.fn(),
     onDeleteChapter: vi.fn(),
-    reorderingChapters: false,
-    onReorderChapters: vi.fn().mockResolvedValue(undefined),
-    refetchChapters: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
 
-describe("ChapterTable sorting availability", () => {
-  it("declaratively disables and re-enables drag handles across edit and translation state", () => {
-    const { rerender } = render(<ChapterTable {...createProps()} />);
-    const handle = screen.getByRole("button", {
-      name: "Reorder chapter 1: บทที่หนึ่ง",
-    }) as HTMLButtonElement;
+describe("ChapterTable browsing behavior", () => {
+  it("keeps title editing while omitting reorder handles", () => {
+    const onStartEdit = vi.fn();
+    const { rerender } = render(<ChapterTable {...createProps({ onStartEdit })} />);
 
-    expect(handle.disabled).toBe(false);
+    expect(
+      screen.queryByRole("button", {
+        name: "Reorder chapter 1: บทที่หนึ่ง",
+      }),
+    ).toBeNull();
+
+    screen.getByRole("button", { name: "Edit chapter" }).click();
+    expect(onStartEdit).toHaveBeenCalledWith(CHAPTER);
 
     rerender(
       <ChapterTable
         {...createProps({
-          editingChapterId: CHAPTER.id,
           titleEdit: {
             chapterId: CHAPTER.id,
             translatedTitle: CHAPTER.translatedTitle ?? "",
@@ -109,12 +109,11 @@ describe("ChapterTable sorting availability", () => {
         })}
       />,
     );
-    expect(handle.disabled).toBe(true);
+    expect(screen.getByLabelText("Translated title for chapter 1")).toBeTruthy();
+  });
 
-    rerender(<ChapterTable {...createProps()} />);
-    expect(handle.disabled).toBe(false);
-
-    rerender(
+  it("keeps translating rows disabled", () => {
+    render(
       <ChapterTable
         {...createProps({
           activeJobs: new Map([[CHAPTER.id, ACTIVE_JOB]]),
@@ -122,9 +121,12 @@ describe("ChapterTable sorting availability", () => {
         })}
       />,
     );
-    expect(handle.disabled).toBe(true);
 
-    rerender(<ChapterTable {...createProps()} />);
-    expect(handle.disabled).toBe(false);
+    expect(
+      (screen.getByRole("checkbox", { name: "Select chapter 1" }) as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Edit chapter" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });

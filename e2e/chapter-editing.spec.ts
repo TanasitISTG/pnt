@@ -52,26 +52,35 @@ test("admin reorders and edits every chapter field", async ({ page }) => {
   await page.getByRole("button", { name: "Back to chapter list" }).click();
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
 
-  const thirdRow = page.getByRole("row").filter({ hasText: "Source three" });
-  const thirdHandle = thirdRow.getByRole("button", {
+  await page.getByRole("button", { name: "Reorder chapters" }).click();
+  await expect(page.getByRole("heading", { name: "Reorder chapters" })).toBeVisible();
+  await expect(page.getByText("Preparing 3 chapters…", { exact: true })).toBeVisible();
+
+  const thirdHandle = page.getByRole("button", {
     name: "Reorder chapter 3: Source three",
   });
+  await expect(thirdHandle).toBeVisible();
+  await page.waitForTimeout(250);
   await thirdHandle.press("Space");
+  await page.waitForTimeout(50);
   await thirdHandle.press("ArrowUp");
   await thirdHandle.press("ArrowUp");
   await expect(page.getByRole("status")).toContainText("moved over");
   await page.waitForTimeout(250);
   await thirdHandle.press("Space");
+  await page.getByRole("button", { name: "Save order" }).click();
   await expect(page.getByText("Chapter order saved", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Reorder chapters" })).toHaveCount(0);
 
   const rows = page.locator("tbody tr");
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0)).toContainText("Source three");
   await expect(rows.nth(1)).toContainText("Source one");
   await expect(rows.nth(2)).toContainText("Source two");
-  await expect(rows.nth(0).locator("td").nth(2)).toHaveText("1");
-  await expect(rows.nth(1).locator("td").nth(2)).toHaveText("1.5");
-  await expect(rows.nth(2).locator("td").nth(2)).toHaveText("3");
+  await expect(rows.nth(0).locator("td").nth(1)).toHaveText("1");
+  await expect(rows.nth(1).locator("td").nth(1)).toHaveText("1.5");
+  await expect(rows.nth(2).locator("td").nth(1)).toHaveText("3");
+
   await rows.nth(0).getByRole("link", { name: "Source three", exact: true }).click();
   await expect(
     page.getByRole("combobox", { name: "Current chapter: Ch. 1 — Source three" }),

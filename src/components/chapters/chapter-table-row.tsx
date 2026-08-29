@@ -1,21 +1,10 @@
 import { memo } from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  GripVertical,
-  Check,
-  Edit,
-  Play,
-  RotateCw,
-  Square,
-  Terminal,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Check, Edit, Play, RotateCw, Square, Terminal, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SortableItem, SortableItemHandle } from "@/components/ui/sortable";
 import { Progress } from "@/components/ui/progress";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ChapterStatusBadge } from "@/components/chapters/chapter-status-badge";
@@ -41,7 +30,6 @@ export interface ChapterTableRowProps {
   titleEdit: TitleEditState | null;
   editError: string | undefined;
   savingTitle: boolean;
-  sortingDisabled: boolean;
   publishingChapter: boolean;
   onToggleSelect: (id: string, checked: boolean) => void;
   onPublishChapter: (vars: { chapterId: string; publishedAt: Date | null }) => void;
@@ -57,29 +45,7 @@ export interface ChapterTableRowProps {
   onDeleteChapter: (chapterId: string) => void;
 }
 
-interface ChapterTableDragHandleProps {
-  chapter: ChapterRow;
-  displayTitle: string;
-}
-
-const ChapterTableDragHandle = memo(function ChapterTableDragHandle({
-  chapter,
-  displayTitle,
-}: ChapterTableDragHandleProps) {
-  return (
-    <TableCell className="w-10">
-      <SortableItemHandle
-        render={<Button variant="ghost" size="icon-sm" />}
-        aria-label={`Reorder chapter ${Number(chapter.number)}: ${displayTitle}`}
-        title="Reorder chapter"
-      >
-        <GripVertical className="size-4 text-muted-foreground" />
-      </SortableItemHandle>
-    </TableCell>
-  );
-});
-
-type ChapterTableRowCellsProps = Omit<ChapterTableRowProps, "sortingDisabled">;
+type ChapterTableRowCellsProps = ChapterTableRowProps;
 
 const ChapterTableRowCells = memo(function ChapterTableRowCells({
   chapter,
@@ -384,7 +350,6 @@ export const ChapterTableRow = memo(function ChapterTableRow({
   titleEdit,
   editError,
   savingTitle,
-  sortingDisabled,
   publishingChapter,
   onToggleSelect,
   onPublishChapter,
@@ -399,7 +364,6 @@ export const ChapterTableRow = memo(function ChapterTableRow({
   onCancelEdit,
   onDeleteChapter,
 }: ChapterTableRowProps) {
-  const displayTitle = chapter.translatedTitle ?? chapter.title;
   const cells = (
     <ChapterTableRowCells
       chapter={chapter}
@@ -436,16 +400,9 @@ export const ChapterTableRow = memo(function ChapterTableRow({
       data-editing={isTitleEditing ? "true" : undefined}
       className="data-[editing=true]:bg-muted/50"
     >
-      {isAdmin && <ChapterTableDragHandle chapter={chapter} displayTitle={displayTitle} />}
       {cells}
     </TableRow>
   );
 
-  return isAdmin ? (
-    <SortableItem key={chapter.id} value={chapter.id} disabled={sortingDisabled} render={row}>
-      {row.props.children}
-    </SortableItem>
-  ) : (
-    row
-  );
+  return row;
 });

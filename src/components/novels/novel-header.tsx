@@ -39,6 +39,7 @@ export interface NovelHeaderProps {
   glossaryStats: GlossaryStats;
   costData: CostData;
   chapters: ChapterRow[];
+  chaptersPending: boolean;
   lastReadChapter: ChapterRow | null;
   firstChapter: ChapterRow | null;
   exporting: "txt" | "epub" | null;
@@ -56,6 +57,7 @@ export function NovelHeader({
   glossaryStats,
   costData,
   chapters,
+  chaptersPending,
   lastReadChapter,
   firstChapter,
   exporting,
@@ -65,12 +67,13 @@ export function NovelHeader({
   onExportEpub,
   onDeleteNovel,
 }: NovelHeaderProps) {
+  const translatedChapterCount = chaptersPending
+    ? 0
+    : chapters.filter((chapter) => chapter.status === "translated").length;
   const progressPercent =
-    chapters.length === 0
+    chaptersPending || chapters.length === 0
       ? 0
-      : Math.round(
-          (chapters.filter((c) => c.status === "translated").length / chapters.length) * 100,
-        );
+      : Math.round((translatedChapterCount / chapters.length) * 100);
 
   return (
     <div className="flex flex-col gap-4">
@@ -208,7 +211,7 @@ export function NovelHeader({
             </p>
           )}
 
-          {chapters.length > 0 && (
+          {!chaptersPending && chapters.length > 0 && (
             <div className="pt-2 flex flex-wrap items-center gap-2">
               {lastReadChapter ? (
                 <Button
@@ -265,11 +268,12 @@ export function NovelHeader({
             <div className="flex justify-between text-caption text-muted-foreground">
               <span>Overall Translation Progress</span>
               <span>
-                {progressPercent}% ({chapters.filter((c) => c.status === "translated").length}/
-                {chapters.length} chapters)
+                {chaptersPending
+                  ? "Loading chapter progress…"
+                  : `${progressPercent}% (${translatedChapterCount}/${chapters.length} chapters)`}
               </span>
             </div>
-            <Progress value={progressPercent} className="h-2" />
+            <Progress value={chaptersPending ? null : progressPercent} className="h-2" />
             {costData &&
               (costData.totals.promptTokens > 0 || costData.totals.completionTokens > 0) && (
                 <div className="flex justify-between text-caption text-muted-foreground font-mono">

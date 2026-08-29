@@ -1,4 +1,4 @@
-import { Check, Languages, Loader2, Play, Trash2, X } from "lucide-react";
+import { Check, GripVertical, Languages, Loader2, Play, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -21,6 +21,8 @@ export interface ChaptersToolbarProps {
   onBackfillTitles: () => void;
   backfillingTitles: boolean;
   chapterCount: number;
+  onReorderChapters: () => void;
+  reorderDisabled: boolean;
   deletingAllTranslations: boolean;
   onDeleteAllTranslations: () => void;
 }
@@ -44,6 +46,8 @@ export function ChaptersToolbar({
   onBackfillTitles,
   backfillingTitles,
   chapterCount,
+  onReorderChapters,
+  reorderDisabled,
   deletingAllTranslations,
   onDeleteAllTranslations,
 }: ChaptersToolbarProps) {
@@ -104,6 +108,12 @@ export function ChaptersToolbar({
         <Button variant="outline" size="sm" onClick={onBackfillTitles} disabled={backfillingTitles}>
           <Languages className="size-4" />
           {backfillingTitles ? "Translating titles..." : `Translate titles (${missingTitleCount})`}
+        </Button>
+      )}
+      {chapterCount > 1 && (
+        <Button variant="outline" size="sm" onClick={onReorderChapters} disabled={reorderDisabled}>
+          <GripVertical className="size-4" />
+          Reorder chapters
         </Button>
       )}
       {chapterCount > 0 && (

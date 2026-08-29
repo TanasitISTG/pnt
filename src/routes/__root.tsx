@@ -1,12 +1,5 @@
 import { useEffect, useState } from "react";
-import { type AnyRouteMatch, type RouterManagedTag } from "@tanstack/router-core";
-import {
-  Asset,
-  createRootRouteWithContext,
-  useRouter,
-  useRouterState,
-  useTags,
-} from "@tanstack/react-router";
+import { Asset, createRootRouteWithContext, Scripts, useTags } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -162,97 +155,6 @@ function HeadContentWithoutModulePreloads() {
   );
 }
 
-type ScriptRenderAsset = RouterManagedTag & {
-  preventScriptHoist?: boolean;
-};
-
-function DeferredScripts() {
-  const router = useRouter();
-  const matches = useRouterState({ select: (state) => state.matches });
-  const nonce = router.options.ssr?.nonce;
-  const getAssetScripts = (matches: AnyRouteMatch[]) => {
-    const assetScripts: ScriptRenderAsset[] = [];
-    const manifest = router.ssr?.manifest;
-
-    if (!manifest) {
-      return [];
-    }
-
-    for (const match of matches) {
-      const scripts = manifest.routes[match.routeId]?.scripts;
-
-      if (!scripts) {
-        continue;
-      }
-
-      for (const asset of scripts) {
-        const src = typeof asset.attrs?.src === "string" ? asset.attrs.src : null;
-        assetScripts.push(
-          src
-            ? {
-                tag: "script",
-                attrs: {
-                  ...asset.attrs,
-                  src: undefined,
-                  async: false,
-                  defer: undefined,
-                  fetchPriority: undefined,
-                  nonce,
-                },
-                children: `const load = () => import(${JSON.stringify(src)}); if (typeof requestAnimationFrame === "function") { requestAnimationFrame(() => setTimeout(load, 250)); } else { setTimeout(load, 250); }`,
-              }
-            : {
-                tag: "script",
-                attrs: { ...asset.attrs, async: false, defer: true, nonce },
-                children: asset.children,
-                preventScriptHoist: true,
-              },
-        );
-      }
-    }
-
-    return assetScripts;
-  };
-
-  const getScripts = (matches: AnyRouteMatch[]) =>
-    matches
-      .map((match) => match.scripts)
-      .flat(1)
-      .filter((script): script is RouterManagedTag => Boolean(script))
-      .map(
-        ({ children, ...script }) =>
-          ({
-            tag: "script",
-            attrs: {
-              ...script,
-              suppressHydrationWarning: true,
-              nonce,
-            },
-            children,
-          }) satisfies RouterManagedTag,
-      );
-
-  const assetScripts = getAssetScripts(matches);
-  const scripts = getScripts(matches);
-
-  const allScripts = [...scripts, ...assetScripts];
-
-  if ((typeof window === "undefined" || router.isServer) && router.serverSsr) {
-    const serverBufferedScript = router.serverSsr.takeBufferedScripts();
-    if (serverBufferedScript) {
-      allScripts.unshift(serverBufferedScript);
-    }
-  }
-
-  return (
-    <>
-      {allScripts.map((asset, index) => (
-        <Asset {...asset} key={`tsr-scripts-${asset.tag}-${index}`} />
-      ))}
-    </>
-  );
-}
-
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { consent } = useConsent();
 
@@ -309,7 +211,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           <ConsentBanner />
         </ThemeProvider>
         {import.meta.env.DEV && <DevelopmentDevtools />}
-        <DeferredScripts />
+        <Scripts />
       </body>
     </html>
   );

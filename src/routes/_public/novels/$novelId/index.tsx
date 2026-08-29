@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { lazy, Suspense, useState, useMemo, useEffect, useCallback } from "react";
 import { AddChapterSection } from "@/components/chapters/add-chapter-section";
 import { useTranslationJob } from "@/components/translation/use-translation-job";
 import { JobLogsDialog } from "@/components/translation/job-logs-dialog";
@@ -23,6 +23,14 @@ import { getResidualHanziChapters } from "@/lib/content/chapter-ops.functions";
 import { getGlossaryStats } from "@/lib/glossary/functions";
 import { getNovelCosts } from "@/lib/translation/api/queries";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 
 const novelQueryOptions = (novelId: string) =>
@@ -54,25 +62,74 @@ const residualHanziQueryOptions = (novelId: string) =>
     queryKey: ["residualHanzi", novelId],
     queryFn: () => getResidualHanziChapters({ data: { novelId } }),
   });
+const LazyChapterReorderDialog = lazy(async () => {
+  const module = await import("@/components/chapters/chapter-reorder-dialog");
+  return { default: module.ChapterReorderDialog };
+});
+
+interface ChapterReorderDialogFallbackProps {
+  chapterCount: number;
+  open: boolean;
+  saving: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function ChapterReorderDialogFallback({
+  chapterCount,
+  open,
+  saving,
+  onOpenChange,
+}: ChapterReorderDialogFallbackProps) {
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !saving && onOpenChange(nextOpen)}>
+      <DialogContent className="max-w-2xl sm:max-w-2xl" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Reorder chapters</DialogTitle>
+          <DialogDescription>
+            Drag chapters into the order they should appear in the reader.
+          </DialogDescription>
+        </DialogHeader>
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex min-h-32 items-center justify-center rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground"
+        >
+          Preparing {chapterCount} chapters…
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button disabled>{saving ? "Saving…" : "Preparing…"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export const Route = createFileRoute("/_public/novels/$novelId/")({
   loader: async ({ params, context }) => {
     const novelPromise = context.queryClient.ensureQueryData(novelQueryOptions(params.novelId));
-    const tasks: Promise<unknown>[] = [
+    if (context.user) {
+      const novel = await novelPromise;
+      if (!novel) {
+        throw notFound();
+      }
+      return { novel };
+    }
+
+    const [novel] = await Promise.all([
+      novelPromise,
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
-      ...(context.user
-        ? [
-            context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
-            context.queryClient.ensureQueryData(costsQueryOptions(params.novelId)),
-          ]
-        : []),
-    ];
-    const [novel] = await Promise.all([novelPromise, ...tasks]);
+    ]);
     if (!novel) {
       throw notFound();
     }
     return { novel };
   },
+  pendingMs: 100,
+  pendingMinMs: 200,
+  pendingComponent: NovelPending,
   head: ({ loaderData }) => {
     const novel = loaderData?.novel;
     const title = novel
@@ -112,8 +169,19 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
         : [],
     };
   },
+  remountDeps: ({ params }) => ({ novelId: params.novelId }),
   component: NovelDetailPage,
 });
+
+function NovelPending() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center px-4">
+      <div role="status" aria-live="polite" className="text-sm text-muted-foreground">
+        Loading novel…
+      </div>
+    </div>
+  );
+}
 
 function NovelDetailPage() {
   const { novelId } = Route.useParams();
@@ -128,18 +196,23 @@ function NovelDetailPage() {
   } = useQuery(novelQueryOptions(novelId));
   const {
     data: chapters = [],
+    isPending: isChaptersPending,
+    isSuccess: isChaptersSuccess,
     isError: isChaptersError,
     error: chaptersError,
     refetch: refetchChapters,
   } = useQuery(chaptersQueryOptions(novelId));
   const { data: glossaryStats } = useQuery({
     ...glossaryStatsQueryOptions(novelId),
-    enabled: !!user,
+    enabled: !!user && isChaptersSuccess,
   });
-  const { data: costData } = useQuery({ ...costsQueryOptions(novelId), enabled: !!user });
+  const { data: costData } = useQuery({
+    ...costsQueryOptions(novelId),
+    enabled: !!user && isChaptersSuccess,
+  });
   const { data: residualHanziChapters = [] } = useQuery({
     ...residualHanziQueryOptions(novelId),
-    enabled: !!user,
+    enabled: !!user && isChaptersSuccess,
   });
 
   const residualHanziMap = useMemo(() => {
@@ -154,6 +227,7 @@ function NovelDetailPage() {
     lastChapterId: null,
     readChapterIds: [],
   });
+  const [readerProgressReady, setReaderProgressReady] = useState(false);
   const readChapterIdSet = useMemo(
     () => new Set(readerProgress.readChapterIds),
     [readerProgress.readChapterIds],
@@ -162,9 +236,11 @@ function NovelDetailPage() {
   const [deleteNovelOpen, setDeleteNovelOpen] = useState(false);
   const [deleteAllTranslationsOpen, setDeleteAllTranslationsOpen] = useState(false);
   const [logChapterId, setLogChapterId] = useState<string | null>(null);
+  const [reorderOpen, setReorderOpen] = useState(false);
 
   useEffect(() => {
     setReaderProgress(getReaderProgress(novelId));
+    setReaderProgressReady(true);
   }, [novelId]);
 
   const lastReadChapter = useMemo(() => {
@@ -173,6 +249,8 @@ function NovelDetailPage() {
   }, [chapters, readerProgress.lastChapterId]);
 
   const firstChapter = chapters[0] ?? null;
+  const chaptersReady = isChaptersSuccess && !isChaptersError;
+  const chapterUiLoading = !!user && (isChaptersPending || !readerProgressReady);
 
   const {
     start: startTranslate,
@@ -181,7 +259,7 @@ function NovelDetailPage() {
     retry: retryTranslate,
     clearActiveJobs,
     activeJobs,
-  } = useTranslationJob(novelId, !!user);
+  } = useTranslationJob(novelId, !!user && chaptersReady);
 
   const handleTranslationsDeleted = useCallback(() => {
     clearActiveJobs();
@@ -192,9 +270,8 @@ function NovelDetailPage() {
     selectedIds,
     setSelectedIds,
     selectableIds,
-    allSelected,
     toggleSelect,
-    toggleSelectAll,
+    toggleSelectMany,
     selectByRange,
     batchStarting,
     batchRangeFrom,
@@ -235,6 +312,14 @@ function NovelDetailPage() {
     saveChapterOrder,
     reorderingChapters,
   } = useNovelDetailMutations(novelId, handleTranslationsDeleted);
+  const handleSaveChapterOrder = useCallback(
+    async (chapterIds: string[]) => {
+      await saveChapterOrder(chapterIds);
+    },
+    [saveChapterOrder],
+  );
+  const reorderDisabled =
+    reorderingChapters || chapters.some((chapter) => isRowTranslating(chapter.id, chapter.status));
   const handleCancelEdit = useCallback(() => {
     setEditState(null);
   }, [setEditState]);
@@ -289,10 +374,9 @@ function NovelDetailPage() {
     residualHanziMap,
     costData,
     selectedIds,
-    allSelected,
     isTranslating: isRowTranslating,
     onToggleSelect: toggleSelect,
-    onToggleSelectAll: toggleSelectAll,
+    onToggleSelectAll: toggleSelectMany,
     publishingChapterId,
     onPublishChapter: publishChapter,
     onCancelTranslate: cancelTranslate,
@@ -300,7 +384,6 @@ function NovelDetailPage() {
     onStartTranslate: startTranslate,
     onRequestRetranslate: setRetranslateChapterId,
     onViewLogs: setLogChapterId,
-    editingChapterId: editState?.chapterId ?? null,
     titleEdit: editState,
     editErrors,
     savingTitle,
@@ -309,9 +392,6 @@ function NovelDetailPage() {
     onStartEdit: handleStartEdit,
     onCancelEdit: handleCancelEdit,
     onDeleteChapter: setDeleteChapterId,
-    reorderingChapters,
-    onReorderChapters: saveChapterOrder,
-    refetchChapters,
   };
 
   return (
@@ -327,6 +407,7 @@ function NovelDetailPage() {
         firstChapter={firstChapter}
         exporting={exporting}
         publishingNovel={publishingNovel}
+        chaptersPending={chapterUiLoading}
         onPublishNovel={publishNovel}
         onExportTxt={handleExportTxt}
         onExportEpub={handleExportEpub}
@@ -335,45 +416,75 @@ function NovelDetailPage() {
 
       <hr className="border-border" />
 
-      {user && <TranslationQualityPanel novelId={novelId} />}
+      {user && chaptersReady && <TranslationQualityPanel novelId={novelId} />}
 
       {/* Chapters Table */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h2 className="text-sub font-semibold text-foreground tracking-tight">Chapters</h2>
-          <ChaptersToolbar
-            isAdmin={!!user}
-            selectedCount={selectedIds.size}
-            selectableCount={selectableIds.length}
-            batchStarting={batchStarting}
-            onBatchTranslate={handleBatchTranslate}
-            onClearSelection={() => setSelectedIds(new Set())}
-            batchRangeFrom={batchRangeFrom}
-            batchRangeTo={batchRangeTo}
-            onBatchRangeFromChange={setBatchRangeFrom}
-            onBatchRangeToChange={setBatchRangeTo}
-            onSelectRange={selectByRange}
-            unpublishedCount={unpublishedCount}
-            onPublishAll={() => publishAllChapters()}
-            publishingAll={publishingAll}
-            missingTitleCount={missingTitleCount}
-            onBackfillTitles={() => backfillTitles()}
-            backfillingTitles={backfillingTitles}
-            chapterCount={chapters.length}
-            deletingAllTranslations={deletingAllTranslations}
-            onDeleteAllTranslations={() => setDeleteAllTranslationsOpen(true)}
-          />
+          {!chapterUiLoading && (
+            <ChaptersToolbar
+              isAdmin={!!user}
+              selectedCount={selectedIds.size}
+              selectableCount={selectableIds.length}
+              batchStarting={batchStarting}
+              onBatchTranslate={handleBatchTranslate}
+              onClearSelection={() => setSelectedIds(new Set())}
+              batchRangeFrom={batchRangeFrom}
+              batchRangeTo={batchRangeTo}
+              onBatchRangeFromChange={setBatchRangeFrom}
+              onBatchRangeToChange={setBatchRangeTo}
+              onSelectRange={selectByRange}
+              unpublishedCount={unpublishedCount}
+              onPublishAll={() => publishAllChapters()}
+              publishingAll={publishingAll}
+              missingTitleCount={missingTitleCount}
+              onBackfillTitles={() => backfillTitles()}
+              backfillingTitles={backfillingTitles}
+              onReorderChapters={() => setReorderOpen(true)}
+              reorderDisabled={reorderDisabled}
+              chapterCount={chapters.length}
+              deletingAllTranslations={deletingAllTranslations}
+              onDeleteAllTranslations={() => setDeleteAllTranslationsOpen(true)}
+            />
+          )}
         </div>
 
-        <ChaptersTableSection chapters={chapters} isAdmin={!!user} tableProps={chapterTableProps} />
+        <ChaptersTableSection
+          chapters={chapters}
+          isAdmin={!!user}
+          loading={chapterUiLoading}
+          tableProps={chapterTableProps}
+        />
       </div>
 
-      {user && (
+      {user && chaptersReady && (
         <AddChapterSection
           novelId={novelId}
           chapters={chapters}
           invalidateChapters={invalidateChapters}
         />
+      )}
+
+      {reorderOpen && (
+        <Suspense
+          fallback={
+            <ChapterReorderDialogFallback
+              chapterCount={chapters.length}
+              open={reorderOpen}
+              saving={reorderingChapters}
+              onOpenChange={setReorderOpen}
+            />
+          }
+        >
+          <LazyChapterReorderDialog
+            chapters={chapters}
+            open={reorderOpen}
+            saving={reorderingChapters}
+            onOpenChange={setReorderOpen}
+            onSave={handleSaveChapterOrder}
+          />
+        </Suspense>
       )}
 
       {/* Confirmation Dialogs */}

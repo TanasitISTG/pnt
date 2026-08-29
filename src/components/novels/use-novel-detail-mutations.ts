@@ -147,6 +147,9 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       ]);
       toast.success("Chapter order saved");
     },
+    onError: (error) => {
+      toast.error(error.message || "Failed to save chapter order");
+    },
   });
 
   return {

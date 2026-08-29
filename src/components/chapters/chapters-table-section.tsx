@@ -14,10 +14,16 @@ const CHAPTER_GROUP_SIZE = 50;
 export interface ChaptersTableSectionProps {
   chapters: ChapterRow[];
   isAdmin: boolean;
+  loading: boolean;
   tableProps: Omit<ChapterTableProps, "chapters">;
 }
 
-export function ChaptersTableSection({ chapters, isAdmin, tableProps }: ChaptersTableSectionProps) {
+export function ChaptersTableSection({
+  chapters,
+  isAdmin,
+  loading,
+  tableProps,
+}: ChaptersTableSectionProps) {
   const chapterGroups = useMemo(() => {
     const groups: ChapterRow[][] = [];
     for (let i = 0; i < chapters.length; i += CHAPTER_GROUP_SIZE) {
@@ -25,6 +31,17 @@ export function ChaptersTableSection({ chapters, isAdmin, tableProps }: Chapters
     }
     return groups;
   }, [chapters]);
+
+  if (loading) {
+    return (
+      <div
+        className="rounded-xl border border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground"
+        aria-live="polite"
+      >
+        Loading chapters…
+      </div>
+    );
+  }
 
   if (chapters.length === 0) {
     return (
@@ -41,17 +58,15 @@ export function ChaptersTableSection({ chapters, isAdmin, tableProps }: Chapters
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
-      {isAdmin ? (
-        <ChapterTable chapters={chapters} {...tableProps} />
-      ) : chapterGroups.length <= 1 ? (
+      {chapterGroups.length <= 1 ? (
         <ChapterTable chapters={chapters} {...tableProps} />
       ) : (
-        <Accordion multiple defaultValue={[0]}>
+        <Accordion defaultValue={[0]} {...(!isAdmin ? { multiple: true } : {})}>
           {chapterGroups.map((group, gi) => (
             <AccordionItem key={gi} value={gi}>
               <AccordionTrigger>
                 <span>
-                  Chapters {Number(group[0].number)}–{Number(group[group.length - 1].number)}
+                  Chapters {Number(group[0].number)}–{Number(group[group.length - 1].number)}{" "}
                   <span className="ml-2 font-normal text-muted-foreground">({group.length})</span>
                 </span>
               </AccordionTrigger>
