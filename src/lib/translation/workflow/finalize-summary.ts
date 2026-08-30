@@ -8,6 +8,7 @@ import type { GlossaryTermInput } from "../types/glossary";
 import type { LogEntry } from "../types/workflow";
 import { translateChapterTitle } from "./title";
 import { buildSummaryPrompt } from "../prompts/translation";
+import { parseRelationshipMap } from "@/lib/relationships/map";
 
 export interface FinalizeSummaryParams {
   providerConfig: AIProviderClient;
@@ -37,13 +38,18 @@ export async function generateSummaryArtifacts({
   let promptTokens = 0;
   let completionTokens = 0;
   let translatedTitle: string | undefined;
+  const relationshipMap = parseRelationshipMap(novel.relationshipMapJson);
 
   // Translate chapter title (cheap, non-fatal)
   const titleRes = await translateChapterTitle(
     providerConfig,
     `${novel.sourceLang}->${novel.targetLang}`,
     chapter.title,
-    { glossaryTerms: approvedTerms, customPrompt: novel.customPrompt },
+    {
+      glossaryTerms: approvedTerms,
+      customPrompt: novel.customPrompt,
+      relationshipMap,
+    },
   );
   promptTokens += titleRes.promptTokens;
   completionTokens += titleRes.completionTokens;

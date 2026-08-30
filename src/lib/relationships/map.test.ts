@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildRelationshipPromptContext,
+  buildRelationshipPromptContextForText,
   emptyRelationshipMap,
   mergeAutomaticRelationshipAnalysis,
   parseRelationshipMap,
@@ -287,5 +288,48 @@ describe("relationship map", () => {
     ]);
     expect(context.activePairs).toHaveLength(1);
     expect(context.relationships[0]?.selfPronoun).toBe("ผม");
+  });
+
+  it("matches enabled names and aliases with directed relationship closure", () => {
+    const map = {
+      version: 1 as const,
+      characters: [
+        character("hero", "许野", {
+          targetName: "สวี่เหยี่ย",
+          aliases: ["小野"],
+        }),
+        character("friend", "林月", { targetName: "หลินเยว่" }),
+        character("disabled", "顾青", { enabled: false }),
+        character("unrelated", "赵明"),
+      ],
+      relationships: [
+        relationship("hero-to-friend", "hero", "friend"),
+        relationship("friend-to-hero", "friend", "hero"),
+        relationship("disabled-to-hero", "disabled", "hero"),
+        relationship("hero-to-unrelated", "hero", "unrelated"),
+      ],
+    };
+
+    const context = buildRelationshipPromptContextForText(map, "第一章 小野与林月");
+
+    expect(context?.characters.map((item) => item.id)).toEqual(["hero", "friend"]);
+    expect(context?.relationships.map((item) => item.id)).toEqual([
+      "hero-to-friend",
+      "friend-to-hero",
+    ]);
+    expect(context?.activePairs).toEqual([
+      { speakerId: "hero", listenerId: "friend", relationshipId: "hero-to-friend" },
+      { speakerId: "friend", listenerId: "hero", relationshipId: "friend-to-hero" },
+    ]);
+  });
+
+  it("returns null when no enabled identity matches source text", () => {
+    const map = {
+      version: 1 as const,
+      characters: [character("hero", "许野", { aliases: ["小野"] })],
+      relationships: [],
+    };
+
+    expect(buildRelationshipPromptContextForText(map, "第一章 林月登场")).toBeNull();
   });
 });

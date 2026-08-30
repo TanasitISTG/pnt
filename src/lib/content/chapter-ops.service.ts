@@ -13,6 +13,7 @@ import { loadApprovedTermsForContext } from "@/lib/translation/workflow/job-stor
 import { createProviderClient } from "@/lib/translation/providers/provider-client";
 import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
 import { translateChapterTitle } from "@/lib/translation/workflow/title";
+import { parseRelationshipMap } from "@/lib/relationships/map";
 
 /** Split items into consecutive fixed-size batches, preserving order. */
 export function batchesOf<T>(items: T[], batchSize: number): T[][] {
@@ -61,6 +62,7 @@ export async function translateMissingTitlesForUser(
     loadApprovedTermsForContext(novel.id),
   ]);
   const pair = `${novel.sourceLang}->${novel.targetLang}`;
+  const relationshipMap = parseRelationshipMap(novel.relationshipMapJson);
 
   // Small parallel batches: 20 sequential LLM calls is slow, 20 parallel
   // is a provider rate-limit burst. 5 at a time.
@@ -72,7 +74,11 @@ export async function translateMissingTitlesForUser(
           providerConfig,
           pair,
           chapter.title,
-          { glossaryTerms: approvedTerms, customPrompt: novel.customPrompt },
+          {
+            glossaryTerms: approvedTerms,
+            customPrompt: novel.customPrompt,
+            relationshipMap,
+          },
         );
         if (!title) return false;
         await db

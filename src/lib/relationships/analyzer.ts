@@ -14,6 +14,7 @@ import {
 import type { RelationshipPromptContext, RelationshipActivePairInput } from "./map";
 import {
   buildRelationshipPromptContext,
+  buildRelationshipPromptContextForText,
   emptyRelationshipMap,
   mergeAutomaticRelationshipAnalysis,
   parseRelationshipMap,
@@ -86,7 +87,7 @@ export async function analyzeChunkRelationships(
     providerConfig = await retryTranslationOperation(() => createProviderClient(row.novel.userId));
   } catch (error) {
     return {
-      context: buildFallbackContext(storedMap, row.chunk.sourceText),
+      context: buildRelationshipPromptContextForText(storedMap, row.chunk.sourceText),
       warning: joinWarnings(
         invalidMapWarning,
         `Relationship analysis unavailable: ${error instanceof Error ? error.message : "provider error"}.`,
@@ -151,7 +152,7 @@ export interface RelationshipSourceAnalysis extends ChunkRelationshipAnalysis {
 export async function analyzeRelationshipSourceChunk(
   options: RelationshipSourceAnalysisOptions,
 ): Promise<RelationshipSourceAnalysis> {
-  const fallback = buildFallbackContext(options.existingMap, options.currentChunk);
+  const fallback = buildRelationshipPromptContextForText(options.existingMap, options.currentChunk);
   let promptTokens = 0;
   let completionTokens = 0;
 
@@ -327,16 +328,10 @@ function buildSceneContext(
     scenePairs.push(relation ?? { speaker: active.speaker, listener: active.listener });
   }
   if (scenePairs.length === 0) {
-    const profiles = map.characters.filter(
-      (character) =>
-        character.enabled &&
-        [character.sourceName, ...character.aliases].some((identity) =>
-          currentChunk.includes(identity),
-        ),
-    );
-    return profiles.length > 0
+    const context = buildRelationshipPromptContextForText(map, currentChunk);
+    return context
       ? {
-          characters: profiles.slice(0, MAX_RELATIONSHIP_PROMPT_ITEMS),
+          characters: context.characters.slice(0, MAX_RELATIONSHIP_PROMPT_ITEMS),
           relationships: [],
           activePairs: [],
         }
@@ -348,36 +343,6 @@ function buildSceneContext(
 
 function identityPairKey(speaker: string, listener: string): string {
   return `${normalizeIdentity(speaker)}\u0000${normalizeIdentity(listener)}`;
-}
-
-function buildFallbackContext(
-  map: RelationshipMapV1 | null,
-  currentChunk: string,
-): RelationshipPromptContext | null {
-  if (!map) return null;
-  const matchedCharacters = map.characters.filter(
-    (character) =>
-      character.enabled &&
-      [character.sourceName, ...character.aliases].some((identity) =>
-        currentChunk.includes(identity),
-      ),
-  );
-  const matchedIds = new Set(matchedCharacters.map((character) => character.id));
-  const matchedRelationships = map.relationships.filter(
-    (relationship) =>
-      relationship.enabled &&
-      matchedIds.has(relationship.speakerId) &&
-      matchedIds.has(relationship.listenerId),
-  );
-  return {
-    characters: matchedCharacters,
-    relationships: matchedRelationships,
-    activePairs: matchedRelationships.map((relationship) => ({
-      speakerId: relationship.speakerId,
-      listenerId: relationship.listenerId,
-      relationshipId: relationship.id,
-    })),
-  };
 }
 
 function joinWarnings(...warnings: Array<string | null | undefined>): string | null {

@@ -2,6 +2,8 @@ import "@tanstack/react-start/server-only";
 
 import type { GlossaryTermInput } from "../types/glossary";
 import type { ProviderClientConfig } from "../types/provider";
+import { buildRelationshipPromptContextForText } from "@/lib/relationships/map";
+import type { RelationshipMapV1 } from "@/lib/relationships/schemas";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "../glossary/terms";
 import { buildTitlePrompt } from "../prompts/translation";
 import { retryTranslationOperation } from "./retry";
@@ -9,6 +11,7 @@ import { retryTranslationOperation } from "./retry";
 export interface TitleTranslationOptions {
   glossaryTerms?: GlossaryTermInput[];
   customPrompt?: string | null;
+  relationshipMap?: RelationshipMapV1 | null;
 }
 
 /**
@@ -26,7 +29,15 @@ export async function translateChapterTitle(
   const glossaryBlock = formatGlossaryBlock(
     filterGlossaryForChunk(options?.glossaryTerms ?? [], title),
   );
-  const titlePrompt = buildTitlePrompt(pair, glossaryBlock, options?.customPrompt);
+  const relationshipContext = buildRelationshipPromptContextForText(
+    options?.relationshipMap ?? null,
+    title,
+  );
+  const titlePrompt = buildTitlePrompt(pair, {
+    glossaryBlock,
+    relationshipContext,
+    customPrompt: options?.customPrompt,
+  });
 
   try {
     const translated = await retryTranslationOperation(async () => {

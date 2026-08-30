@@ -339,6 +339,43 @@ export function buildRelationshipPromptContext(
     activePairs: pairs,
   };
 }
+/**
+ * Build the durable relationship projection for source text when no
+ * current-scene analysis is available.
+ */
+export function buildRelationshipPromptContextForText(
+  map: RelationshipMapV1 | null,
+  sourceText: string,
+): RelationshipPromptContext | null {
+  if (!map) return null;
+
+  const matchedCharacters = map.characters.filter(
+    (character) =>
+      character.enabled &&
+      [character.sourceName, ...character.aliases].some((identity) =>
+        sourceText.includes(identity),
+      ),
+  );
+  if (matchedCharacters.length === 0) return null;
+
+  const matchedIds = new Set(matchedCharacters.map((character) => character.id));
+  const matchedRelationships = map.relationships.filter(
+    (relationship) =>
+      relationship.enabled &&
+      matchedIds.has(relationship.speakerId) &&
+      matchedIds.has(relationship.listenerId),
+  );
+
+  return {
+    characters: matchedCharacters,
+    relationships: matchedRelationships,
+    activePairs: matchedRelationships.map((relationship) => ({
+      speakerId: relationship.speakerId,
+      listenerId: relationship.listenerId,
+      relationshipId: relationship.id,
+    })),
+  };
+}
 
 function mergeAutomaticRelationship(
   target: CharacterRelationship,

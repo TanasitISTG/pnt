@@ -6,6 +6,11 @@ export interface ContextOptions {
   previousSummary?: string | null;
   relationshipContext?: RelationshipPromptContext | null;
 }
+export interface TitlePromptOptions {
+  glossaryBlock?: string | null;
+  relationshipContext?: RelationshipPromptContext | null;
+  customPrompt?: string | null;
+}
 
 // ---------------------------------------------------------------------------
 // Public builders
@@ -68,11 +73,7 @@ export function buildUserMessage(markedText: string, previousChunkTail?: string 
   return parts.join("\n\n");
 }
 
-export function buildTitlePrompt(
-  pair: string,
-  glossaryBlock?: string | null,
-  customPrompt?: string | null,
-): string {
+export function buildTitlePrompt(pair: string, options?: TitlePromptOptions | null): string {
   const normalizedPair = normalizePair(pair);
   const langs: Record<LanguagePair, string> = {
     "en->th": "English to Thai",
@@ -80,16 +81,62 @@ export function buildTitlePrompt(
     "zh->th": "Chinese to Thai",
   };
   const sections = [
-    `You are a professional literary translator. Translate the chapter title from ${langs[normalizedPair]}.`,
+    [
+      `You are a professional literary translator. Translate the chapter title from ${langs[normalizedPair]}.`,
+      "Context precedence: approved glossary spellings are authoritative; otherwise use relationship-map targetName for mapped characters; custom instructions may affect style but never override those names or the output contract.",
+    ].join("\n"),
   ];
+  if (options?.glossaryBlock && options.glossaryBlock.trim().length > 0) {
+    sections.push(formatGlossarySection(options.glossaryBlock, false));
+  }
+  if (options?.relationshipContext && options.relationshipContext.characters.length > 0) {
+    sections.push(formatRelationshipContext(options.relationshipContext));
+  }
+  if (options?.customPrompt && options.customPrompt.trim().length > 0) {
+    sections.push(formatCustomInstructions(options.customPrompt));
+  }
+  sections.push(
+    "Output ONLY the translated title — no quotes, no explanation, no chapter numbers.",
+  );
+  return sections.join("\n\n");
+}
+
+export function buildResidualRepairPrompt(
+  pair: string,
+  glossaryBlock?: string | null,
+  context?: ContextOptions | null,
+  customPrompt?: string | null,
+): string {
+  const normalizedPair = normalizePair(pair);
+  const { source, target } = LANG_LABELS[normalizedPair];
+  const sections = [
+    `You repair residual Chinese web-novel fragments in ${source} web novels into ${target}.`,
+    getPriorityOrder(),
+  ];
+
   if (glossaryBlock && glossaryBlock.trim().length > 0) {
-    sections.push(formatGlossarySection(glossaryBlock, false));
+    sections.push(formatGlossarySection(glossaryBlock, true));
+  }
+  if (context?.previousSummary && context.previousSummary.trim().length > 0) {
+    sections.push(
+      `## Story Context\n### Summary of Previous Chapter:\n${context.previousSummary.trim()}`,
+    );
+  }
+  if (context?.relationshipContext && context.relationshipContext.characters.length > 0) {
+    sections.push(formatRelationshipContext(context.relationshipContext));
   }
   if (customPrompt && customPrompt.trim().length > 0) {
     sections.push(formatCustomInstructions(customPrompt));
   }
+
   sections.push(
-    "Output ONLY the translated title — no quotes, no explanation, no chapter numbers.",
+    [
+      "## Output Contract",
+      'Return exactly one JSON object: {"translations":["..."]}.',
+      "- Include exactly one string per supplied segment, in the same order and count.",
+      "- Translate or transliterate every Chinese word in every segment; no Chinese characters may remain.",
+      "- Output no Markdown, explanation, or additional keys.",
+    ].join("\n"),
   );
   return sections.join("\n\n");
 }
@@ -117,7 +164,7 @@ function formatGlossarySection(glossaryBlock: string, includeRelationshipNote: b
   ];
   if (includeRelationshipNote) {
     lines.push(
-      "Approved character glossary mappings also supply exact Thai names to the relationship context.",
+      "Approved character glossary mappings also supply exact target-language names to the relationship context.",
     );
   }
   lines.push(glossaryBlock.trim());

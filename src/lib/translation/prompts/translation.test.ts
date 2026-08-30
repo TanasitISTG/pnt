@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildResidualRepairPrompt,
   buildSystemPrompt,
   buildUserMessage,
   buildSummaryPrompt,
@@ -7,9 +8,68 @@ import {
 } from "./translation";
 import { findResidualSourceChars, RESIDUAL_CJK_CLASS, RESIDUAL_CJK_SQL_RE } from "../text/residual";
 import { formatRelationshipContext } from "./relationship-context";
-import { buildRelationshipPromptContext } from "@/lib/relationships/map";
+import {
+  buildRelationshipPromptContext,
+  buildRelationshipPromptContextForText,
+} from "@/lib/relationships/map";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 
+const relationshipContext = buildRelationshipPromptContextForText(
+  relationshipMapSchema.parse({
+    version: 1,
+    characters: [
+      {
+        id: "hero",
+        sourceName: "许野",
+        targetName: "สวี่เหยี่ย",
+        aliases: [],
+        gender: "male",
+        role: "protagonist",
+        notes: null,
+        enabled: true,
+        locked: false,
+        evidence: null,
+        lastSeenChapter: null,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "friend",
+        sourceName: "林月",
+        targetName: "หลินเยว่",
+        aliases: [],
+        gender: "female",
+        role: null,
+        notes: null,
+        enabled: true,
+        locked: false,
+        evidence: null,
+        lastSeenChapter: null,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+    relationships: [
+      {
+        id: "hero-to-friend",
+        speakerId: "hero",
+        listenerId: "friend",
+        relationship: "friend",
+        speakerStatus: "peer",
+        familiarity: "close",
+        selfPronoun: null,
+        addresseeTerm: null,
+        sentenceParticles: null,
+        register: null,
+        notes: null,
+        enabled: true,
+        locked: false,
+        evidence: null,
+        lastSeenChapter: null,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+  }),
+  "第一章 许野与林月",
+);
 describe("prompts module", () => {
   // -- System prompt structure -----------------------------------------------
 
@@ -181,6 +241,19 @@ describe("prompts module", () => {
     expect(prompt).toContain("Never invent alternative");
   });
 
+  it("uses target-language glossary wording for zh->en prompts", () => {
+    const glossary = "- 许野 -> Xu Ye (character)";
+    const systemPrompt = buildSystemPrompt("zh->en", glossary);
+    const repairPrompt = buildResidualRepairPrompt("zh->en", glossary);
+
+    for (const prompt of [systemPrompt, repairPrompt]) {
+      expect(prompt).toContain("exact target-language names");
+      expect(prompt).not.toContain("exact Thai names");
+    }
+    expect(systemPrompt).toContain("## Output Requirements");
+    expect(repairPrompt).toContain("## Output Contract");
+  });
+
   // -- Context ---------------------------------------------------------------
 
   it("includes context block when summary provided", () => {
@@ -289,17 +362,17 @@ describe("prompts module", () => {
     expect(prompt).toContain("ONLY the translated title");
   });
   it("adds glossary and custom sections before the title-only contract", () => {
-    const prompt = buildTitlePrompt(
-      "zh->th",
-      "- 许野 -> สวี่เหยี่ย (character)",
-      "Use the approved title style.",
-    );
+    const prompt = buildTitlePrompt("zh->th", {
+      glossaryBlock: "- 许野 -> สวี่เหยี่ย (character)",
+      customPrompt: "Use the approved title style.",
+      relationshipContext: null,
+    });
 
     expect(prompt).toContain("## Terminology & Glossary");
     expect(prompt).toContain("许野 -> สวี่เหยี่ย");
     expect(prompt).toContain("## Custom Instructions");
     expect(prompt).toContain("Use the approved title style.");
-    expect(prompt).not.toContain("relationship context");
+    expect(prompt).not.toContain("## Character & Relationship Context");
 
     const glossaryIndex = prompt.indexOf("## Terminology & Glossary");
     const customIndex = prompt.indexOf("## Custom Instructions");
@@ -309,11 +382,90 @@ describe("prompts module", () => {
     expect(prompt.slice(outputIndex)).not.toContain("\n## ");
   });
 
+  it("orders matched title context before custom instructions and the output contract", () => {
+    const prompt = buildTitlePrompt("zh->th", {
+      glossaryBlock: "- 许野 -> สวี่เหยี่ย (character)",
+      relationshipContext,
+      customPrompt: "Use the approved title style.",
+    });
+
+    expect(prompt).toContain("targetName");
+    expect(prompt).toContain("hero-to-friend");
+    expect(prompt).toContain(
+      "Context precedence: approved glossary spellings are authoritative; otherwise use relationship-map targetName for mapped characters; custom instructions may affect style but never override those names or the output contract.",
+    );
+
+    const glossaryIndex = prompt.indexOf("## Terminology & Glossary");
+    const relationshipIndex = prompt.indexOf("## Character & Relationship Context");
+    const customIndex = prompt.indexOf("## Custom Instructions");
+    const outputIndex = prompt.indexOf("Output ONLY the translated title");
+    expect(glossaryIndex).toBeLessThan(relationshipIndex);
+    expect(relationshipIndex).toBeLessThan(customIndex);
+    expect(customIndex).toBeLessThan(outputIndex);
+  });
+
   it("omits empty optional title prompt sections", () => {
-    const prompt = buildTitlePrompt("en->th", "  ", "\n");
+    const prompt = buildTitlePrompt("en->th", {
+      glossaryBlock: "  ",
+      relationshipContext: null,
+      customPrompt: "\n",
+    });
     expect(prompt).not.toContain("## Terminology & Glossary");
+    expect(prompt).not.toContain("## Character & Relationship Context");
     expect(prompt).not.toContain("## Custom Instructions");
     expect(prompt).toContain("Output ONLY the translated title");
+  });
+
+  it("builds a context-aware JSON contract for residual repairs", () => {
+    const prompt = buildResidualRepairPrompt(
+      "zh->th",
+      "- 许野 -> สวี่เหยี่ย (character)",
+      {
+        previousSummary: "许野 met 林月 at the mountain gate.",
+        relationshipContext,
+      },
+      "Keep names consistent.",
+    );
+
+    expect(prompt).toContain("residual Chinese web-novel fragments");
+    expect(prompt).toContain("Chinese web novels into Thai");
+    expect(prompt).toContain("## Translation Priorities");
+    expect(prompt).toContain("## Terminology & Glossary");
+    expect(prompt).toContain("## Story Context");
+    expect(prompt).toContain("## Character & Relationship Context");
+    expect(prompt).toContain("## Custom Instructions");
+    expect(prompt).toContain('{"translations":["..."]}');
+    expect(prompt).toContain("one string per supplied segment");
+    expect(prompt).toContain("no Chinese characters may remain");
+
+    const glossaryIndex = prompt.indexOf("## Terminology & Glossary");
+    const storyIndex = prompt.indexOf("## Story Context");
+    const relationshipIndex = prompt.indexOf("## Character & Relationship Context");
+    const customIndex = prompt.indexOf("## Custom Instructions");
+    const outputIndex = prompt.indexOf("## Output Contract");
+    expect(glossaryIndex).toBeLessThan(storyIndex);
+    expect(storyIndex).toBeLessThan(relationshipIndex);
+    expect(relationshipIndex).toBeLessThan(customIndex);
+    expect(customIndex).toBeLessThan(outputIndex);
+    expect(prompt.slice(outputIndex)).not.toContain("\n## ");
+  });
+
+  it("omits empty optional residual repair sections", () => {
+    const prompt = buildResidualRepairPrompt(
+      "zh->th",
+      " ",
+      {
+        previousSummary: "\n",
+        relationshipContext: null,
+      },
+      " ",
+    );
+
+    expect(prompt).not.toContain("## Terminology & Glossary");
+    expect(prompt).not.toContain("## Story Context");
+    expect(prompt).not.toContain("## Character & Relationship Context");
+    expect(prompt).not.toContain("## Custom Instructions");
+    expect(prompt).toContain("## Output Contract");
   });
 
   // -- Shared residual CJK class (JS scanner ↔ SQL pre-filter) ---------------

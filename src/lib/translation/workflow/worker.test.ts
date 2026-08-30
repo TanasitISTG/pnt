@@ -6,6 +6,8 @@ import * as finalizeSummaryModule from "./finalize-summary";
 import * as jobStore from "./job-store";
 import * as providerClientModule from "../providers/provider-client";
 
+import { buildRelationshipPromptContextForText } from "@/lib/relationships/map";
+import { relationshipMapSchema } from "@/lib/relationships/schemas";
 vi.mock("./job-store", () => ({
   beginJob: vi.fn(),
   completeChunk: vi.fn(),
@@ -69,6 +71,12 @@ describe("translation worker guarded state transitions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([]);
+    vi.mocked(jobStore.loadPrevChapterForContext).mockResolvedValue(null as never);
+    vi.mocked(jobStore.loadTermSourcesForExclusion).mockResolvedValue({
+      approvedTerms: [],
+      existingSources: [],
+    });
     vi.mocked(jobStore.completeChunk).mockResolvedValue(true);
     vi.mocked(jobStore.saveChunkFailure).mockResolvedValue(true);
     vi.mocked(jobStore.completeJob).mockResolvedValue(true);
@@ -132,11 +140,71 @@ describe("translation worker guarded state transitions", () => {
       expect.objectContaining({ translation: "Translated Chunk 1" }),
     );
   });
-  it("repairs short residual spans after four surgical attempts", async () => {
+  it("repairs short residual spans with all translation context", async () => {
     provider.generateChatCompletion.mockReset();
+    const relationshipContext = buildRelationshipPromptContextForText(
+      relationshipMapSchema.parse({
+        version: 1,
+        characters: [
+          {
+            id: "hero",
+            sourceName: "许野",
+            targetName: "สวี่เหยี่ย",
+            aliases: [],
+            gender: "male",
+            role: "protagonist",
+            notes: null,
+            enabled: true,
+            locked: false,
+            evidence: null,
+            lastSeenChapter: null,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "friend",
+            sourceName: "林月",
+            targetName: "หลินเยว่",
+            aliases: [],
+            gender: "female",
+            role: null,
+            notes: null,
+            enabled: true,
+            locked: false,
+            evidence: null,
+            lastSeenChapter: null,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        relationships: [
+          {
+            id: "hero-to-friend",
+            speakerId: "hero",
+            listenerId: "friend",
+            relationship: "friend",
+            speakerStatus: "peer",
+            familiarity: "close",
+            selfPronoun: null,
+            addresseeTerm: null,
+            sentenceParticles: null,
+            register: null,
+            notes: null,
+            enabled: true,
+            locked: false,
+            evidence: null,
+            lastSeenChapter: null,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      }),
+      "许野 林月",
+    )!;
+    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([
+      { source: "许野", target: "สวี่เหยี่ย", category: "character", note: null },
+    ] as never);
     vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
       ...row,
-      chunk: chunks[0],
+      novel: { ...mockNovel, customPrompt: "Keep names consistent." },
+      chunk: { ...chunks[0], sourceText: "许野 text", textLength: 7 },
       previousChunk: null,
     } as never);
     provider.generateChatCompletion
@@ -158,9 +226,38 @@ describe("translation worker guarded state transitions", () => {
         usage: { promptTokens: 1, completionTokens: 1 },
       });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, {
+      context: relationshipContext,
+      warning: null,
+      promptTokens: 0,
+      completionTokens: 0,
+    });
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(5);
+    const spanRepairRequest = provider.generateChatCompletion.mock.calls[1]?.[0] as {
+      messages: Array<{ content?: string }>;
+      responseFormat?: unknown;
+    };
+    const repairPrompt = spanRepairRequest.messages[0]?.content as string;
+    expect(repairPrompt).toContain("## Terminology & Glossary");
+    expect(repairPrompt).toContain("许野 -> สวี่เหยี่ย");
+    expect(repairPrompt).toContain("Old story summary");
+    expect(repairPrompt).toContain("## Character & Relationship Context");
+    expect(repairPrompt).toContain('"id":"hero-to-friend"');
+    expect(repairPrompt).toContain("## Custom Instructions");
+    expect(repairPrompt).toContain("Keep names consistent.");
+    expect(repairPrompt).toContain('{"translations":["..."]}');
+    expect(repairPrompt.indexOf("## Terminology & Glossary")).toBeLessThan(
+      repairPrompt.indexOf("## Character & Relationship Context"),
+    );
+    expect(repairPrompt.indexOf("## Character & Relationship Context")).toBeLessThan(
+      repairPrompt.indexOf("## Custom Instructions"),
+    );
+    expect(repairPrompt.indexOf("## Custom Instructions")).toBeLessThan(
+      repairPrompt.indexOf("## Output Contract"),
+    );
+    expect(repairPrompt.slice(repairPrompt.indexOf("## Output Contract"))).not.toContain("\n## ");
+    expect(spanRepairRequest.responseFormat).toEqual({ type: "json_object" });
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
       "job-1",
       generation,

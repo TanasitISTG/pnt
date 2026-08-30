@@ -5,6 +5,7 @@ import { generateSummaryArtifacts } from "./finalize-summary";
 import type { AIProviderClient } from "../types/provider";
 import type { GlossaryTermInput } from "../types/glossary";
 import type { LogEntry } from "../types/workflow";
+import { relationshipMapSchema } from "@/lib/relationships/schemas";
 
 vi.mock("./title", () => ({ translateChapterTitle: vi.fn() }));
 
@@ -21,12 +22,74 @@ function makeProvider(
   };
 }
 
+const relationshipMap = relationshipMapSchema.parse({
+  version: 1,
+  characters: [
+    {
+      id: "hero",
+      sourceName: "许野",
+      targetName: "สวี่เหยี่ย",
+      aliases: [],
+      gender: "male",
+      role: "protagonist",
+      notes: null,
+      enabled: true,
+      locked: false,
+      evidence: null,
+      lastSeenChapter: null,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      id: "friend",
+      sourceName: "林月",
+      targetName: "หลินเยว่",
+      aliases: [],
+      gender: "female",
+      role: null,
+      notes: null,
+      enabled: true,
+      locked: false,
+      evidence: null,
+      lastSeenChapter: null,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  ],
+  relationships: [
+    {
+      id: "hero-to-friend",
+      speakerId: "hero",
+      listenerId: "friend",
+      relationship: "friend",
+      speakerStatus: "peer",
+      familiarity: "close",
+      selfPronoun: null,
+      addresseeTerm: null,
+      sentenceParticles: null,
+      register: null,
+      notes: null,
+      enabled: true,
+      locked: false,
+      evidence: null,
+      lastSeenChapter: null,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  ],
+});
 const novel = {
   id: "novel-1",
   sourceLang: "zh",
   targetLang: "th",
   storySummary: "Existing story",
   customPrompt: "Keep names consistent.",
+  relationshipMapJson: JSON.stringify(relationshipMap),
+} as never;
+const invalidRelationshipMapNovel = {
+  id: "novel-1",
+  sourceLang: "zh",
+  targetLang: "th",
+  storySummary: "Existing story",
+  customPrompt: "Keep names consistent.",
+  relationshipMapJson: "not json",
 } as never;
 const chapter = { id: "chapter-1", title: "第一章" } as never;
 const approvedTerms: GlossaryTermInput[] = [
@@ -81,7 +144,41 @@ describe("generateSummaryArtifacts", () => {
       expect.anything(),
       "zh->th",
       "第一章",
-      { glossaryTerms: approvedTerms, customPrompt: "Keep names consistent." },
+      {
+        glossaryTerms: approvedTerms,
+        customPrompt: "Keep names consistent.",
+        relationshipMap,
+      },
+    );
+  });
+
+  it("passes null relationship context when persisted map JSON is invalid", async () => {
+    const generateChatCompletion = vi
+      .fn()
+      .mockResolvedValueOnce(completion("Chapter summary"))
+      .mockResolvedValueOnce(completion("Updated story"));
+    const logs: LogEntry[] = [];
+
+    const result = await generateSummaryArtifacts({
+      providerConfig: makeProvider(generateChatCompletion),
+      novel: invalidRelationshipMapNovel,
+      chapter,
+      fullTranslation: "Translated chapter",
+      approvedTerms,
+      logs,
+    });
+
+    expect(result.translatedTitle).toBe("บทที่หนึ่ง");
+    expect(result.freshSummary).toBe("Chapter summary");
+    expect(titleModule.translateChapterTitle).toHaveBeenCalledWith(
+      expect.anything(),
+      "zh->th",
+      "第一章",
+      {
+        glossaryTerms: approvedTerms,
+        customPrompt: "Keep names consistent.",
+        relationshipMap: null,
+      },
     );
   });
 

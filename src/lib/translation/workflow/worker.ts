@@ -3,7 +3,11 @@ import "@tanstack/react-start/server-only";
 import { createProviderClient } from "../providers/provider-client";
 import type { AIProviderClient } from "../types/provider";
 import { splitAtParagraphBoundary } from "../text/chunker";
-import { buildSystemPrompt, buildUserMessage } from "../prompts/translation";
+import {
+  buildResidualRepairPrompt,
+  buildSystemPrompt,
+  buildUserMessage,
+} from "../prompts/translation";
 import { findResidualSourceChars } from "../text/residual";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "../glossary/terms";
 import {
@@ -57,6 +61,7 @@ async function translatePiece(
   previousTail: string | null,
   providerConfig: AIProviderClient,
   systemPrompt: string,
+  residualRepairPrompt: string,
   langPair: string,
   logs: LogEntry[],
   chunkLabel: string,
@@ -127,6 +132,7 @@ async function translatePiece(
     translation,
     providerConfig,
     systemPrompt,
+    residualRepairPrompt,
     userMessage,
     langPair,
     logs,
@@ -153,6 +159,7 @@ async function repairResidualHanzi(
   translation: string,
   providerConfig: AIProviderClient,
   systemPrompt: string,
+  residualRepairPrompt: string,
   userMessage: string,
   langPair: string,
   logs: LogEntry[],
@@ -211,13 +218,12 @@ async function repairResidualHanzi(
   if (stillDirty && spans.length > 0 && spans.every((s) => s.text.length <= LONG_SPAN_LIMIT)) {
     try {
       const repaired = await retryTranslationOperation(async () => {
-        const targetLang = langPair.toLowerCase().endsWith("th") ? "Thai" : "English";
         const repair = await providerConfig.generateChatCompletion({
           temperature: 0.2,
           messages: [
             {
               role: "system",
-              content: `You translate Chinese web-novel fragments into ${targetLang}. Translate or transliterate every Chinese word, including names — no Chinese characters in the output. Reply with JSON: {"translations": [...]} — one translated string per input segment, same order and count.`,
+              content: residualRepairPrompt,
             },
             { role: "user", content: JSON.stringify({ segments: spans.map((s) => s.text) }) },
           ],
@@ -335,17 +341,24 @@ export async function translateChunk(
     );
   }
 
+  const translationContext = {
+    previousSummary,
+    relationshipContext: dialogueAnalysis?.context ?? null,
+  };
   const systemPrompt = buildSystemPrompt(
     `${novel.sourceLang}->${novel.targetLang}`,
     glossaryBlock,
-    {
-      previousSummary,
-      relationshipContext: dialogueAnalysis?.context ?? null,
-    },
+    translationContext,
     novel.customPrompt,
   );
 
   const langPair = `${novel.sourceLang}->${novel.targetLang}`;
+  const residualRepairPrompt = buildResidualRepairPrompt(
+    langPair,
+    glossaryBlock,
+    translationContext,
+    novel.customPrompt,
+  );
   const chunkLabel = `Chunk ${i + 1}/${job.totalChunks}`;
 
   async function translatePieceWithAutoSplit(
@@ -359,6 +372,7 @@ export async function translateChunk(
         prevTail,
         providerConfig,
         systemPrompt,
+        residualRepairPrompt,
         langPair,
         logs,
         chunkLabel,
