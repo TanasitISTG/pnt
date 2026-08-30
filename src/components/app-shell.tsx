@@ -65,6 +65,7 @@ export function AppShell({ user, children }: AppShellProps) {
           <div className="flex items-center gap-8">
             <Link
               to="/"
+              preload={false}
               className="flex items-center gap-2 text-card-title font-semibold text-foreground no-underline"
             >
               <img src="/logo-64.png" alt="" width={32} height={32} className="size-8 rounded-md" />
@@ -73,6 +74,7 @@ export function AppShell({ user, children }: AppShellProps) {
             <nav className="hidden items-center gap-6 md:flex">
               <Link
                 to="/"
+                preload={false}
                 className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
                 activeProps={{ className: "font-semibold" }}
               >
@@ -82,6 +84,7 @@ export function AppShell({ user, children }: AppShellProps) {
                 <>
                   <Link
                     to="/jobs"
+                    preload={false}
                     className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
                     activeProps={{ className: "font-semibold" }}
                   >
@@ -129,6 +132,7 @@ export function AppShell({ user, children }: AppShellProps) {
             <nav className="flex flex-col gap-4">
               <Link
                 to="/"
+                preload={false}
                 className="text-body-lg text-foreground no-underline"
                 onClick={() => setMenuOpen(false)}
               >
@@ -138,6 +142,7 @@ export function AppShell({ user, children }: AppShellProps) {
                 <>
                   <Link
                     to="/jobs"
+                    preload={false}
                     className="text-body-lg text-foreground no-underline"
                     onClick={() => setMenuOpen(false)}
                   >

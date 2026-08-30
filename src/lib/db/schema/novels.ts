@@ -82,6 +82,13 @@ export const chapters = pgTable(
   (table) => [
     unique("unique_novel_chapter_number").on(table.novelId, table.number),
     index("chapters_published_at_idx").on(table.publishedAt),
+    index("chapters_novel_metrics_idx").on(
+      table.novelId,
+      table.publishedAt,
+      table.status,
+      table.id,
+    ),
+    index("chapters_id_novel_id_idx").on(table.id, table.novelId),
   ],
 );
 

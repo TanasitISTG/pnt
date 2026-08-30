@@ -57,7 +57,10 @@ export const importJobs = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [index("import_jobs_novel_id_idx").on(table.novelId)],
+  (table) => [
+    index("import_jobs_novel_id_idx").on(table.novelId),
+    index("import_jobs_recent_idx").on(table.updatedAt.desc(), table.novelId, table.id),
+  ],
 );
 
 export const epubUploads = pgTable(

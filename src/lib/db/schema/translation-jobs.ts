@@ -41,6 +41,7 @@ export const translationJobs = pgTable(
   },
   (table) => [
     index("translation_jobs_chapter_id_idx").on(table.chapterId),
+    index("translation_jobs_recent_idx").on(table.updatedAt.desc(), table.chapterId, table.id),
     uniqueIndex("translation_jobs_one_active_per_chapter_idx")
       .on(table.chapterId)
       .where(sql`${table.status} IN ('pending', 'running')`),
@@ -63,7 +64,15 @@ export const translationJobChunks = pgTable(
     error: text("error"),
     completedAt: timestamp("completed_at"),
   },
-  (table) => [primaryKey({ columns: [table.jobId, table.index] })],
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.index] }),
+    index("translation_job_chunks_metrics_idx").on(
+      table.jobId,
+      table.latencyMs,
+      table.promptTokens,
+      table.completionTokens,
+    ),
+  ],
 );
 
 export const translationJobsRelations = relations(translationJobs, ({ one }) => ({

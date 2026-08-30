@@ -1,97 +1,45 @@
 import { createServerFn } from "@tanstack/react-start";
-import { desc, eq, sql } from "drizzle-orm";
-
 import { ensureSession } from "@/lib/auth/functions";
-import { db } from "@/lib/db";
-import {
-  chapters,
-  importJobs,
-  novels,
-  translationJobChunks,
-  translationJobs,
-} from "@/lib/db/schema";
+import { loadJobActivity, loadJobStats } from "@/lib/job-observability.service";
 import { withSafeHandler } from "@/lib/server-fn-error";
+import { createServerTiming } from "@/lib/server-timing";
 
-export const getJobDashboard = createServerFn({ method: "GET" }).handler(async () =>
-  withSafeHandler(async () => {
-    const session = await ensureSession();
+export const getJobDashboard = createServerFn({ method: "GET" }).handler(async () => {
+  const timing = createServerTiming();
+  try {
+    return await withSafeHandler(async () => {
+      const session = await timing.measure("auth", () => ensureSession());
+      const [activity, stats] = await Promise.all([
+        loadJobActivity(session.user.id, timing),
+        loadJobStats(session.user.id, timing),
+      ]);
+      return { activity, stats };
+    });
+  } finally {
+    timing.flush();
+  }
+});
 
-    const [translationRows, importRows, [chunkStats]] = await Promise.all([
-      db
-        .select({
-          id: translationJobs.id,
-          status: translationJobs.status,
-          totalChunks: translationJobs.totalChunks,
-          doneChunks: translationJobs.doneChunks,
-          error: translationJobs.error,
-          usageJson: translationJobs.usageJson,
-          createdAt: translationJobs.createdAt,
-          updatedAt: translationJobs.updatedAt,
-          chapterId: chapters.id,
-          chapterNumber: chapters.number,
-          chapterTitle: chapters.title,
-          novelId: novels.id,
-          novelTitle: novels.title,
-        })
-        .from(translationJobs)
-        .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(eq(novels.userId, session.user.id))
-        .orderBy(desc(translationJobs.updatedAt))
-        .limit(25),
-      db
-        .select({
-          id: importJobs.id,
-          kind: importJobs.kind,
-          status: importJobs.status,
-          baseUrl: importJobs.baseUrl,
-          sourceFileName: importJobs.sourceFileName,
-          fromNumber: importJobs.fromNumber,
-          toNumber: importJobs.toNumber,
-          nextNumber: importJobs.nextNumber,
-          scrapeProvider: importJobs.scrapeProvider,
-          added: importJobs.added,
-          skipped: importJobs.skipped,
-          failed: importJobs.failed,
-          error: importJobs.error,
-          createdAt: importJobs.createdAt,
-          updatedAt: importJobs.updatedAt,
-          novelId: novels.id,
-          novelTitle: novels.title,
-        })
-        .from(importJobs)
-        .innerJoin(novels, eq(importJobs.novelId, novels.id))
-        .where(eq(novels.userId, session.user.id))
-        .orderBy(desc(importJobs.updatedAt))
-        .limit(25),
-      db
-        .select({
-          avgLatencyMs: sql<number>`COALESCE(ROUND(AVG(${translationJobChunks.latencyMs})), 0)::int`,
-          promptTokens: sql<number>`COALESCE(SUM(${translationJobChunks.promptTokens}), 0)::int`,
-          completionTokens: sql<number>`COALESCE(SUM(${translationJobChunks.completionTokens}), 0)::int`,
-        })
-        .from(translationJobChunks)
-        .innerJoin(translationJobs, eq(translationJobChunks.jobId, translationJobs.id))
-        .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(eq(novels.userId, session.user.id)),
-    ]);
+export const getJobActivity = createServerFn({ method: "GET" }).handler(async () => {
+  const timing = createServerTiming();
+  try {
+    return await withSafeHandler(async () => {
+      const session = await timing.measure("auth", () => ensureSession());
+      return loadJobActivity(session.user.id, timing);
+    });
+  } finally {
+    timing.flush();
+  }
+});
 
-    return {
-      summary: {
-        activeTranslationJobs: translationRows.filter(
-          (j) => j.status === "pending" || j.status === "running",
-        ).length,
-        failedTranslationJobs: translationRows.filter((j) => j.status === "error").length,
-        activeImportJobs: importRows.filter((j) => j.status === "pending" || j.status === "running")
-          .length,
-        failedImportJobs: importRows.filter((j) => j.status === "error").length,
-        avgChunkLatencyMs: Number(chunkStats?.avgLatencyMs ?? 0),
-        promptTokens: Number(chunkStats?.promptTokens ?? 0),
-        completionTokens: Number(chunkStats?.completionTokens ?? 0),
-      },
-      translationJobs: translationRows,
-      importJobs: importRows,
-    };
-  }),
-);
+export const getJobStats = createServerFn({ method: "GET" }).handler(async () => {
+  const timing = createServerTiming();
+  try {
+    return await withSafeHandler(async () => {
+      const session = await timing.measure("auth", () => ensureSession());
+      return loadJobStats(session.user.id, timing);
+    });
+  } finally {
+    timing.flush();
+  }
+});

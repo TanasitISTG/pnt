@@ -8,6 +8,7 @@ import { ensureSession, getSession } from "@/lib/auth/functions";
 import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
+import { createServerTiming } from "@/lib/server-timing";
 import { novelLive, chapterLive } from "@/lib/content/publish";
 import {
   createNovelSchema,
@@ -16,44 +17,52 @@ import {
 } from "@/lib/content/novel.schemas";
 
 export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
-  return withSafeHandler(async () => {
-    const session = await getSession();
-    if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
+  const timing = createServerTiming();
+  try {
+    return await withSafeHandler(async () => {
+      const session = await timing.measure("auth", () => getSession());
+      if (!session)
+        await timing.measure("rate-limit", () => checkRateLimit("read", GUEST_READ_LIMIT));
 
-    const rows = await db
-      .select({
-        id: novels.id,
-        title: novels.title,
-        originalTitle: novels.originalTitle,
-        author: novels.author,
-        description: novels.description,
-        sourceLang: novels.sourceLang,
-        targetLang: novels.targetLang,
-        publishedAt: novels.publishedAt,
-        createdAt: novels.createdAt,
-        updatedAt: novels.updatedAt,
-        hasCover: sql<number>`CASE WHEN ${novels.cover} IS NOT NULL THEN 1 ELSE 0 END`,
-        chapterCount: sql<number>`count(${chapters.id})::int`,
-        translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
-      })
-      .from(novels)
-      .leftJoin(
-        chapters,
-        session
-          ? eq(chapters.novelId, novels.id)
-          : and(eq(chapters.novelId, novels.id), chapterLive()),
-      )
-      .where(session ? eq(novels.userId, session.user.id) : novelLive())
-      .groupBy(novels.id)
-      .orderBy(desc(novels.createdAt));
+      const rows = await timing.measure("novels", () =>
+        db
+          .select({
+            id: novels.id,
+            title: novels.title,
+            originalTitle: novels.originalTitle,
+            author: novels.author,
+            description: novels.description,
+            sourceLang: novels.sourceLang,
+            targetLang: novels.targetLang,
+            publishedAt: novels.publishedAt,
+            createdAt: novels.createdAt,
+            updatedAt: novels.updatedAt,
+            hasCover: sql<number>`CASE WHEN ${novels.cover} IS NOT NULL THEN 1 ELSE 0 END`,
+            chapterCount: sql<number>`count(${chapters.id})::int`,
+            translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
+          })
+          .from(novels)
+          .leftJoin(
+            chapters,
+            session
+              ? eq(chapters.novelId, novels.id)
+              : and(eq(chapters.novelId, novels.id), chapterLive()),
+          )
+          .where(session ? eq(novels.userId, session.user.id) : novelLive())
+          .groupBy(novels.id)
+          .orderBy(desc(novels.createdAt)),
+      );
 
-    return rows.map((row) => ({
-      ...row,
-      chapterCount: Number(row.chapterCount || 0),
-      translatedCount: Number(row.translatedCount || 0),
-      hasCover: Number(row.hasCover || 0),
-    }));
-  });
+      return rows.map((row) => ({
+        ...row,
+        chapterCount: Number(row.chapterCount || 0),
+        translatedCount: Number(row.translatedCount || 0),
+        hasCover: Number(row.hasCover || 0),
+      }));
+    });
+  } finally {
+    timing.flush();
+  }
 });
 
 export const getNovel = createServerFn({ method: "GET" })

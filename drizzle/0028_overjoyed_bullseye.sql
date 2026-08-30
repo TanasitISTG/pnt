@@ -1,0 +1,1 @@
+CREATE INDEX "chapters_id_novel_id_idx" ON "chapters" USING btree ("id","novel_id");
