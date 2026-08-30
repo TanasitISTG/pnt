@@ -184,10 +184,13 @@ function getStyleGuidelines(pair: LanguagePair): string {
 
   if (pair === "zh->th") {
     lines.push(
-      "- Identify both the dialogue speaker and listener before choosing Thai forms; second-person words follow the listener's gender. นาย is not for a female listener.",
-      "- A male 我 may become ผม toward elders, superiors, or formal listeners, but may become ฉัน, เรา, a name, a kinship term, or omission among close peers or intimates.",
+      "- Identify both the dialogue speaker and listener before choosing Thai forms; second-person words follow the listener's gender.",
+      "- For an unlocked relationship, a known male listener in neutral, friendly, or romantic dialogue uses นาย, never เธอ. A known female listener uses เธอ unless a kinship term, title, name, or locked choice is more appropriate.",
+      "- A male speaker uses ผม toward an elder, superior, or formal/distant listener, and ฉัน or omission toward a familiar peer or intimate listener.",
+      "- If the listener is unknown, omit the second-person pronoun or use an established name or kinship term rather than guessing gender.",
+      "- แก is never a default. It may appear only when a locked directed pair explicitly requests it; convey hostility through wording instead of inventing a coarse pronoun.",
+      "- Locked directed-pair speech fields are authoritative and override these defaults; use them exactly when present.",
       "- Do not append ครับ, ค่ะ, or คะ by default; use sentence particles only when the directed relationship context or source evidence supports them.",
-      "- When evidence is insufficient, preserve ambiguity by omitting the pronoun or using an established name or kinship term rather than guessing gender or status.",
       "- A current source change may supersede a relationship label, but automatic analysis and generic custom instructions may not overwrite a locked per-pair speech choice.",
     );
   }
@@ -206,14 +209,16 @@ function getFewShotExample(pair: LanguagePair): string {
     return [
       "## Examples (Chinese → Thai dialogue direction)",
       "1. Source: 男人对女人说：“你先走。” Good translation: “เธอไปก่อนเถอะ”",
-      "2. Source: 儿子对父亲说：“我会回来的。” Good translation: “ผมจะกลับมา”",
-      "3. Source: 男人对亲密的男性朋友说：“你别装了，我知道。” Good translation: “ฉันรู้ว่านายกำลังแกล้งทำ”",
-      "4. Source: 男主对女主说：“我只想和你在一起。” Good translation: “ฉันแค่อยากอยู่กับเธอ”",
-      "These are directional examples, not a global mapping for 我 or 你. Do not add ครับ/ค่ะ/คะ by default.",
+      "2. Source: 女主对男主说：“我只想和你在一起。” Good translation: “ฉันแค่อยากอยู่กับนาย”",
+      "3. Source: 男主对女主说：“我只想和你在一起。” Good translation: “ฉันแค่อยากอยู่กับเธอ”",
+      "4. Source: 男人对亲密的男性朋友说：“你别装了，我知道。” Good translation: “ฉันรู้ว่านายกำลังแกล้งทำ”",
+      "5. Source: 儿子对父亲说：“父亲，我明白了。” Good translation: “พ่อ ผมเข้าใจแล้ว”",
+      "These are conservative directional defaults, not a global mapping for 我 or 你. Locked per-pair speech choices always win.",
+      "Do not add ครับ/ค่ะ/คะ by default.",
     ].join("\n");
   }
 
-  const examples: Record<LanguagePair, { source: string; translation: string }> = {
+  const examples: Record<"en->th" | "zh->en", { source: string; translation: string }> = {
     "en->th": {
       source: `"I told you to stay away," he said coldly, turning his back to her. She clenched her fists but said nothing.`,
       translation: `“บอกแล้วไงว่าอย่าเข้ามาใกล้” เขาพูดเสียงเย็นชาพลางหันหลังให้เธอ เธอกำหมัดแน่นแต่ไม่ได้เอ่ยอะไร`,
@@ -221,10 +226,6 @@ function getFewShotExample(pair: LanguagePair): string {
     "zh->en": {
       source: `"你以为你是谁？"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
       translation: `"Who do you think you are?" he sneered. Behind him, the girl trembled yet said nothing.`,
-    },
-    "zh->th": {
-      source: `"你以为你是谁……"他冷笑道。身后的少女瑟瑟发抖，却一言不发。`,
-      translation: `“แกคิดว่าแกเป็นใคร…” เขายิ้มเยาะ สาวน้อยด้านหลังตัวสั่นแต่ไม่เอ่ยสักคำ`,
     },
   };
 

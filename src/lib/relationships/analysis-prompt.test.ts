@@ -57,10 +57,99 @@ describe("relationship analysis prompt", () => {
     expect(system).toContain("父亲");
     expect(system).toContain("พ่อ");
     expect(system).toContain("Do not invent");
-    expect(system).toContain("Never infer a global Thai mapping for Chinese 我 or 你");
+    expect(system).toContain("Never infer or output Thai speech choices");
+    expect(system).not.toContain("selfPronoun");
+    expect(system).not.toContain("addresseeTerm");
+    expect(system).not.toContain("sentenceParticles");
     expect(user).toContain("父亲看着儿子");
     expect(user).toContain("<<<BEGIN_CURRENT_SOURCE>>>");
     expect(user).toContain("儿子说：我会回来");
+  });
+  it("strips legacy exact speech fields from provider output", () => {
+    const relationship = parseRelationshipAnalysis(validResponse)?.relationships[0];
+
+    expect(relationship).toEqual({
+      speaker: "儿子",
+      listener: "父亲",
+      relationship: "son",
+      speakerStatus: "lower",
+      familiarity: "close",
+      register: "respectful",
+      notes: null,
+      evidence: "儿子说",
+    });
+    expect(relationship).not.toHaveProperty("selfPronoun");
+    expect(relationship).not.toHaveProperty("addresseeTerm");
+    expect(relationship).not.toHaveProperty("sentenceParticles");
+  });
+  it("hides stored exact speech fields from automatic analysis", () => {
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const map = relationshipMapSchema.parse({
+      version: 1,
+      characters: [
+        {
+          id: "speaker",
+          sourceName: "甲",
+          targetName: "ตัวเอก",
+          aliases: [],
+          gender: "male",
+          role: null,
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: timestamp,
+        },
+        {
+          id: "listener",
+          sourceName: "乙",
+          targetName: "คู่สนทนา",
+          aliases: [],
+          gender: "female",
+          role: null,
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: timestamp,
+        },
+      ],
+      relationships: [
+        {
+          id: "pair",
+          speakerId: "speaker",
+          listenerId: "listener",
+          relationship: "friend",
+          speakerStatus: "peer",
+          familiarity: "close",
+          selfPronoun: "ฉัน",
+          addresseeTerm: "เธอ",
+          sentenceParticles: "นะ",
+          register: "informal",
+          notes: null,
+          enabled: true,
+          locked: true,
+          evidence: "甲对乙说",
+          lastSeenChapter: 1,
+          updatedAt: timestamp,
+        },
+      ],
+    });
+    const prompt = buildRelationshipAnalysisPrompt({
+      pair: "zh->th",
+      existingMap: map,
+      approvedMappings: [],
+      currentChunk: "甲对乙说：你好。",
+    });
+
+    expect(prompt).not.toContain("selfPronoun");
+    expect(prompt).not.toContain("addresseeTerm");
+    expect(prompt).not.toContain("sentenceParticles");
+    expect(prompt).not.toContain("ฉัน");
+    expect(prompt).not.toContain("เธอ");
+    expect(prompt).not.toContain("นะ");
   });
 
   it("parses plain and fenced JSON while requiring evidence", () => {
@@ -127,7 +216,16 @@ describe("relationship analysis prompt", () => {
       }),
     );
     expect(result?.characters[0]?.aliases).toEqual(["小儿"]);
-    expect(result?.relationships[0]?.selfPronoun).toBe("ผม");
+    expect(result?.relationships[0]).toEqual({
+      speaker: "儿子",
+      listener: "父亲",
+      relationship: "son",
+      speakerStatus: "unknown",
+      familiarity: "unknown",
+      register: null,
+      notes: null,
+      evidence: "儿子",
+    });
   });
 
   it("bounds analysis context to relevant entries with referential relationships", () => {

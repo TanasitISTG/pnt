@@ -75,9 +75,6 @@ function relationshipAnalysisFixture() {
         relationship: "son",
         speakerStatus: "lower",
         familiarity: "close",
-        selfPronoun: "ฉัน",
-        addresseeTerm: "พ่อ",
-        sentenceParticles: null,
         register: "respectful",
         notes: null,
         evidence: "儿子",
@@ -396,11 +393,29 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
       expect(result.applied).toBe(true);
       expect(result.map?.relationships).toHaveLength(1);
 
-      const [novel] = await sql<{ relationshipMap: { relationships: unknown[] } }[]>`
+      const [novel] = await sql<
+        {
+          relationshipMap: {
+            relationships: Array<{
+              selfPronoun: string | null;
+              addresseeTerm: string | null;
+              sentenceParticles: string | null;
+              locked: boolean;
+            }>;
+          };
+        }[]
+      >`
         SELECT "relationship_map_json"::jsonb AS "relationshipMap"
         FROM "novels" WHERE "id" = ${fixture.novelId}
       `;
-      expect(novel.relationshipMap.relationships).toHaveLength(1);
+      expect(novel.relationshipMap.relationships).toEqual([
+        expect.objectContaining({
+          selfPronoun: null,
+          addresseeTerm: null,
+          sentenceParticles: null,
+          locked: false,
+        }),
+      ]);
     } finally {
       await deleteFixture(fixture.userId);
     }

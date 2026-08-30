@@ -31,7 +31,7 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 
 11. Relationship analysis is ZH→TH-only and non-fatal. The memoized `context-N` step runs immediately before `chunk-N`; provider or JSON validation failure logs a warning and falls back to matching enabled stored context.
 12. Automatic relationship-map writes use the same locked job/chapter/novel transaction and generation, source-revision, `doneChunks`, and active-job ownership checks as chunk writes.
-13. Locked admin character and directed-relationship entries are never changed or re-enabled by automatic analysis. Unlocked entries may receive only source-evidenced, non-empty automatic values; caps discard new suggestions rather than evicting existing facts.
+13. Locked admin character and directed-relationship entries are never changed or re-enabled by automatic analysis. Unlocked entries may receive only source-evidenced, non-empty automatic semantic values; exact speech fields are scrubbed; caps discard new suggestions rather than evicting existing facts.
 14. Relationship-map edits do not increment chapter source revision or cancel a translation job. They apply to subsequent not-yet-started `context-N`/translation steps and future retranslations while preserving per-novel concurrency and finalization invariants.
 
 ## State transitions
@@ -67,9 +67,9 @@ The active-job column intentionally has no foreign key. Translation jobs already
 
 Each novel stores one bounded version-1 relationship document in `novels.relationship_map_json`. The protected relationship editor applies one atomic, ownership-checked mutation at a time; an invalid persisted document is never silently overwritten.
 
-For a ZH→TH job, Inngest executes memoized `context-N` immediately before `chunk-N`. Analysis receives the rolling summary, preceding raw-source tail, current raw chunk, enabled map, and approved character glossary mappings. It may persist only source-evidenced automatic facts while the job still matches its generation, source revision, active chapter pointer, and `doneChunks` position. A later replay of the same context step is idempotent.
+For a ZH→TH job, Inngest executes memoized `context-N` immediately before `chunk-N`. Analysis receives the rolling summary, preceding raw-source tail, current raw chunk, enabled map, and approved character glossary mappings. Automatic analysis owns only source-evidenced semantic facts and directed active pairs; it does not invent exact Thai pronouns, addressee terms, or sentence particles. It may persist those semantic facts while the job still matches its generation, source revision, active chapter pointer, and `doneChunks` position. A later replay of the same context step is idempotent.
 
-Locked admin entries are authoritative and survive conflicting automatic evidence. Analysis failures do not fail translation: the worker logs a warning and uses enabled stored entries whose names match the source window. Automatic map updates do not increment chapter source revision or cancel active work; they affect later not-yet-started context/translation steps and future retranslations.
+Unlocked exact speech fields are scrubbed and never reach the translator as authoritative guidance. Locked admin character and directed-relationship entries are authoritative and preserve their exact Thai speech choices against conflicting automatic evidence. Analysis failures do not fail translation: the worker logs a warning and uses enabled stored entries whose names match the source window. Automatic map updates do not increment chapter source revision or cancel active work; they affect later not-yet-started context/translation steps and future retranslations.
 
 ## Boundaries
 

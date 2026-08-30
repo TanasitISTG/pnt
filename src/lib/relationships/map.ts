@@ -83,8 +83,9 @@ export function serializeRelationshipMap(map: RelationshipMapV1): string {
  * Merge one source-window analysis into the durable map.
  *
  * The returned map is a new value. Existing locked rows are copied byte-for-byte;
- * unlocked rows accept only non-empty, known automatic values. Caps are additive:
- * automatic suggestions are discarded rather than evicting existing facts.
+ * unlocked rows accept only non-empty, known automatic semantic values. Legacy
+ * exact speech fields are scrubbed from unlocked rows; caps discard new
+ * suggestions rather than evicting existing facts.
  */
 export function mergeAutomaticRelationshipAnalysis(
   map: RelationshipMapV1,
@@ -113,6 +114,7 @@ export function mergeAutomaticRelationshipAnalysis(
   const characterByIdentity = buildCharacterIdentityIndex(next.characters);
   const reservedCharacterIds = new Set(next.characters.map((character) => character.id));
   const timestamp = validTimestamp(updatedAt);
+  scrubAutomaticSpeechFields(next.relationships, timestamp);
 
   for (const suggestion of analysis.characters) {
     const existing = resolveCharacter(next.characters, characterByIdentity, suggestion.sourceName);
@@ -231,9 +233,9 @@ export function mergeAutomaticRelationshipAnalysis(
         relationship: automaticText(suggestion.relationship) ?? "unknown",
         speakerStatus: suggestion.speakerStatus,
         familiarity: suggestion.familiarity,
-        selfPronoun: automaticText(suggestion.selfPronoun),
-        addresseeTerm: automaticText(suggestion.addresseeTerm),
-        sentenceParticles: automaticText(suggestion.sentenceParticles),
+        selfPronoun: null,
+        addresseeTerm: null,
+        sentenceParticles: null,
         register: automaticText(suggestion.register),
         notes: automaticText(suggestion.notes),
         enabled: true,
@@ -347,9 +349,6 @@ function mergeAutomaticRelationship(
   const relationship = knownRequiredText(target.relationship, suggestion.relationship, "unknown");
   const speakerStatus = knownEnum(target.speakerStatus, suggestion.speakerStatus, UNKNOWN_STATUS);
   const familiarity = knownEnum(target.familiarity, suggestion.familiarity, UNKNOWN_FAMILIARITY);
-  const selfPronoun = knownText(target.selfPronoun, suggestion.selfPronoun);
-  const addresseeTerm = knownText(target.addresseeTerm, suggestion.addresseeTerm);
-  const sentenceParticles = knownText(target.sentenceParticles, suggestion.sentenceParticles);
   const register = knownText(target.register, suggestion.register);
   const notes = knownText(target.notes, suggestion.notes);
   const evidence = knownText(target.evidence, suggestion.evidence);
@@ -365,18 +364,6 @@ function mergeAutomaticRelationship(
   }
   if (target.familiarity !== familiarity) {
     target.familiarity = familiarity;
-    changed = true;
-  }
-  if (target.selfPronoun !== selfPronoun) {
-    target.selfPronoun = selfPronoun;
-    changed = true;
-  }
-  if (target.addresseeTerm !== addresseeTerm) {
-    target.addresseeTerm = addresseeTerm;
-    changed = true;
-  }
-  if (target.sentenceParticles !== sentenceParticles) {
-    target.sentenceParticles = sentenceParticles;
     changed = true;
   }
   if (target.register !== register) {
@@ -397,6 +384,24 @@ function mergeAutomaticRelationship(
   }
   if (changed) target.updatedAt = updatedAt;
   return changed;
+}
+
+function scrubAutomaticSpeechFields(
+  relationships: CharacterRelationship[],
+  updatedAt: string,
+): void {
+  for (const relationship of relationships) {
+    if (relationship.locked) continue;
+    const changed =
+      relationship.selfPronoun !== null ||
+      relationship.addresseeTerm !== null ||
+      relationship.sentenceParticles !== null;
+    if (!changed) continue;
+    relationship.selfPronoun = null;
+    relationship.addresseeTerm = null;
+    relationship.sentenceParticles = null;
+    relationship.updatedAt = updatedAt;
+  }
 }
 
 function addAutomaticAliases(

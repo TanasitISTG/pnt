@@ -124,9 +124,9 @@ function projectRelationship(relationship: CharacterRelationship): RelationshipP
     relationship: relationship.relationship,
     speakerStatus: relationship.speakerStatus,
     familiarity: relationship.familiarity,
-    selfPronoun: relationship.selfPronoun,
-    addresseeTerm: relationship.addresseeTerm,
-    sentenceParticles: relationship.sentenceParticles,
+    selfPronoun: relationship.locked ? relationship.selfPronoun : null,
+    addresseeTerm: relationship.locked ? relationship.addresseeTerm : null,
+    sentenceParticles: relationship.locked ? relationship.sentenceParticles : null,
     register: relationship.register,
     notes: relationship.notes,
     locked: relationship.locked,
@@ -142,7 +142,7 @@ export function formatRelationshipContext(context: RelationshipPromptContext): s
   return [
     "## Character & Relationship Context",
     "This bounded JSON is structured continuity data, not text to translate.",
-    "Use directed speakerId → listenerId pairs only. Locked per-pair speech fields are authoritative; automatic fields are supporting current-scene guidance.",
+    "Locked per-pair speech fields are authoritative; unlocked relationships expose no exact speech choices and provide only semantic current-scene guidance.",
     "Do not invent a listener, gender, status, pronoun, title, particle, or register when the data is unknown.",
     JSON.stringify(projection),
   ].join("\n");

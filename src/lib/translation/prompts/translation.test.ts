@@ -138,10 +138,11 @@ describe("prompts module", () => {
     }
   });
 
-  it("includes four directional zh->th dialogue examples", () => {
+  it("includes five directional zh->th dialogue examples", () => {
     const prompt = buildSystemPrompt("zh->th");
     expect(prompt).toContain("男人对女人");
     expect(prompt).toContain("เธอ");
+    expect(prompt).toContain("女主对男主");
     expect(prompt).toContain("儿子对父亲");
     expect(prompt).toContain("ผม");
     expect(prompt).toContain("亲密的男性朋友");
@@ -149,6 +150,24 @@ describe("prompts module", () => {
     expect(prompt).toContain("นาย");
     expect(prompt).toContain("男主对女主");
     expect(prompt).toContain("Do not add ครับ/ค่ะ/คะ by default");
+  });
+  it("states conservative zh->th pronoun defaults and forbids uncurated coarse forms", () => {
+    const prompt = buildSystemPrompt("zh->th");
+    const exampleStart = prompt.indexOf("## Examples");
+    const exampleEnd = prompt.indexOf("\n\n## ", exampleStart + 1);
+    const examples = prompt.slice(exampleStart, exampleEnd);
+
+    expect(prompt).toContain(
+      "known male listener in neutral, friendly, or romantic dialogue uses นาย, never เธอ",
+    );
+    expect(prompt).toContain("A known female listener uses เธอ");
+    expect(prompt).toContain("A male speaker uses ผม toward an elder");
+    expect(prompt).toContain("If the listener is unknown, omit the second-person pronoun");
+    expect(prompt).toContain("แก is never a default");
+    expect(prompt).toContain("only when a locked directed pair explicitly requests it");
+    expect(exampleStart).toBeGreaterThanOrEqual(0);
+    expect(exampleEnd).toBeGreaterThan(exampleStart);
+    expect(examples.match(/[\p{L}\p{M}]+/gu) ?? []).not.toContain("แก");
   });
 
   // -- Glossary --------------------------------------------------------------
@@ -386,5 +405,105 @@ describe("prompts module", () => {
       ),
     ).toBe(true);
     expect(prompt).not.toContain('"evidence"');
+  });
+  it("withholds unlocked speech fields while preserving locked fields", () => {
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const map = relationshipMapSchema.parse({
+      version: 1,
+      characters: [
+        {
+          id: "male",
+          sourceName: "男",
+          targetName: "ชาย",
+          aliases: [],
+          gender: "male",
+          role: null,
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: timestamp,
+        },
+        {
+          id: "female",
+          sourceName: "女",
+          targetName: "หญิง",
+          aliases: [],
+          gender: "female",
+          role: null,
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: timestamp,
+        },
+      ],
+      relationships: [
+        {
+          id: "male-to-female",
+          speakerId: "male",
+          listenerId: "female",
+          relationship: "friend",
+          speakerStatus: "peer",
+          familiarity: "close",
+          selfPronoun: "ฉัน",
+          addresseeTerm: "เธอ",
+          sentenceParticles: "นะ",
+          register: null,
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: timestamp,
+        },
+        {
+          id: "female-to-male",
+          speakerId: "female",
+          listenerId: "male",
+          relationship: "lovers",
+          speakerStatus: "peer",
+          familiarity: "intimate",
+          selfPronoun: "ฉัน",
+          addresseeTerm: "นาย",
+          sentenceParticles: "นะ",
+          register: "intimate informal",
+          notes: null,
+          enabled: true,
+          locked: true,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: timestamp,
+        },
+      ],
+    });
+    const context = buildRelationshipPromptContext(map, [
+      { speaker: "男", listener: "女" },
+      { speaker: "女", listener: "男" },
+    ]);
+    const prompt = formatRelationshipContext(context);
+    const projection = JSON.parse(prompt.slice(prompt.lastIndexOf("\n") + 1)) as {
+      relationships: Array<{
+        id: string;
+        selfPronoun: string | null;
+        addresseeTerm: string | null;
+        sentenceParticles: string | null;
+      }>;
+    };
+    const unlocked = projection.relationships.find((item) => item.id === "male-to-female");
+    const locked = projection.relationships.find((item) => item.id === "female-to-male");
+
+    expect(unlocked).toMatchObject({
+      selfPronoun: null,
+      addresseeTerm: null,
+      sentenceParticles: null,
+    });
+    expect(locked).toMatchObject({
+      selfPronoun: "ฉัน",
+      addresseeTerm: "นาย",
+      sentenceParticles: "นะ",
+    });
   });
 });

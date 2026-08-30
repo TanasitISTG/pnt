@@ -85,9 +85,6 @@ function analysis() {
         relationship: "son",
         speakerStatus: "lower",
         familiarity: "close",
-        selfPronoun: "ฉัน",
-        addresseeTerm: "พ่อ",
-        sentenceParticles: null,
         register: "respectful",
         evidence: "儿子",
       },
@@ -146,6 +143,48 @@ describe("relationship map", () => {
     expect(result.map.relationships[0]?.listenerId).toBe(
       result.map.characters.find((item) => item.sourceName === "父亲")?.id,
     );
+  });
+  it("scrubs unlocked speech fields while preserving locked rows", () => {
+    const map = relationshipMapSchema.parse({
+      version: 1,
+      characters: [character("father", "父亲"), character("son", "儿子")],
+      relationships: [
+        relationship("unlocked", "son", "father", {
+          selfPronoun: "ฉัน",
+          addresseeTerm: "พ่อ",
+          sentenceParticles: "นะ",
+          updatedAt: "2025-12-31T00:00:00.000Z",
+        }),
+        relationship("locked", "father", "son", {
+          locked: true,
+          selfPronoun: "ผม",
+          addresseeTerm: "ลูก",
+          sentenceParticles: "ครับ",
+          updatedAt: "2025-12-30T00:00:00.000Z",
+        }),
+      ],
+    });
+    const lockedBefore = map.relationships[1];
+    const result = mergeAutomaticRelationshipAnalysis(map, analysis(), [], 3, updatedAt);
+    const unlockedAfter = result.map.relationships[0];
+    const lockedAfter = result.map.relationships[1];
+
+    expect(unlockedAfter).toMatchObject({
+      selfPronoun: null,
+      addresseeTerm: null,
+      sentenceParticles: null,
+      updatedAt,
+    });
+    expect(lockedAfter).toEqual(lockedBefore);
+
+    const replay = mergeAutomaticRelationshipAnalysis(
+      result.map,
+      analysis(),
+      [],
+      3,
+      "2026-01-02T00:00:00.000Z",
+    ).map;
+    expect(serializeRelationshipMap(replay)).toBe(serializeRelationshipMap(result.map));
   });
 
   it("keeps automatic replay byte-identical", () => {

@@ -138,6 +138,67 @@ describe("relationship source analyzer", () => {
       { speaker: "儿子", listener: "父亲", evidence: "爸爸" },
     ]);
   });
+  it("retains semantic pairs while discarding legacy automatic speech fields", async () => {
+    const map = mapWith(
+      [character("speaker", "甲"), character("listener", "乙")],
+      [
+        relationship("pair", "speaker", "listener", {
+          selfPronoun: "我",
+          addresseeTerm: "你",
+          sentenceParticles: "吧",
+        }),
+      ],
+    );
+    const result = await analyzeRelationshipSourceChunk({
+      pair: "zh->th",
+      providerConfig: provider({
+        characters: [],
+        relationships: [
+          {
+            speaker: "甲",
+            listener: "乙",
+            relationship: "friend",
+            speakerStatus: "peer",
+            familiarity: "close",
+            selfPronoun: "我",
+            addresseeTerm: "你",
+            sentenceParticles: "吧",
+            evidence: "甲对乙说",
+          },
+        ],
+        activePairs: [{ speaker: "甲", listener: "乙", evidence: "甲对乙说" }],
+      }),
+      existingMap: map,
+      approvedMappings: [],
+      previousSourceTail: null,
+      currentChunk: "甲对乙说：我知道吧。",
+      chapterNumber: 1,
+    });
+
+    expect(result.analysis?.relationships[0]).toEqual({
+      speaker: "甲",
+      listener: "乙",
+      relationship: "friend",
+      speakerStatus: "peer",
+      familiarity: "close",
+      register: null,
+      notes: null,
+      evidence: "甲对乙说",
+    });
+    expect(result.analysis?.relationships[0]).not.toHaveProperty("selfPronoun");
+    expect(result.analysis?.relationships[0]).not.toHaveProperty("addresseeTerm");
+    expect(result.analysis?.relationships[0]).not.toHaveProperty("sentenceParticles");
+    expect(result.map.relationships[0]).toMatchObject({
+      selfPronoun: null,
+      addresseeTerm: null,
+      sentenceParticles: null,
+    });
+    expect(result.context?.relationships[0]).toMatchObject({
+      selfPronoun: null,
+      addresseeTerm: null,
+      sentenceParticles: null,
+    });
+  });
 
   it("reuses a stored locked relationship when no replacement is analyzed", async () => {
     const map = mapWith(
