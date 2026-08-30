@@ -1,4 +1,5 @@
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogIn, LogOut, Menu, Moon, Settings, Sun, X, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -28,6 +29,7 @@ export function AppShell({ user, children }: AppShellProps) {
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { consent, hydrated } = useConsent();
 
   useEffect(() => {
@@ -44,6 +46,7 @@ export function AppShell({ user, children }: AppShellProps) {
     await signOut({
       fetchOptions: {
         onSuccess: () => {
+          queryClient.clear();
           router.invalidate().finally(() => navigate({ to: "/" }));
         },
         onError: () => {

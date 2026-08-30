@@ -1,4 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 
@@ -36,6 +37,7 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const { redirect: redirectPath } = Route.useSearch();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ function LoginPage() {
 
       const isInternal =
         redirectPath && redirectPath.startsWith("/") && !redirectPath.startsWith("//");
+      queryClient.clear();
       navigate({ to: isInternal ? redirectPath! : "/", replace: true });
     } catch {
       setError("Something went wrong. Please try again.");

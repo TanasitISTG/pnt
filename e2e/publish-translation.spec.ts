@@ -4,6 +4,7 @@ const adminEmail = "e2e-admin@example.test";
 const adminPassword = "e2e-password-123";
 const novelTitle = "Father and Son at Dawn";
 const chapterTitle = "黎明";
+const draftNovelTitle = "Unpublished Draft at Noon";
 async function waitForReactHydration(page: import("@playwright/test").Page) {
   await page.waitForFunction(() => {
     const submit = document.querySelector('button[type="submit"]');
@@ -83,7 +84,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(page.getByText("Auto-managed").first()).toBeVisible();
   await expect(page.getByRole("cell", { name: "儿子", exact: true })).toBeVisible();
   await expect(page.getByText("“儿子”", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Self: ฉัน", { exact: true })).toBeVisible();
+  await expect(page.getByText("Self: —", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add character profile" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add directed relationship" })).toBeVisible();
   await page.screenshot({ path: ".tura/e2e/relationships-desktop.png", fullPage: true });
@@ -155,9 +156,24 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     translatedChapterRow.getByRole("button", { name: "Publishing options" }),
   ).toContainText("Live");
 
+  await page.getByRole("link", { name: "Library", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  await page.getByRole("button", { name: "New Novel" }).click();
+  await page.getByLabel("Title *").fill(draftNovelTitle);
+  await page.getByRole("button", { name: "Create Novel" }).click();
+  await expect(page.getByRole("heading", { name: draftNovelTitle })).toBeVisible();
+  await page.getByRole("link", { name: "Library", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(novelTitle) })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(draftNovelTitle) })).toBeVisible();
+
   await page.getByRole("button", { name: /E2E Admin/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your Library", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: new RegExp(novelTitle) })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(draftNovelTitle) })).toHaveCount(0);
 
   await page.getByRole("link", { name: new RegExp(novelTitle) }).click();
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
