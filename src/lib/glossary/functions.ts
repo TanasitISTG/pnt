@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, inArray, count, or, ilike } from "drizzle-orm";
+import { eq, and, sql, inArray, count } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
@@ -19,6 +19,7 @@ import {
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import {
   deleteAllGlossaryTermsForUser,
+  listGlossaryTermsForUser,
   rejectAllPendingGlossaryTermsForUser,
   updateGlossaryTermAtomic,
 } from "@/lib/glossary/service";
@@ -28,45 +29,7 @@ export const listGlossaryTerms = createServerFn({ method: "GET" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const [novel] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
-      }
-
-      const conditions = [eq(glossaryTerms.novelId, data.novelId)];
-
-      if (data.status && data.status !== "all") {
-        conditions.push(eq(glossaryTerms.status, data.status));
-      }
-
-      if (data.category && data.category !== "all") {
-        conditions.push(eq(glossaryTerms.category, data.category));
-      }
-
-      if (data.search?.trim()) {
-        const escaped = data.search.trim().replace(/[\\%_]/g, (m) => "\\" + m);
-        const pattern = `%${escaped}%`;
-        conditions.push(
-          or(
-            ilike(glossaryTerms.source, pattern),
-            ilike(glossaryTerms.target, pattern),
-            ilike(glossaryTerms.note, pattern),
-          )!,
-        );
-      }
-
-      const rows = await db
-        .select()
-        .from(glossaryTerms)
-        .where(and(...conditions));
-
-      return rows;
+      return listGlossaryTermsForUser(session.user.id, data);
     }),
   );
 

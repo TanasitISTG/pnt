@@ -22,11 +22,6 @@ interface GlossaryDialogsProps {
   onDeleteAllOpenChange: (open: boolean) => void;
   onDeleteAllConfirm: () => void;
   deletingAllTerms: boolean;
-  replaceConfirm: { chapterCount: number; occurrences: number } | null;
-  onReplaceOpenChange: (open: boolean) => void;
-  originalTarget: string | undefined;
-  onReplaceConfirm: (apply: boolean) => void;
-  savingEdit: boolean;
   importOpen: boolean;
   onImportOpenChange: (open: boolean) => void;
   tsvText: string;
@@ -44,11 +39,6 @@ export function GlossaryDialogs({
   onDeleteAllOpenChange,
   onDeleteAllConfirm,
   deletingAllTerms,
-  replaceConfirm,
-  onReplaceOpenChange,
-  originalTarget,
-  onReplaceConfirm,
-  savingEdit,
   importOpen,
   onImportOpenChange,
   tsvText,
@@ -78,36 +68,9 @@ export function GlossaryDialogs({
         pending={deletingAllTerms}
       />
 
-      {/* Replace-in-chapters Confirm Dialog */}
-      <Dialog open={replaceConfirm !== null} onOpenChange={onReplaceOpenChange}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Replace in translated chapters?</DialogTitle>
-            <DialogDescription>
-              The old target{" "}
-              <span className="font-semibold text-foreground">“{originalTarget}”</span> appears in{" "}
-              {replaceConfirm?.chapterCount ?? 0} translated chapter(s) (
-              {replaceConfirm?.occurrences ?? 0} occurrence(s)).
-            </DialogDescription>
-          </DialogHeader>
-          <p className="text-caption text-muted-foreground">
-            Replacement is an exact, case-sensitive match and may also match inside longer words.
-            This cannot be undone.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onReplaceConfirm(false)} disabled={savingEdit}>
-              Save glossary only
-            </Button>
-            <Button onClick={() => onReplaceConfirm(true)} disabled={savingEdit}>
-              {savingEdit ? "Saving..." : "Replace & Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Bulk Import Dialog */}
       <Dialog open={importOpen} onOpenChange={onImportOpenChange}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Bulk Import Glossary Terms (TSV)</DialogTitle>
             <DialogDescription>

@@ -1,11 +1,42 @@
-import { Check, Edit, RotateCcw, Trash2, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronsUpDown,
+  Columns3,
+  Loader2,
+  MoreHorizontal,
+  Search,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  columnVisibilityFeature,
+  createColumnHelper,
+  rowPaginationFeature,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
+  type Column,
+  type ColumnVisibilityState,
+  type PaginationState,
+  type SortingState,
+  type Updater,
+} from "@tanstack/react-table";
 
-import { type TermCategory, type TermStatus } from "@/lib/glossary/schemas";
-
-import { EDIT_CATEGORY_ITEMS } from "./category-items";
-
+import { QueryErrorState } from "@/components/query-error-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -22,224 +53,751 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type {
+  GlossaryListPage,
+  GlossaryListRow,
+  GlossaryListSearch,
+  TermCategory,
+  TermStatus,
+} from "@/lib/glossary/schemas";
 
-export interface EditState {
-  termId: string;
-  source: string;
-  target: string;
-  category: "character" | "place" | "skill" | "item" | "other";
-  note: string;
-  originalTarget: string;
+const glossaryTableFeatures = tableFeatures({
+  rowPaginationFeature,
+  rowSortingFeature,
+  columnVisibilityFeature,
+});
+
+type GlossaryTableFeatures = typeof glossaryTableFeatures;
+const columnHelper = createColumnHelper<GlossaryTableFeatures, GlossaryListRow>();
+
+export type GlossarySearchChange = (
+  changes: Partial<GlossaryListSearch>,
+  replace?: boolean,
+) => void;
+
+export interface GlossaryTableActions {
+  onEdit: (term: GlossaryListRow) => void;
+  onDelete: (termId: string) => void;
+  onApprove: (termId: string) => void;
+  onReject: (termId: string) => void;
+  pending: boolean;
 }
 
-export interface GlossaryTerm {
-  id: string;
-  source: string;
-  target: string;
-  category: TermCategory;
-  note: string | null;
-  status: TermStatus;
+export interface GlossaryTableQueryState {
+  page: GlossaryListPage | undefined;
+  isPending: boolean;
+  isFetching: boolean;
+  isPlaceholderData: boolean;
+  isError: boolean;
+  error: unknown;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  character: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  place: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  skill: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
-  item: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  other: "bg-muted text-muted-foreground border-border",
+export interface GlossaryTableProps {
+  query: GlossaryTableQueryState;
+  search: GlossaryListSearch;
+  onRetry: () => void;
+  onSearchChange: GlossarySearchChange;
+  actions: GlossaryTableActions;
+}
+
+const categoryItems: Record<string, string> = {
+  all: "All categories",
+  character: "Character",
+  place: "Place",
+  skill: "Skill",
+  item: "Item",
+  other: "Other",
 };
 
-export function CategoryBadge({ category }: { category: string }) {
-  const colorClass = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
+const statusItems: Record<string, string> = {
+  all: "All statuses",
+  approved: "Approved",
+  pending: "Pending",
+  rejected: "Rejected",
+};
+
+const pageSizeOptions = [10, 25, 50] as const;
+const pageSizeItems: Record<string, string> = { "10": "10", "25": "25", "50": "50" };
+const columnLabels: Record<string, string> = {
+  source: "Source",
+  target: "Target",
+  category: "Category",
+  status: "Status",
+  note: "Note",
+  actions: "Actions",
+};
+const sortableSearchColumns: Record<string, GlossaryListSearch["sort"]> = {
+  source: "source",
+  target: "target",
+  category: "category",
+  status: "status",
+};
+
+function resolveUpdater<T>(updater: Updater<T>, current: T): T {
+  if (typeof updater === "function") return (updater as (old: T) => T)(current);
+  return updater;
+}
+
+function hasActiveFilters(search: GlossaryListSearch) {
+  return search.q !== "" || search.category !== "all" || search.status !== "approved";
+}
+
+function formatRange(first: number, last: number, total: number) {
+  return total === 0
+    ? "0 terms"
+    : `${first.toLocaleString()}–${last.toLocaleString()} of ${total.toLocaleString()} terms`;
+}
+
+function SkeletonRows({ columnCount }: { columnCount: number }) {
   return (
-    <Badge variant="outline" className={`capitalize font-medium text-xs ${colorClass}`}>
+    <>
+      {Array.from({ length: 7 }, (_, skeletonIndex) => (
+        <TableRow key={`skeleton-${skeletonIndex}`} aria-hidden="true">
+          {Array.from({ length: columnCount }, (_cellPlaceholder, cellIndex) => (
+            <TableCell key={`skeleton-${skeletonIndex}-${cellIndex}`}>
+              <div className="h-4 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+function SortableHeader<TValue>({
+  column,
+  label,
+}: {
+  column: Column<GlossaryTableFeatures, GlossaryListRow, TValue>;
+  label: string;
+}) {
+  const sorted = column.getIsSorted();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="-ml-2 h-8 px-2 font-semibold text-muted-foreground hover:text-foreground"
+      onClick={() => column.toggleSorting(sorted === "asc")}
+      aria-label={`Sort by ${label}`}
+    >
+      {label}
+      {sorted === "asc" ? (
+        <ChevronsUpDown className="size-3.5" aria-hidden="true" />
+      ) : sorted === "desc" ? (
+        <ChevronsUpDown className="size-3.5 rotate-180" aria-hidden="true" />
+      ) : (
+        <ChevronsUpDown className="size-3.5 opacity-60" aria-hidden="true" />
+      )}
+    </Button>
+  );
+}
+
+function StatusBadge({ status }: { status: TermStatus }) {
+  return (
+    <Badge
+      variant={
+        status === "approved" ? "secondary" : status === "pending" ? "outline" : "destructive"
+      }
+    >
+      {status}
+    </Badge>
+  );
+}
+
+export function CategoryBadge({ category }: { category: TermCategory | string }) {
+  return (
+    <Badge variant="outline" className="font-medium capitalize">
       {category}
     </Badge>
   );
 }
 
-interface GlossaryTableProps {
-  terms: GlossaryTerm[];
-  editState: EditState | null;
-  setEditState: React.Dispatch<React.SetStateAction<EditState | null>>;
-  editErrors: Record<string, string>;
-  setEditErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  onEdit: (term: GlossaryTerm) => void;
-  onSaveEdit: () => void;
-  onDelete: (termId: string) => void;
-  onApprove: (termId: string) => void;
-  savingEdit: boolean;
-  previewingReplace: boolean;
-  approvingTerm: boolean;
+function createGlossaryColumns(actions: GlossaryTableActions) {
+  return columnHelper.columns([
+    columnHelper.accessor("source", {
+      id: "source",
+      enableHiding: false,
+      header: ({ column }) => <SortableHeader column={column} label="Source" />,
+      cell: ({ row }) => (
+        <div
+          className="min-w-[180px] max-w-[280px] truncate font-medium text-foreground"
+          title={row.original.source}
+        >
+          {row.original.source}
+        </div>
+      ),
+    }),
+    columnHelper.accessor("target", {
+      id: "target",
+      enableHiding: false,
+      header: ({ column }) => <SortableHeader column={column} label="Target" />,
+      cell: ({ row }) => (
+        <div
+          className="min-w-[180px] max-w-[280px] truncate text-foreground"
+          title={row.original.target}
+        >
+          {row.original.target}
+        </div>
+      ),
+    }),
+    columnHelper.accessor("category", {
+      id: "category",
+      header: ({ column }) => <SortableHeader column={column} label="Category" />,
+      cell: ({ row }) => <CategoryBadge category={row.original.category} />,
+    }),
+    columnHelper.accessor("status", {
+      id: "status",
+      header: ({ column }) => <SortableHeader column={column} label="Status" />,
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    }),
+    columnHelper.accessor("note", {
+      id: "note",
+      header: "Note",
+      cell: ({ row }) => (
+        <div
+          className="max-w-[280px] truncate text-caption text-muted-foreground"
+          title={row.original.note ?? undefined}
+        >
+          {row.original.note || "—"}
+        </div>
+      ),
+    }),
+    columnHelper.display({
+      id: "actions",
+      header: "",
+      enableHiding: false,
+      cell: ({ row }) => {
+        const term = row.original;
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Actions for ${term.source}`}
+                  disabled={actions.pending}
+                />
+              }
+            >
+              <MoreHorizontal className="size-4" aria-hidden="true" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Term actions</DropdownMenuLabel>
+                <DropdownMenuItem disabled={actions.pending} onClick={() => actions.onEdit(term)}>
+                  Edit
+                </DropdownMenuItem>
+                {term.status === "pending" && (
+                  <>
+                    <DropdownMenuItem
+                      disabled={actions.pending}
+                      onClick={() => actions.onApprove(term.id)}
+                    >
+                      Approve
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={actions.pending}
+                      onClick={() => actions.onReject(term.id)}
+                    >
+                      Reject
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {term.status === "rejected" && (
+                  <DropdownMenuItem
+                    disabled={actions.pending}
+                    onClick={() => actions.onApprove(term.id)}
+                  >
+                    Restore
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={actions.pending}
+                  onClick={() => actions.onDelete(term.id)}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
+    }),
+  ]);
 }
-
 export function GlossaryTable({
-  terms,
-  editState,
-  setEditState,
-  editErrors,
-  setEditErrors,
-  onEdit,
-  onSaveEdit,
-  onDelete,
-  onApprove,
-  savingEdit,
-  previewingReplace,
-  approvingTerm,
+  query,
+  search,
+  onRetry,
+  onSearchChange,
+  actions,
 }: GlossaryTableProps) {
+  const { page, isPending, isFetching, isPlaceholderData, isError, error } = query;
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({ note: false });
+
+  useEffect(() => {
+    if (!page || isFetching || isPlaceholderData || page.page === search.page) return;
+    onSearchChange({ page: page.page }, true);
+  }, [isFetching, isPlaceholderData, onSearchChange, page, search.page]);
+
+  const pagination = useMemo<PaginationState>(
+    () => ({ pageIndex: Math.max(0, search.page - 1), pageSize: search.pageSize }),
+    [search.page, search.pageSize],
+  );
+  const sorting = useMemo<SortingState>(
+    () => [{ id: search.sort, desc: search.dir === "desc" }],
+    [search.dir, search.sort],
+  );
+  const columns = useMemo(() => createGlossaryColumns(actions), [actions]);
+  const data = page?.rows ?? [];
+
+  const table = useTable({
+    features: glossaryTableFeatures,
+    columns,
+    data,
+    manualPagination: true,
+    manualSorting: true,
+    rowCount: page?.rowCount ?? 0,
+    enableMultiSort: false,
+    state: { pagination, sorting, columnVisibility },
+    onPaginationChange: (updater) => {
+      const next = resolveUpdater(updater, pagination);
+      if (next.pageSize !== search.pageSize) {
+        onSearchChange(
+          { pageSize: next.pageSize as GlossaryListSearch["pageSize"], page: 1 },
+          true,
+        );
+        return;
+      }
+      const nextPage = next.pageIndex + 1;
+      if (nextPage !== search.page) onSearchChange({ page: nextPage }, false);
+    },
+    onSortingChange: (updater) => {
+      const next = resolveUpdater(updater, sorting);
+      const selected = next[0];
+      const sort = selected ? sortableSearchColumns[selected.id] : undefined;
+      if (!sort) return;
+      onSearchChange({ sort, dir: selected.desc ? "desc" : "asc", page: 1 }, true);
+    },
+    onColumnVisibilityChange: setColumnVisibility,
+  });
+
+  const rowCount = page?.rowCount ?? 0;
+  const currentPage = page?.page ?? search.page;
+  const filtered = hasActiveFilters(search);
+  const noRows = Boolean(page && !isFetching && data.length === 0);
+  const paginationBusy = isPlaceholderData || (isPending && !page);
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
+
+  if (isError && !page) {
+    return (
+      <QueryErrorState
+        title="Unable to load glossary terms"
+        error={error}
+        onRetry={onRetry}
+        className="my-0"
+      />
+    );
+  }
+
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-1/3">Source Term</TableHead>
-            <TableHead className="w-1/3">Target Translation</TableHead>
-            <TableHead className="w-28">Category</TableHead>
-            <TableHead>Note</TableHead>
-            <TableHead className="w-24 text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {terms.map((term) => {
-            const isEditing = editState?.termId === term.id;
+    <section
+      className="overflow-hidden rounded-xl border border-border bg-card"
+      aria-label="Glossary terms"
+      aria-busy={isFetching}
+    >
+      <GlossaryTableToolbar
+        search={search}
+        query={query}
+        table={table}
+        onSearchChange={onSearchChange}
+      />
 
-            if (isEditing) {
-              return (
-                <TableRow key={term.id} className="bg-muted/40">
-                  <TableCell>
-                    <Input
-                      value={editState.source}
-                      onChange={(e) => setEditState((s) => s && { ...s, source: e.target.value })}
-                      placeholder="Source"
-                      size={1}
-                    />
-                    {editErrors.source && (
-                      <span className="text-caption text-destructive block mt-1">
-                        {editErrors.source}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={editState.target}
-                      onChange={(e) => setEditState((s) => s && { ...s, target: e.target.value })}
-                      placeholder="Target"
-                      size={1}
-                    />
-                    {editErrors.target && (
-                      <span className="text-caption text-destructive block mt-1">
-                        {editErrors.target}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={editState.category}
-                      onValueChange={(val) =>
-                        setEditState((s) => s && { ...s, category: val as TermCategory })
-                      }
-                      items={EDIT_CATEGORY_ITEMS}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="character">Character</SelectItem>
-                        <SelectItem value="place">Place</SelectItem>
-                        <SelectItem value="skill">Skill</SelectItem>
-                        <SelectItem value="item">Item</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={editState.note}
-                      onChange={(e) => setEditState((s) => s && { ...s, note: e.target.value })}
-                      placeholder="Note (optional)"
-                      size={1}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-emerald-600 dark:text-emerald-400"
-                        onClick={onSaveEdit}
-                        disabled={savingEdit || previewingReplace}
-                        aria-label="Save edit"
-                      >
-                        <Check className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-muted-foreground"
-                        onClick={() => {
-                          setEditState(null);
-                          setEditErrors({});
-                        }}
-                        aria-label="Cancel edit"
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            }
+      {isError && page && (
+        <QueryErrorState
+          title="Unable to update glossary terms"
+          error={error}
+          onRetry={onRetry}
+          className="m-3 min-h-0 sm:m-4"
+        />
+      )}
 
-            return (
-              <TableRow key={term.id}>
-                <TableCell className="font-semibold text-foreground">{term.source}</TableCell>
-                <TableCell className="font-medium text-foreground">{term.target}</TableCell>
-                <TableCell>
-                  <CategoryBadge category={term.category} />
-                </TableCell>
-                <TableCell className="text-caption text-muted-foreground">
-                  {term.note || "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    {term.status === "rejected" && (
+      <div className="overflow-x-auto">
+        <Table className="min-w-[860px] text-caption">
+          <TableHeader className="bg-muted/20">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id} className="hover:bg-transparent">
+                {headerGroup.headers.map((header) => (
+                  <TableHead
+                    key={header.id}
+                    className={`h-11 px-3 ${
+                      header.column.id === "actions"
+                        ? "sticky right-0 z-10 border-l border-border bg-muted/20"
+                        : ""
+                    }`}
+                  >
+                    {header.isPlaceholder ? null : <table.FlexRender header={header} />}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {isPending && !page ? (
+              <SkeletonRows columnCount={visibleColumnCount} />
+            ) : noRows ? (
+              <TableRow>
+                <TableCell colSpan={visibleColumnCount} className="h-56 px-6 text-center">
+                  <div className="mx-auto max-w-sm">
+                    <p className="font-medium text-foreground">
+                      {filtered ? "No terms match these filters" : "No glossary terms yet"}
+                    </p>
+                    <p className="mt-1 text-caption text-muted-foreground">
+                      {filtered
+                        ? "Try a different search or clear the filters to see all terms."
+                        : "Add a term or bulk import TSV mappings to keep translations consistent."}
+                    </p>
+                    {filtered && (
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-500/10"
-                        onClick={() => onApprove(term.id)}
-                        disabled={approvingTerm}
-                        aria-label="Restore term"
-                        title="Restore term"
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() =>
+                          onSearchChange(
+                            {
+                              q: "",
+                              category: "all",
+                              status: "approved",
+                              sort: "source",
+                              dir: "asc",
+                              page: 1,
+                            },
+                            true,
+                          )
+                        }
                       >
-                        <RotateCcw className="size-4" />
+                        Clear filters
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      onClick={() => onEdit(term)}
-                      aria-label="Edit term"
-                    >
-                      <Edit className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      onClick={() => onDelete(term.id)}
-                      aria-label="Delete term"
-                    >
-                      <Trash2 className="size-4 text-destructive" />
-                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+            ) : data.length > 0 ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow key={row.id} className="h-[4.25rem]">
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell
+                      key={cell.id}
+                      className={`px-3 py-2 ${
+                        cell.column.id === "actions"
+                          ? "sticky right-0 z-10 border-l border-border bg-card"
+                          : ""
+                      }`}
+                    >
+                      <table.FlexRender cell={cell} />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : null}
+          </TableBody>
+        </Table>
+      </div>
+
+      <GlossaryTablePagination
+        search={search}
+        table={table}
+        rowCount={rowCount}
+        currentPage={currentPage}
+        paginationBusy={paginationBusy}
+        onSearchChange={onSearchChange}
+      />
+    </section>
+  );
+}
+type GlossaryColumnTable = {
+  getAllLeafColumns: () => Array<{
+    id: string;
+    getCanHide: () => boolean;
+    getIsVisible: () => boolean;
+    toggleVisibility: (visible: boolean) => void;
+  }>;
+};
+
+type GlossaryPaginationTable = GlossaryColumnTable & {
+  getRowModel: () => { rows: Array<unknown> };
+  getPageCount: () => number;
+  getCanPreviousPage: () => boolean;
+  getCanNextPage: () => boolean;
+  getCanLastPage: () => boolean;
+  firstPage: () => void;
+  previousPage: () => void;
+  nextPage: () => void;
+  lastPage: () => void;
+};
+
+function GlossaryTableToolbar({
+  search,
+  query,
+  table,
+  onSearchChange,
+}: {
+  search: GlossaryListSearch;
+  query: GlossaryTableQueryState;
+  table: GlossaryColumnTable;
+  onSearchChange: GlossarySearchChange;
+}) {
+  const [queryInput, setQueryInput] = useState(search.q);
+
+  useEffect(() => setQueryInput(search.q), [search.q]);
+  useEffect(() => {
+    if (queryInput === search.q) return;
+    const timeoutId = window.setTimeout(
+      () => onSearchChange({ q: queryInput, page: 1 }, true),
+      300,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [onSearchChange, queryInput, search.q]);
+
+  const isChangingQuery = query.isFetching && query.isPlaceholderData;
+  return (
+    <div className="border-b border-border p-3 sm:p-4">
+      <div className="grid gap-3 lg:grid-cols-[minmax(300px,1fr)_20rem_auto] lg:items-center">
+        <div className="relative min-w-0">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            value={queryInput}
+            onChange={(event) => setQueryInput(event.target.value)}
+            placeholder="Search source, target, or note"
+            aria-label="Search glossary"
+            className="h-10 pl-9"
+          />
+        </div>
+        <div className="grid min-w-0 grid-cols-2 gap-2">
+          <Select
+            value={search.category}
+            items={categoryItems}
+            onValueChange={(value) => {
+              if (value && value !== search.category) {
+                onSearchChange(
+                  { category: value as GlossaryListSearch["category"], page: 1 },
+                  true,
+                );
+              }
+            }}
+          >
+            <SelectTrigger aria-label="Filter by category" className="h-10 min-w-0 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              <SelectItem value="character">Character</SelectItem>
+              <SelectItem value="place">Place</SelectItem>
+              <SelectItem value="skill">Skill</SelectItem>
+              <SelectItem value="item">Item</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={search.status}
+            items={statusItems}
+            onValueChange={(value) => {
+              if (value && value !== search.status) {
+                onSearchChange({ status: value as GlossaryListSearch["status"], page: 1 }, true);
+              }
+            }}
+          >
+            <SelectTrigger aria-label="Filter by status" className="h-10 min-w-0 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="all">All statuses</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          {hasActiveFilters(search) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-10"
+              onClick={() =>
+                onSearchChange(
+                  {
+                    q: "",
+                    category: "all",
+                    status: "approved",
+                    sort: "source",
+                    dir: "asc",
+                    page: 1,
+                  },
+                  true,
+                )
+              }
+            >
+              Clear filters
+            </Button>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="outline" size="sm" className="h-10">
+                  <Columns3 className="size-4" aria-hidden="true" />
+                  Columns
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Show columns</DropdownMenuLabel>
+                {table.getAllLeafColumns().map((column) =>
+                  column.getCanHide() ? (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(checked) => column.toggleVisibility(!!checked)}
+                    >
+                      {columnLabels[column.id] ?? column.id}
+                    </DropdownMenuCheckboxItem>
+                  ) : null,
+                )}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      <div className="mt-3 flex min-h-5 items-center justify-between gap-3 text-caption text-muted-foreground">
+        <p>Approved glossary mappings used in future translations</p>
+        {query.isFetching && !isChangingQuery && (
+          <span className="inline-flex items-center gap-1.5" role="status" aria-live="polite">
+            <Loader2
+              className="size-3.5 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            Updating…
+          </span>
+        )}
+      </div>
+      {isChangingQuery && (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-caption text-primary"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2
+            className="size-3.5 animate-spin motion-reduce:animate-none"
+            aria-hidden="true"
+          />
+          Loading glossary page…
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GlossaryTablePagination({
+  search,
+  table,
+  rowCount,
+  currentPage,
+  paginationBusy,
+  onSearchChange,
+}: {
+  search: GlossaryListSearch;
+  table: GlossaryPaginationTable;
+  rowCount: number;
+  currentPage: number;
+  paginationBusy: boolean;
+  onSearchChange: GlossarySearchChange;
+}) {
+  const firstRow = rowCount === 0 ? 0 : (currentPage - 1) * search.pageSize + 1;
+  const lastRow =
+    rowCount === 0 ? 0 : Math.min(rowCount, firstRow + table.getRowModel().rows.length - 1);
+  return (
+    <div className="flex flex-col gap-3 border-t border-border px-3 py-3 text-caption text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
+      <div className="tabular-nums">{formatRange(firstRow, lastRow, rowCount)}</div>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2">
+          <span>Rows</span>
+          <Select
+            value={String(search.pageSize)}
+            items={pageSizeItems}
+            onValueChange={(value) => {
+              const pageSize = Number(value);
+              if (pageSizeOptions.includes(pageSize as (typeof pageSizeOptions)[number])) {
+                onSearchChange(
+                  {
+                    pageSize: pageSize as GlossaryListSearch["pageSize"],
+                    page: 1,
+                  },
+                  true,
+                );
+              }
+            }}
+          >
+            <SelectTrigger aria-label="Rows per page" className="h-9 w-[76px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {pageSizeOptions.map((pageSize) => (
+                <SelectItem key={pageSize} value={String(pageSize)}>
+                  {pageSize}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => table.firstPage()}
+            disabled={!table.getCanPreviousPage() || paginationBusy}
+            aria-label="First page"
+          >
+            <ChevronsLeft className="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage() || paginationBusy}
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="size-4" aria-hidden="true" />
+          </Button>
+          <span className="min-w-16 px-1 text-center tabular-nums text-foreground">
+            Page {currentPage} of {Math.max(1, table.getPageCount())}
+          </span>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage() || paginationBusy}
+            aria-label="Next page"
+          >
+            <ChevronRight className="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => table.lastPage()}
+            disabled={!table.getCanLastPage() || paginationBusy}
+            aria-label="Last page"
+          >
+            <ChevronsRight className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

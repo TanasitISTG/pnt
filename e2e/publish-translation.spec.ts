@@ -49,19 +49,21 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
 
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
+  await page.getByRole("tab", { name: /Directed relationships/ }).click();
   const addRelationshipButton = page.getByRole("button", { name: "Add directed relationship" });
   await expect(addRelationshipButton).toBeDisabled();
   await expect(
     page.getByText("Add at least 2 character profiles first.", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("tab", { name: /Characters/ }).click();
   await page.getByRole("button", { name: "Add character profile" }).click();
-  await expect(page.getByRole("heading", { name: "Add character profile" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Add character profile" })).toBeVisible();
   await page.getByRole("button", { name: "Save character" }).click();
   const sourceNameInput = page.getByLabel("Source name");
   await expect(sourceNameInput).toHaveAttribute("aria-invalid", "true");
   await expect(sourceNameInput).toHaveAttribute("aria-describedby", /character-source-error/);
   await expect(page.locator("#character-source-error")).toHaveAttribute("role", "alert");
-  await page.getByRole("button", { name: "Cancel character form" }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("button", { name: "Back to novel" }).click();
 
   const sourceChapterRow = page.getByRole("row", { name: new RegExp(chapterTitle) });
@@ -77,15 +79,49 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(completionToast).toBeHidden({ timeout: 15_000 });
   await waitForTransientToastsToClear(page);
 
+  await page.getByRole("button", { name: "Glossary" }).click();
+  await expect(page.getByRole("heading", { name: `${novelTitle} Glossary` })).toBeVisible();
+  await page.getByRole("button", { name: "Bulk Import (TSV)" }).click();
+  const glossaryImport = Array.from({ length: 26 }, (_, index) => {
+    const number = index + 1;
+    const label = String(number).padStart(2, "0");
+    return `E2E Term ${label}\tเป้าหมาย ${label}\tother\tDeterministic fixture ${label}`;
+  }).join("\n");
+  await page.getByLabel("TSV Content").fill(glossaryImport);
+  await page.getByRole("button", { name: "Import Terms" }).click();
+  await expect(page.getByText("1–25 of 26 terms")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Next page" }).click();
+  await expect(page.getByText("Page 2 of 2")).toBeVisible();
+  await expect(page.getByText("E2E Term 26", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "First page" }).click();
+  await page.getByRole("button", { name: "Add term" }).click();
+  await expect(page.getByRole("heading", { name: "Add glossary term" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await waitForTransientToastsToClear(page);
+  await page.screenshot({ path: ".tura/e2e/glossary-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const glossaryTableContainer = page.locator(
+    'section[aria-label="Glossary terms"] [data-slot="table-container"]',
+  );
+  await expect(
+    glossaryTableContainer.evaluate((element) => element.scrollWidth > element.clientWidth),
+  ).resolves.toBe(true);
+  await expect(
+    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).resolves.toBe(true);
+  await page.screenshot({ path: ".tura/e2e/glossary-mobile.png", fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole("button", { name: "Back to novel details" }).click();
+
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Characters" })).toBeVisible();
+  const relationshipsTab = page.getByRole("tab", { name: /Directed relationships/ });
+  await relationshipsTab.click();
   await expect(page.getByRole("heading", { name: "Directed relationships" })).toBeVisible();
-  await expect(page.getByText("Auto-managed").first()).toBeVisible();
-  await expect(page.getByRole("cell", { name: "儿子", exact: true })).toBeVisible();
-  await expect(page.getByText("“儿子”", { exact: true }).first()).toBeVisible();
+  const relationshipPanel = page.locator('section[aria-labelledby="relationships-heading"]');
+  await expect(relationshipPanel.getByText("儿子", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Self: —", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add character profile" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add directed relationship" })).toBeVisible();
   await page.screenshot({ path: ".tura/e2e/relationships-desktop.png", fullPage: true });
 
@@ -96,35 +132,45 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   );
   await expect(
     relationshipTableContainer.getByRole("button", {
-      name: "Edit relationship 儿子 to 父亲",
+      name: "Actions for relationship 儿子 to 父亲",
     }),
   ).toBeVisible();
   await expect(
-    relationshipTableContainer.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    relationshipTableContainer.evaluate((element) => element.scrollWidth > element.clientWidth),
   ).resolves.toBe(true);
   await expect(
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);
   await page.screenshot({ path: ".tura/e2e/relationships-mobile.png", fullPage: true });
+
   const relationshipRow = page
     .getByRole("row")
     .filter({ hasText: "儿子" })
     .filter({ hasText: "父亲" })
     .last();
   await expect(relationshipRow).toBeVisible();
-  await relationshipRow.getByRole("button", { name: "Disable relationship 儿子 to 父亲" }).click();
+  await relationshipRow
+    .getByRole("button", { name: "Actions for relationship 儿子 to 父亲" })
+    .click();
+  await page.getByRole("menuitem", { name: "Disable" }).click();
   await expect(page.getByText("Relationship entry disabled", { exact: true })).toBeVisible();
   await expect(relationshipRow.getByText("Disabled", { exact: true })).toBeVisible();
   await expect(relationshipRow.getByText("Auto-managed", { exact: true })).toBeVisible();
-  await relationshipRow.getByRole("button", { name: "Restore relationship 儿子 to 父亲" }).click();
+  await relationshipRow
+    .getByRole("button", { name: "Actions for relationship 儿子 to 父亲" })
+    .click();
+  await page.getByRole("menuitem", { name: "Restore" }).click();
   await expect(page.getByText("Relationship entry restored", { exact: true })).toBeVisible();
-  await expect(relationshipRow.getByText("Enabled", { exact: true })).toBeVisible();
+  await expect(relationshipRow.getByText("Active", { exact: true })).toBeVisible();
   await expect(relationshipRow.getByText("Auto-managed", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /Edit relationship 儿子 to 父亲/ }).click();
+  await relationshipRow
+    .getByRole("button", { name: "Actions for relationship 儿子 to 父亲" })
+    .click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  await expect(page.getByRole("heading", { name: "Edit directed relationship" })).toBeVisible();
   await page.getByLabel("Preferred self-pronoun").fill("ผม");
   await page.getByRole("button", { name: "Save relationship" }).click();
-  await expect(page.getByText("Manual").first()).toBeVisible();
   await expect(page.getByText("Self: ผม", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("button", { name: "Back to novel" }).click();

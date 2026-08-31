@@ -1,12 +1,86 @@
 import "@tanstack/react-start/server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
-import { updateTermSchema } from "@/lib/glossary/schemas";
+import {
+  type GlossaryListInput,
+  type GlossaryListPage,
+  updateTermSchema,
+} from "@/lib/glossary/schemas";
 import { SafeServerError } from "@/lib/server-fn-error";
+
+function escapeIlikePattern(value: string) {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
+export async function listGlossaryTermsForUser(
+  userId: string,
+  input: GlossaryListInput,
+): Promise<GlossaryListPage> {
+  const [novel] = await db
+    .select({ id: novels.id })
+    .from(novels)
+    .where(and(eq(novels.id, input.novelId), eq(novels.userId, userId)))
+    .limit(1);
+
+  if (!novel) {
+    throw new SafeServerError("Novel not found or unauthorized");
+  }
+
+  const conditions = [eq(glossaryTerms.novelId, input.novelId)];
+  if (input.status !== "all") {
+    conditions.push(eq(glossaryTerms.status, input.status));
+  }
+  if (input.category !== "all") {
+    conditions.push(eq(glossaryTerms.category, input.category));
+  }
+  if (input.q) {
+    const pattern = `%${escapeIlikePattern(input.q)}%`;
+    conditions.push(
+      or(
+        ilike(glossaryTerms.source, pattern),
+        ilike(glossaryTerms.target, pattern),
+        ilike(glossaryTerms.note, pattern),
+      )!,
+    );
+  }
+
+  const where = and(...conditions);
+  const [countRow] = await db
+    .select({ count: count(glossaryTerms.id) })
+    .from(glossaryTerms)
+    .where(where);
+  const rowCount = Number(countRow?.count ?? 0);
+  const maxPage = Math.max(1, Math.ceil(rowCount / input.pageSize));
+  const page = Math.min(Math.max(input.page, 1), maxPage);
+  const sortColumn = {
+    source: sql`lower(${glossaryTerms.source})`,
+    target: sql`lower(${glossaryTerms.target})`,
+    category: glossaryTerms.category,
+    status: glossaryTerms.status,
+  }[input.sort];
+  const sortOrder = input.dir === "asc" ? asc : desc;
+
+  const rows = await db
+    .select({
+      id: glossaryTerms.id,
+      source: glossaryTerms.source,
+      target: glossaryTerms.target,
+      category: glossaryTerms.category,
+      note: glossaryTerms.note,
+      status: glossaryTerms.status,
+    })
+    .from(glossaryTerms)
+    .where(where)
+    .orderBy(sortOrder(sortColumn), asc(glossaryTerms.id))
+    .limit(input.pageSize)
+    .offset((page - 1) * input.pageSize);
+
+  return { rows, rowCount, page, pageSize: input.pageSize };
+}
 
 type UpdateTermData = z.infer<typeof updateTermSchema>;
 

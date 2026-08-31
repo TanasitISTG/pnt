@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ interface GlossaryHeaderProps {
   sourceLang: string;
   targetLang: string;
   stats: GlossaryStats | undefined;
+  onAddClick: () => void;
   onImportClick: () => void;
   deletingAllTerms: boolean;
   onDeleteAllTerms: () => void;
@@ -28,6 +29,7 @@ export function GlossaryHeader({
   sourceLang,
   targetLang,
   stats,
+  onAddClick,
   onImportClick,
   deletingAllTerms,
   onDeleteAllTerms,
@@ -43,7 +45,11 @@ export function GlossaryHeader({
         >
           <ArrowLeft className="size-4" />
         </Button>
-        <div className="flex items-center justify-end flex-wrap gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button size="sm" onClick={onAddClick}>
+            <Plus className="size-4" />
+            Add term
+          </Button>
           <Button variant="outline" size="sm" onClick={onImportClick}>
             <Upload className="size-4" />
             Bulk Import (TSV)
@@ -92,7 +98,7 @@ export function GlossaryHeader({
           {(stats?.pending ?? 0) > 0 && (
             <Badge
               variant="outline"
-              className="px-3 py-1 text-xs font-mono text-amber-600 dark:text-amber-400 border-amber-500/40 bg-amber-500/10 animate-pulse"
+              className="px-3 py-1 text-xs font-mono text-amber-600 dark:text-amber-400 border-amber-500/40 bg-amber-500/10"
             >
               Pending: {stats?.pending}
             </Badge>
