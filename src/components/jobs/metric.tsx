@@ -1,11 +1,14 @@
+import type { ReactNode } from "react";
+
 import { Card, CardContent } from "@/components/ui/card";
 
 interface MetricProps {
   label: string;
   value: string | number;
+  detail?: ReactNode;
 }
 
-export function Metric({ label, value }: MetricProps) {
+export function Metric({ label, value, detail }: MetricProps) {
   return (
     <Card size="sm">
       <CardContent>
@@ -16,6 +19,7 @@ export function Metric({ label, value }: MetricProps) {
           {value}
         </div>
         <div className="mt-1 text-caption text-muted-foreground">{label}</div>
+        {detail && <div className="mt-2 truncate text-[11px] text-muted-foreground">{detail}</div>}
       </CardContent>
     </Card>
   );

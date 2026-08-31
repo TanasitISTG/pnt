@@ -1,31 +1,149 @@
-import { Link } from "@tanstack/react-router";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { getRouteApi } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
-import { DateCell } from "@/components/jobs/date-cell";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ImportJobDetailsDialog } from "@/components/jobs/import-job-details-dialog";
+import { JobHistoryTable } from "@/components/jobs/job-history-table";
+import { JobLogsDialog } from "@/components/translation/job-logs-dialog";
 import { Metric } from "@/components/jobs/metric";
-import { StatusBadge } from "@/components/jobs/status-badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { activityQueryOptions, statsQueryOptions } from "@/lib/job-dashboard-query";
+import {
+  historyQueryOptions,
+  JOB_HISTORY_QUERY_KEY,
+  JOB_STATS_QUERY_KEY,
+  statsQueryOptions,
+} from "@/lib/job-dashboard/query";
+import type { JobHistoryRow, JobHistorySearch, JobStats } from "@/lib/job-dashboard/contracts";
+import { cancelTranslationJob, retryTranslationJob } from "@/lib/translation/api/mutations";
+import { cancelImportJob, startImportJob } from "@/lib/scrape/functions";
+
+type Operation = {
+  kind: "cancel" | "retry";
+  job: JobHistoryRow;
+} | null;
+
+const jobsRoute = getRouteApi("/_protected/jobs");
+
+const EMPTY_STATS: JobStats = {
+  avgChunkLatencyMs: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  activeTranslationJobs: 0,
+  failedTranslationJobs: 0,
+  activeImportJobs: 0,
+  failedImportJobs: 0,
+};
+
+async function handleCopyJobId(job: JobHistoryRow) {
+  try {
+    await navigator.clipboard.writeText(job.id);
+    toast.success("Job ID copied");
+  } catch {
+    toast.error("Unable to copy job ID");
+  }
+}
 
 export function JobsPage() {
-  const activityQuery = useSuspenseQuery(activityQueryOptions());
-  const statsQuery = useSuspenseQuery(statsQueryOptions());
-  const activity = activityQuery.data;
-  const stats = statsQuery.data;
+  const search = jobsRoute.useSearch();
+  const navigate = jobsRoute.useNavigate();
+  const queryClient = useQueryClient();
+  const historyQuery = useQuery(historyQueryOptions(search));
+  const statsQuery = useQuery(statsQueryOptions());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [operation, setOperation] = useState<Operation>(null);
+  const [pendingJobId, setPendingJobId] = useState<string | null>(null);
+  const [translationDetails, setTranslationDetails] = useState<{
+    jobId: string;
+    chapterId: string;
+  } | null>(null);
+  const [importDetailsJobId, setImportDetailsJobId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const updateSearch = useCallback(
+    (changes: Partial<JobHistorySearch>, replace = true) => {
+      navigate({
+        search: (previous) => ({ ...previous, ...changes }),
+        replace,
+      });
+    },
+    [navigate],
+  );
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([activityQuery.refetch(), statsQuery.refetch()]);
+      const results = await Promise.allSettled([historyQuery.refetch(), statsQuery.refetch()]);
+      const failed = results.some(
+        (result) =>
+          result.status === "rejected" || (result.status === "fulfilled" && result.value.isError),
+      );
+      if (failed) toast.error("Some job dashboard data could not be refreshed");
     } finally {
       setIsRefreshing(false);
     }
   };
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
+  const invalidateAffectedQueries = async (job: JobHistoryRow) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: JOB_HISTORY_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: JOB_STATS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: ["chapters", job.novelId] }),
+      queryClient.invalidateQueries({ queryKey: ["novels"] }),
+      queryClient.invalidateQueries({ queryKey: ["costs", job.novelId] }),
+    ]);
+  };
+
+  const handleConfirmOperation = async () => {
+    if (!operation) return;
+    const { job } = operation;
+    setPendingJobId(job.id);
+    try {
+      if (operation.kind === "cancel") {
+        if (job.type === "translation") {
+          await cancelTranslationJob({ data: { jobId: job.id } });
+        } else {
+          await cancelImportJob({ data: { jobId: job.id } });
+        }
+        toast.success("Job cancellation requested");
+      } else if (job.type === "translation") {
+        await retryTranslationJob({ data: { jobId: job.id } });
+        toast.success("Translation retry queued");
+      } else if (job.type === "scrape" && job.scrapeProvider) {
+        await startImportJob({
+          data: {
+            novelId: job.novelId,
+            baseUrl: job.baseUrl,
+            from: job.fromNumber,
+            to: job.toNumber,
+            provider: job.scrapeProvider,
+          },
+        });
+        toast.success("New scrape job queued");
+      } else {
+        throw new Error("This job cannot be retried");
+      }
+      await invalidateAffectedQueries(job);
+      setOperation(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Job operation failed");
+    } finally {
+      setPendingJobId(null);
+    }
+  };
+
+  const handleViewDetails = (job: JobHistoryRow) => {
+    if (job.type === "translation") {
+      setTranslationDetails({ jobId: job.id, chapterId: job.chapterId });
+    } else {
+      setImportDetailsJobId(job.id);
+    }
+  };
+
+  const stats = statsQuery.data ?? EMPTY_STATS;
   const totalTokens = Number(stats.promptTokens) + Number(stats.completionTokens);
   const compactTokenCount = useMemo(
     () =>
@@ -38,11 +156,15 @@ export function JobsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-display-alt font-semibold text-foreground">Jobs</h1>
-          <p className="mt-1 text-body-lg text-muted-foreground">
-            Translation and import health, recent failures, tokens, and chunk latency.
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-caption font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Operations
+          </p>
+          <h1 className="mt-1 text-display-alt font-semibold text-foreground">Job activity</h1>
+          <p className="mt-1 max-w-2xl text-body-lg text-muted-foreground">
+            Inspect every retained translation and import run, then act on failures without leaving
+            the work queue.
           </p>
         </div>
         <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
@@ -50,158 +172,106 @@ export function JobsPage() {
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <Metric label="Active translations" value={activity.summary.activeTranslationJobs} />
-        <Metric label="Failed translations" value={activity.summary.failedTranslationJobs} />
-        <Metric label="Active imports" value={activity.summary.activeImportJobs} />
-        <Metric label="Failed imports" value={activity.summary.failedImportJobs} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric
+          label="Active jobs"
+          value={stats.activeTranslationJobs + stats.activeImportJobs}
+          detail={
+            <>
+              Translation {stats.activeTranslationJobs} · Import {stats.activeImportJobs}
+            </>
+          }
+        />
+        <Metric
+          label="Failed jobs"
+          value={stats.failedTranslationJobs + stats.failedImportJobs}
+          detail={
+            <>
+              Translation {stats.failedTranslationJobs} · Import {stats.failedImportJobs}
+            </>
+          }
+        />
         <Metric label="Avg chunk latency" value={formatDuration(stats.avgChunkLatencyMs)} />
-        <Metric label="Tokens" value={mounted ? compactTokenCount : totalTokens} />
+        <Metric
+          label="Tokens"
+          value={mounted ? compactTokenCount : totalTokens}
+          detail={
+            <>
+              Prompt {stats.promptTokens.toLocaleString()} · Completion{" "}
+              {stats.completionTokens.toLocaleString()}
+            </>
+          }
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent translation jobs</CardTitle>
-          <CardDescription>Latest 25 jobs across your novels.</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[980px] table-fixed text-left text-caption">
-            <colgroup>
-              <col className="w-[86px]" />
-              <col className="w-[270px]" />
-              <col className="w-[230px]" />
-              <col className="w-[70px]" />
-              <col className="w-[150px]" />
-              <col />
-            </colgroup>
-            <thead className="border-b border-border text-muted-foreground">
-              <tr>
-                <th className="py-2 pr-3 font-semibold">Status</th>
-                <th className="py-2 pr-3 font-semibold">Novel</th>
-                <th className="py-2 pr-3 font-semibold">Chapter</th>
-                <th className="py-2 pr-3 font-semibold">Progress</th>
-                <th className="py-2 pr-3 font-semibold">Updated</th>
-                <th className="py-2 pr-3 font-semibold">Error</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {activity.translationJobs.map((job) => (
-                <tr key={job.id}>
-                  <td className="py-2 pr-3">
-                    <StatusBadge status={job.status} />
-                  </td>
-                  <td className="truncate py-2 pr-3">
-                    <Link
-                      to="/novels/$novelId"
-                      params={{ novelId: job.novelId }}
-                      className="no-underline hover:text-muted-foreground"
-                      title={job.novelTitle}
-                    >
-                      {job.novelTitle}
-                    </Link>
-                  </td>
-                  <td
-                    className="truncate py-2 pr-3"
-                    title={`Ch. ${job.chapterNumber} — ${job.chapterTitle}`}
-                  >
-                    Ch. {job.chapterNumber} — {job.chapterTitle}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {job.doneChunks}/{job.totalChunks}
-                  </td>
-                  <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
-                    <DateCell value={job.updatedAt} />
-                  </td>
-                  <td className="truncate py-2 pr-3 text-muted-foreground" title={job.error || ""}>
-                    {job.error || "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      <JobHistoryTable
+        history={historyQuery.data}
+        search={search}
+        isPending={historyQuery.isPending}
+        isFetching={historyQuery.isFetching}
+        isPlaceholderData={historyQuery.isPlaceholderData}
+        isError={historyQuery.isError}
+        error={historyQuery.error}
+        onRetry={() => void historyQuery.refetch()}
+        onSearchChange={updateSearch}
+        pendingJobId={pendingJobId}
+        actions={{
+          onViewDetails: handleViewDetails,
+          onOpenNovel: (novelId) => void navigate({ to: "/novels/$novelId", params: { novelId } }),
+          onOpenChapter: (job) =>
+            void navigate({
+              to: "/novels/$novelId/chapters/$chapterId",
+              params: { novelId: job.novelId, chapterId: job.chapterId },
+            }),
+          onCopyJobId: (job) => void handleCopyJobId(job),
+          onCancel: (job) => setOperation({ kind: "cancel", job }),
+          onRetry: (job) => setOperation({ kind: "retry", job }),
+        }}
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent import jobs</CardTitle>
-          <CardDescription>Bulk scrape/import runs.</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[980px] table-fixed text-left text-caption">
-            <colgroup>
-              <col className="w-[86px]" />
-              <col />
-              <col className="w-[70px]" />
-              <col className="w-[100px]" />
-              <col className="w-[120px]" />
-              <col className="w-[150px]" />
-              <col className="w-[260px]" />
-            </colgroup>
-            <thead className="border-b border-border text-muted-foreground">
-              <tr>
-                <th className="py-2 pr-3 font-semibold">Status</th>
-                <th className="py-2 pr-3 font-semibold">Novel</th>
-                <th className="py-2 pr-3 font-semibold">Range</th>
-                <th className="py-2 pr-3 font-semibold">Provider</th>
-                <th className="py-2 pr-3 font-semibold">Result</th>
-                <th className="py-2 pr-3 font-semibold">Updated</th>
-                <th className="py-2 pr-3 font-semibold">Error</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {activity.importJobs.map((job) => (
-                <tr key={job.id}>
-                  <td className="py-2 pr-3">
-                    <StatusBadge status={job.status} />
-                  </td>
-                  <td className="truncate py-2 pr-3" title={job.novelTitle}>
-                    {job.novelTitle}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {job.kind === "epub"
-                      ? job.toNumber === 0
-                        ? "Preparing…"
-                        : `1–${job.toNumber}`
-                      : `${job.fromNumber}–${job.toNumber}`}
-                  </td>
-                  <td
-                    className="truncate py-2 pr-3"
-                    title={
-                      job.kind === "epub"
-                        ? job.sourceFileName
-                          ? `EPUB — ${job.sourceFileName}`
-                          : "EPUB"
-                        : formatLabel(job.scrapeProvider)
-                    }
-                  >
-                    {job.kind === "epub"
-                      ? job.sourceFileName
-                        ? `EPUB — ${job.sourceFileName}`
-                        : "EPUB"
-                      : formatLabel(job.scrapeProvider)}
-                  </td>
-                  <td className="whitespace-nowrap py-2 pr-3" title="added / skipped / failed">
-                    {job.added} / {job.skipped} / {job.failed}
-                  </td>
-                  <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
-                    <DateCell value={job.updatedAt} />
-                  </td>
-                  <td className="truncate py-2 pr-3 text-muted-foreground" title={job.error || ""}>
-                    {job.error || "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      <ConfirmDialog
+        open={operation !== null}
+        onOpenChange={(open) => !open && setOperation(null)}
+        title={operation ? getOperationTitle(operation) : "Confirm job operation"}
+        description={operation ? getOperationDescription(operation) : ""}
+        confirmText={
+          pendingJobId ? "Working…" : operation?.kind === "cancel" ? "Cancel job" : "Retry job"
+        }
+        variant={operation?.kind === "cancel" ? "destructive" : "default"}
+        pending={pendingJobId !== null}
+        onConfirm={() => void handleConfirmOperation()}
+      />
+
+      <JobLogsDialog
+        jobId={translationDetails?.jobId ?? null}
+        chapterId={translationDetails?.chapterId ?? null}
+        open={translationDetails !== null}
+        onOpenChange={(open) => !open && setTranslationDetails(null)}
+      />
+
+      <ImportJobDetailsDialog
+        jobId={importDetailsJobId}
+        open={importDetailsJobId !== null}
+        onOpenChange={(open) => !open && setImportDetailsJobId(null)}
+      />
     </div>
   );
 }
 
-function formatLabel(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+function getOperationTitle(operation: Exclude<Operation, null>) {
+  return operation.kind === "cancel" ? "Cancel this job?" : "Retry this job?";
+}
+
+function getOperationDescription(operation: Exclude<Operation, null>) {
+  const { job } = operation;
+  const target = `${job.novelTitle} (${job.id})`;
+  if (operation.kind === "cancel") {
+    return `Cancel ${target}? The worker will stop before its next step.`;
+  }
+  if (job.type === "translation") {
+    return `Retry ${target}? Completed chunks will be resumed, and a newer active translation for this chapter may be cancelled.`;
+  }
+  return `Retry ${target}? This creates a new history row and cancels any active import for the novel.`;
 }
 
 function formatDuration(value: number) {

@@ -159,6 +159,9 @@ const importJobStatusSelect = {
   id: importJobs.id,
   kind: importJobs.kind,
   status: importJobs.status,
+  baseUrl: importJobs.baseUrl,
+  novelId: novels.id,
+  novelTitle: novels.title,
   sourceFileName: importJobs.sourceFileName,
   fromNumber: importJobs.fromNumber,
   toNumber: importJobs.toNumber,
@@ -168,6 +171,8 @@ const importJobStatusSelect = {
   skipped: importJobs.skipped,
   failed: importJobs.failed,
   error: importJobs.error,
+  createdAt: importJobs.createdAt,
+  updatedAt: importJobs.updatedAt,
 };
 
 export const getImportJobStatus = createServerFn({ method: "GET" })

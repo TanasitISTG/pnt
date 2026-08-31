@@ -67,6 +67,28 @@ const relationshipMapQueryOptions = (novelId: string) =>
     queryFn: () => getRelationshipMap({ data: { novelId } }),
   });
 
+const relationshipGenderItems: Record<string, string> = {
+  male: "Male",
+  female: "Female",
+  nonbinary: "Nonbinary",
+  unknown: "Unknown",
+};
+
+const speakerStatusItems: Record<string, string> = {
+  lower: "Lower",
+  peer: "Peer",
+  higher: "Higher",
+  unknown: "Unknown",
+};
+
+const familiarityItems: Record<string, string> = {
+  intimate: "Intimate",
+  close: "Close",
+  familiar: "Familiar",
+  distant: "Distant",
+  unknown: "Unknown",
+};
+
 export const Route = createFileRoute("/_protected/novels/$novelId/relationships")({
   loader: async ({ params, context }) => {
     const [novel] = await Promise.all([
@@ -817,6 +839,7 @@ function CharacterForm({
           {({ id, ...fieldProps }) => (
             <Select
               value={form.gender}
+              items={relationshipGenderItems}
               onValueChange={(value) => onChange({ ...form, gender: value as RelationshipGender })}
             >
               <SelectTrigger {...fieldProps} id={id}>
@@ -967,6 +990,7 @@ function RelationshipForm({
           {({ id, ...fieldProps }) => (
             <Select
               value={form.speakerStatus}
+              items={speakerStatusItems}
               onValueChange={(value) =>
                 onChange({ ...form, speakerStatus: value as SpeakerStatus })
               }
@@ -987,6 +1011,7 @@ function RelationshipForm({
           {({ id, ...fieldProps }) => (
             <Select
               value={form.familiarity}
+              items={familiarityItems}
               onValueChange={(value) => onChange({ ...form, familiarity: value as Familiarity })}
             >
               <SelectTrigger {...fieldProps} id={id}>
@@ -1106,7 +1131,16 @@ function CharacterSelect({
   "aria-invalid"?: boolean;
 }) {
   return (
-    <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue ?? "")}>
+    <Select
+      value={value}
+      items={Object.fromEntries(
+        characters.map((character) => [
+          character.id,
+          `${character.sourceName}${character.targetName ? ` · ${character.targetName}` : ""}`,
+        ]),
+      )}
+      onValueChange={(nextValue) => onValueChange(nextValue ?? "")}
+    >
       <SelectTrigger id={id} aria-describedby={ariaDescribedby} aria-invalid={ariaInvalid}>
         <SelectValue placeholder="Select character" />
       </SelectTrigger>
