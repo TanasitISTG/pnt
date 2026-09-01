@@ -97,39 +97,34 @@ function DevelopmentDevtools() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      import("@tanstack/react-devtools"),
-      import("@tanstack/react-router-devtools"),
-      import("../integrations/tanstack-query/devtools"),
-    ])
-      .then(
-        ([reactDevtools, routerDevtools, queryDevtools]: [
-          DevtoolsModule,
-          RouterDevtoolsModule,
-          QueryDevtoolsModule,
-        ]) => {
-          if (cancelled) return;
-          const TanStackDevtools = reactDevtools.TanStackDevtools;
-          const TanStackRouterDevtoolsPanel = routerDevtools.TanStackRouterDevtoolsPanel;
-          const TanStackQueryDevtools = queryDevtools.default;
-          setDevtools(
-            <TanStackDevtools
-              config={{ position: "bottom-right" }}
-              plugins={[
-                {
-                  name: "Tanstack Router",
-                  render: <TanStackRouterDevtoolsPanel />,
-                },
-                TanStackQueryDevtools,
-              ]}
-            />,
-          );
-        },
-      )
-      .catch((error: unknown) => {
+    void (async () => {
+      try {
+        const [reactDevtools, routerDevtools, queryDevtools] = (await Promise.all([
+          import("@tanstack/react-devtools"),
+          import("@tanstack/react-router-devtools"),
+          import("../integrations/tanstack-query/devtools"),
+        ])) as [DevtoolsModule, RouterDevtoolsModule, QueryDevtoolsModule];
+        if (cancelled) return;
+        const TanStackDevtools = reactDevtools.TanStackDevtools;
+        const TanStackRouterDevtoolsPanel = routerDevtools.TanStackRouterDevtoolsPanel;
+        const TanStackQueryDevtools = queryDevtools.default;
+        setDevtools(
+          <TanStackDevtools
+            config={{ position: "bottom-right" }}
+            plugins={[
+              {
+                name: "Tanstack Router",
+                render: <TanStackRouterDevtoolsPanel />,
+              },
+              TanStackQueryDevtools,
+            ]}
+          />,
+        );
+      } catch (error: unknown) {
         if (cancelled) return;
         captureException(error instanceof Error ? error : new Error(String(error)));
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -141,18 +136,18 @@ function DevelopmentDevtools() {
 function HeadContentWithoutModulePreloads() {
   const tags = useTags();
 
-  return (
-    <>
-      {tags
-        .filter((tag) => tag.tag !== "link" || tag.attrs?.rel !== "modulepreload")
-        .map((tag) => (
-          <Asset
-            key={`${tag.tag}-${tag.attrs?.rel ?? ""}-${tag.attrs?.href ?? ""}-${tag.attrs?.name ?? ""}-${tag.attrs?.property ?? ""}`}
-            {...tag}
-          />
-        ))}
-    </>
-  );
+  const assets: React.ReactNode[] = [];
+  for (const tag of tags) {
+    if (tag.tag === "link" && tag.attrs?.rel === "modulepreload") continue;
+    assets.push(
+      <Asset
+        key={`${tag.tag}-${tag.attrs?.rel ?? ""}-${tag.attrs?.href ?? ""}-${tag.attrs?.name ?? ""}-${tag.attrs?.property ?? ""}`}
+        {...tag}
+      />,
+    );
+  }
+
+  return <>{assets}</>;
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {

@@ -223,13 +223,15 @@ describe("JobsPage dashboard", () => {
   it("shows a loading banner while a new server page is fetching", () => {
     render(
       <JobHistoryTable
-        history={history}
+        query={{
+          page: history,
+          isPending: false,
+          isFetching: true,
+          isPlaceholderData: true,
+          isError: false,
+          error: null,
+        }}
         search={defaultSearch}
-        isPending={false}
-        isFetching
-        isPlaceholderData
-        isError={false}
-        error={null}
         onRetry={vi.fn()}
         onSearchChange={vi.fn()}
         actions={{
@@ -252,13 +254,15 @@ describe("JobsPage dashboard", () => {
     const onRetry = vi.fn();
     render(
       <JobHistoryTable
-        history={history}
+        query={{
+          page: history,
+          isPending: false,
+          isFetching: false,
+          isPlaceholderData: true,
+          isError: true,
+          error: new Error("Network down"),
+        }}
         search={{ ...defaultSearch, type: "epub" }}
-        isPending={false}
-        isFetching={false}
-        isPlaceholderData
-        isError
-        error={new Error("Network down")}
         onRetry={onRetry}
         onSearchChange={vi.fn()}
         actions={{
@@ -367,6 +371,29 @@ describe("JobsPage dashboard", () => {
     navigation = routerState.navigate.mock.calls.at(-1)?.[0];
     expect(navigation.search(defaultSearch)).toMatchObject({ pageSize: 50, page: 1 });
   });
+  it("cancels a pending search when filters are cleared", async () => {
+    vi.useFakeTimers();
+    const search = { ...defaultSearch, type: "epub" as const };
+    renderJobsPage(history, search);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search job history" }), {
+      target: { value: "stale search" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(routerState.navigate).toHaveBeenCalledOnce();
+    const navigation = routerState.navigate.mock.calls[0]?.[0];
+    expect(navigation.replace).toBe(true);
+    expect(navigation.search(search)).toMatchObject({
+      q: "",
+      type: "all",
+      status: "all",
+      page: 1,
+    });
+  });
 
   it("uses server rowCount for pagination and keeps explicit page navigation history", () => {
     const pagedHistory = { ...history, rows: [translationRow], rowCount: 31 };
@@ -380,6 +407,16 @@ describe("JobsPage dashboard", () => {
     const navigation = routerState.navigate.mock.calls.at(-1)?.[0];
     expect(navigation.replace).toBe(false);
     expect(navigation.search(defaultSearch)).toMatchObject({ page: 2 });
+  });
+  it("syncs the URL when the server clamps an out-of-range page", async () => {
+    const search = { ...defaultSearch, page: 4 };
+    renderJobsPage({ ...history, page: 1 }, search);
+
+    await waitFor(() => {
+      const navigation = routerState.navigate.mock.calls.at(-1)?.[0];
+      expect(navigation.replace).toBe(true);
+      expect(navigation.search(search)).toMatchObject({ page: 1 });
+    });
   });
 
   it("distinguishes global and filtered empty history", () => {
@@ -443,13 +480,15 @@ describe("JobsPage job actions", () => {
   it("disables destructive controls for the pending row only", () => {
     render(
       <JobHistoryTable
-        history={history}
+        query={{
+          page: history,
+          isPending: false,
+          isFetching: false,
+          isPlaceholderData: false,
+          isError: false,
+          error: null,
+        }}
         search={defaultSearch}
-        isPending={false}
-        isFetching={false}
-        isPlaceholderData={false}
-        isError={false}
-        error={null}
         onRetry={vi.fn()}
         onSearchChange={vi.fn()}
         actions={{

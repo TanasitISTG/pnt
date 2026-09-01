@@ -10,6 +10,31 @@
         // Inngest resume mechanism. Parallel = broken context + broken resume.
         "files": ["src/lib/inngest/functions.ts"],
         "rules": ["react-doctor/async-await-in-loop"]
+      },
+      {
+        // Sequential by design: each EPUB chunk is converted and uploaded in
+        // order so progress is deterministic, failures stop later uploads,
+        // and a whole-file base64 copy is not retained for a 50 MB upload.
+        "files": ["src/components/chapters/epub-import-section.tsx"],
+        "rules": ["react-doctor/async-await-in-loop"]
+      },
+      {
+        // Sequential by design: bounded 50-row inserts stay ordered on one
+        // transaction connection; parallel statements add no safe parallelism.
+        "files": ["src/lib/epub/job-store.ts"],
+        "rules": ["react-doctor/async-await-in-loop"]
+      },
+      {
+        // Intentional substring evidence checks against currentChunk; a Set
+        // would change String.includes semantics and reject valid evidence.
+        "files": ["src/lib/relationships/analyzer.ts"],
+        "rules": ["react-doctor/js-set-map-lookups"]
+      },
+      {
+        // Intentional substring proof against fullTranslation; this is not
+        // an array membership lookup that can be replaced with a Set.
+        "files": ["src/lib/translation/glossary/policy.ts"],
+        "rules": ["react-doctor/js-set-map-lookups"]
       }
     ]
   }

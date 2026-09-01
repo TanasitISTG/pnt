@@ -204,7 +204,7 @@ function StatusBadge({ status }: { status: TermStatus }) {
   );
 }
 
-export function CategoryBadge({ category }: { category: TermCategory | string }) {
+function CategoryBadge({ category }: { category: TermCategory | string }) {
   return (
     <Badge variant="outline" className="font-medium capitalize">
       {category}

@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { chapters, novels, translationJobs, translationOutbox } from "@/lib/db/schema";
@@ -234,28 +234,40 @@ export async function reorderChaptersForUser(
       return target !== undefined && novelChapters[targetIndex]?.number !== target;
     });
     const now = new Date();
-
-    for (const [index, chapter] of changed.entries()) {
-      await tx
-        .update(chapters)
-        .set({ number: `${-(index + 1)}` })
-        .where(eq(chapters.id, chapter.id));
-    }
-
-    for (const chapter of changed) {
+    const changedIds = changed.map((chapter) => chapter.id);
+    const finalNumbers = changed.map((chapter) => {
       const targetIndex = input.chapterIds.indexOf(chapter.id);
       const target = novelChapters[targetIndex]?.number;
       if (target === undefined) {
         throw new SafeServerError("Chapter order is stale; refresh and try again");
       }
+      return { id: chapter.id, number: target };
+    });
+
+    if (changedIds.length > 0) {
+      const temporaryNumberCase = sql.join(
+        changed.map((chapter, index) => sql`WHEN ${chapter.id} THEN ${-(index + 1)}`),
+        sql` `,
+      );
       await tx
         .update(chapters)
         .set({
-          number: target,
+          number: sql`CASE ${chapters.id} ${temporaryNumberCase} ELSE ${chapters.number} END`,
+        })
+        .where(inArray(chapters.id, changedIds));
+
+      const finalNumberCase = sql.join(
+        finalNumbers.map(({ id, number }) => sql`WHEN ${id} THEN ${number}`),
+        sql` `,
+      );
+      await tx
+        .update(chapters)
+        .set({
+          number: sql`CASE ${chapters.id} ${finalNumberCase} ELSE ${chapters.number} END`,
           sourceRevision: sql`${chapters.sourceRevision} + 1`,
           updatedAt: now,
         })
-        .where(eq(chapters.id, chapter.id));
+        .where(inArray(chapters.id, changedIds));
     }
 
     await tx

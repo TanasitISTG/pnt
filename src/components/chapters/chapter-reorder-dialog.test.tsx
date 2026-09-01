@@ -84,30 +84,37 @@ afterAll(() => {
 });
 afterEach(cleanup);
 
-function renderDialog(onSave: (chapterIds: string[]) => Promise<unknown>) {
-  const onOpenChange = vi.fn();
-  const result = render(
-    <ChapterReorderDialog
-      chapters={CHAPTERS}
-      open
-      saving={false}
-      onOpenChange={onOpenChange}
-      onSave={onSave}
-    />,
-  );
-  return { ...result, onOpenChange };
-}
-function ControlledDialog({ onSave }: { onSave: (chapterIds: string[]) => Promise<unknown> }) {
+function ControlledDialog({
+  onSave,
+  onOpenChange,
+}: {
+  onSave: (chapterIds: string[]) => Promise<unknown>;
+  onOpenChange: (open: boolean) => void;
+}) {
   const [open, setOpen] = useState(true);
-  return (
+  const handleOpenChange = (nextOpen: boolean) => {
+    onOpenChange(nextOpen);
+    setOpen(nextOpen);
+  };
+
+  return open ? (
     <ChapterReorderDialog
       chapters={CHAPTERS}
-      open={open}
       saving={false}
-      onOpenChange={setOpen}
+      onOpenChange={handleOpenChange}
       onSave={onSave}
     />
+  ) : (
+    <button type="button" onClick={() => setOpen(true)}>
+      Reopen
+    </button>
   );
+}
+
+function renderDialog(onSave: (chapterIds: string[]) => Promise<unknown>) {
+  const onOpenChange = vi.fn();
+  const result = render(<ControlledDialog onSave={onSave} onOpenChange={onOpenChange} />);
+  return { ...result, onOpenChange };
 }
 
 async function waitForSortableList() {
@@ -147,7 +154,7 @@ describe("ChapterReorderDialog", () => {
 
   it("discards local changes when canceled and cannot save unchanged order", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    const { rerender, onOpenChange } = renderDialog(onSave);
+    const { onOpenChange } = renderDialog(onSave);
     await waitForSortableList();
 
     await keyboardMoveThirdToFirst();
@@ -156,24 +163,10 @@ describe("ChapterReorderDialog", () => {
     screen.getByRole("button", { name: "Cancel" }).click();
     expect(onOpenChange).toHaveBeenCalledWith(false);
 
-    rerender(
-      <ChapterReorderDialog
-        chapters={CHAPTERS}
-        open={false}
-        saving={false}
-        onOpenChange={onOpenChange}
-        onSave={onSave}
-      />,
-    );
-    rerender(
-      <ChapterReorderDialog
-        chapters={CHAPTERS}
-        open
-        saving={false}
-        onOpenChange={onOpenChange}
-        onSave={onSave}
-      />,
-    );
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Reopen" })).toBeTruthy();
+    });
+    screen.getByRole("button", { name: "Reopen" }).click();
     await waitForSortableList();
     expect(sortableTitles()[0]).toContain("Source one");
 
@@ -185,7 +178,7 @@ describe("ChapterReorderDialog", () => {
 
   it("submits the complete changed order once and closes after saving", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    render(<ControlledDialog onSave={onSave} />);
+    renderDialog(onSave);
     await waitForSortableList();
 
     await keyboardMoveThirdToFirst();

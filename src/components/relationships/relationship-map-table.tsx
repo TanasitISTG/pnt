@@ -54,13 +54,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { RelationshipMapSearch } from "@/lib/relationships/query";
-import type {
-  CharacterProfile,
-  CharacterRelationship,
-  RelationshipMapV1,
-} from "@/lib/relationships/schemas";
+import type { RelationshipTablePage } from "./relationship-table-data";
+import type { CharacterProfile, CharacterRelationship } from "@/lib/relationships/schemas";
 
-export const relationshipTableFeatures = tableFeatures({
+const relationshipTableFeatures = tableFeatures({
   rowPaginationFeature,
   rowSortingFeature,
   columnVisibilityFeature,
@@ -88,7 +85,7 @@ export interface RelationshipTableActions {
 }
 
 interface CharacterProfilesTableProps {
-  map: RelationshipMapV1;
+  page: RelationshipTablePage<CharacterProfile>;
   search: RelationshipMapSearch;
   onSearchChange: RelationshipSearchChange;
   actions: RelationshipTableActions;
@@ -96,7 +93,8 @@ interface CharacterProfilesTableProps {
 }
 
 interface DirectedRelationshipsTableProps {
-  map: RelationshipMapV1;
+  characters: CharacterProfile[];
+  page: RelationshipTablePage<CharacterRelationship>;
   search: RelationshipMapSearch;
   onSearchChange: RelationshipSearchChange;
   actions: RelationshipTableActions;
@@ -139,14 +137,6 @@ const relationshipColumnLabels: Record<string, string> = {
 function resolveUpdater<T>(updater: Updater<T>, current: T): T {
   if (typeof updater === "function") return (updater as (old: T) => T)(current);
   return updater;
-}
-
-function normalize(value: string | null | undefined) {
-  return (value ?? "").toLocaleLowerCase();
-}
-
-function compareText(left: string, right: string) {
-  return left.localeCompare(right, undefined, { sensitivity: "base", numeric: true });
 }
 
 function formatRange(first: number, last: number, total: number, noun: string) {
@@ -591,68 +581,8 @@ function RelationshipEmptyState({
   );
 }
 
-export function CharacterProfilesTable({
-  map,
-  search,
-  onSearchChange,
-  actions,
-  onAdd,
-}: CharacterProfilesTableProps) {
-  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({ notes: false });
-  const filteredRows = useMemo(() => {
-    const query = normalize(search.q);
-    return map.characters
-      .filter((character) => {
-        const active = character.enabled;
-        const management = character.locked ? "manual" : "auto";
-        if (search.state !== "all" && (search.state === "active") !== active) return false;
-        if (search.management !== "all" && search.management !== management) return false;
-        if (!query) return true;
-        return [
-          character.sourceName,
-          character.targetName,
-          character.aliases.join(" "),
-          character.gender,
-          character.role,
-          character.notes,
-          character.evidence,
-        ].some((value) => normalize(value).includes(query));
-      })
-      .toSorted((left, right) => {
-        let result = 0;
-        if (search.sort === "name") result = compareText(left.sourceName, right.sourceName);
-        if (search.sort === "state")
-          result = compareText(
-            left.enabled ? "active" : "inactive",
-            right.enabled ? "active" : "inactive",
-          );
-        if (search.sort === "management")
-          result = compareText(left.locked ? "manual" : "auto", right.locked ? "manual" : "auto");
-        if (result === 0) return compareText(left.id, right.id);
-        return search.dir === "desc" ? -result : result;
-      });
-  }, [map.characters, search]);
-  const rowCount = filteredRows.length;
-  const pageCount = Math.max(1, Math.ceil(rowCount / search.pageSize));
-  const currentPage = Math.min(Math.max(search.page, 1), pageCount);
-  const pageRows = filteredRows.slice(
-    (currentPage - 1) * search.pageSize,
-    currentPage * search.pageSize,
-  );
-
-  useEffect(() => {
-    if (currentPage !== search.page) onSearchChange({ page: currentPage }, true);
-  }, [currentPage, onSearchChange, search.page]);
-
-  const pagination = useMemo<PaginationState>(
-    () => ({ pageIndex: currentPage - 1, pageSize: search.pageSize }),
-    [currentPage, search.pageSize],
-  );
-  const sorting = useMemo<SortingState>(
-    () => [{ id: search.sort, desc: search.dir === "desc" }],
-    [search.dir, search.sort],
-  );
-  const columns = useMemo(
+function useCharacterProfileColumns(actions: RelationshipTableActions) {
+  return useMemo(
     () =>
       characterColumnHelper.columns([
         characterColumnHelper.accessor((character) => character.sourceName, {
@@ -746,6 +676,27 @@ export function CharacterProfilesTable({
       ]),
     [actions],
   );
+}
+
+export function CharacterProfilesTable({
+  page,
+  search,
+  onSearchChange,
+  actions,
+  onAdd,
+}: CharacterProfilesTableProps) {
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({ notes: false });
+  const { rows: pageRows, rowCount, pageCount, currentPage } = page;
+
+  const pagination = useMemo<PaginationState>(
+    () => ({ pageIndex: currentPage - 1, pageSize: search.pageSize }),
+    [currentPage, search.pageSize],
+  );
+  const sorting = useMemo<SortingState>(
+    () => [{ id: search.sort, desc: search.dir === "desc" }],
+    [search.dir, search.sort],
+  );
+  const columns = useCharacterProfileColumns(actions);
   const table = useTable({
     features: relationshipTableFeatures,
     columns,
@@ -861,103 +812,12 @@ export function CharacterProfilesTable({
   );
 }
 
-export function DirectedRelationshipsTable({
-  map,
-  search,
-  onSearchChange,
-  actions,
-  onAdd,
-}: DirectedRelationshipsTableProps) {
-  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({ notes: false });
-  const charactersById = useMemo(
-    () => new Map(map.characters.map((character) => [character.id, character])),
-    [map.characters],
-  );
-  const characterLabel = useCallback(
-    (id: string) => charactersById.get(id)?.sourceName ?? "Unknown character",
-    [charactersById],
-  );
-  const characterSearchLabel = useCallback(
-    (id: string) => {
-      const character = charactersById.get(id);
-      return character
-        ? `${character.sourceName} ${character.targetName ?? ""}`
-        : "Unknown character";
-    },
-    [charactersById],
-  );
-  const isActive = useCallback(
-    (relationship: CharacterRelationship) =>
-      relationship.enabled &&
-      Boolean(charactersById.get(relationship.speakerId)?.enabled) &&
-      Boolean(charactersById.get(relationship.listenerId)?.enabled),
-    [charactersById],
-  );
-  const filteredRows = useMemo(() => {
-    const query = normalize(search.q);
-    return map.relationships
-      .filter((relationship) => {
-        const active = isActive(relationship);
-        const management = relationship.locked ? "manual" : "auto";
-        if (search.state !== "all" && (search.state === "active") !== active) return false;
-        if (search.management !== "all" && search.management !== management) return false;
-        if (!query) return true;
-        return [
-          characterSearchLabel(relationship.speakerId),
-          characterSearchLabel(relationship.listenerId),
-          relationship.relationship,
-          relationship.speakerStatus,
-          relationship.familiarity,
-          relationship.selfPronoun,
-          relationship.addresseeTerm,
-          relationship.sentenceParticles,
-          relationship.register,
-          relationship.notes,
-          relationship.evidence,
-        ].some((value) => normalize(value).includes(query));
-      })
-      .toSorted((left, right) => {
-        let result = 0;
-        if (search.sort === "name") {
-          result = compareText(characterLabel(left.speakerId), characterLabel(right.speakerId));
-          if (result === 0) {
-            result = compareText(characterLabel(left.listenerId), characterLabel(right.listenerId));
-          }
-        }
-        if (search.sort === "state") {
-          result = compareText(
-            isActive(left) ? "active" : "inactive",
-            isActive(right) ? "active" : "inactive",
-          );
-        }
-        if (search.sort === "management") {
-          result = compareText(left.locked ? "manual" : "auto", right.locked ? "manual" : "auto");
-        }
-        if (result === 0) return compareText(left.id, right.id);
-        return search.dir === "desc" ? -result : result;
-      });
-  }, [characterLabel, characterSearchLabel, isActive, map.relationships, search]);
-  const rowCount = filteredRows.length;
-  const pageCount = Math.max(1, Math.ceil(rowCount / search.pageSize));
-  const currentPage = Math.min(Math.max(search.page, 1), pageCount);
-  const pageRows = filteredRows.slice(
-    (currentPage - 1) * search.pageSize,
-    currentPage * search.pageSize,
-  );
-
-  useEffect(() => {
-    if (currentPage !== search.page) onSearchChange({ page: currentPage }, true);
-  }, [currentPage, onSearchChange, search.page]);
-
-  const pagination = useMemo<PaginationState>(
-    () => ({ pageIndex: currentPage - 1, pageSize: search.pageSize }),
-    [currentPage, search.pageSize],
-  );
-  const sorting = useMemo<SortingState>(
-    () => [{ id: search.sort, desc: search.dir === "desc" }],
-    [search.dir, search.sort],
-  );
-  const columns = useMemo(
+function useDirectedRelationshipColumns(
+  actions: RelationshipTableActions,
+  characterLabel: (id: string) => string,
+  isActive: (relationship: CharacterRelationship) => boolean,
+) {
+  return useMemo(
     () =>
       relationshipColumnHelper.columns([
         relationshipColumnHelper.accessor(
@@ -1106,6 +966,42 @@ export function DirectedRelationshipsTable({
       ]),
     [actions, characterLabel, isActive],
   );
+}
+export function DirectedRelationshipsTable({
+  characters,
+  page,
+  search,
+  onSearchChange,
+  actions,
+  onAdd,
+}: DirectedRelationshipsTableProps) {
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({ notes: false });
+  const charactersById = useMemo(
+    () => new Map(characters.map((character) => [character.id, character])),
+    [characters],
+  );
+  const characterLabel = useCallback(
+    (id: string) => charactersById.get(id)?.sourceName ?? "Unknown character",
+    [charactersById],
+  );
+  const isActive = useCallback(
+    (relationship: CharacterRelationship) =>
+      relationship.enabled &&
+      Boolean(charactersById.get(relationship.speakerId)?.enabled) &&
+      Boolean(charactersById.get(relationship.listenerId)?.enabled),
+    [charactersById],
+  );
+  const { rows: pageRows, rowCount, pageCount, currentPage } = page;
+
+  const pagination = useMemo<PaginationState>(
+    () => ({ pageIndex: currentPage - 1, pageSize: search.pageSize }),
+    [currentPage, search.pageSize],
+  );
+  const sorting = useMemo<SortingState>(
+    () => [{ id: search.sort, desc: search.dir === "desc" }],
+    [search.dir, search.sort],
+  );
+  const columns = useDirectedRelationshipColumns(actions, characterLabel, isActive);
   const table = useTable({
     features: relationshipTableFeatures,
     columns,
@@ -1190,7 +1086,7 @@ export function DirectedRelationshipsTable({
                 <TableCell colSpan={visibleColumnCount} className="p-4">
                   <RelationshipEmptyState
                     filtered={filteredSearch(search)}
-                    canAdd={map.characters.length >= 2}
+                    canAdd={characters.length >= 2}
                     onClear={clear}
                     onAdd={onAdd}
                   />

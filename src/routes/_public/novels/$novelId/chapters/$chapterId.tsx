@@ -1,16 +1,12 @@
-import { createFileRoute, notFound, useBlocker } from "@tanstack/react-router";
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, notFound } from "@tanstack/react-router";
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useTheme } from "next-themes";
-import { toast } from "sonner";
 import sarabunThaiUrl from "@fontsource/sarabun/files/sarabun-thai-400-normal.woff2?url";
 
 import { getNovel } from "@/lib/content/novel.functions";
-import { getChapter, listChapters, updateChapter } from "@/lib/content/chapter.functions";
-import { editChapterSchema, type EditChapterInput } from "@/lib/content/novel.schemas";
-import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { getChapter, listChapters } from "@/lib/content/chapter.functions";
 import { QueryErrorState } from "@/components/query-error-state";
 import { useTranslationJob } from "@/components/translation/use-translation-job";
 import { alignParagraphs, splitParagraphs } from "@/lib/translation/text/paragraphs";
@@ -19,15 +15,9 @@ import { ReaderContent } from "@/components/reader/chapter-content";
 import { ChapterTitleRow } from "@/components/reader/chapter-title-row";
 import { ReaderFooterNav } from "@/components/reader/reader-footer-nav";
 import { ReaderToolbar } from "@/components/reader/reader-toolbar";
-import { ChapterEditor, type ChapterDraft } from "@/components/reader/chapter-editor";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ChapterEditor } from "@/components/reader/chapter-editor";
+import { ReaderDialogs } from "@/components/reader/reader-dialogs";
+import { useChapterEditor } from "@/components/reader/use-chapter-editor";
 import { useChapterNav } from "@/components/reader/use-chapter-nav";
 import { useReaderScroll } from "@/components/reader/use-reader-scroll";
 
@@ -122,11 +112,6 @@ function ReaderPage() {
   const { settings, update } = useReaderSettings();
   const { theme, setTheme } = useTheme();
   const viewMode = settings.viewMode;
-  const [draft, setDraft] = useState<ChapterDraft | null>(null);
-  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
-  const [sourcePolicyDialogOpen, setSourcePolicyDialogOpen] = useState(false);
-  const editing = draft !== null;
   const [retranslateConfirmOpen, setRetranslateConfirmOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -137,6 +122,30 @@ function ReaderPage() {
     activeJob?.status === "running" ||
     chapter?.status === "queued" ||
     chapter?.status === "translating";
+  const {
+    beginEditing,
+    blocker,
+    discardChanges,
+    discardDialogOpen,
+    editErrors,
+    editing,
+    handleDiscardDialogChange,
+    handleSaveRequest,
+    keepEditing,
+    persistDraft,
+    requestCancelEditing,
+    saving,
+    setSourcePolicyDialogOpen,
+    sourcePolicyDialogOpen,
+    draft,
+    updateDraft,
+  } = useChapterEditor({
+    chapterId,
+    novelId,
+    chapter,
+    canEdit: !!user,
+    jobRunning,
+  });
 
   const { prevChapter, nextChapter, goToChapter } = useChapterNav(novelId, chapterId, chapters);
 
@@ -153,158 +162,6 @@ function ReaderPage() {
     }
   }, [activeJob?.status, chapterId, novelId, queryClient]);
 
-  const { mutateAsync: saveChapter, isPending: saving } = useMutation({
-    mutationFn: (payload: EditChapterInput) => updateChapter({ data: payload }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] }),
-        queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
-      ]);
-      setDraft(null);
-      setEditErrors({});
-      setSourcePolicyDialogOpen(false);
-      toast.success("Chapter saved");
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to save chapter");
-    },
-  });
-
-  const sourceChanged =
-    !!draft &&
-    !!chapter &&
-    (draft.title !== chapter.title || draft.rawContent !== chapter.rawContent);
-  const isDirty =
-    !!draft &&
-    !!chapter &&
-    (sourceChanged ||
-      draft.translatedTitle !== (chapter.translatedTitle ?? "") ||
-      draft.translatedContent !== (chapter.translatedContent ?? ""));
-
-  const blocker = useBlocker({
-    shouldBlockFn: () => isDirty,
-    withResolver: true,
-    enableBeforeUnload: isDirty,
-  });
-
-  const clearEditErrors = (field: string) => {
-    setEditErrors((current) => ({ ...current, [field]: "" }));
-  };
-
-  const beginEditing = () => {
-    if (!chapter || !user || jobRunning) return;
-    setDraft({
-      title: chapter.title,
-      translatedTitle: chapter.translatedTitle ?? "",
-      rawContent: chapter.rawContent,
-      translatedContent: chapter.translatedContent ?? "",
-    });
-    setEditErrors({});
-  };
-
-  const updateDraft = (field: keyof ChapterDraft, value: string) => {
-    setDraft((current) => (current ? { ...current, [field]: value } : current));
-    clearEditErrors(field);
-  };
-
-  const closeEditor = () => {
-    setDraft(null);
-    setEditErrors({});
-    setSourcePolicyDialogOpen(false);
-  };
-
-  const requestCancelEditing = () => {
-    if (!editing) return;
-    if (isDirty) {
-      setDiscardDialogOpen(true);
-    } else {
-      closeEditor();
-    }
-  };
-
-  const setSchemaErrors = (issues: Array<{ path: PropertyKey[]; message: string }>) => {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of issues) {
-      if (issue.path[0] !== undefined) fieldErrors[String(issue.path[0])] = issue.message;
-    }
-    setEditErrors(fieldErrors);
-  };
-
-  const buildPayload = (policy?: "keep" | "clear"): EditChapterInput | null => {
-    if (!draft || !chapter) return null;
-
-    if (
-      policy !== "clear" &&
-      chapter.translatedContent !== null &&
-      draft.translatedContent.trim().length === 0
-    ) {
-      setEditErrors({
-        translatedContent: "Translation cannot be empty. Choose Clear Translation to remove it.",
-      });
-      return null;
-    }
-
-    const translatedContentChanged = draft.translatedContent !== (chapter.translatedContent ?? "");
-    const translatedContent =
-      policy === "clear" && sourceChanged
-        ? { translatedContent: null }
-        : translatedContentChanged && draft.translatedContent.trim().length > 0
-          ? { translatedContent: draft.translatedContent }
-          : {};
-    const payload = {
-      chapterId,
-      title: draft.title,
-      translatedTitle: draft.translatedTitle.trim().length ? draft.translatedTitle : null,
-      rawContent: draft.rawContent,
-      ...translatedContent,
-      ...(sourceChanged && policy ? { sourceChangePolicy: policy } : {}),
-    } satisfies EditChapterInput;
-    const result = editChapterSchema.safeParse(payload);
-    if (!result.success) {
-      setSchemaErrors(result.error.issues);
-      return null;
-    }
-    return result.data;
-  };
-
-  const persistDraft = async (policy?: "keep" | "clear") => {
-    const payload = buildPayload(policy);
-    if (!payload) return;
-    await saveChapter(payload).catch(() => {});
-  };
-
-  const handleSaveRequest = () => {
-    if (!draft || !chapter) return;
-    setEditErrors({});
-
-    const fieldsResult = editChapterSchema.safeParse({
-      chapterId,
-      title: draft.title,
-      translatedTitle: draft.translatedTitle.trim().length ? draft.translatedTitle : null,
-      rawContent: draft.rawContent,
-    });
-    if (!fieldsResult.success) {
-      setSchemaErrors(fieldsResult.error.issues);
-      return;
-    }
-
-    if (sourceChanged) {
-      const hasTranslation = Boolean(
-        chapter.translatedTitle ||
-        chapter.translatedContent ||
-        draft.translatedTitle.trim() ||
-        draft.translatedContent.trim(),
-      );
-      if (hasTranslation) {
-        setSourcePolicyDialogOpen(true);
-        return;
-      }
-      void persistDraft("clear");
-      return;
-    }
-
-    void persistDraft();
-  };
   const aligned = useMemo(
     () =>
       chapter?.translatedContent
@@ -444,121 +301,34 @@ function ReaderPage() {
         onGoToChapter={goToChapter}
       />
 
-      <ConfirmDialog
-        open={retranslateConfirmOpen}
-        onOpenChange={setRetranslateConfirmOpen}
-        title="Overwrite Edited Translation?"
-        description="This chapter was manually edited. Re-translating will overwrite your manual changes with a new machine translation."
-        confirmText="Overwrite & Translate"
-        onConfirm={() => {
-          setRetranslateConfirmOpen(false);
-          startTranslate(chapterId);
+      <ReaderDialogs
+        translation={{
+          open: retranslateConfirmOpen,
+          onOpenChange: setRetranslateConfirmOpen,
+          onConfirm: () => {
+            setRetranslateConfirmOpen(false);
+            startTranslate(chapterId);
+          },
+        }}
+        sourceEdit={{
+          open: sourcePolicyDialogOpen,
+          saving,
+          onOpenChange: setSourcePolicyDialogOpen,
+          onClear: () => void persistDraft("clear"),
+          onKeep: () => void persistDraft("keep"),
+        }}
+        discard={{
+          open: discardDialogOpen || blocker.status === "blocked",
+          onOpenChange: handleDiscardDialogChange,
+          onKeep: keepEditing,
+          onDiscard: discardChanges,
+        }}
+        shortcuts={{
+          open: shortcutsOpen,
+          onOpenChange: setShortcutsOpen,
+          canEdit: !!user,
         }}
       />
-      <Dialog open={sourcePolicyDialogOpen} onOpenChange={setSourcePolicyDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Source Changed</DialogTitle>
-            <DialogDescription>
-              Keeping the translation marks it as manually edited. Clearing removes the translated
-              title and content so the chapter can be retranslated.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setSourcePolicyDialogOpen(false)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void persistDraft("clear")}
-              disabled={saving}
-            >
-              Clear Translation
-            </Button>
-            <Button onClick={() => void persistDraft("keep")} disabled={saving}>
-              Keep Translation
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={discardDialogOpen || blocker.status === "blocked"}
-        onOpenChange={(open) => {
-          if (open) return;
-          setDiscardDialogOpen(false);
-          if (blocker.status === "blocked") blocker.reset();
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Discard Unsaved Changes?</DialogTitle>
-            <DialogDescription>
-              Your chapter edits are not saved. Leaving now will discard them.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDiscardDialogOpen(false);
-                if (blocker.status === "blocked") blocker.reset();
-              }}
-            >
-              Keep Editing
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                const wasBlocked = blocker.status === "blocked";
-                closeEditor();
-                setDiscardDialogOpen(false);
-                if (wasBlocked) blocker.proceed();
-              }}
-            >
-              Discard Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reader shortcuts</DialogTitle>
-            <DialogDescription>
-              Keyboard controls work when focus is outside form fields.
-            </DialogDescription>
-          </DialogHeader>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-caption">
-            <ShortcutKeys keys="← / h" label="Previous chapter" />
-            <ShortcutKeys keys="→ / l" label="Next chapter" />
-            <ShortcutKeys keys="v" label="Cycle view mode" />
-            <ShortcutKeys keys="t" label="Toggle theme" />
-            {user && <ShortcutKeys keys="e" label="Edit chapter" />}
-            {user && <ShortcutKeys keys="Ctrl/⌘+S" label="Save chapter" />}
-            <ShortcutKeys keys="Esc" label="Cancel edit or close help" />
-            <ShortcutKeys keys="/" label="Show this help" />
-          </dl>
-        </DialogContent>
-      </Dialog>
     </div>
-  );
-}
-
-function ShortcutKeys({ keys, label }: { keys: string; label: string }) {
-  return (
-    <>
-      <dt>
-        <kbd className="rounded-sm border border-border bg-muted px-1.5 py-0.5 font-semibold text-foreground">
-          {keys}
-        </kbd>
-      </dt>
-      <dd className="text-muted-foreground">{label}</dd>
-    </>
   );
 }

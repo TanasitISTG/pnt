@@ -77,24 +77,23 @@ export const ChapterTable = memo(function ChapterTable({
   const rows = chapters.map((chapter) => {
     const activeJob = activeJobs.get(chapter.id);
     const isRowTranslating = isTranslating(chapter.id, chapter.status);
-    const isTitleEditing = titleEdit?.chapterId === chapter.id;
+    const titleEditForRow = titleEdit?.chapterId === chapter.id ? titleEdit : null;
 
     return (
       <ChapterTableRow
         key={chapter.id}
         chapter={chapter}
         novelId={novelId}
-        isAdmin={isAdmin}
+        viewer={isAdmin ? "admin" : "guest"}
         activeJob={activeJob}
-        isRead={readChapterIdSet.has(chapter.id)}
+        readState={readChapterIdSet.has(chapter.id) ? "read" : "unread"}
         residualCount={residualHanziMap.get(chapter.id)}
         chapterCost={costData?.costs[chapter.id]}
         selected={selectedIds.has(chapter.id)}
-        isRowTranslating={isRowTranslating}
-        isTitleEditing={isTitleEditing}
-        titleEdit={isTitleEditing ? titleEdit : null}
-        editError={isTitleEditing ? editErrors.translatedTitle : undefined}
-        savingTitle={isTitleEditing ? savingTitle : false}
+        translationState={isRowTranslating ? "translating" : "idle"}
+        titleEdit={titleEditForRow}
+        editError={titleEditForRow ? editErrors.translatedTitle : undefined}
+        savingTitle={titleEditForRow ? savingTitle : false}
         publishingChapter={publishingChapterId === chapter.id}
         onToggleSelect={onToggleSelect}
         onPublishChapter={onPublishChapter}
@@ -103,7 +102,7 @@ export const ChapterTable = memo(function ChapterTable({
         onStartTranslate={onStartTranslate}
         onRequestRetranslate={onRequestRetranslate}
         onViewLogs={onViewLogs}
-        onSaveTitle={isTitleEditing ? onSaveTitle : undefined}
+        onSaveTitle={titleEditForRow ? onSaveTitle : undefined}
         onTitleChange={onTitleChange}
         onStartEdit={onStartEdit}
         onCancelEdit={onCancelEdit}

@@ -148,14 +148,15 @@ export function selectRelevantApprovedMappings(
 ): { source: string; target: string }[] {
   if (limit <= 0 || suggestions.length === 0 || approvedTerms.length === 0) return [];
 
-  const candidateSources = suggestions
-    .map((suggestion) => normalizeGlossaryComparisonKey(suggestion.source))
-    .filter((source) => source.length > 0);
-  const candidateTargets = new Set(
-    suggestions
-      .map((suggestion) => normalizeGlossaryComparisonKey(suggestion.target))
-      .filter((target) => target.length > 0),
-  );
+  const candidateSources: string[] = [];
+  const candidateTargets = new Set<string>();
+  for (const suggestion of suggestions) {
+    const source = normalizeGlossaryComparisonKey(suggestion.source);
+    if (source.length > 0) candidateSources.push(source);
+
+    const target = normalizeGlossaryComparisonKey(suggestion.target);
+    if (target.length > 0) candidateTargets.add(target);
+  }
   const relevantMappings: Array<{
     source: string;
     target: string;

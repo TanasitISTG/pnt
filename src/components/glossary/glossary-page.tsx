@@ -1,51 +1,20 @@
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback } from "react";
 
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { GlossaryDialogs } from "@/components/glossary/glossary-dialogs";
 import { GlossaryHeader } from "@/components/glossary/glossary-header";
-import {
-  GlossaryTermDialog,
-  type GlossaryEditState,
-  type GlossaryTermDraft,
-  type TermReplacementPreview,
-} from "@/components/glossary/glossary-term-dialog";
+import { GlossaryTermDialog } from "@/components/glossary/glossary-term-dialog";
 import { GlossaryTable } from "@/components/glossary/glossary-table";
-import { useGlossaryMutations } from "@/components/glossary/use-glossary-mutations";
+import { useGlossaryPageController } from "@/components/glossary/use-glossary-page-controller";
 import {
   glossaryNovelQueryOptions,
   glossaryStatsQueryOptions,
   glossaryTermsQueryOptions,
 } from "@/lib/glossary/query";
-import {
-  createTermSchema,
-  updateTermSchema,
-  type GlossaryListRow,
-  type TermCategory,
-  type UpdateTermInput,
-} from "@/lib/glossary/schemas";
-import { previewTermReplacement } from "@/lib/glossary/functions";
-import { useQuery } from "@tanstack/react-query";
 
 const glossaryRoute = getRouteApi("/_protected/novels/$novelId/glossary");
-
-const EMPTY_ADD_DRAFT: GlossaryTermDraft = {
-  source: "",
-  target: "",
-  category: "character",
-  note: "",
-};
-
-function toFieldErrors(error: { issues: Array<{ path: PropertyKey[]; message: string }> }) {
-  const fieldErrors: Record<string, string> = {};
-  for (const issue of error.issues) {
-    const field = issue.path[0];
-    if (field !== undefined && fieldErrors[String(field)] === undefined) {
-      fieldErrors[String(field)] = issue.message;
-    }
-  }
-  return fieldErrors;
-}
 
 export function GlossaryPage() {
   const { novelId } = glossaryRoute.useParams();
@@ -54,58 +23,47 @@ export function GlossaryPage() {
   const novelQuery = useQuery(glossaryNovelQueryOptions(novelId));
   const statsQuery = useQuery(glossaryStatsQueryOptions(novelId));
   const termsQuery = useQuery(glossaryTermsQueryOptions(novelId, search));
-
-  const [termDialogMode, setTermDialogMode] = useState<"add" | "edit" | null>(null);
-  const [addDraft, setAddDraft] = useState<GlossaryTermDraft>(EMPTY_ADD_DRAFT);
-  const [editState, setEditState] = useState<GlossaryEditState | null>(null);
-  const [termErrors, setTermErrors] = useState<Record<string, string>>({});
-  const [replacement, setReplacement] = useState<
-    (TermReplacementPreview & { payload: UpdateTermInput }) | null
-  >(null);
-  const [previewingReplace, setPreviewingReplace] = useState(false);
-  const [deleteTermId, setDeleteTermId] = useState<string | null>(null);
-  const [deleteAllTermsOpen, setDeleteAllTermsOpen] = useState(false);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [tsvText, setTsvText] = useState("");
-
-  const resetTermDialog = useCallback(() => {
-    setTermDialogMode(null);
-    setAddDraft(EMPTY_ADD_DRAFT);
-    setEditState(null);
-    setTermErrors({});
-    setReplacement(null);
-    setPreviewingReplace(false);
-  }, []);
-
   const {
-    addTerm,
+    addDraft,
     addingTerm,
-    saveEdit,
-    savingEdit,
-    removeTerm,
-    deletingTerm,
-    deleteAllTerms,
-    deletingAllTerms,
-    approveTerm,
-    approvingTerm,
     approveAll,
     approvingAll,
-    rejectTerm,
-    rejectingTerm,
+    approveTerm,
+    approvingTerm,
+    clearReplacement,
+    confirmReplacement,
+    deleteAllTerms,
+    deleteAllTermsOpen,
+    deleteTermId,
+    deletingAllTerms,
+    deletingTerm,
+    doBulkImport,
+    editState,
+    handleAddSubmit,
+    handleSaveEdit,
+    handleTermDialogChange,
+    importDialogOpen,
+    importing,
+    openAddDialog,
+    openEditDialog,
+    previewingReplace,
     rejectAll,
     rejectingAll,
-    doBulkImport,
-    importing,
-  } = useGlossaryMutations(novelId, {
-    onAdded: resetTermDialog,
-    onSaved: resetTermDialog,
-    onDeleted: () => setDeleteTermId(null),
-    onAllDeleted: () => setDeleteAllTermsOpen(false),
-    onImported: () => {
-      setImportDialogOpen(false);
-      setTsvText("");
-    },
-  });
+    rejectingTerm,
+    rejectTerm,
+    removeTerm,
+    replacement,
+    savingEdit,
+    setAddDraft,
+    setDeleteAllTermsOpen,
+    setDeleteTermId,
+    setEditState,
+    setImportDialogOpen,
+    setTsvText,
+    termDialogMode,
+    termErrors,
+    tsvText,
+  } = useGlossaryPageController(novelId);
 
   const updateSearch = useCallback(
     (changes: Partial<typeof search>, replace = true) => {
@@ -116,93 +74,6 @@ export function GlossaryPage() {
     },
     [navigate],
   );
-
-  const openAddDialog = () => {
-    setTermErrors({});
-    setReplacement(null);
-    setAddDraft(EMPTY_ADD_DRAFT);
-    setTermDialogMode("add");
-  };
-
-  const openEditDialog = (term: GlossaryListRow) => {
-    setTermErrors({});
-    setReplacement(null);
-    setEditState({
-      termId: term.id,
-      source: term.source,
-      target: term.target,
-      category: term.category,
-      note: term.note ?? "",
-      originalTarget: term.target,
-    });
-    setTermDialogMode("edit");
-  };
-
-  const handleTermDialogChange = (open: boolean) => {
-    if (!open && !addingTerm && !savingEdit && !previewingReplace) resetTermDialog();
-  };
-
-  const handleAddSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setTermErrors({});
-    const payload = {
-      novelId,
-      source: addDraft.source,
-      target: addDraft.target,
-      category: addDraft.category,
-      note: addDraft.note || undefined,
-      status: "approved" as const,
-    };
-    const parsed = createTermSchema.safeParse(payload);
-    if (!parsed.success) {
-      setTermErrors(toFieldErrors(parsed.error));
-      return;
-    }
-    await addTerm(payload).catch(() => {});
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editState) return;
-    setTermErrors({});
-    const payload = {
-      termId: editState.termId,
-      source: editState.source,
-      target: editState.target,
-      category: editState.category,
-      note: editState.note,
-    };
-    const parsed = updateTermSchema.safeParse(payload);
-    if (!parsed.success) {
-      setTermErrors(toFieldErrors(parsed.error));
-      return;
-    }
-
-    if (editState.target.trim() !== editState.originalTarget) {
-      setPreviewingReplace(true);
-      try {
-        const preview = await previewTermReplacement({
-          data: { novelId, oldTarget: editState.originalTarget },
-        });
-        if (preview.chapterCount > 0) {
-          setReplacement({ ...preview, payload: parsed.data });
-          return;
-        }
-      } catch {
-        // A failed preview falls back to saving the glossary entry only.
-      } finally {
-        setPreviewingReplace(false);
-      }
-    }
-
-    await saveEdit(parsed.data).catch(() => {});
-  };
-
-  const confirmReplacement = async (applyToChapters: boolean) => {
-    if (!replacement) return;
-    const payload = replacement.payload;
-    setReplacement(null);
-    await saveEdit({ ...payload, applyToChapters }).catch(() => {});
-  };
 
   const stats = statsQuery.data;
   const pendingCount = stats?.pending ?? 0;
@@ -341,7 +212,7 @@ export function GlossaryPage() {
         savingEdit={savingEdit}
         previewingReplace={previewingReplace}
         replacement={replacement}
-        onBackFromReplacement={() => setReplacement(null)}
+        onBackFromReplacement={clearReplacement}
         onReplaceConfirm={confirmReplacement}
       />
 
@@ -364,5 +235,3 @@ export function GlossaryPage() {
     </div>
   );
 }
-
-export type { GlossaryTermDraft, GlossaryEditState, TermCategory };

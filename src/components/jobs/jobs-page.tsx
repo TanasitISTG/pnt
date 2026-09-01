@@ -205,13 +205,15 @@ export function JobsPage() {
       </div>
 
       <JobHistoryTable
-        history={historyQuery.data}
+        query={{
+          page: historyQuery.data,
+          isPending: historyQuery.isPending,
+          isFetching: historyQuery.isFetching,
+          isPlaceholderData: historyQuery.isPlaceholderData,
+          isError: historyQuery.isError,
+          error: historyQuery.error,
+        }}
         search={search}
-        isPending={historyQuery.isPending}
-        isFetching={historyQuery.isFetching}
-        isPlaceholderData={historyQuery.isPlaceholderData}
-        isError={historyQuery.isError}
-        error={historyQuery.error}
         onRetry={() => void historyQuery.refetch()}
         onSearchChange={updateSearch}
         pendingJobId={pendingJobId}

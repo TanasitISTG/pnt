@@ -68,9 +68,12 @@ export async function analyzeChunkRelationships(
     loadApprovedTermsForContext(row.novel.id),
     loadPrevChapterForContext(row.novel.id, row.chapter.number),
   ]);
-  const approvedMappings: ApprovedCharacterMapping[] = terms
-    .filter((term) => term.category === "character")
-    .map((term) => ({ source: term.source, target: term.target }));
+  const approvedMappings: ApprovedCharacterMapping[] = [];
+  for (const term of terms) {
+    if (term.category === "character") {
+      approvedMappings.push({ source: term.source, target: term.target });
+    }
+  }
   const storedMap = parseRelationshipMap(row.novel.relationshipMapJson);
   const baseMap = storedMap ?? emptyRelationshipMap();
   const sourceTail =

@@ -310,17 +310,19 @@ function SortableItem({ value, className, render, disabled, ...props }: Sortable
     ),
     children: props.children,
   };
+  const contextValue = useMemo(
+    () => ({
+      attributes,
+      listeners,
+      setActivatorNodeRef,
+      isDragging,
+      disabled,
+    }),
+    [attributes, listeners, setActivatorNodeRef, isDragging, disabled],
+  );
 
   return (
-    <SortableItemContext.Provider
-      value={{
-        attributes,
-        listeners,
-        setActivatorNodeRef,
-        isDragging,
-        disabled,
-      }}
-    >
+    <SortableItemContext.Provider value={contextValue}>
       {useRender({
         defaultTagName: "div",
         render,

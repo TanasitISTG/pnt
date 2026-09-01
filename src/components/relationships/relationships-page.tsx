@@ -1,26 +1,22 @@
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Network, Plus, Trash2, Users } from "lucide-react";
-import { useCallback, useState, type FormEvent } from "react";
-import { toast } from "sonner";
-import { z } from "zod";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import {
   CharacterFormDialog,
-  EMPTY_CHARACTER_FORM,
-  EMPTY_RELATIONSHIP_FORM,
   RelationshipFormDialog,
-  splitAliases,
-  toFieldErrors,
-  type CharacterFormState,
-  type RelationshipFormState,
 } from "@/components/relationships/relationship-entry-dialogs";
 import {
   CharacterProfilesTable,
   DirectedRelationshipsTable,
-  type RelationshipTableActions,
 } from "@/components/relationships/relationship-map-table";
+import {
+  buildCharacterTablePage,
+  buildDirectedRelationshipTablePage,
+} from "@/components/relationships/relationship-table-data";
+import { useRelationshipsPageController } from "@/components/relationships/use-relationships-page-controller";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,23 +29,6 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  deleteRelationshipEntry,
-  setRelationshipEntryAutoManaged,
-  setRelationshipEntryEnabled,
-  upsertCharacterProfile,
-  upsertCharacterRelationship,
-} from "@/lib/relationships/functions";
-import {
-  deleteRelationshipEntrySchema,
-  setRelationshipEntryAutoManagedSchema,
-  setRelationshipEntryEnabledSchema,
-  upsertCharacterProfileSchema,
-  upsertCharacterRelationshipSchema,
-  type CharacterProfile,
-  type CharacterRelationship,
-  type RelationshipMapV1,
-} from "@/lib/relationships/schemas";
-import {
   relationshipMapQueryOptions,
   relationshipNovelQueryOptions,
   type RelationshipMapSearch,
@@ -57,24 +36,33 @@ import {
 
 const relationshipsRoute = getRouteApi("/_protected/novels/$novelId/relationships");
 
-type DeleteTarget = {
-  entryType: "character" | "relationship";
-  entryId: string;
-  label: string;
-};
-
 export function RelationshipsPage() {
   const { novelId } = relationshipsRoute.useParams();
   const search = relationshipsRoute.useSearch();
   const navigate = relationshipsRoute.useNavigate();
-  const queryClient = useQueryClient();
   const novelQuery = useQuery(relationshipNovelQueryOptions(novelId));
   const mapQuery = useQuery(relationshipMapQueryOptions(novelId));
-  const [characterForm, setCharacterForm] = useState<CharacterFormState | null>(null);
-  const [relationshipForm, setRelationshipForm] = useState<RelationshipFormState | null>(null);
-  const [characterErrors, setCharacterErrors] = useState<Record<string, string>>({});
-  const [relationshipErrors, setRelationshipErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const {
+    actions,
+    characterErrors,
+    characterForm,
+    closeCharacterDialog,
+    closeDeleteDialog,
+    closeRelationshipDialog,
+    confirmDelete,
+    deleteTarget,
+    deleting,
+    openCharacterAdd,
+    openRelationshipAdd,
+    relationshipErrors,
+    relationshipForm,
+    saveCharacterPending,
+    saveRelationshipPending,
+    setCharacterForm,
+    setRelationshipForm,
+    submitCharacter,
+    submitRelationship,
+  } = useRelationshipsPageController(novelId);
 
   const updateSearch = useCallback(
     (changes: Partial<RelationshipMapSearch>, replace = true) => {
@@ -86,186 +74,23 @@ export function RelationshipsPage() {
     [navigate],
   );
 
-  const invalidateMap = () => {
-    void queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] });
-  };
-
-  const saveCharacter = useMutation({
-    mutationFn: (payload: z.infer<typeof upsertCharacterProfileSchema>) =>
-      upsertCharacterProfile({ data: payload }),
-    onSuccess: () => {
-      invalidateMap();
-      toast.success("Character profile saved");
-      setCharacterForm(null);
-      setCharacterErrors({});
-    },
-    onError: (error) => toast.error(error.message || "Failed to save character profile"),
-  });
-
-  const saveRelationship = useMutation({
-    mutationFn: (payload: z.infer<typeof upsertCharacterRelationshipSchema>) =>
-      upsertCharacterRelationship({ data: payload }),
-    onSuccess: () => {
-      invalidateMap();
-      toast.success("Directed relationship saved");
-      setRelationshipForm(null);
-      setRelationshipErrors({});
-    },
-    onError: (error) => toast.error(error.message || "Failed to save directed relationship"),
-  });
-
-  const toggleEntry = useMutation({
-    mutationFn: (payload: z.infer<typeof setRelationshipEntryEnabledSchema>) =>
-      setRelationshipEntryEnabled({ data: payload }),
-    onSuccess: (_data, variables) => {
-      invalidateMap();
-      toast.success(
-        variables.enabled ? "Relationship entry restored" : "Relationship entry disabled",
-      );
-    },
-    onError: (error) => toast.error(error.message || "Failed to update relationship entry"),
-  });
-
-  const useAutoUpdates = useMutation({
-    mutationFn: (payload: z.infer<typeof setRelationshipEntryAutoManagedSchema>) =>
-      setRelationshipEntryAutoManaged({ data: payload }),
-    onSuccess: () => {
-      invalidateMap();
-      toast.success("Automatic updates enabled");
-    },
-    onError: (error) => toast.error(error.message || "Failed to enable automatic updates"),
-  });
-
-  const removeEntry = useMutation({
-    mutationFn: (payload: z.infer<typeof deleteRelationshipEntrySchema>) =>
-      deleteRelationshipEntry({ data: payload }),
-    onSuccess: () => {
-      invalidateMap();
-      toast.success("Relationship entry deleted");
-      setDeleteTarget(null);
-    },
-    onError: (error) => toast.error(error.message || "Failed to delete relationship entry"),
-  });
-
   const map = mapQuery.data;
   const novel = novelQuery.data;
+  const characterPage = useMemo(() => {
+    if (!map || search.view !== "characters") return null;
+    return buildCharacterTablePage(map, search);
+  }, [map, search]);
+  const relationshipPage = useMemo(() => {
+    if (!map || search.view !== "relationships") return null;
+    return buildDirectedRelationshipTablePage(map, search);
+  }, [map, search]);
+  const activePage = characterPage ?? relationshipPage;
 
-  const openCharacterAdd = () => {
-    setCharacterErrors({});
-    setCharacterForm({ ...EMPTY_CHARACTER_FORM });
-  };
-  const openRelationshipAdd = () => {
-    setRelationshipErrors({});
-    setRelationshipForm({ ...EMPTY_RELATIONSHIP_FORM });
-  };
-  const openCharacterEdit = (character: CharacterProfile) => {
-    setCharacterErrors({});
-    setCharacterForm({
-      id: character.id,
-      sourceName: character.sourceName,
-      targetName: character.targetName ?? "",
-      aliases: character.aliases.join(", "),
-      gender: character.gender,
-      role: character.role ?? "",
-      notes: character.notes ?? "",
-      evidence: character.evidence ?? "",
-    });
-  };
-  const openRelationshipEdit = (relationship: CharacterRelationship) => {
-    setRelationshipErrors({});
-    setRelationshipForm({
-      id: relationship.id,
-      speakerId: relationship.speakerId,
-      listenerId: relationship.listenerId,
-      relationship: relationship.relationship,
-      speakerStatus: relationship.speakerStatus,
-      familiarity: relationship.familiarity,
-      selfPronoun: relationship.selfPronoun ?? "",
-      addresseeTerm: relationship.addresseeTerm ?? "",
-      sentenceParticles: relationship.sentenceParticles ?? "",
-      register: relationship.register ?? "",
-      notes: relationship.notes ?? "",
-      evidence: relationship.evidence ?? "",
-    });
-  };
-  const closeCharacterDialog = (open: boolean) => {
-    if (!open && !saveCharacter.isPending) {
-      setCharacterForm(null);
-      setCharacterErrors({});
+  useEffect(() => {
+    if (activePage && activePage.currentPage !== search.page) {
+      updateSearch({ page: activePage.currentPage }, true);
     }
-  };
-  const closeRelationshipDialog = (open: boolean) => {
-    if (!open && !saveRelationship.isPending) {
-      setRelationshipForm(null);
-      setRelationshipErrors({});
-    }
-  };
-
-  const submitCharacter = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!characterForm) return;
-    setCharacterErrors({});
-    const parsed = upsertCharacterProfileSchema.safeParse({
-      novelId,
-      id: characterForm.id,
-      sourceName: characterForm.sourceName,
-      targetName: characterForm.targetName.trim() || null,
-      aliases: splitAliases(characterForm.aliases),
-      gender: characterForm.gender,
-      role: characterForm.role.trim() || null,
-      notes: characterForm.notes.trim() || null,
-      evidence: characterForm.evidence.trim() || null,
-    });
-    if (!parsed.success) {
-      setCharacterErrors(toFieldErrors(parsed.error));
-      return;
-    }
-    void saveCharacter.mutateAsync(parsed.data).catch(() => {});
-  };
-
-  const submitRelationship = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!relationshipForm) return;
-    setRelationshipErrors({});
-    const parsed = upsertCharacterRelationshipSchema.safeParse({
-      novelId,
-      id: relationshipForm.id,
-      speakerId: relationshipForm.speakerId,
-      listenerId: relationshipForm.listenerId,
-      relationship: relationshipForm.relationship,
-      speakerStatus: relationshipForm.speakerStatus,
-      familiarity: relationshipForm.familiarity,
-      selfPronoun: relationshipForm.selfPronoun.trim() || null,
-      addresseeTerm: relationshipForm.addresseeTerm.trim() || null,
-      sentenceParticles: relationshipForm.sentenceParticles.trim() || null,
-      register: relationshipForm.register.trim() || null,
-      notes: relationshipForm.notes.trim() || null,
-      evidence: relationshipForm.evidence.trim() || null,
-    });
-    if (!parsed.success) {
-      setRelationshipErrors(toFieldErrors(parsed.error));
-      return;
-    }
-    void saveRelationship.mutateAsync(parsed.data).catch(() => {});
-  };
-
-  const requestDelete = (entryType: DeleteTarget["entryType"], entryId: string, label: string) =>
-    setDeleteTarget({ entryType, entryId, label });
-
-  const actions: RelationshipTableActions = {
-    onEditCharacter: openCharacterEdit,
-    onEditRelationship: openRelationshipEdit,
-    onToggle: (entryType, entryId, enabled) =>
-      toggleEntry.mutate({ novelId, entryType, entryId, enabled }),
-    onAuto: (entryType, entryId) => useAutoUpdates.mutate({ novelId, entryType, entryId }),
-    onDelete: requestDelete,
-    pending:
-      saveCharacter.isPending ||
-      saveRelationship.isPending ||
-      toggleEntry.isPending ||
-      useAutoUpdates.isPending ||
-      removeEntry.isPending,
-  };
+  }, [activePage, search.page, updateSearch]);
 
   const switchView = (view: string | null) => {
     if (view !== "characters" && view !== "relationships") return;
@@ -358,7 +183,7 @@ export function RelationshipsPage() {
         </TabsList>
 
         <TabsContent value="characters">
-          {search.view === "characters" && (
+          {search.view === "characters" && characterPage && (
             <section className="space-y-4" aria-labelledby="characters-heading">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
@@ -382,7 +207,7 @@ export function RelationshipsPage() {
                 </Button>
               </div>
               <CharacterProfilesTable
-                map={map}
+                page={characterPage}
                 search={search}
                 onSearchChange={updateSearch}
                 actions={actions}
@@ -393,7 +218,7 @@ export function RelationshipsPage() {
         </TabsContent>
 
         <TabsContent value="relationships">
-          {search.view === "relationships" && (
+          {search.view === "relationships" && relationshipPage && (
             <section className="space-y-4" aria-labelledby="relationships-heading">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
@@ -429,7 +254,8 @@ export function RelationshipsPage() {
                 </div>
               </div>
               <DirectedRelationshipsTable
-                map={map}
+                characters={map.characters}
+                page={relationshipPage}
                 search={search}
                 onSearchChange={updateSearch}
                 actions={actions}
@@ -443,7 +269,7 @@ export function RelationshipsPage() {
       <CharacterFormDialog
         form={characterForm}
         errors={characterErrors}
-        saving={saveCharacter.isPending}
+        saving={saveCharacterPending}
         onChange={setCharacterForm}
         onSubmit={submitCharacter}
         onOpenChange={closeCharacterDialog}
@@ -452,13 +278,13 @@ export function RelationshipsPage() {
         form={relationshipForm}
         characters={map.characters}
         errors={relationshipErrors}
-        saving={saveRelationship.isPending}
+        saving={saveRelationshipPending}
         onChange={setRelationshipForm}
         onSubmit={submitRelationship}
         onOpenChange={closeRelationshipDialog}
       />
 
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <Dialog open={deleteTarget !== null} onOpenChange={closeDeleteDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete relationship entry?</DialogTitle>
@@ -469,24 +295,13 @@ export function RelationshipsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteTarget(null)}
-              disabled={removeEntry.isPending}
-            >
+            <Button variant="outline" onClick={() => closeDeleteDialog(false)} disabled={deleting}>
               Cancel
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                if (!deleteTarget) return;
-                removeEntry.mutate({
-                  novelId,
-                  entryType: deleteTarget.entryType,
-                  entryId: deleteTarget.entryId,
-                });
-              }}
-              disabled={removeEntry.isPending}
+              onClick={confirmDelete}
+              disabled={deleting}
               aria-label="Confirm delete relationship entry"
             >
               <Trash2 className="size-4" aria-hidden="true" />
@@ -498,5 +313,3 @@ export function RelationshipsPage() {
     </div>
   );
 }
-
-export type { RelationshipMapV1 };

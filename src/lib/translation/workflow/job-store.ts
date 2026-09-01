@@ -381,12 +381,16 @@ export async function loadTermSourcesForExclusion(novelId: string) {
     .from(glossaryTerms)
     .where(eq(glossaryTerms.novelId, novelId));
 
-  return {
-    approvedTerms: rows
-      .filter((row) => row.status === "approved")
-      .map(({ source, target }) => ({ source, target })),
-    existingSources: rows.map((row) => row.source),
-  };
+  const approvedTerms: { source: string; target: string }[] = [];
+  const existingSources: string[] = [];
+  for (const row of rows) {
+    existingSources.push(row.source);
+    if (row.status === "approved") {
+      approvedTerms.push({ source: row.source, target: row.target });
+    }
+  }
+
+  return { approvedTerms, existingSources };
 }
 
 export interface ApplyRelationshipAnalysisResult {

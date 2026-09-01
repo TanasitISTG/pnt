@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useState } from "react";
 import { GripVertical, Loader2 } from "lucide-react";
 
 import {
@@ -15,7 +15,6 @@ import type { ChapterRow } from "./types";
 
 export interface ChapterReorderDialogProps {
   chapters: ChapterRow[];
-  open: boolean;
   saving: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (chapterIds: string[]) => Promise<unknown>;
@@ -40,39 +39,20 @@ function handleDialogKeyDown(event: KeyboardEvent) {
 
 export function ChapterReorderDialog({
   chapters,
-  open,
   saving,
   onOpenChange,
   onSave,
 }: ChapterReorderDialogProps) {
-  const chaptersRef = useRef(chapters);
-  const initialOrderRef = useRef(chapters.map((chapter) => chapter.id));
   const [orderedChapters, setOrderedChapters] = useState(() => chapters);
-  const [numberSlots, setNumberSlots] = useState(() => chapters.map((chapter) => chapter.number));
+  const [numberSlots] = useState(() => chapters.map((chapter) => chapter.number));
+  const [initialOrder] = useState(() => chapters.map((chapter) => chapter.id));
   const [listReady, setListReady] = useState(false);
 
-  useEffect(() => {
-    chaptersRef.current = chapters;
-  }, [chapters]);
-
-  useEffect(() => {
-    if (!open) {
-      setListReady(false);
-      return;
-    }
-
-    const nextChapters = chaptersRef.current;
-    initialOrderRef.current = nextChapters.map((chapter) => chapter.id);
-    setOrderedChapters(nextChapters);
-    setNumberSlots(nextChapters.map((chapter) => chapter.number));
-    setListReady(false);
-
-    return scheduleNextFrame(() => setListReady(true));
-  }, [open]);
+  useEffect(() => scheduleNextFrame(() => setListReady(true)), []);
 
   const orderChanged =
-    orderedChapters.length !== initialOrderRef.current.length ||
-    orderedChapters.some((chapter, index) => chapter.id !== initialOrderRef.current[index]);
+    orderedChapters.length !== initialOrder.length ||
+    orderedChapters.some((chapter, index) => chapter.id !== initialOrder[index]);
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -94,7 +74,7 @@ export function ChapterReorderDialog({
   }, [onOpenChange, onSave, orderChanged, orderedChapters, saving]);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open onOpenChange={handleOpenChange}>
       <DialogContent
         className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-4 sm:max-w-2xl"
         onKeyDown={handleDialogKeyDown}

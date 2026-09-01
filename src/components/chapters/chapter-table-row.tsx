@@ -19,14 +19,13 @@ export type ChapterCost = NovelCostData["costs"][string];
 export interface ChapterTableRowProps {
   chapter: ChapterRow;
   novelId: string;
-  isAdmin: boolean;
+  viewer: "admin" | "guest";
   activeJob: ActiveJobState | undefined;
-  isRead: boolean;
+  readState: "read" | "unread";
   residualCount: number | undefined;
   chapterCost: ChapterCost | undefined;
   selected: boolean;
-  isRowTranslating: boolean;
-  isTitleEditing: boolean;
+  translationState: "translating" | "idle";
   titleEdit: TitleEditState | null;
   editError: string | undefined;
   savingTitle: boolean;
@@ -50,14 +49,13 @@ type ChapterTableRowCellsProps = ChapterTableRowProps;
 const ChapterTableRowCells = memo(function ChapterTableRowCells({
   chapter,
   novelId,
-  isAdmin,
+  viewer,
   activeJob,
-  isRead,
+  readState,
   residualCount,
   chapterCost,
   selected,
-  isRowTranslating,
-  isTitleEditing,
+  translationState,
   titleEdit,
   editError,
   savingTitle,
@@ -75,6 +73,7 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
   onCancelEdit,
   onDeleteChapter,
 }: ChapterTableRowCellsProps) {
+  const isTitleEditing = titleEdit !== null;
   const displayTitle = chapter.translatedTitle ?? chapter.title;
   const normalizedTitle = titleEdit?.translatedTitle.trim() ?? "";
   const titleChanged = isTitleEditing && normalizedTitle !== titleEdit?.initialTranslatedTitle;
@@ -82,12 +81,12 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
 
   return (
     <>
-      {isAdmin && (
+      {viewer === "admin" && (
         <TableCell className="w-10">
           <input
             type="checkbox"
             checked={selected}
-            disabled={isRowTranslating}
+            disabled={translationState === "translating"}
             onChange={(event) => onToggleSelect(chapter.id, event.target.checked)}
             aria-label={`Select chapter ${Number(chapter.number)}`}
             className="size-4 accent-primary align-middle"
@@ -101,7 +100,12 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
             className="flex min-w-56 flex-col gap-1.5"
             onSubmit={(event) => {
               event.preventDefault();
-              if (titleChanged && titleValid && !savingTitle && !isRowTranslating) {
+              if (
+                titleChanged &&
+                titleValid &&
+                !savingTitle &&
+                translationState !== "translating"
+              ) {
                 onSaveTitle?.();
               }
             }}
@@ -123,7 +127,7 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
                 aria-invalid={editError ? true : undefined}
                 maxLength={500}
                 autoFocus
-                disabled={savingTitle || isRowTranslating}
+                disabled={savingTitle || translationState === "translating"}
                 className="h-8"
               />
               <Button
@@ -132,7 +136,9 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
                 size="icon-sm"
                 aria-label="Save translated title"
                 title="Save translated title"
-                disabled={!titleChanged || !titleValid || savingTitle || isRowTranslating}
+                disabled={
+                  !titleChanged || !titleValid || savingTitle || translationState === "translating"
+                }
               >
                 <Check className="size-4" />
               </Button>
@@ -159,7 +165,7 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
               params={{ novelId, chapterId: chapter.id }}
               className={cn(
                 "text-foreground hover:underline underline-offset-4",
-                isRead && "text-muted-foreground font-normal",
+                readState === "read" && "text-muted-foreground font-normal",
               )}
             >
               {displayTitle}
@@ -198,7 +204,7 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
             )}
             <span>· {chapter.rawCharCount.toLocaleString()} chars</span>
           </div>
-          {isAdmin && chapterCost && (
+          {viewer === "admin" && chapterCost && (
             <div className="font-mono text-muted-foreground">
               {formatTokens(chapterCost.promptTokens + chapterCost.completionTokens)} tok
               {chapterCost.cost != null && ` · ${formatCost(chapterCost.cost)}`}
@@ -208,7 +214,7 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
       </TableCell>
       <TableCell className="text-muted-foreground hidden sm:table-cell">
         {chapter.rawCharCount.toLocaleString()}
-        {isAdmin && chapterCost && (
+        {viewer === "admin" && chapterCost && (
           <div className="text-caption font-mono text-muted-foreground">
             {formatTokens(chapterCost.promptTokens + chapterCost.completionTokens)} tok
             {chapterCost.cost != null && ` · ${formatCost(chapterCost.cost)}`}
@@ -237,7 +243,7 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
           <ChapterStatusBadge status={chapter.status} />
         )}
       </TableCell>
-      {isAdmin && (
+      {viewer === "admin" && (
         <TableCell className="text-right">
           <div className="flex justify-end items-center gap-1">
             <PublishMenu
@@ -245,7 +251,7 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
               pending={publishingChapter}
               onChange={(publishedAt) => onPublishChapter({ chapterId: chapter.id, publishedAt })}
             />
-            {isRowTranslating && activeJob ? (
+            {translationState === "translating" && activeJob ? (
               <Button
                 variant="ghost"
                 size="icon"
@@ -312,7 +318,7 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
               onClick={() => (isTitleEditing ? onCancelEdit() : onStartEdit(chapter))}
               aria-label={isTitleEditing ? "Cancel edit" : "Edit chapter"}
               title={isTitleEditing ? "Cancel edit" : "Edit chapter"}
-              disabled={!isTitleEditing && isRowTranslating}
+              disabled={!isTitleEditing && translationState === "translating"}
             >
               {isTitleEditing ? (
                 <X className="size-4 text-muted-foreground" />
@@ -339,14 +345,13 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells({
 export const ChapterTableRow = memo(function ChapterTableRow({
   chapter,
   novelId,
-  isAdmin,
+  viewer,
   activeJob,
-  isRead,
+  readState,
   residualCount,
   chapterCost,
   selected,
-  isRowTranslating,
-  isTitleEditing,
+  translationState,
   titleEdit,
   editError,
   savingTitle,
@@ -364,18 +369,18 @@ export const ChapterTableRow = memo(function ChapterTableRow({
   onCancelEdit,
   onDeleteChapter,
 }: ChapterTableRowProps) {
+  const isTitleEditing = titleEdit !== null;
   const cells = (
     <ChapterTableRowCells
       chapter={chapter}
       novelId={novelId}
-      isAdmin={isAdmin}
+      viewer={viewer}
       activeJob={activeJob}
-      isRead={isRead}
+      readState={readState}
       residualCount={residualCount}
       chapterCost={chapterCost}
       selected={selected}
-      isRowTranslating={isRowTranslating}
-      isTitleEditing={isTitleEditing}
+      translationState={translationState}
       titleEdit={titleEdit}
       editError={editError}
       savingTitle={savingTitle}
