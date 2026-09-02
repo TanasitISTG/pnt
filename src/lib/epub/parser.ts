@@ -162,8 +162,8 @@ function parseChapterNumberAndTitle(rawTitle: string): {
     return { number: null, title: "" };
   }
 
-  // Chinese chapter pattern: 第 12 章, 第12話, 第12.5节, 第12回, etc.
-  const cnMatch = trimmed.match(/^第\s*(\d+(?:\.\d+)?)\s*[章話话节節回卷]\s*[:：、\s-]*(.*)$/);
+  // Chinese chapter pattern: 第 12 章, 12章, 第12話, 第12.5节, 第12回, etc.
+  const cnMatch = trimmed.match(/^(?:第\s*)?(\d+(?:\.\d+)?)\s*[章話话节節回卷]\s*[:：、\s-]*(.*)$/);
   if (cnMatch) {
     const num = cnMatch[1];
     const rest = cnMatch[2].trim();

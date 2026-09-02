@@ -140,6 +140,23 @@ describe("EPUB Parser", () => {
     expect(ch3.title).toBe("The Climax");
     expect(ch3.content).toBe("The dawn broke over the ancient fortress, revealing the army below.");
   });
+  it("recognizes bare Chinese chapter headings without 第", () => {
+    const epub = createEpubBuffer({
+      "META-INF/container.xml":
+        '<container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>',
+      "content.opf":
+        '<package><metadata><dc:title>Test</dc:title></metadata><manifest><item id="chapter" href="chapter.xhtml"/></manifest><spine><itemref idref="chapter"/></spine></package>',
+      "chapter.xhtml": "<html><body><h1>172章 我喜歡她嗎？</h1><p>正文內容。</p></body></html>",
+    });
+
+    const parsed = parseEpubArchive(epub);
+
+    expect(parsed.chapters).toHaveLength(1);
+    expect(parsed.chapters[0]).toMatchObject({
+      number: "172",
+      title: "我喜歡她嗎？",
+    });
+  });
 
   it("parses EPUB 3 navigation documents", () => {
     const containerXml = `<?xml version="1.0"?>
