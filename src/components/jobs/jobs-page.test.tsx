@@ -337,6 +337,23 @@ describe("JobsPage dashboard", () => {
     });
   });
 
+  it("keeps an open job menu when dashboard data refreshes", async () => {
+    const queryClient = renderJobsPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Translation Novel" }));
+    expect(screen.getByRole("menuitem", { name: "View details" })).toBeTruthy();
+
+    await act(async () => {
+      queryClient.setQueryData(JOB_STATS_QUERY_KEY, {
+        ...stats,
+        activeTranslationJobs: stats.activeTranslationJobs + 1,
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("menuitem", { name: "View details" })).toBeTruthy();
+  });
+
   it("writes debounced query, filter, sort, and page-size state to the URL", async () => {
     vi.useFakeTimers();
     renderJobsPage();

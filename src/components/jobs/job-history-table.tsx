@@ -149,6 +149,7 @@ export function JobHistoryTable({
     features: jobHistoryTableFeatures,
     columns,
     data,
+    getRowId: (row) => row.id,
     manualPagination: true,
     manualSorting: true,
     rowCount: history?.rowCount ?? 0,

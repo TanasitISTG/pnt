@@ -15,7 +15,12 @@ import {
   JOB_STATS_QUERY_KEY,
   statsQueryOptions,
 } from "@/lib/job-dashboard/query";
-import type { JobHistoryRow, JobHistorySearch, JobStats } from "@/lib/job-dashboard/contracts";
+import type {
+  JobHistoryRow,
+  JobHistorySearch,
+  JobHistoryTranslationRow,
+  JobStats,
+} from "@/lib/job-dashboard/contracts";
 import { cancelTranslationJob, retryTranslationJob } from "@/lib/translation/api/mutations";
 import { cancelImportJob, startImportJob } from "@/lib/scrape/functions";
 
@@ -135,13 +140,50 @@ export function JobsPage() {
     }
   };
 
-  const handleViewDetails = (job: JobHistoryRow) => {
+  const handleViewDetails = useCallback((job: JobHistoryRow) => {
     if (job.type === "translation") {
       setTranslationDetails({ jobId: job.id, chapterId: job.chapterId });
     } else {
       setImportDetailsJobId(job.id);
     }
-  };
+  }, []);
+
+  const handleOpenNovel = useCallback(
+    (novelId: string) => {
+      void navigate({ to: "/novels/$novelId", params: { novelId } });
+    },
+    [navigate],
+  );
+
+  const handleOpenChapter = useCallback(
+    (job: JobHistoryTranslationRow) => {
+      void navigate({
+        to: "/novels/$novelId/chapters/$chapterId",
+        params: { novelId: job.novelId, chapterId: job.chapterId },
+      });
+    },
+    [navigate],
+  );
+
+  const handleCancelJob = useCallback(
+    (job: JobHistoryRow) => setOperation({ kind: "cancel", job }),
+    [],
+  );
+  const handleRetryJob = useCallback(
+    (job: JobHistoryRow) => setOperation({ kind: "retry", job }),
+    [],
+  );
+  const jobHistoryActions = useMemo(
+    () => ({
+      onViewDetails: handleViewDetails,
+      onOpenNovel: handleOpenNovel,
+      onOpenChapter: handleOpenChapter,
+      onCopyJobId: (job: JobHistoryRow) => void handleCopyJobId(job),
+      onCancel: handleCancelJob,
+      onRetry: handleRetryJob,
+    }),
+    [handleCancelJob, handleOpenChapter, handleOpenNovel, handleRetryJob, handleViewDetails],
+  );
 
   const stats = statsQuery.data ?? EMPTY_STATS;
   const totalTokens = Number(stats.promptTokens) + Number(stats.completionTokens);
@@ -217,18 +259,7 @@ export function JobsPage() {
         onRetry={() => void historyQuery.refetch()}
         onSearchChange={updateSearch}
         pendingJobId={pendingJobId}
-        actions={{
-          onViewDetails: handleViewDetails,
-          onOpenNovel: (novelId) => void navigate({ to: "/novels/$novelId", params: { novelId } }),
-          onOpenChapter: (job) =>
-            void navigate({
-              to: "/novels/$novelId/chapters/$chapterId",
-              params: { novelId: job.novelId, chapterId: job.chapterId },
-            }),
-          onCopyJobId: (job) => void handleCopyJobId(job),
-          onCancel: (job) => setOperation({ kind: "cancel", job }),
-          onRetry: (job) => setOperation({ kind: "retry", job }),
-        }}
+        actions={jobHistoryActions}
       />
 
       <ConfirmDialog
