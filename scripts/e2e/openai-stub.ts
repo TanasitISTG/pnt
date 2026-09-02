@@ -72,6 +72,9 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
       activePairs: [{ speaker: "儿子", listener: "父亲", evidence: "儿子" }],
     });
   }
+  if (jsonResponse && system.includes("wrong writing system")) {
+    return JSON.stringify({ translations: ["กลับมา"] });
+  }
   if (jsonResponse || system.includes("Return ONLY a JSON object")) {
     return system.includes('single key "reviews"') ? '{"reviews":[]}' : '{"terms":[]}';
   }
@@ -89,7 +92,7 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
     const hasFatherSon = sourceMatch[1].includes("儿子") || sourceMatch[1].includes("父亲");
     const selfPronoun = system.includes('"selfPronoun":"ผม"') ? "ผม" : "ฉัน";
     const paragraphs = hasFatherSon
-      ? [`“${selfPronoun}จะกลับมา” ลูกชายบอกพ่อ`]
+      ? [`“${selfPronoun}จะ return مرحبا мир” ลูกชายบอกพ่อ`]
       : ["At dawn, Lin opened the old gate.", "Beyond it, the silent road waited."];
     return Array.from(
       { length: markerCount + 1 },

@@ -1,0 +1,1 @@
+ALTER TABLE "translation_eval_reports" RENAME COLUMN "residual_cjk" TO "residual_script_letters";

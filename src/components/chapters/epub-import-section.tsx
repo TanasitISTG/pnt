@@ -9,7 +9,7 @@ import {
   completeEpubUpload,
   abortEpubUpload,
 } from "@/lib/epub/functions";
-import { useImportJob } from "@/components/chapters/use-import-job";
+import { useImportJob, type ImportJobState } from "@/components/chapters/use-import-job";
 import { blobToDataUrl } from "@/lib/utils";
 
 interface EpubImportSectionProps {
@@ -25,15 +25,151 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+interface UploadProgress {
+  currentChunk: number;
+  totalChunks: number;
+  percent: number;
+}
+
+interface EpubUploadControlsProps {
+  selectedFile: File | null;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  isBusy: boolean;
+  uploading: boolean;
+  uploadPercent: number;
+  importActive: boolean;
+  onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onUpload: () => void;
+  onCancelImport: () => void;
+}
+
+function EpubUploadControls({
+  selectedFile,
+  fileInputRef,
+  isBusy,
+  uploading,
+  uploadPercent,
+  importActive,
+  onFileChange,
+  onUpload,
+  onCancelImport,
+}: EpubUploadControlsProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".epub,application/epub+zip"
+        onChange={onFileChange}
+        disabled={isBusy}
+        className="hidden"
+        id="epub-file-input"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={isBusy}
+        size="sm"
+      >
+        {selectedFile ? "Change File" : "Select .epub"}
+      </Button>
+      {selectedFile ? (
+        <span
+          className="text-caption text-foreground truncate max-w-[260px]"
+          title={selectedFile.name}
+        >
+          {selectedFile.name} ({formatFileSize(selectedFile.size)})
+        </span>
+      ) : null}
+      <Button
+        type="button"
+        onClick={onUpload}
+        disabled={!selectedFile || isBusy}
+        size="sm"
+        className="ml-auto"
+      >
+        {uploading ? `Uploading (${uploadPercent}%)` : "Upload & Import EPUB"}
+      </Button>
+      {importActive ? (
+        <Button type="button" variant="destructive" size="sm" onClick={onCancelImport}>
+          Cancel Import
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function EpubUploadProgress({ progress }: { progress: UploadProgress | null }) {
+  if (!progress) return null;
+  return (
+    <div className="flex flex-col gap-1.5 pt-1">
+      <div className="flex justify-between text-caption text-muted-foreground">
+        <span>
+          Uploading chunk {progress.currentChunk} of {progress.totalChunks}
+        </span>
+        <span>{progress.percent}%</span>
+      </div>
+      <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+        <div
+          className="h-full bg-primary transition-[width] duration-200"
+          style={{ width: `${progress.percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function EpubImportStatus({
+  importJob,
+  importActive,
+}: {
+  importJob: ImportJobState | null;
+  importActive: boolean;
+}) {
+  if (!importJob) return null;
+  const progressLabel =
+    importJob.toNumber === 0
+      ? "Preparing EPUB…"
+      : `Chapter ${importJob.nextNumber - 1} / ${importJob.toNumber}`;
+  return (
+    <div className="flex flex-col gap-1 rounded bg-background/50 p-2.5 text-caption border border-border/50">
+      <div className="flex items-center justify-between font-medium">
+        <span className="capitalize text-foreground">
+          Status: {importJob.status}
+          {importJob.sourceFileName ? ` (${importJob.sourceFileName})` : ""}
+        </span>
+        {importJob.status === "running" ? (
+          <span className="text-muted-foreground">{progressLabel}</span>
+        ) : null}
+      </div>
+      {importJob.toNumber === 0 && importActive ? (
+        <p className="text-muted-foreground">Extracting and parsing EPUB chapters on server…</p>
+      ) : null}
+      {importJob.toNumber > 0 ? (
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <span>
+            Added: <strong className="text-foreground">{importJob.added}</strong>
+          </span>
+          <span>
+            Skipped: <strong className="text-foreground">{importJob.skipped}</strong>
+          </span>
+          <span>
+            Failed: <strong className="text-foreground">{importJob.failed}</strong>
+          </span>
+        </div>
+      ) : null}
+      {importJob.error ? (
+        <p className="text-destructive font-medium">Error: {importJob.error}</p>
+      ) : null}
+    </div>
+  );
+}
 
 export function EpubImportSection({ novelId, invalidateChapters }: EpubImportSectionProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{
-    currentChunk: number;
-    totalChunks: number;
-    percent: number;
-  } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,121 +280,30 @@ export function EpubImportSection({ novelId, invalidateChapters }: EpubImportSec
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
           <Label className="text-sub font-semibold text-foreground">Import from EPUB</Label>
-          {importActive && (
+          {importActive ? (
             <span className="text-caption text-primary font-medium">
               (runs server-side — safe to close this tab)
             </span>
-          )}
+          ) : null}
         </div>
         <p className="text-caption text-muted-foreground">
           Upload a WebToEpub or standard .epub file (up to 50 MB) to import raw chapters into this
           novel.
         </p>
       </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".epub,application/epub+zip"
-          onChange={handleFileChange}
-          disabled={isBusy}
-          className="hidden"
-          id="epub-file-input"
-        />
-
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isBusy}
-          size="sm"
-        >
-          {selectedFile ? "Change File" : "Select .epub"}
-        </Button>
-
-        {selectedFile && (
-          <span
-            className="text-caption text-foreground truncate max-w-[260px]"
-            title={selectedFile.name}
-          >
-            {selectedFile.name} ({formatFileSize(selectedFile.size)})
-          </span>
-        )}
-
-        <Button
-          type="button"
-          onClick={handleUploadAndImport}
-          disabled={!selectedFile || isBusy}
-          size="sm"
-          className="ml-auto"
-        >
-          {uploading ? `Uploading (${uploadProgress?.percent ?? 0}%)` : "Upload & Import EPUB"}
-        </Button>
-
-        {importActive && (
-          <Button type="button" variant="destructive" size="sm" onClick={cancelImport}>
-            Cancel Import
-          </Button>
-        )}
-      </div>
-
-      {uploadProgress && (
-        <div className="flex flex-col gap-1.5 pt-1">
-          <div className="flex justify-between text-caption text-muted-foreground">
-            <span>
-              Uploading chunk {uploadProgress.currentChunk} of {uploadProgress.totalChunks}
-            </span>
-            <span>{uploadProgress.percent}%</span>
-          </div>
-          <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-[width] duration-200"
-              style={{ width: `${uploadProgress.percent}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {importJob && (
-        <div className="flex flex-col gap-1 rounded bg-background/50 p-2.5 text-caption border border-border/50">
-          <div className="flex items-center justify-between font-medium">
-            <span className="capitalize text-foreground">
-              Status: {importJob.status}
-              {importJob.sourceFileName ? ` (${importJob.sourceFileName})` : ""}
-            </span>
-            {importJob.status === "running" && (
-              <span className="text-muted-foreground">
-                {importJob.toNumber === 0
-                  ? "Preparing EPUB…"
-                  : `Chapter ${importJob.nextNumber - 1} / ${importJob.toNumber}`}
-              </span>
-            )}
-          </div>
-
-          {importJob.toNumber === 0 && importActive && (
-            <p className="text-muted-foreground">Extracting and parsing EPUB chapters on server…</p>
-          )}
-
-          {importJob.toNumber > 0 && (
-            <div className="flex items-center gap-3 text-muted-foreground">
-              <span>
-                Added: <strong className="text-foreground">{importJob.added}</strong>
-              </span>
-              <span>
-                Skipped: <strong className="text-foreground">{importJob.skipped}</strong>
-              </span>
-              <span>
-                Failed: <strong className="text-foreground">{importJob.failed}</strong>
-              </span>
-            </div>
-          )}
-
-          {importJob.error && (
-            <p className="text-destructive font-medium">Error: {importJob.error}</p>
-          )}
-        </div>
-      )}
+      <EpubUploadControls
+        selectedFile={selectedFile}
+        fileInputRef={fileInputRef}
+        isBusy={isBusy}
+        uploading={uploading}
+        uploadPercent={uploadProgress?.percent ?? 0}
+        importActive={importActive}
+        onFileChange={handleFileChange}
+        onUpload={handleUploadAndImport}
+        onCancelImport={cancelImport}
+      />
+      <EpubUploadProgress progress={uploadProgress} />
+      <EpubImportStatus importJob={importJob} importActive={importActive} />
     </div>
   );
 }

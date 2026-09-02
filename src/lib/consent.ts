@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+import { useHydrated } from "@/lib/use-hydrated";
 
 export type ConsentState = "pending" | "granted" | "denied";
 
@@ -18,34 +19,26 @@ export function setConsent(value: ConsentState) {
   window.dispatchEvent(new CustomEvent(CONSENT_EVENT, { detail: value }));
 }
 
+function subscribeToConsent(onStoreChange: () => void) {
+  const handleConsentChange = () => onStoreChange();
+  const handleStorageChange = (event: StorageEvent) => {
+    if (event.key === CONSENT_KEY) onStoreChange();
+  };
+
+  window.addEventListener(CONSENT_EVENT, handleConsentChange);
+  window.addEventListener("storage", handleStorageChange);
+  return () => {
+    window.removeEventListener(CONSENT_EVENT, handleConsentChange);
+    window.removeEventListener("storage", handleStorageChange);
+  };
+}
+
+function getServerConsentSnapshot(): ConsentState {
+  return "pending";
+}
+
 export function useConsent() {
-  const [consent, setConsentState] = useState<ConsentState>("pending");
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setConsentState(getConsent());
-    setHydrated(true);
-
-    const handleCustomEvent = (e: Event) => {
-      const custom = e as CustomEvent<ConsentState>;
-      if (custom.detail) {
-        setConsentState(custom.detail);
-      }
-    };
-    const handleStorageEvent = (e: StorageEvent) => {
-      if (e.key === CONSENT_KEY) {
-        setConsentState(getConsent());
-      }
-    };
-
-    window.addEventListener(CONSENT_EVENT, handleCustomEvent);
-    window.addEventListener("storage", handleStorageEvent);
-
-    return () => {
-      window.removeEventListener(CONSENT_EVENT, handleCustomEvent);
-      window.removeEventListener("storage", handleStorageEvent);
-    };
-  }, []);
-
+  const consent = useSyncExternalStore(subscribeToConsent, getConsent, getServerConsentSnapshot);
+  const hydrated = useHydrated();
   return { consent, setConsent, hydrated };
 }

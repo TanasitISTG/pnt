@@ -226,7 +226,8 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await page.getByRole("link", { name: "ยามรุ่งอรุณ" }).click();
 
   await expect(page.getByRole("heading", { name: "ยามรุ่งอรุณ" })).toBeVisible();
-  await expect(page.getByText("“ผมจะกลับมา” ลูกชายบอกพ่อ")).toBeVisible();
+  await expect(page.getByText("“ผมจะ กลับมา” ลูกชายบอกพ่อ")).toBeVisible();
+  await expect(page.getByText("return مرحبا мир")).toHaveCount(0);
   await expect(page.getByText("Machine-translated from Chinese.")).toBeVisible();
   await page.screenshot({ path: ".tura/e2e/guest-reader.png", fullPage: true });
 });

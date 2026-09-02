@@ -57,6 +57,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
     queryClient.invalidateQueries({ queryKey: ["costs", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["residualScripts", novelId] });
   }, [novelId, queryClient]);
 
   // Rehydrate active jobs from DB on mount — shows jobs the worker is processing

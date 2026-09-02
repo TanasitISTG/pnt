@@ -1,5 +1,4 @@
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   useTable,
   type ColumnVisibilityState,
@@ -8,15 +7,12 @@ import {
   type Updater,
 } from "@tanstack/react-table";
 
-import { QueryErrorState } from "@/components/query-error-state";
-import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DataTableEmptyState,
+  DataTablePagination,
+  DataTableSkeletonRows,
+} from "@/components/ui/data-table-parts";
+import { QueryErrorState } from "@/components/query-error-state";
 import {
   Table,
   TableBody,
@@ -77,11 +73,7 @@ const sortableSearchColumns: Record<string, JobHistorySearch["sort"]> = {
 
 const pageSizeOptions = [10, 25, 50] as const;
 
-const pageSizeItems: Record<string, string> = {
-  "10": "10",
-  "25": "25",
-  "50": "50",
-};
+const EMPTY_JOB_HISTORY_ROWS: JobHistoryPage["rows"] = [];
 
 function resolveUpdater<T>(updater: Updater<T>, current: T): T {
   if (typeof updater === "function") return (updater as (old: T) => T)(current);
@@ -97,20 +89,154 @@ function formatRange(first: number, last: number, total: number) {
     ? "0 jobs"
     : `${first.toLocaleString()}–${last.toLocaleString()} of ${total.toLocaleString()} jobs`;
 }
+interface JobHistoryVisibilityColumn {
+  id: string;
+  getCanHide: () => boolean;
+  getIsVisible: () => boolean;
+  toggleVisibility: (visible: boolean) => void;
+}
 
-function SkeletonRows({ columnCount }: { columnCount: number }) {
+function buildJobHistoryFilterColumns(
+  columns: JobHistoryVisibilityColumn[],
+): JobHistoryFilterColumn[] {
+  const filterColumns: JobHistoryFilterColumn[] = [];
+  for (const column of columns) {
+    if (!column.getCanHide()) continue;
+    filterColumns.push({
+      id: column.id,
+      label: columnLabels[column.id] ?? column.id,
+      checked: column.getIsVisible(),
+      onCheckedChange: (checked) => column.toggleVisibility(checked),
+    });
+  }
+  return filterColumns;
+}
+
+function getJobHistoryRange(
+  rowCount: number,
+  currentPage: number,
+  pageSize: number,
+  pageRowCount: number,
+) {
+  if (rowCount === 0) return { firstRow: 0, lastRow: 0 };
+  const firstRow = (currentPage - 1) * pageSize + 1;
+  return { firstRow, lastRow: firstRow + pageRowCount - 1 };
+}
+
+const CLEAR_JOB_FILTERS: Partial<JobHistorySearch> = {
+  q: "",
+  type: "all",
+  status: "all",
+  sort: "updatedAt",
+  dir: "desc",
+  page: 1,
+};
+
+function JobHistoryUpdateError({
+  visible,
+  error,
+  onRetry,
+}: {
+  visible: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  if (!visible) return null;
   return (
-    <>
-      {Array.from({ length: 7 }, (_, skeletonIndex) => (
-        <TableRow key={`skeleton-${skeletonIndex}`} aria-hidden="true">
-          {Array.from({ length: columnCount }, (_cellPlaceholder, cellIndex) => (
-            <TableCell key={`skeleton-${skeletonIndex}-${cellIndex}`}>
-              <div className="h-4 animate-pulse rounded bg-muted motion-reduce:animate-none" />
-            </TableCell>
-          ))}
-        </TableRow>
-      ))}
-    </>
+    <QueryErrorState
+      title="Unable to update job history"
+      error={error}
+      onRetry={onRetry}
+      className="m-3 min-h-0 sm:m-4"
+    />
+  );
+}
+
+interface JobHistoryBodyProps {
+  initialLoading: boolean;
+  noRows: boolean;
+  filtered: boolean;
+  visibleColumnCount: number;
+  rows: ReactNode;
+  onClearFilters: () => void;
+}
+
+function JobHistoryBody({
+  initialLoading,
+  noRows,
+  filtered,
+  visibleColumnCount,
+  rows,
+  onClearFilters,
+}: JobHistoryBodyProps) {
+  if (initialLoading) {
+    return (
+      <TableBody>
+        <DataTableSkeletonRows columnCount={visibleColumnCount} />
+      </TableBody>
+    );
+  }
+  if (!noRows) return <TableBody>{rows}</TableBody>;
+  return (
+    <DataTableEmptyState
+      columnCount={visibleColumnCount}
+      filtered={filtered}
+      emptyTitle="No jobs yet"
+      filteredTitle="No jobs match these filters"
+      emptyDescription="Translation and import runs will appear here as they are created."
+      filteredDescription="Try a different search or clear the filters to see all retained runs."
+      onClearFilters={onClearFilters}
+    />
+  );
+}
+
+interface JobHistoryPaginationTable {
+  firstPage: () => void;
+  previousPage: () => void;
+  nextPage: () => void;
+  lastPage: () => void;
+  getCanPreviousPage: () => boolean;
+  getCanNextPage: () => boolean;
+  getCanLastPage: () => boolean;
+  getPageCount: () => number;
+}
+
+interface JobHistoryPaginationProps {
+  table: JobHistoryPaginationTable;
+  search: JobHistorySearch;
+  firstRow: number;
+  lastRow: number;
+  rowCount: number;
+  currentPage: number;
+  busy: boolean;
+  onSearchChange: JobHistorySearchChange;
+}
+
+function JobHistoryPagination({
+  table,
+  search,
+  firstRow,
+  lastRow,
+  rowCount,
+  currentPage,
+  busy,
+  onSearchChange,
+}: JobHistoryPaginationProps) {
+  return (
+    <DataTablePagination
+      table={table}
+      firstRow={firstRow}
+      lastRow={lastRow}
+      rowCount={rowCount}
+      currentPage={currentPage}
+      busy={busy}
+      pageSize={search.pageSize}
+      pageSizeOptions={pageSizeOptions}
+      formatRange={formatRange}
+      onPageSizeChange={(pageSize) =>
+        onSearchChange({ pageSize: pageSize as JobHistorySearch["pageSize"], page: 1 }, true)
+      }
+    />
   );
 }
 
@@ -143,7 +269,7 @@ export function JobHistoryTable({
     () => createJobHistoryColumns({ ...actions, pendingJobId }),
     [actions, pendingJobId],
   );
-  const data = history?.rows ?? [];
+  const data = history?.rows ?? EMPTY_JOB_HISTORY_ROWS;
 
   const table = useTable({
     features: jobHistoryTableFeatures,
@@ -176,22 +302,31 @@ export function JobHistoryTable({
 
   const rowCount = history?.rowCount ?? 0;
   const currentPage = history?.page ?? search.page;
-  const firstRow = rowCount === 0 ? 0 : (currentPage - 1) * search.pageSize + 1;
-  const lastRow = rowCount === 0 ? 0 : firstRow + data.length - 1;
+  const { firstRow, lastRow } = getJobHistoryRange(
+    rowCount,
+    currentPage,
+    search.pageSize,
+    data.length,
+  );
   const filtered = hasActiveFilters(search);
   const noRows = Boolean(history && !isFetching && data.length === 0);
   const paginationBusy = isPlaceholderData || (isPending && !history);
   const visibleColumnCount = table.getVisibleLeafColumns().length;
-  const filterColumns: JobHistoryFilterColumn[] = [];
-  for (const column of table.getAllLeafColumns()) {
-    if (!column.getCanHide()) continue;
-    filterColumns.push({
-      id: column.id,
-      label: columnLabels[column.id] ?? column.id,
-      checked: column.getIsVisible(),
-      onCheckedChange: (checked) => column.toggleVisibility(checked),
-    });
-  }
+  const filterColumns = buildJobHistoryFilterColumns(table.getAllLeafColumns());
+  const renderedRows = table.getRowModel().rows.map((row) => (
+    <TableRow key={row.id} className="h-[4.25rem]">
+      {row.getVisibleCells().map((cell) => (
+        <TableCell
+          key={cell.id}
+          className={`px-3 py-2 ${
+            cell.column.id === "actions" ? "sticky right-0 z-10 border-l border-border bg-card" : ""
+          }`}
+        >
+          <table.FlexRender cell={cell} />
+        </TableCell>
+      ))}
+    </TableRow>
+  ));
 
   if (isError && !history) {
     return (
@@ -215,14 +350,11 @@ export function JobHistoryTable({
         query={{ isFetching, isPlaceholderData }}
         columns={filterColumns}
       />
-      {isError && history && (
-        <QueryErrorState
-          title="Unable to update job history"
-          error={error}
-          onRetry={onRetry}
-          className="m-3 min-h-0 sm:m-4"
-        />
-      )}
+      <JobHistoryUpdateError
+        visible={isError && Boolean(history)}
+        error={error}
+        onRetry={onRetry}
+      />
 
       <div className="overflow-x-auto">
         <Table className="min-w-[1080px] text-caption">
@@ -244,141 +376,27 @@ export function JobHistoryTable({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
-            {isPending && !history ? (
-              <SkeletonRows columnCount={visibleColumnCount} />
-            ) : noRows ? (
-              <TableRow>
-                <TableCell colSpan={visibleColumnCount} className="h-56 px-6 text-center">
-                  <div className="mx-auto max-w-sm">
-                    <p className="font-medium text-foreground">
-                      {filtered ? "No jobs match these filters" : "No jobs yet"}
-                    </p>
-                    <p className="mt-1 text-caption text-muted-foreground">
-                      {filtered
-                        ? "Try a different search or clear the filters to see all retained runs."
-                        : "Translation and import runs will appear here as they are created."}
-                    </p>
-                    {filtered && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-4"
-                        onClick={() =>
-                          onSearchChange(
-                            {
-                              q: "",
-                              type: "all",
-                              status: "all",
-                              sort: "updatedAt",
-                              dir: "desc",
-                              page: 1,
-                            },
-                            true,
-                          )
-                        }
-                      >
-                        Clear filters
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : data.length > 0 ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="h-[4.25rem]">
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={`px-3 py-2 ${
-                        cell.column.id === "actions"
-                          ? "sticky right-0 z-10 border-l border-border bg-card"
-                          : ""
-                      }`}
-                    >
-                      <table.FlexRender cell={cell} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : null}
-          </TableBody>
+          <JobHistoryBody
+            initialLoading={isPending && !history}
+            noRows={noRows}
+            filtered={filtered}
+            visibleColumnCount={visibleColumnCount}
+            rows={renderedRows}
+            onClearFilters={() => onSearchChange(CLEAR_JOB_FILTERS, true)}
+          />
         </Table>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-border px-3 py-3 text-caption text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
-        <div className="tabular-nums">{formatRange(firstRow, lastRow, rowCount)}</div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2">
-            <span>Rows</span>
-            <Select
-              value={String(search.pageSize)}
-              items={pageSizeItems}
-              onValueChange={(value) => {
-                const pageSize = Number(value);
-                if (pageSizeOptions.includes(pageSize as (typeof pageSizeOptions)[number])) {
-                  onSearchChange(
-                    { pageSize: pageSize as JobHistorySearch["pageSize"], page: 1 },
-                    true,
-                  );
-                }
-              }}
-            >
-              <SelectTrigger aria-label="Rows per page" className="h-9 w-[76px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {pageSizeOptions.map((pageSize) => (
-                  <SelectItem key={pageSize} value={String(pageSize)}>
-                    {pageSize}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => table.firstPage()}
-              disabled={!table.getCanPreviousPage() || paginationBusy}
-              aria-label="First page"
-            >
-              <ChevronsLeft className="size-4" aria-hidden="true" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage() || paginationBusy}
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </Button>
-            <span className="min-w-16 px-1 text-center tabular-nums text-foreground">
-              Page {currentPage} of {Math.max(1, table.getPageCount())}
-            </span>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage() || paginationBusy}
-              aria-label="Next page"
-            >
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => table.lastPage()}
-              disabled={!table.getCanLastPage() || paginationBusy}
-              aria-label="Last page"
-            >
-              <ChevronsRight className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
-        </div>
-      </div>
+      <JobHistoryPagination
+        table={table}
+        search={search}
+        firstRow={firstRow}
+        lastRow={lastRow}
+        rowCount={rowCount}
+        currentPage={currentPage}
+        busy={paginationBusy}
+        onSearchChange={onSearchChange}
+      />
     </section>
   );
 }

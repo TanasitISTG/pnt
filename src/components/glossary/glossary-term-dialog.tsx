@@ -66,6 +66,171 @@ const categoryItems: Record<string, string> = {
   other: "Other",
 };
 
+type UpdateGlossaryDraft = (changes: Partial<GlossaryTermDraft>) => void;
+
+function getSubmitLabel(
+  mode: NonNullable<GlossaryTermDialogProps["mode"]>,
+  addingTerm: boolean,
+  savingEdit: boolean,
+  previewingReplace: boolean,
+) {
+  if (mode === "add") return addingTerm ? "Adding…" : "Add term";
+  if (previewingReplace) return "Checking chapters…";
+  return savingEdit ? "Saving…" : "Save term";
+}
+
+interface GlossaryReplacementStepProps {
+  replacement: TermReplacementPreview;
+  originalTarget: string;
+  savingEdit: boolean;
+  onBack: () => void;
+  onConfirm: (applyToChapters: boolean) => void;
+}
+
+function GlossaryReplacementStep({
+  replacement,
+  originalTarget,
+  savingEdit,
+  onBack,
+  onConfirm,
+}: GlossaryReplacementStepProps) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+        <p className="font-medium text-foreground">Replace this target in translated chapters?</p>
+        <p className="mt-2 text-muted-foreground">
+          The old target <span className="font-medium text-foreground">“{originalTarget}”</span>{" "}
+          appears in {replacement.chapterCount} translated chapter(s) ({replacement.occurrences}{" "}
+          occurrence(s)).
+        </p>
+      </div>
+      <p className="text-caption text-muted-foreground">
+        Replacement is an exact, case-sensitive match and may also match inside longer words. This
+        cannot be undone.
+      </p>
+      <DialogFooter>
+        <Button variant="outline" onClick={onBack} disabled={savingEdit}>
+          <ArrowLeft className="size-4" />
+          Back
+        </Button>
+        <Button variant="outline" onClick={() => onConfirm(false)} disabled={savingEdit}>
+          Save glossary only
+        </Button>
+        <Button onClick={() => onConfirm(true)} disabled={savingEdit}>
+          {savingEdit ? (
+            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
+          ) : null}
+          {savingEdit ? "Saving…" : "Replace & save"}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+interface GlossaryTermFormProps {
+  mode: NonNullable<GlossaryTermDialogProps["mode"]>;
+  draft: GlossaryTermDraft;
+  errors: Record<string, string>;
+  pending: boolean;
+  addingTerm: boolean;
+  savingEdit: boolean;
+  previewingReplace: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+  onUpdateDraft: UpdateGlossaryDraft;
+}
+
+function GlossaryTermForm({
+  mode,
+  draft,
+  errors,
+  pending,
+  addingTerm,
+  savingEdit,
+  previewingReplace,
+  onSubmit,
+  onCancel,
+  onUpdateDraft,
+}: GlossaryTermFormProps) {
+  const submitLabel = getSubmitLabel(mode, addingTerm, savingEdit, previewingReplace);
+  return (
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
+      <FormField id="glossary-source" label="Source term" error={errors.source}>
+        {({ id, ...fieldProps }) => (
+          <Input
+            {...fieldProps}
+            id={id}
+            value={draft.source}
+            maxLength={500}
+            onChange={(event) => onUpdateDraft({ source: event.target.value })}
+          />
+        )}
+      </FormField>
+      <FormField id="glossary-target" label="Target translation" error={errors.target}>
+        {({ id, ...fieldProps }) => (
+          <Input
+            {...fieldProps}
+            id={id}
+            value={draft.target}
+            maxLength={500}
+            onChange={(event) => onUpdateDraft({ target: event.target.value })}
+          />
+        )}
+      </FormField>
+      <FormField id="glossary-category" label="Category" error={errors.category}>
+        {({ id, ...fieldProps }) => (
+          <Select
+            value={draft.category}
+            items={categoryItems}
+            onValueChange={(value) => value && onUpdateDraft({ category: value as TermCategory })}
+          >
+            <SelectTrigger {...fieldProps} id={id}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="character">Character</SelectItem>
+              <SelectItem value="place">Place</SelectItem>
+              <SelectItem value="skill">Skill</SelectItem>
+              <SelectItem value="item">Item</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+      </FormField>
+      <FormField
+        id="glossary-note"
+        label="Note"
+        hint="Optional context for future editing."
+        error={errors.note}
+      >
+        {({ id, ...fieldProps }) => (
+          <Textarea
+            {...fieldProps}
+            id={id}
+            value={draft.note}
+            maxLength={1000}
+            onChange={(event) => onUpdateDraft({ note: event.target.value })}
+            className="min-h-10"
+          />
+        )}
+      </FormField>
+      <DialogFooter className="sm:col-span-2">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={pending}>
+          {pending ? (
+            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
+          ) : (
+            <Check className="size-4" />
+          )}
+          {submitLabel}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 export function GlossaryTermDialog({
   mode,
   open,
@@ -131,129 +296,26 @@ export function GlossaryTermDialog({
         </DialogClose>
 
         {replacement && mode === "edit" ? (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
-              <p className="font-medium text-foreground">
-                Replace this target in translated chapters?
-              </p>
-              <p className="mt-2 text-muted-foreground">
-                The old target{" "}
-                <span className="font-medium text-foreground">“{editState?.originalTarget}”</span>{" "}
-                appears in {replacement.chapterCount} translated chapter(s) (
-                {replacement.occurrences} occurrence(s)).
-              </p>
-            </div>
-            <p className="text-caption text-muted-foreground">
-              Replacement is an exact, case-sensitive match and may also match inside longer words.
-              This cannot be undone.
-            </p>
-            <DialogFooter>
-              <Button variant="outline" onClick={onBackFromReplacement} disabled={savingEdit}>
-                <ArrowLeft className="size-4" />
-                Back
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => onReplaceConfirm(false)}
-                disabled={savingEdit}
-              >
-                Save glossary only
-              </Button>
-              <Button onClick={() => onReplaceConfirm(true)} disabled={savingEdit}>
-                {savingEdit && (
-                  <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
-                )}
-                {savingEdit ? "Saving…" : "Replace & save"}
-              </Button>
-            </DialogFooter>
-          </div>
+          <GlossaryReplacementStep
+            replacement={replacement}
+            originalTarget={editState?.originalTarget ?? ""}
+            savingEdit={savingEdit}
+            onBack={onBackFromReplacement}
+            onConfirm={onReplaceConfirm}
+          />
         ) : (
-          <form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
-            <FormField id="glossary-source" label="Source term" error={errors.source}>
-              {({ id, ...fieldProps }) => (
-                <Input
-                  {...fieldProps}
-                  id={id}
-                  value={draft.source}
-                  maxLength={500}
-                  onChange={(event) => updateDraft({ source: event.target.value })}
-                />
-              )}
-            </FormField>
-            <FormField id="glossary-target" label="Target translation" error={errors.target}>
-              {({ id, ...fieldProps }) => (
-                <Input
-                  {...fieldProps}
-                  id={id}
-                  value={draft.target}
-                  maxLength={500}
-                  onChange={(event) => updateDraft({ target: event.target.value })}
-                />
-              )}
-            </FormField>
-            <FormField id="glossary-category" label="Category" error={errors.category}>
-              {({ id, ...fieldProps }) => (
-                <Select
-                  value={draft.category}
-                  items={categoryItems}
-                  onValueChange={(value) =>
-                    value && updateDraft({ category: value as TermCategory })
-                  }
-                >
-                  <SelectTrigger {...fieldProps} id={id}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="character">Character</SelectItem>
-                    <SelectItem value="place">Place</SelectItem>
-                    <SelectItem value="skill">Skill</SelectItem>
-                    <SelectItem value="item">Item</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </FormField>
-            <FormField
-              id="glossary-note"
-              label="Note"
-              hint="Optional context for future editing."
-              error={errors.note}
-            >
-              {({ id, ...fieldProps }) => (
-                <Textarea
-                  {...fieldProps}
-                  id={id}
-                  value={draft.note}
-                  maxLength={1000}
-                  onChange={(event) => updateDraft({ note: event.target.value })}
-                  className="min-h-10"
-                />
-              )}
-            </FormField>
-            <DialogFooter className="sm:col-span-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={pending}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending}>
-                {pending && <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />}
-                {!pending && <Check className="size-4" />}
-                {mode === "edit"
-                  ? previewingReplace
-                    ? "Checking chapters…"
-                    : savingEdit
-                      ? "Saving…"
-                      : "Save term"
-                  : addingTerm
-                    ? "Adding…"
-                    : "Add term"}
-              </Button>
-            </DialogFooter>
-          </form>
+          <GlossaryTermForm
+            mode={mode}
+            draft={draft}
+            errors={errors}
+            pending={pending}
+            addingTerm={addingTerm}
+            savingEdit={savingEdit}
+            previewingReplace={previewingReplace}
+            onSubmit={onSubmit}
+            onCancel={() => onOpenChange(false)}
+            onUpdateDraft={updateDraft}
+          />
         )}
       </DialogContent>
     </Dialog>

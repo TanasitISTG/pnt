@@ -64,6 +64,162 @@ const VIEW_MODES: { value: ReaderViewMode; label: string; icon: typeof Columns2 
   { value: "translated", label: "Translated", icon: BookOpen },
   { value: "raw", label: "Raw", icon: FileText },
 ];
+type ReaderNavigationProps = Pick<
+  ReaderToolbarProps,
+  "novelId" | "chapterId" | "chapter" | "chapters" | "prevChapter" | "nextChapter" | "onGoToChapter"
+>;
+
+function ReaderNavigation({
+  novelId,
+  chapterId,
+  chapter,
+  chapters,
+  prevChapter,
+  nextChapter,
+  onGoToChapter,
+}: ReaderNavigationProps) {
+  return (
+    <div className="flex items-center gap-1.5 w-full sm:w-auto sm:flex-1 sm:max-w-xl">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 shrink-0"
+        render={<Link to="/novels/$novelId" params={{ novelId }} />}
+        aria-label="Back to chapter list"
+      >
+        <ArrowLeft className="size-4" />
+      </Button>
+      <Select value={chapterId} onValueChange={(id) => onGoToChapter(id as string)}>
+        <SelectTrigger
+          className="min-w-0 flex-1 sm:max-w-md"
+          aria-label={`Current chapter: Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
+        >
+          <SelectValue>
+            {`Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {chapters.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {`Ch. ${Number(c.number)} — ${c.translatedTitle ?? c.title}`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex items-center shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          disabled={!prevChapter}
+          onClick={() => prevChapter && onGoToChapter(prevChapter.id)}
+          aria-label="Previous chapter"
+          title="Previous chapter (←)"
+        >
+          <ChevronLeft className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          disabled={!nextChapter}
+          onClick={() => nextChapter && onGoToChapter(nextChapter.id)}
+          aria-label="Next chapter"
+          title="Next chapter (→)"
+        >
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ViewModeGroup({
+  viewMode,
+  onSelect,
+}: {
+  viewMode: ReaderViewMode;
+  onSelect: (value: ReaderViewMode) => void;
+}) {
+  return (
+    <div
+      className="inline-flex items-center gap-0.5 rounded-lg border border-border p-0.5"
+      role="group"
+      aria-label="View mode"
+    >
+      {VIEW_MODES.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onSelect(value)}
+          aria-pressed={viewMode === value}
+          title={label}
+          className={cn(
+            "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors",
+            viewMode === value
+              ? "bg-muted font-semibold text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <Icon className="size-4" />
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TranslateAction({
+  hasTranslation,
+  editing,
+  jobRunning,
+  activeJob,
+  onTranslateRequest,
+}: Pick<
+  ReaderToolbarProps,
+  "hasTranslation" | "editing" | "jobRunning" | "activeJob" | "onTranslateRequest"
+>) {
+  if (jobRunning) {
+    if (!activeJob) {
+      return (
+        <span className="text-caption text-muted-foreground" role="status">
+          Translation in progress
+        </span>
+      );
+    }
+    return (
+      <div className="flex min-w-36 flex-col gap-1">
+        <div className="flex justify-between text-xs text-muted-foreground font-mono">
+          <span>Translating...</span>
+          <span>
+            {activeJob.doneChunks}/{activeJob.totalChunks}
+          </span>
+        </div>
+        <Progress
+          value={
+            activeJob.totalChunks > 0
+              ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
+              : 0
+          }
+          className="h-1.5"
+        />
+      </div>
+    );
+  }
+  if (editing) return null;
+  return (
+    <Button
+      variant={hasTranslation ? "outline" : "default"}
+      size="sm"
+      onClick={onTranslateRequest}
+      aria-label={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
+      title={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
+    >
+      <RotateCw className="size-4" />
+      <span className="hidden sm:inline">{hasTranslation ? "Re-translate" : "Translate"}</span>
+    </Button>
+  );
+}
 
 export function ReaderToolbar({
   novelId,
@@ -89,98 +245,27 @@ export function ReaderToolbar({
   return (
     <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
       {/* Navigation Group */}
-      <div className="flex items-center gap-1.5 w-full sm:w-auto sm:flex-1 sm:max-w-xl">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8 shrink-0"
-          render={<Link to="/novels/$novelId" params={{ novelId }} />}
-          aria-label="Back to chapter list"
-        >
-          <ArrowLeft className="size-4" />
-        </Button>
-
-        <Select value={chapterId} onValueChange={(id) => onGoToChapter(id as string)}>
-          <SelectTrigger
-            className="min-w-0 flex-1 sm:max-w-md"
-            aria-label={`Current chapter: Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
-          >
-            <SelectValue>
-              {`Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {chapters.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {`Ch. ${Number(c.number)} — ${c.translatedTitle ?? c.title}`}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="flex items-center shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            disabled={!prevChapter}
-            onClick={() => prevChapter && onGoToChapter(prevChapter.id)}
-            aria-label="Previous chapter"
-            title="Previous chapter (←)"
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            disabled={!nextChapter}
-            onClick={() => nextChapter && onGoToChapter(nextChapter.id)}
-            aria-label="Next chapter"
-            title="Next chapter (→)"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      </div>
-
+      <ReaderNavigation
+        novelId={novelId}
+        chapterId={chapterId}
+        chapter={chapter}
+        chapters={chapters}
+        prevChapter={prevChapter}
+        nextChapter={nextChapter}
+        onGoToChapter={onGoToChapter}
+      />
       {/* Reader Controls Group */}
       <div className="flex items-center justify-end gap-2 w-full sm:w-auto sm:ml-auto shrink-0">
-        {hasTranslation && !editing && (
-          <div
-            className="inline-flex items-center gap-0.5 rounded-lg border border-border p-0.5"
-            role="group"
-            aria-label="View mode"
-          >
-            {VIEW_MODES.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => update({ viewMode: value })}
-                aria-pressed={viewMode === value}
-                title={label}
-                className={cn(
-                  "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors",
-                  viewMode === value
-                    ? "bg-muted font-semibold text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="size-4" />
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
+        {hasTranslation && !editing ? (
+          <ViewModeGroup viewMode={viewMode} onSelect={(value) => update({ viewMode: value })} />
+        ) : null}
         <ReaderSettingsPanel
           settings={settings}
           update={update}
           theme={theme}
           setTheme={setTheme}
         />
-
-        {isAdmin && !editing && !jobRunning && (
+        {isAdmin && !editing && !jobRunning ? (
           <Button
             variant="outline"
             size="sm"
@@ -191,9 +276,8 @@ export function ReaderToolbar({
             <Pencil className="size-4" />
             <span className="hidden sm:inline">Edit</span>
           </Button>
-        )}
-
-        {hasTranslation && !editing && !jobRunning && (
+        ) : null}
+        {hasTranslation && !editing && !jobRunning ? (
           <Button
             variant="outline"
             size="sm"
@@ -209,48 +293,16 @@ export function ReaderToolbar({
             <Download className="size-4" />
             <span className="hidden sm:inline">.txt</span>
           </Button>
-        )}
-
-        {isAdmin &&
-          (jobRunning ? (
-            activeJob ? (
-              <div className="flex min-w-36 flex-col gap-1">
-                <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                  <span>Translating...</span>
-                  <span>
-                    {activeJob.doneChunks}/{activeJob.totalChunks}
-                  </span>
-                </div>
-                <Progress
-                  value={
-                    activeJob.totalChunks > 0
-                      ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
-                      : 0
-                  }
-                  className="h-1.5"
-                />
-              </div>
-            ) : (
-              <span className="text-caption text-muted-foreground" role="status">
-                Translation in progress
-              </span>
-            )
-          ) : (
-            !editing && (
-              <Button
-                variant={hasTranslation ? "outline" : "default"}
-                size="sm"
-                onClick={onTranslateRequest}
-                aria-label={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
-                title={hasTranslation ? "Re-translate chapter" : "Translate chapter"}
-              >
-                <RotateCw className="size-4" />
-                <span className="hidden sm:inline">
-                  {hasTranslation ? "Re-translate" : "Translate"}
-                </span>
-              </Button>
-            )
-          ))}
+        ) : null}
+        {isAdmin ? (
+          <TranslateAction
+            hasTranslation={hasTranslation}
+            editing={editing}
+            jobRunning={jobRunning}
+            activeJob={activeJob}
+            onTranslateRequest={onTranslateRequest}
+          />
+        ) : null}
       </div>
     </div>
   );

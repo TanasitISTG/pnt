@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, Globe, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatLocalDateTime } from "@/lib/date-time";
 import { publishState } from "@/lib/content/publish";
+import { useHydrated } from "@/lib/use-hydrated";
 
 interface PublishMenuProps {
   publishedAt: Date | string | null | undefined;
@@ -45,9 +46,8 @@ export function PublishMenu({
   const state = publishState(publishedAt);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [value, setValue] = useState("");
-  // Locale-dependent formatting runs after mount so SSR and hydration render identical text.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // Locale-dependent formatting waits for hydration so server and client snapshots agree.
+  const mounted = useHydrated();
 
   const openSchedule = () => {
     const base = publishedAt ? new Date(publishedAt) : new Date();

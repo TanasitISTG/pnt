@@ -4,6 +4,41 @@ import { getReaderProgress, markChapterRead, saveScrollPosition } from "@/lib/re
 
 // Reader scroll lifecycle: marks the chapter read, restores the saved scroll
 // fraction on load, and persists scroll position while scrolling.
+interface MutableValue<T> {
+  current: T;
+}
+
+function createScrollPersistence(
+  novelId: string,
+  chapterId: string,
+  isRestoringRef: MutableValue<boolean>,
+  restoredChapterRef: MutableValue<string | null>,
+) {
+  let timer: number | NodeJS.Timeout | undefined;
+
+  const handleScroll = () => {
+    if (isRestoringRef.current || restoredChapterRef.current !== chapterId || timer !== undefined) {
+      return;
+    }
+    timer = setTimeout(() => {
+      timer = undefined;
+      if (isRestoringRef.current || restoredChapterRef.current !== chapterId) return;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (maxScroll > 50) {
+        const fraction = window.scrollY / maxScroll;
+        if (fraction > 0.005) saveScrollPosition(novelId, fraction);
+      }
+    }, 300);
+  };
+
+  const dispose = () => {
+    clearTimeout(timer);
+    timer = undefined;
+  };
+
+  return { handleScroll, dispose };
+}
+
 export function useReaderScroll(
   novelId: string,
   chapterId: string,
@@ -87,29 +122,16 @@ export function useReaderScroll(
   }, [chapterId, novelId, chapter]);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const handleScroll = () => {
-      if (isRestoringRef.current || restoredChapterRef.current !== chapterId) return;
-      if (timer) return;
-      timer = setTimeout(() => {
-        timer = null;
-        if (isRestoringRef.current || restoredChapterRef.current !== chapterId) return;
-        const docHeight = document.documentElement.scrollHeight;
-        const viewportHeight = window.innerHeight;
-        const maxScroll = docHeight - viewportHeight;
-        if (maxScroll > 50) {
-          const fraction = window.scrollY / maxScroll;
-          if (fraction > 0.005) {
-            saveScrollPosition(novelId, fraction);
-          }
-        }
-      }, 300);
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
+    const persistence = createScrollPersistence(
+      novelId,
+      chapterId,
+      isRestoringRef,
+      restoredChapterRef,
+    );
+    window.addEventListener("scroll", persistence.handleScroll, { passive: true });
     return () => {
-      if (timer) clearTimeout(timer);
-      window.removeEventListener("scroll", handleScroll);
+      persistence.dispose();
+      window.removeEventListener("scroll", persistence.handleScroll);
     };
   }, [novelId, chapterId]);
 }

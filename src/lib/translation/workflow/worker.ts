@@ -8,7 +8,8 @@ import {
   buildSystemPrompt,
   buildUserMessage,
 } from "../prompts/translation";
-import { findResidualSourceChars } from "../text/residual";
+import { LANG_LABELS, normalizePair } from "../prompts/language";
+import { scanResidualScripts, sourceTagsArePreserved, spliceResidualSpans } from "../text/residual";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "../glossary/terms";
 import {
   injectParagraphMarkers,
@@ -16,7 +17,6 @@ import {
   countParagraphMarkers,
   normalizeTranslationOutput,
 } from "../text/paragraphs";
-import { extractHanziSpans, spliceSpans } from "../text/residual-repair";
 import { createLog } from "./log-entry";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
 import type { ChunkRelationshipAnalysis } from "@/lib/relationships/analyzer";
@@ -63,6 +63,7 @@ async function translatePiece(
   systemPrompt: string,
   residualRepairPrompt: string,
   langPair: string,
+  protectedTerms: readonly string[],
   logs: LogEntry[],
   chunkLabel: string,
 ): Promise<TranslatePieceResult> {
@@ -126,15 +127,18 @@ async function translatePiece(
     }
   }
 
-  // Residual-hanzi repair runs on the MARKED text, so the "preserve ||¶|| markers"
+  // Residual-script repair runs on the MARKED text, so the "preserve ||¶|| markers"
   // instruction in the retry prompt stays truthful; restore once at the end.
-  const repaired = await repairResidualHanzi(
+  const repaired = await repairResidualScripts(
     translation,
     providerConfig,
     systemPrompt,
     residualRepairPrompt,
     userMessage,
     langPair,
+    text,
+    expectedMarkers,
+    protectedTerms,
     logs,
     chunkLabel,
   );
@@ -146,7 +150,7 @@ async function translatePiece(
 }
 
 // ---------------------------------------------------------------------------
-// Residual hanzi repair
+// Residual-script repair
 // ---------------------------------------------------------------------------
 // Surgical splice first (cheap, precise — the common case is short spans like
 // bracketed system lines and names). Whole-chunk retry only when a long span
@@ -155,27 +159,63 @@ async function translatePiece(
 // kept and surfaced via the admin badge.
 const LONG_SPAN_LIMIT = 200;
 
-async function repairResidualHanzi(
+function countExactOccurrences(text: string, needle: string): number {
+  if (!needle) return 0;
+  let count = 0;
+  let from = 0;
+  while (from <= text.length - needle.length) {
+    const index = text.indexOf(needle, from);
+    if (index < 0) break;
+    count++;
+    from = index + 1;
+  }
+  return count;
+}
+
+function protectedTermsArePreserved(
+  originalText: string,
+  repairedText: string,
+  protectedTerms: readonly string[],
+): boolean {
+  for (const term of new Set(protectedTerms)) {
+    if (
+      term &&
+      countExactOccurrences(repairedText, term) < countExactOccurrences(originalText, term)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function repairResidualScripts(
   translation: string,
   providerConfig: AIProviderClient,
   systemPrompt: string,
   residualRepairPrompt: string,
   userMessage: string,
   langPair: string,
+  sourceText: string,
+  expectedMarkers: number,
+  protectedTerms: readonly string[],
   logs: LogEntry[],
   chunkLabel: string,
 ): Promise<TranslatePieceResult> {
   let text = translation;
   let promptTokens = 0;
   let completionTokens = 0;
+  let residual = scanResidualScripts(langPair, text, { sourceText, protectedTerms });
+  if (residual.letterCount === 0) return { translation: text, promptTokens, completionTokens };
 
-  const initial = findResidualSourceChars(langPair, text);
-  if (initial.length === 0) return { translation: text, promptTokens, completionTokens };
   logs.push(
-    createLog("warn", `${chunkLabel} has ${initial.length} untranslated hanzi — repairing.`),
+    createLog(
+      "warn",
+      `${chunkLabel} has ${residual.letterCount} foreign-script letters — repairing.`,
+    ),
   );
 
-  if (extractHanziSpans(text).some((s) => s.text.length > LONG_SPAN_LIMIT)) {
+  const { target } = LANG_LABELS[normalizePair(langPair)];
+  if (residual.spans.some((span) => span.letterCount > LONG_SPAN_LIMIT)) {
     try {
       const repaired = await retryTranslationOperation(async () => {
         const fix = await providerConfig.generateChatCompletion({
@@ -185,8 +225,7 @@ async function repairResidualHanzi(
             { role: "assistant", content: text },
             {
               role: "user",
-              content:
-                "Your translation still contains untranslated Chinese text. Re-output the COMPLETE translation with every Chinese word translated or transliterated — including bracketed lines, notifications, and all names. Preserve every ||¶|| marker exactly. Output only the corrected translation.",
+              content: `Your translation contains ${residual.letterCount} letters from writing systems other than ${target}. Re-output the COMPLETE translation with every off-script word translated or transliterated into ${target} — including bracketed lines, notifications, names, and usernames. Preserve every ||¶|| marker and source HTML/XML-like tag exactly. Output only the corrected translation.`,
             },
           ],
         });
@@ -194,13 +233,25 @@ async function repairResidualHanzi(
         completionTokens += fix.usage?.completionTokens || 0;
 
         const fixed = fix.content || "";
-        if (!fixed.trim()) throw new Error("Empty Hanzi repair completion");
-        if (extractHanziSpans(fixed).some((s) => s.text.length > LONG_SPAN_LIMIT)) {
-          throw new Error("Hanzi repair still contains a long span");
+        if (!fixed.trim()) throw new Error("Empty residual-script repair completion");
+        if (
+          countParagraphMarkers(fixed) !== expectedMarkers ||
+          !sourceTagsArePreserved(sourceText, fixed) ||
+          !protectedTermsArePreserved(text, fixed, protectedTerms)
+        ) {
+          throw new Error("Residual-script repair did not preserve protected structure");
+        }
+        const fixedResidual = scanResidualScripts(langPair, fixed, {
+          sourceText,
+          protectedTerms,
+        });
+        if (fixedResidual.spans.some((span) => span.letterCount > LONG_SPAN_LIMIT)) {
+          throw new Error("Residual-script repair still contains a long span");
         }
         return fixed;
       });
       text = repaired;
+      residual = scanResidualScripts(langPair, text, { sourceText, protectedTerms });
       logs.push(createLog("info", `${chunkLabel} re-requested for untranslated passage.`));
     } catch (fixErr) {
       logs.push(
@@ -213,9 +264,12 @@ async function repairResidualHanzi(
   }
 
   // Surgical splice for what remains (primary path, or stragglers after retry).
-  const spans = extractHanziSpans(text);
-  const stillDirty = findResidualSourceChars(langPair, text).length > 0;
-  if (stillDirty && spans.length > 0 && spans.every((s) => s.text.length <= LONG_SPAN_LIMIT)) {
+  const spans = residual.spans;
+  if (
+    residual.letterCount > 0 &&
+    spans.length > 0 &&
+    spans.every((span) => span.letterCount <= LONG_SPAN_LIMIT)
+  ) {
     try {
       const repaired = await retryTranslationOperation(async () => {
         const repair = await providerConfig.generateChatCompletion({
@@ -225,7 +279,7 @@ async function repairResidualHanzi(
               role: "system",
               content: residualRepairPrompt,
             },
-            { role: "user", content: JSON.stringify({ segments: spans.map((s) => s.text) }) },
+            { role: "user", content: JSON.stringify({ segments: spans.map((span) => span.text) }) },
           ],
           responseFormat: { type: "json_object" },
         });
@@ -236,7 +290,7 @@ async function repairResidualHanzi(
         try {
           parsed = JSON.parse(repair.content || "{}") as unknown;
         } catch {
-          throw new Error("Invalid Hanzi span repair response");
+          throw new Error("Invalid residual-script span repair response");
         }
         const replacements = Array.isArray(parsed)
           ? parsed
@@ -250,17 +304,24 @@ async function repairResidualHanzi(
             (replacement): replacement is string => typeof replacement === "string",
           )
         ) {
-          throw new Error("Invalid Hanzi span repair response");
+          throw new Error("Invalid residual-script span repair response");
         }
 
-        const spliced = spliceSpans(text, spans, replacements);
-        if (spliced === null || findResidualSourceChars(langPair, spliced).length > 0) {
-          throw new Error("Invalid Hanzi span repair response");
+        const spliced = spliceResidualSpans(text, spans, replacements);
+        if (spliced === null) {
+          throw new Error("Invalid residual-script span repair response");
+        }
+        const remaining = scanResidualScripts(langPair, spliced, {
+          sourceText,
+          protectedTerms,
+        });
+        if (remaining.letterCount > 0) {
+          throw new Error("Invalid residual-script span repair response");
         }
         return spliced;
       });
       text = repaired;
-      logs.push(createLog("success", `${chunkLabel} hanzi spans repaired.`));
+      logs.push(createLog("success", `${chunkLabel} foreign-script spans repaired.`));
     } catch (spanErr) {
       logs.push(
         createLog(
@@ -269,11 +330,11 @@ async function repairResidualHanzi(
         ),
       );
     }
-  } else if (stillDirty) {
+  } else if (residual.letterCount > 0) {
     logs.push(
       createLog(
         "warn",
-        `${chunkLabel} still has ${findResidualSourceChars(langPair, text).length} hanzi after retry — keeping anyway.`,
+        `${chunkLabel} still has ${residual.letterCount} foreign-script letters after retry — keeping anyway.`,
       ),
     );
   }
@@ -360,10 +421,11 @@ export async function translateChunk(
     novel.customPrompt,
   );
   const chunkLabel = `Chunk ${i + 1}/${job.totalChunks}`;
-
+  const protectedTerms = matchedTerms.map((term) => term.target);
   async function translatePieceWithAutoSplit(
     text: string,
     prevTail: string | null,
+    pieceProtectedTerms: readonly string[],
     depth = 0,
   ): Promise<TranslatePieceResult> {
     try {
@@ -374,6 +436,7 @@ export async function translateChunk(
         systemPrompt,
         residualRepairPrompt,
         langPair,
+        pieceProtectedTerms,
         logs,
         chunkLabel,
       );
@@ -392,9 +455,19 @@ export async function translateChunk(
         // ponytail: upgrade path — if 5-min budget per half is needed in future, split into separate Inngest steps.
         const [half1, half2] = splitAtParagraphBoundary(text);
         if (half1.length > 0 && half2.length > 0) {
-          const res1 = await translatePieceWithAutoSplit(half1, prevTail, depth + 1);
+          const res1 = await translatePieceWithAutoSplit(
+            half1,
+            prevTail,
+            pieceProtectedTerms,
+            depth + 1,
+          );
           const tail1 = res1.translation.slice(-tailLen);
-          const res2 = await translatePieceWithAutoSplit(half2, tail1, depth + 1);
+          const res2 = await translatePieceWithAutoSplit(
+            half2,
+            tail1,
+            pieceProtectedTerms,
+            depth + 1,
+          );
           return {
             translation: `${res1.translation}\n\n${res2.translation}`,
             promptTokens: res1.promptTokens + res2.promptTokens,
@@ -410,7 +483,12 @@ export async function translateChunk(
   let result: TranslatePieceResult;
 
   try {
-    result = await translatePieceWithAutoSplit(currentChunk.sourceText, previousChunkTail, 0);
+    result = await translatePieceWithAutoSplit(
+      currentChunk.sourceText,
+      previousChunkTail,
+      protectedTerms,
+      0,
+    );
   } catch (err) {
     // Record which chunk failed for the UI, then rethrow — Inngest owns retries.
     const error = err instanceof Error ? err.message : "API Error";

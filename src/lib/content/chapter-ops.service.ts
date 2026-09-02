@@ -1,9 +1,15 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { chapters, novels, translationJobs, translationOutbox } from "@/lib/db/schema";
+import {
+  chapters,
+  glossaryTerms,
+  novels,
+  translationJobs,
+  translationOutbox,
+} from "@/lib/db/schema";
 import { mapWithConcurrency } from "@/lib/async";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { nanoid } from "@/lib/utils";
@@ -14,6 +20,7 @@ import { createProviderClient } from "@/lib/translation/providers/provider-clien
 import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
 import { translateChapterTitle } from "@/lib/translation/workflow/title";
 import { parseRelationshipMap } from "@/lib/relationships/map";
+import { scanResidualScripts } from "@/lib/translation/text/residual";
 
 /** Split items into consecutive fixed-size batches, preserving order. */
 export function batchesOf<T>(items: T[], batchSize: number): T[][] {
@@ -22,6 +29,81 @@ export function batchesOf<T>(items: T[], batchSize: number): T[][] {
     batches.push(items.slice(i, i + batchSize));
   }
   return batches;
+}
+const RESIDUAL_SCAN_BATCH_SIZE = 100;
+
+export interface ResidualScriptChapter {
+  chapterId: string;
+  number: string;
+  count: number;
+}
+
+export async function getResidualScriptChaptersForUser(
+  userId: string,
+  novelId: string,
+): Promise<ResidualScriptChapter[]> {
+  const [novel] = await db
+    .select({
+      sourceLang: novels.sourceLang,
+      targetLang: novels.targetLang,
+    })
+    .from(novels)
+    .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+    .limit(1);
+
+  if (!novel) {
+    throw new SafeServerError("Novel not found or unauthorized");
+  }
+
+  const approvedTerms = await db
+    .select({ target: glossaryTerms.target })
+    .from(glossaryTerms)
+    .where(and(eq(glossaryTerms.novelId, novelId), eq(glossaryTerms.status, "approved")));
+  const pair = `${novel.sourceLang}->${novel.targetLang}`;
+  const protectedTerms = approvedTerms.map((term) => term.target);
+  const residualChapters: ResidualScriptChapter[] = [];
+  let lastChapterId: string | undefined;
+
+  while (true) {
+    const where = lastChapterId
+      ? and(
+          eq(chapters.novelId, novelId),
+          eq(chapters.status, "translated"),
+          gt(chapters.id, lastChapterId),
+        )
+      : and(eq(chapters.novelId, novelId), eq(chapters.status, "translated"));
+    const batch = await db
+      .select({
+        id: chapters.id,
+        number: chapters.number,
+        rawContent: chapters.rawContent,
+        translatedContent: chapters.translatedContent,
+      })
+      .from(chapters)
+      .where(where)
+      .orderBy(asc(chapters.id))
+      .limit(RESIDUAL_SCAN_BATCH_SIZE);
+
+    if (batch.length === 0) break;
+    for (const chapter of batch) {
+      if (!chapter.translatedContent) continue;
+      const residual = scanResidualScripts(pair, chapter.translatedContent, {
+        sourceText: chapter.rawContent,
+        protectedTerms,
+      });
+      if (residual.letterCount > 0) {
+        residualChapters.push({
+          chapterId: chapter.id,
+          number: chapter.number,
+          count: residual.letterCount,
+        });
+      }
+    }
+    lastChapterId = batch[batch.length - 1].id;
+    if (batch.length < RESIDUAL_SCAN_BATCH_SIZE) break;
+  }
+
+  return residualChapters;
 }
 
 export async function translateMissingTitlesForUser(

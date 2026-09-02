@@ -51,6 +51,7 @@ describe("useTranslationJob", () => {
       jobId: "job-101",
       totalChunks: 4,
     } as never);
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
     const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
 
@@ -68,6 +69,9 @@ describe("useTranslationJob", () => {
     });
     expect(toast.info).toHaveBeenCalledWith("Translation queued");
     expect(toast.error).not.toHaveBeenCalled();
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["residualScripts", "novel-1"],
+    });
   });
 
   it("batch response populates both jobs immediately with 0/totalChunks and triggers no error toast", async () => {

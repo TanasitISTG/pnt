@@ -37,6 +37,104 @@ const REASONING_EFFORT_OPTIONS: Array<{
   { value: "xhigh", label: "Extra high" },
   { value: "max", label: "Maximum" },
 ];
+
+function computeProviderSwitch(
+  newProvider: ProviderType,
+  current: { baseUrl: string; model: string },
+): { baseUrl: string; model: string } {
+  if (newProvider === "gemini") {
+    const baseUrl = "https://generativelanguage.googleapis.com";
+    const model = ["gpt-4o", "deepseek/deepseek-r1", "deepseek-chat"].includes(current.model)
+      ? "gemini-2.5-flash"
+      : current.model;
+    return { baseUrl, model };
+  }
+  const baseUrl =
+    current.baseUrl === "https://generativelanguage.googleapis.com" || !current.baseUrl
+      ? "https://api.openai.com/v1"
+      : current.baseUrl;
+  const model = current.model.startsWith("gemini") ? "gpt-4o" : current.model;
+  return { baseUrl, model };
+}
+
+function getReasoningEffortLabel(value: ReasoningEffort | null) {
+  const resolved = value ?? "default";
+  return (
+    REASONING_EFFORT_OPTIONS.find((option) => option.value === resolved)?.label ??
+    "Provider default"
+  );
+}
+
+function ReasoningEffortField({
+  value,
+  onChange,
+}: {
+  value: ReasoningEffort | null;
+  onChange: (value: ReasoningEffort | null) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="reasoningEffort">Reasoning Effort</Label>
+      <Select
+        value={value ?? "default"}
+        onValueChange={(next) => onChange(next === "default" ? null : (next as ReasoningEffort))}
+      >
+        <SelectTrigger id="reasoningEffort" className="h-10 w-full px-3 sm:max-w-md">
+          <SelectValue>{getReasoningEffortLabel(value)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="sm:max-w-md">
+          {REASONING_EFFORT_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="max-w-2xl text-caption text-muted-foreground">
+        OpenAI-compatible models only. Provider default omits the parameter; explicit levels may be
+        rejected by models that do not support reasoning effort.
+      </p>
+    </div>
+  );
+}
+
+function TemperatureField({
+  temperature,
+  disabled,
+  onChange,
+}: {
+  temperature: number;
+  disabled: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="temperature">Temperature</Label>
+        <span className="font-mono text-body text-foreground">{temperature.toFixed(1)}</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <input
+          id="temperature"
+          type="range"
+          min="0"
+          max="2"
+          step="0.1"
+          value={temperature}
+          disabled={disabled}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+          className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-muted accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </div>
+      <p className="text-caption text-muted-foreground">
+        {disabled
+          ? "OpenCode Luna does not support a custom temperature."
+          : "Lower values (0.2–0.5) produce more accurate translations; higher values (0.7–1.0) allow more creative flair."}
+      </p>
+    </div>
+  );
+}
+
 export interface ProviderTestResult {
   success: boolean;
   latencyMs?: number;
@@ -50,6 +148,111 @@ export interface ProviderSettingsCardProps {
   testing: boolean;
   onSave: (data: SaveProviderSettingsInput) => Promise<boolean>;
   onTest: (data: TestProviderConnectionInput) => Promise<ProviderTestResult>;
+}
+interface ProviderModelFieldsProps {
+  provider: ProviderType;
+  baseUrl: string;
+  model: string;
+  fastModel: string;
+  onBaseUrlChange: (value: string) => void;
+  onModelChange: (value: string) => void;
+  onFastModelChange: (value: string) => void;
+}
+
+function ProviderModelFields({
+  provider,
+  baseUrl,
+  model,
+  fastModel,
+  onBaseUrlChange,
+  onModelChange,
+  onFastModelChange,
+}: ProviderModelFieldsProps) {
+  const isGemini = provider === "gemini";
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="baseUrl">Base URL</Label>
+        <Input
+          id="baseUrl"
+          type="url"
+          required
+          value={baseUrl}
+          onChange={(e) => onBaseUrlChange(e.target.value)}
+          placeholder={
+            isGemini ? "https://generativelanguage.googleapis.com" : "https://api.openai.com/v1"
+          }
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="model">Model Name</Label>
+        <Input
+          id="model"
+          type="text"
+          required
+          value={model}
+          onChange={(e) => onModelChange(e.target.value)}
+          placeholder={isGemini ? "gemini-2.5-flash" : "gpt-4o"}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="fastModel">Fast Model (Cheaper tasks)</Label>
+        <Input
+          id="fastModel"
+          type="text"
+          value={fastModel}
+          onChange={(e) => onFastModelChange(e.target.value)}
+          placeholder={isGemini ? "gemini-2.5-flash" : "gpt-4o-mini"}
+        />
+        <p className="text-caption text-muted-foreground">
+          Optional. Used for title translation, chapter summaries, term suggestions, and story
+          context updates to reduce costs.
+        </p>
+      </div>
+    </>
+  );
+}
+
+interface ProviderFormActionsProps {
+  saving: boolean;
+  testing: boolean;
+  testDisabled: boolean;
+  testResult: ProviderTestResult | null;
+  showFullError: boolean;
+  onToggleFullError: () => void;
+  onTestConnection: () => void;
+}
+
+function ProviderFormActions({
+  saving,
+  testing,
+  testDisabled,
+  testResult,
+  showFullError,
+  onToggleFullError,
+  onTestConnection,
+}: ProviderFormActionsProps) {
+  return (
+    <>
+      {testResult ? (
+        <TestResultBanner
+          testResult={testResult}
+          showFullError={showFullError}
+          onToggleFullError={onToggleFullError}
+        />
+      ) : null}
+      <div className="flex flex-wrap items-center gap-4 pt-2">
+        <Button type="submit" disabled={saving}>
+          {saving ? <Loader2 className="animate-spin" /> : null}
+          {saving ? "Saving…" : "Save Settings"}
+        </Button>
+        <Button type="button" variant="outline" onClick={onTestConnection} disabled={testDisabled}>
+          {testing ? <Loader2 className="animate-spin" /> : <Zap className="size-4" />}
+          {testing ? "Testing…" : "Test Connection"}
+        </Button>
+      </div>
+    </>
+  );
 }
 
 export function ProviderSettingsCard({
@@ -88,19 +291,9 @@ export function ProviderSettingsCard({
   const handleProviderChange = (newProvider: ProviderType) => {
     setProvider(newProvider);
     setTestResult(null);
-    if (newProvider === "gemini") {
-      setBaseUrl("https://generativelanguage.googleapis.com");
-      if (model === "gpt-4o" || model === "deepseek/deepseek-r1" || model === "deepseek-chat") {
-        setModel("gemini-2.5-flash");
-      }
-    } else if (newProvider === "openai") {
-      if (baseUrl === "https://generativelanguage.googleapis.com" || !baseUrl) {
-        setBaseUrl("https://api.openai.com/v1");
-      }
-      if (model.startsWith("gemini")) {
-        setModel("gpt-4o");
-      }
-    }
+    const next = computeProviderSwitch(newProvider, { baseUrl, model });
+    setBaseUrl(next.baseUrl);
+    setModel(next.model);
   };
 
   const applyPreset = (
@@ -172,23 +365,15 @@ export function ProviderSettingsCard({
             onApplyPreset={applyPreset}
           />
 
-          {/* Base URL */}
-          <div className="space-y-2">
-            <Label htmlFor="baseUrl">Base URL</Label>
-            <Input
-              id="baseUrl"
-              type="url"
-              required
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder={
-                provider === "gemini"
-                  ? "https://generativelanguage.googleapis.com"
-                  : "https://api.openai.com/v1"
-              }
-            />
-          </div>
-
+          <ProviderModelFields
+            provider={provider}
+            baseUrl={baseUrl}
+            model={model}
+            fastModel={fastModel}
+            onBaseUrlChange={setBaseUrl}
+            onModelChange={setModel}
+            onFastModelChange={setFastModel}
+          />
           <ApiKeySection
             provider={provider}
             apiKey={apiKey}
@@ -197,91 +382,15 @@ export function ProviderSettingsCard({
             apiKeyMasked={apiKeyMasked}
           />
 
-          {/* Model */}
-          <div className="space-y-2">
-            <Label htmlFor="model">Model Name</Label>
-            <Input
-              id="model"
-              type="text"
-              required
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder={provider === "gemini" ? "gemini-2.5-flash" : "gpt-4o"}
-            />
-          </div>
-
-          {/* Fast Model */}
-          <div className="space-y-2">
-            <Label htmlFor="fastModel">Fast Model (Cheaper tasks)</Label>
-            <Input
-              id="fastModel"
-              type="text"
-              value={fastModel}
-              onChange={(e) => setFastModel(e.target.value)}
-              placeholder={provider === "gemini" ? "gemini-2.5-flash" : "gpt-4o-mini"}
-            />
-            <p className="text-caption text-muted-foreground">
-              Optional. Used for title translation, chapter summaries, term suggestions, and story
-              context updates to reduce costs.
-            </p>
-          </div>
-
           {provider === "openai" ? (
-            <div className="space-y-2">
-              <Label htmlFor="reasoningEffort">Reasoning Effort</Label>
-              <Select
-                value={reasoningEffort ?? "default"}
-                onValueChange={(value) =>
-                  setReasoningEffort(value === "default" ? null : (value as ReasoningEffort))
-                }
-              >
-                <SelectTrigger id="reasoningEffort" className="h-10 w-full px-3 sm:max-w-md">
-                  <SelectValue>
-                    {REASONING_EFFORT_OPTIONS.find(
-                      (option) => option.value === (reasoningEffort ?? "default"),
-                    )?.label ?? "Provider default"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="sm:max-w-md">
-                  {REASONING_EFFORT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="max-w-2xl text-caption text-muted-foreground">
-                OpenAI-compatible models only. Provider default omits the parameter; explicit levels
-                may be rejected by models that do not support reasoning effort.
-              </p>
-            </div>
+            <ReasoningEffortField value={reasoningEffort} onChange={setReasoningEffort} />
           ) : null}
 
-          {/* Temperature */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="temperature">Temperature</Label>
-              <span className="font-mono text-body text-foreground">{temperature.toFixed(1)}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <input
-                id="temperature"
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={temperature}
-                disabled={isTemperatureDisabled}
-                onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-muted accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            <p className="text-caption text-muted-foreground">
-              {isTemperatureDisabled
-                ? "OpenCode Luna does not support a custom temperature."
-                : "Lower values (0.2–0.5) produce more accurate translations; higher values (0.7–1.0) allow more creative flair."}
-            </p>
-          </div>
+          <TemperatureField
+            temperature={temperature}
+            disabled={isTemperatureDisabled}
+            onChange={setTemperature}
+          />
 
           <TimeoutPricingFields
             requestTimeoutSec={requestTimeoutSec}
@@ -292,31 +401,15 @@ export function ProviderSettingsCard({
             onOutputPriceChange={setOutputPrice}
           />
 
-          {/* Test connection result banner */}
-          {testResult && (
-            <TestResultBanner
-              testResult={testResult}
-              showFullError={showFullError}
-              onToggleFullError={() => setShowFullError((prev) => !prev)}
-            />
-          )}
-
-          {/* Buttons */}
-          <div className="flex flex-wrap items-center gap-4 pt-2">
-            <Button type="submit" disabled={saving}>
-              {saving && <Loader2 className="animate-spin" />}
-              {saving ? "Saving…" : "Save Settings"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleTestConnection}
-              disabled={testing || (!hasApiKey && !apiKey) || !baseUrl || !model}
-            >
-              {testing ? <Loader2 className="animate-spin" /> : <Zap className="size-4" />}
-              {testing ? "Testing…" : "Test Connection"}
-            </Button>
-          </div>
+          <ProviderFormActions
+            saving={saving}
+            testing={testing}
+            testDisabled={testing || (!hasApiKey && !apiKey) || !baseUrl || !model}
+            testResult={testResult}
+            showFullError={showFullError}
+            onToggleFullError={() => setShowFullError((prev) => !prev)}
+            onTestConnection={handleTestConnection}
+          />
         </form>
       </CardContent>
     </Card>

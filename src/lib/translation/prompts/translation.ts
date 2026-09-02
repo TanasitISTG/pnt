@@ -110,7 +110,7 @@ export function buildResidualRepairPrompt(
   const normalizedPair = normalizePair(pair);
   const { source, target } = LANG_LABELS[normalizedPair];
   const sections = [
-    `You repair residual Chinese web-novel fragments in ${source} web novels into ${target}.`,
+    `You repair fragments written in the wrong writing system in ${source} to ${target} web-novel translations.`,
     getPriorityOrder(),
   ];
 
@@ -134,7 +134,7 @@ export function buildResidualRepairPrompt(
       "## Output Contract",
       'Return exactly one JSON object: {"translations":["..."]}.',
       "- Include exactly one string per supplied segment, in the same order and count.",
-      "- Translate or transliterate every Chinese word in every segment; no Chinese characters may remain.",
+      `- Translate or transliterate every supplied segment into ${target}; no letters from another writing system may remain.`,
       "- Output no Markdown, explanation, or additional keys.",
     ].join("\n"),
   );

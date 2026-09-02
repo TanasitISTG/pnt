@@ -6,7 +6,6 @@ import {
   buildSummaryPrompt,
   buildTitlePrompt,
 } from "./translation";
-import { findResidualSourceChars, RESIDUAL_CJK_CLASS, RESIDUAL_CJK_SQL_RE } from "../text/residual";
 import { formatRelationshipContext } from "./relationship-context";
 import {
   buildRelationshipPromptContext,
@@ -332,17 +331,6 @@ describe("prompts module", () => {
     expect(buildUserMessage("text", "   ")).not.toContain("Preceding");
   });
 
-  // -- findResidualSourceChars -----------------------------------------------
-
-  it("findResidualSourceChars flags hanzi regardless of pair", () => {
-    expect(findResidualSourceChars("zh->th", "สวัสดี【虎哥送嘉年华】ครับ")).toHaveLength(6);
-    expect(findResidualSourceChars("zh->en", "clean English text")).toHaveLength(0);
-    expect(findResidualSourceChars("zh->th", "ข้อความไทยล้วน")).toHaveLength(0);
-    expect(findResidualSourceChars("en->th", "leftover English words")).toHaveLength(0);
-    // en->th with CJK = misconfigured sourceLang or model artifact — still flagged.
-    expect(findResidualSourceChars("en->th", "เหลือ剩余คำ")).toHaveLength(2);
-  });
-
   // -- buildSummaryPrompt ----------------------------------------------------
 
   it("buildSummaryPrompt returns structured format with English requirement", () => {
@@ -427,8 +415,8 @@ describe("prompts module", () => {
       "Keep names consistent.",
     );
 
-    expect(prompt).toContain("residual Chinese web-novel fragments");
-    expect(prompt).toContain("Chinese web novels into Thai");
+    expect(prompt).toContain("fragments written in the wrong writing system");
+    expect(prompt).toContain("Chinese to Thai web-novel translations");
     expect(prompt).toContain("## Translation Priorities");
     expect(prompt).toContain("## Terminology & Glossary");
     expect(prompt).toContain("## Story Context");
@@ -436,7 +424,7 @@ describe("prompts module", () => {
     expect(prompt).toContain("## Custom Instructions");
     expect(prompt).toContain('{"translations":["..."]}');
     expect(prompt).toContain("one string per supplied segment");
-    expect(prompt).toContain("no Chinese characters may remain");
+    expect(prompt).toContain("no letters from another writing system may remain");
 
     const glossaryIndex = prompt.indexOf("## Terminology & Glossary");
     const storyIndex = prompt.indexOf("## Story Context");
@@ -468,28 +456,6 @@ describe("prompts module", () => {
     expect(prompt).toContain("## Output Contract");
   });
 
-  // -- Shared residual CJK class (JS scanner ↔ SQL pre-filter) ---------------
-
-  it("RESIDUAL_CJK_SQL_RE is a bracket class built from the shared char class", () => {
-    expect(RESIDUAL_CJK_SQL_RE).toBe(`[${RESIDUAL_CJK_CLASS}]`);
-  });
-
-  it("SQL class matches exactly what the JS scanner flags", () => {
-    // The DB pre-filter and the JS counter must agree, or the badge would
-    // miss chapters the repair pass flags (or vice versa).
-    const sqlRe = new RegExp(RESIDUAL_CJK_SQL_RE);
-    const samples = [
-      "ภาคที่หนึ่ง 第一章 เข้าสู่", // unified ideographs in Thai prose
-      "㐀", // ext-A
-      "豈", // compat ideograph
-      "clean English text",
-      "ข้อความไทยล้วน", // pure Thai
-      "",
-    ];
-    for (const s of samples) {
-      expect(sqlRe.test(s)).toBe(findResidualSourceChars("zh->th", s).length > 0);
-    }
-  });
   it("keeps relationship context pairs referentially closed at the shared cap", () => {
     const timestamp = "2026-01-01T00:00:00.000Z";
     const characters = Array.from({ length: 26 }, (_, index) => ({

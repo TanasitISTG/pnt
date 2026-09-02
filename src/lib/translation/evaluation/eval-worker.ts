@@ -5,7 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { chapters, glossaryTerms, novels, translationEvalReports } from "@/lib/db/schema";
 import { splitParagraphs } from "@/lib/translation/text/paragraphs";
-import { findResidualSourceChars } from "@/lib/translation/text/residual";
+import { scanResidualScripts } from "@/lib/translation/text/residual";
 
 function parseSelector(selector: string): number[] | null {
   const normalized = selector.trim().toLowerCase();
@@ -66,7 +66,12 @@ export async function runTranslationEvalReport(reportId: string) {
       const translatedText = chapter.translatedContent || "";
       const rawParagraphCount = splitParagraphs(chapter.rawContent).length;
       const translatedParagraphCount = translatedText ? splitParagraphs(translatedText).length : 0;
-      const residual = translatedText ? findResidualSourceChars(pair, translatedText).length : 0;
+      const residualScriptLetters = translatedText
+        ? scanResidualScripts(pair, translatedText, {
+            sourceText: chapter.rawContent,
+            protectedTerms: terms.map((term) => term.target),
+          }).letterCount
+        : 0;
       const matchedTerms = terms.filter((term) => chapter.rawContent.includes(term.source));
       const adheredTerms = matchedTerms.filter((term) => translatedText.includes(term.target));
       return {
@@ -74,7 +79,7 @@ export async function runTranslationEvalReport(reportId: string) {
         chapterNumber: chapter.number,
         chapterTitle: chapter.title,
         status: chapter.status,
-        residualCjk: residual,
+        residualScriptLetters,
         markerMismatches: Math.abs(rawParagraphCount - translatedParagraphCount),
         matchedGlossaryTerms: matchedTerms.length,
         adheredGlossaryTerms: adheredTerms.length,
@@ -88,14 +93,14 @@ export async function runTranslationEvalReport(reportId: string) {
     const summary = results.reduce(
       (acc, result) => ({
         chapterCount: acc.chapterCount + 1,
-        residualCjk: acc.residualCjk + result.residualCjk,
+        residualScriptLetters: acc.residualScriptLetters + result.residualScriptLetters,
         markerMismatches: acc.markerMismatches + result.markerMismatches,
         matchedGlossaryTerms: acc.matchedGlossaryTerms + result.matchedGlossaryTerms,
         adheredGlossaryTerms: acc.adheredGlossaryTerms + result.adheredGlossaryTerms,
       }),
       {
         chapterCount: 0,
-        residualCjk: 0,
+        residualScriptLetters: 0,
         markerMismatches: 0,
         matchedGlossaryTerms: 0,
         adheredGlossaryTerms: 0,
@@ -107,7 +112,7 @@ export async function runTranslationEvalReport(reportId: string) {
       .set({
         status: "done",
         chapterCount: summary.chapterCount,
-        residualCjk: summary.residualCjk,
+        residualScriptLetters: summary.residualScriptLetters,
         markerMismatches: summary.markerMismatches,
         matchedGlossaryTerms: summary.matchedGlossaryTerms,
         adheredGlossaryTerms: summary.adheredGlossaryTerms,

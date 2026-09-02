@@ -123,7 +123,7 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novels"] });
-      queryClient.invalidateQueries({ queryKey: ["residualHanzi", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["residualScripts", novelId] });
       onTranslationsDeleted();
       toast.success(
         chaptersCleared > 0

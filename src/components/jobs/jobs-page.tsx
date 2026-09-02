@@ -1,6 +1,6 @@
 import { getRouteApi } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -23,6 +23,7 @@ import type {
 } from "@/lib/job-dashboard/contracts";
 import { cancelTranslationJob, retryTranslationJob } from "@/lib/translation/api/mutations";
 import { cancelImportJob, startImportJob } from "@/lib/scrape/functions";
+import { useHydrated } from "@/lib/use-hydrated";
 
 type Operation = {
   kind: "cancel" | "retry";
@@ -64,9 +65,7 @@ export function JobsPage() {
     chapterId: string;
   } | null>(null);
   const [importDetailsJobId, setImportDetailsJobId] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   const updateSearch = useCallback(
     (changes: Partial<JobHistorySearch>, replace = true) => {

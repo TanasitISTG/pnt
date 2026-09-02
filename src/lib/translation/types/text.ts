@@ -8,8 +8,9 @@ export interface AlignedParagraph {
   translated?: string;
 }
 
-export interface HanziSpan {
+export interface ResidualScriptSpan {
   start: number;
   end: number; // exclusive
   text: string;
+  letterCount: number;
 }

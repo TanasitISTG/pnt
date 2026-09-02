@@ -37,7 +37,7 @@ function createTableProps(
     isAdmin: true,
     activeJobs: new Map(),
     readChapterIdSet: new Set(),
-    residualHanziMap: new Map(),
+    residualScriptMap: new Map(),
     costData: undefined,
     selectedIds: new Set(),
     isTranslating: () => false,

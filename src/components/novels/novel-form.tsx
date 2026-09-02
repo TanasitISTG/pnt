@@ -34,14 +34,8 @@ const TARGET_LANG_ITEMS: Record<string, string> = {
   th: "Thai (TH)",
   en: "English (EN)",
 };
-
-export function NovelForm({
-  defaultValues,
-  onSubmit,
-  submitLabel,
-  pending = false,
-}: NovelFormProps) {
-  const [form, setForm] = useState<NovelFormData>({
+function createInitialNovelForm(defaultValues: NovelFormProps["defaultValues"]): NovelFormData {
+  return {
     title: defaultValues?.title || "",
     originalTitle: defaultValues?.originalTitle || "",
     author: defaultValues?.author || "",
@@ -54,7 +48,16 @@ export function NovelForm({
     cover: null,
     coverMime: null,
     removeCover: false,
-  });
+  };
+}
+
+export function NovelForm({
+  defaultValues,
+  onSubmit,
+  submitLabel,
+  pending = false,
+}: NovelFormProps) {
+  const [form, setForm] = useState<NovelFormData>(() => createInitialNovelForm(defaultValues));
 
   const [errors, setErrors] = useState<Partial<Record<keyof NovelFormData, string>>>({});
 

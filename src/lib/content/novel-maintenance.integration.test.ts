@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
+import type * as ChapterOpsService from "./chapter-ops.service";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
-let deleteAllNovelTranslationsForUser: typeof import("./chapter-ops.service").deleteAllNovelTranslationsForUser;
+let deleteAllNovelTranslationsForUser: typeof ChapterOpsService.deleteAllNovelTranslationsForUser;
+let getResidualScriptChaptersForUser: typeof ChapterOpsService.getResidualScriptChaptersForUser;
 let deleteAllGlossaryTermsForUser: typeof import("../glossary/service").deleteAllGlossaryTermsForUser;
 let rejectAllPendingGlossaryTermsForUser: typeof import("../glossary/service").rejectAllPendingGlossaryTermsForUser;
 const skipEagerDispatch = async () => {};
@@ -275,7 +277,9 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
     process.env.INNGEST_DEV ||= "1";
 
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
-    ({ deleteAllNovelTranslationsForUser } = await import("./chapter-ops.service"));
+    // Server-only modules must load after DATABASE_URL points at the disposable test database.
+    ({ deleteAllNovelTranslationsForUser, getResidualScriptChaptersForUser } =
+      await import("./chapter-ops.service"));
     ({ deleteAllGlossaryTermsForUser, rejectAllPendingGlossaryTermsForUser } =
       await import("../glossary/service"));
   });
@@ -466,6 +470,82 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
       ).resolves.toEqual({ deleted: 0 });
     } finally {
       await deleteFixture(fixture);
+    }
+  }, 30_000);
+  it("reports residual scripts across keyset pages with ownership and exemptions", async () => {
+    const ownerUserId = `user-${randomUUID()}`;
+    const otherUserId = `user-${randomUUID()}`;
+    const novelId = `novel-${randomUUID()}`;
+    const chapterPrefix = `report-chapter-${randomUUID()}-`;
+    const approvedTermId = `term-${randomUUID()}`;
+    const pendingTermId = `term-${randomUUID()}`;
+
+    await sql`
+      INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
+      VALUES
+        (${ownerUserId}, 'Residual Owner', ${`${ownerUserId}@example.test`}, true, now(), now()),
+        (${otherUserId}, 'Residual Other', ${`${otherUserId}@example.test`}, true, now(), now())
+    `;
+    try {
+      await sql`
+        INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang")
+        VALUES (${novelId}, ${ownerUserId}, 'Residual Report Novel', 'zh', 'th')
+      `;
+      await sql`
+        INSERT INTO "glossary_terms" (
+          "id", "novel_id", "source", "target", "category", "status"
+        ) VALUES
+          (${approvedTermId}, ${novelId}, '术语', 'OpenAI', 'other', 'approved'),
+          (${pendingTermId}, ${novelId}, '待定', 'PendingLatin', 'other', 'pending')
+      `;
+      await sql`
+        INSERT INTO "chapters" (
+          "id", "novel_id", "number", "title", "raw_content", "translated_content",
+          "status", "raw_char_count"
+        )
+        SELECT
+          ${chapterPrefix} || lpad(generated.series::text, 3, '0'),
+          ${novelId},
+          generated.series + 1,
+          'Report chapter ' || generated.series,
+          CASE generated.series
+            WHEN 1 THEN '<em>原文</em>'
+            WHEN 2 THEN '术语'
+            WHEN 101 THEN '待定'
+            ELSE '原文'
+          END,
+          CASE generated.series
+            WHEN 0 THEN 'ภาษาไทย Hello'
+            WHEN 1 THEN '<em>ภาษาไทย</em>'
+            WHEN 2 THEN 'OpenAI ภาษาไทย'
+            WHEN 100 THEN 'ภาษาไทย мир مرحبا'
+            WHEN 101 THEN 'ภาษาไทย PendingLatin'
+            ELSE 'ภาษาไทย'
+          END,
+          'translated'::chapter_status,
+          20
+        FROM generate_series(0, 104) AS generated(series)
+      `;
+
+      await expect(getResidualScriptChaptersForUser(otherUserId, novelId)).rejects.toThrow(
+        "Novel not found or unauthorized",
+      );
+
+      const results = await getResidualScriptChaptersForUser(ownerUserId, novelId);
+      expect(
+        results.map((result) => ({
+          chapterId: result.chapterId,
+          number: Number(result.number),
+          count: result.count,
+        })),
+      ).toEqual([
+        { chapterId: `${chapterPrefix}000`, number: 1, count: 5 },
+        { chapterId: `${chapterPrefix}100`, number: 101, count: 8 },
+        { chapterId: `${chapterPrefix}101`, number: 102, count: 12 },
+      ]);
+      expect(Object.keys(results[0]).toSorted()).toEqual(["chapterId", "count", "number"]);
+    } finally {
+      await sql`DELETE FROM "user" WHERE "id" IN (${ownerUserId}, ${otherUserId})`;
     }
   }, 30_000);
 });

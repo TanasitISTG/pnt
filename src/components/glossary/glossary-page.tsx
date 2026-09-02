@@ -13,8 +13,101 @@ import {
   glossaryStatsQueryOptions,
   glossaryTermsQueryOptions,
 } from "@/lib/glossary/query";
+import type { GlossaryListSearch } from "@/lib/glossary/schemas";
 
 const glossaryRoute = getRouteApi("/_protected/novels/$novelId/glossary");
+function GlossaryNotFound() {
+  return (
+    <div className="py-12 text-center">
+      <h2 className="text-card-title font-semibold text-foreground">Novel not found</h2>
+      <Button className="mt-4" render={<Link to="/" />}>
+        Back to Library
+      </Button>
+    </div>
+  );
+}
+
+function PendingSuggestionsNotice({
+  pendingCount,
+  isViewingPending,
+  onReview,
+}: {
+  pendingCount: number;
+  isViewingPending: boolean;
+  onReview: () => void;
+}) {
+  if (pendingCount === 0 || isViewingPending) return null;
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-medium text-foreground">
+          {pendingCount.toLocaleString()} AI suggestions awaiting review
+        </p>
+        <p className="mt-1 text-caption text-muted-foreground">
+          Review extracted mappings before they influence future translations.
+        </p>
+      </div>
+      <Button variant="outline" size="sm" className="border-amber-500/40" onClick={onReview}>
+        Review suggestions
+      </Button>
+    </section>
+  );
+}
+
+interface PendingBulkActionsProps {
+  pendingCount: number;
+  isViewingPending: boolean;
+  hasPendingActions: boolean;
+  approvingAll: boolean;
+  rejectingAll: boolean;
+  onApproveAll: () => void;
+  onRejectAll: () => void;
+}
+
+function PendingBulkActions({
+  pendingCount,
+  isViewingPending,
+  hasPendingActions,
+  approvingAll,
+  rejectingAll,
+  onApproveAll,
+  onRejectAll,
+}: PendingBulkActionsProps) {
+  if (!isViewingPending || pendingCount === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+      <div>
+        <p className="font-medium text-foreground">Pending suggestions</p>
+        <p className="mt-1 text-caption text-muted-foreground">
+          Bulk actions apply to all {pendingCount.toLocaleString()} pending terms in this novel.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={onApproveAll} disabled={hasPendingActions}>
+          {approvingAll ? "Approving…" : `Approve all ${pendingCount} pending`}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive"
+          onClick={onRejectAll}
+          disabled={hasPendingActions}
+        >
+          {rejectingAll ? "Rejecting…" : `Reject all ${pendingCount} pending`}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const PENDING_SEARCH: Partial<GlossaryListSearch> = {
+  q: "",
+  category: "all",
+  status: "pending",
+  sort: "source",
+  dir: "asc",
+  page: 1,
+};
 
 export function GlossaryPage() {
   const { novelId } = glossaryRoute.useParams();
@@ -82,16 +175,7 @@ export function GlossaryPage() {
     approvingAll || rejectingAll || approvingTerm || rejectingTerm || deletingTerm;
   const novel = novelQuery.data;
 
-  if (!novel) {
-    return (
-      <div className="py-12 text-center">
-        <h2 className="text-card-title font-semibold text-foreground">Novel not found</h2>
-        <Button className="mt-4" render={<Link to="/" />}>
-          Back to Library
-        </Button>
-      </div>
-    );
-  }
+  if (!novel) return <GlossaryNotFound />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -107,68 +191,20 @@ export function GlossaryPage() {
         onDeleteAllTerms={() => setDeleteAllTermsOpen(true)}
       />
 
-      {pendingCount > 0 && !isViewingPending && (
-        <section className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-medium text-foreground">
-              {pendingCount.toLocaleString()} AI suggestions awaiting review
-            </p>
-            <p className="mt-1 text-caption text-muted-foreground">
-              Review extracted mappings before they influence future translations.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-amber-500/40"
-            onClick={() =>
-              updateSearch(
-                {
-                  q: "",
-                  category: "all",
-                  status: "pending",
-                  sort: "source",
-                  dir: "asc",
-                  page: 1,
-                },
-                true,
-              )
-            }
-          >
-            Review suggestions
-          </Button>
-        </section>
-      )}
-
-      {isViewingPending && pendingCount > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
-          <div>
-            <p className="font-medium text-foreground">Pending suggestions</p>
-            <p className="mt-1 text-caption text-muted-foreground">
-              Bulk actions apply to all {pendingCount.toLocaleString()} pending terms in this novel.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void approveAll().catch(() => {})}
-              disabled={hasPendingActions}
-            >
-              {approvingAll ? "Approving…" : `Approve all ${pendingCount} pending`}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive"
-              onClick={() => void rejectAll().catch(() => {})}
-              disabled={hasPendingActions}
-            >
-              {rejectingAll ? "Rejecting…" : `Reject all ${pendingCount} pending`}
-            </Button>
-          </div>
-        </div>
-      )}
+      <PendingSuggestionsNotice
+        pendingCount={pendingCount}
+        isViewingPending={isViewingPending}
+        onReview={() => updateSearch(PENDING_SEARCH, true)}
+      />
+      <PendingBulkActions
+        pendingCount={pendingCount}
+        isViewingPending={isViewingPending}
+        hasPendingActions={hasPendingActions}
+        approvingAll={approvingAll}
+        rejectingAll={rejectingAll}
+        onApproveAll={() => void approveAll().catch(() => {})}
+        onRejectAll={() => void rejectAll().catch(() => {})}
+      />
 
       <GlossaryTable
         query={{

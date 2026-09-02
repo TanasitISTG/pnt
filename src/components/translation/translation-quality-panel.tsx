@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,11 +12,11 @@ import {
   startTranslationEval,
 } from "@/lib/translation/evaluation/eval.functions";
 import { formatLocalDateTime } from "@/lib/date-time";
+import { useHydrated } from "@/lib/use-hydrated";
 export function TranslationQualityPanel({ novelId }: { novelId: string }) {
   const queryClient = useQueryClient();
   const [selector, setSelector] = useState("first3");
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   const { data: reports = [] } = useQuery({
     queryKey: ["translation-eval-reports", novelId],
@@ -65,7 +65,7 @@ export function TranslationQualityPanel({ novelId }: { novelId: string }) {
           <div className="grid gap-3 md:grid-cols-5">
             <QualityMetric label="Status" value={<Badge>{latest.status}</Badge>} />
             <QualityMetric label="Chapters" value={latest.chapterCount} />
-            <QualityMetric label="Residual CJK" value={latest.residualCjk} />
+            <QualityMetric label="Foreign-script letters" value={latest.residualScriptLetters} />
             <QualityMetric label="Paragraph mismatch" value={latest.markerMismatches} />
             <QualityMetric
               label="Glossary adherence"
@@ -88,7 +88,7 @@ export function TranslationQualityPanel({ novelId }: { novelId: string }) {
                   <th className="py-2 pr-3 font-semibold">Created</th>
                   <th className="py-2 pr-3 font-semibold">Selector</th>
                   <th className="py-2 pr-3 font-semibold">Status</th>
-                  <th className="py-2 pr-3 font-semibold">Residual</th>
+                  <th className="py-2 pr-3 font-semibold">Foreign-script letters</th>
                   <th className="py-2 pr-3 font-semibold">Mismatch</th>
                   <th className="py-2 pr-3 font-semibold">Error</th>
                 </tr>
@@ -105,7 +105,7 @@ export function TranslationQualityPanel({ novelId }: { novelId: string }) {
                         {report.status}
                       </Badge>
                     </td>
-                    <td className="py-2 pr-3">{report.residualCjk}</td>
+                    <td className="py-2 pr-3">{report.residualScriptLetters}</td>
                     <td className="py-2 pr-3">{report.markerMismatches}</td>
                     <td className="max-w-[260px] truncate py-2 pr-3 text-muted-foreground">
                       {report.error || "—"}

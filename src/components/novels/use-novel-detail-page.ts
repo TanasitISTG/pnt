@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
 import { getNovel } from "@/lib/content/novel.functions";
 import { listChapters } from "@/lib/content/chapter.functions";
-import { getResidualHanziChapters } from "@/lib/content/chapter-ops.functions";
+import { getResidualScriptChapters } from "@/lib/content/chapter-ops.functions";
 import type { ReaderProgress } from "@/lib/reader/types";
 import { getGlossaryStats } from "@/lib/glossary/functions";
 import { getNovelCosts } from "@/lib/translation/api/queries";
@@ -13,9 +13,10 @@ import { useChapterTitleEdit } from "@/components/chapters/use-chapter-title-edi
 import { useNovelDetailMutations } from "@/components/novels/use-novel-detail-mutations";
 import { useNovelExport } from "@/components/novels/use-novel-export";
 import { useTranslationJob } from "@/components/translation/use-translation-job";
+import { useHydrated } from "@/lib/use-hydrated";
 
 const EMPTY_CHAPTERS: never[] = [];
-const EMPTY_RESIDUAL_HANZI: never[] = [];
+const EMPTY_RESIDUAL_SCRIPTS: never[] = [];
 const READER_PROGRESS_STORAGE_KEY = "pnt-reader-progress";
 const EMPTY_READER_PROGRESS: ReaderProgress = {
   lastChapterId: null,
@@ -24,17 +25,6 @@ const EMPTY_READER_PROGRESS: ReaderProgress = {
 
 function getServerReaderProgressSnapshot() {
   return EMPTY_READER_PROGRESS;
-}
-function subscribeToNothing() {
-  return () => {};
-}
-
-function getClientReadySnapshot() {
-  return true;
-}
-
-function getServerReadySnapshot() {
-  return false;
 }
 
 export const novelQueryOptions = (novelId: string) =>
@@ -61,10 +51,10 @@ export const costsQueryOptions = (novelId: string) =>
     queryFn: () => getNovelCosts({ data: { novelId } }),
   });
 
-export const residualHanziQueryOptions = (novelId: string) =>
+export const residualScriptQueryOptions = (novelId: string) =>
   queryOptions({
-    queryKey: ["residualHanzi", novelId],
-    queryFn: () => getResidualHanziChapters({ data: { novelId } }),
+    queryKey: ["residualScripts", novelId],
+    queryFn: () => getResidualScriptChapters({ data: { novelId } }),
   });
 
 export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
@@ -79,20 +69,20 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     ...costsQueryOptions(novelId),
     enabled: isAdmin && chaptersQuery.isSuccess,
   });
-  const residualHanziQuery = useQuery({
-    ...residualHanziQueryOptions(novelId),
+  const residualScriptQuery = useQuery({
+    ...residualScriptQueryOptions(novelId),
     enabled: isAdmin && chaptersQuery.isSuccess,
   });
 
   const chapters = chaptersQuery.data ?? EMPTY_CHAPTERS;
-  const residualHanziChapters = residualHanziQuery.data ?? EMPTY_RESIDUAL_HANZI;
-  const residualHanziMap = useMemo(() => {
+  const residualScriptChapters = residualScriptQuery.data ?? EMPTY_RESIDUAL_SCRIPTS;
+  const residualScriptMap = useMemo(() => {
     const map = new Map<string, number>();
-    for (const item of residualHanziChapters) {
+    for (const item of residualScriptChapters) {
       map.set(item.chapterId, item.count);
     }
     return map;
-  }, [residualHanziChapters]);
+  }, [residualScriptChapters]);
 
   const readerProgressStore = useMemo(() => {
     let snapshot: ReaderProgress | null = null;
@@ -117,11 +107,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     readerProgressStore.getSnapshot,
     getServerReaderProgressSnapshot,
   );
-  const readerProgressReady = useSyncExternalStore(
-    subscribeToNothing,
-    getClientReadySnapshot,
-    getServerReadySnapshot,
-  );
+  const readerProgressReady = useHydrated();
   const readChapterIdSet = useMemo(
     () => new Set(readerProgress.readChapterIds),
     [readerProgress.readChapterIds],
@@ -238,7 +224,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     isAdmin,
     activeJobs,
     readChapterIdSet,
-    residualHanziMap,
+    residualScriptMap,
     costData: costsQuery.data,
     selectedIds,
     isTranslating: isRowTranslating,

@@ -18,7 +18,7 @@ export const translationEvalReports = pgTable(
     status: evalReportStatusEnum("status").notNull().default("pending"),
     chapterSelector: text("chapter_selector").notNull().default("first3"),
     chapterCount: integer("chapter_count").notNull().default(0),
-    residualCjk: integer("residual_cjk").notNull().default(0),
+    residualScriptLetters: integer("residual_script_letters").notNull().default(0),
     markerMismatches: integer("marker_mismatches").notNull().default(0),
     matchedGlossaryTerms: integer("matched_glossary_terms").notNull().default(0),
     adheredGlossaryTerms: integer("adhered_glossary_terms").notNull().default(0),

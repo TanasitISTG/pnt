@@ -1,13 +1,6 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { batchesOf } from "@/lib/content/chapter-ops.service";
-
-const source = readFileSync(
-  fileURLToPath(new URL("./chapter-ops.functions.ts", import.meta.url)),
-  "utf8",
-);
 
 describe("batchesOf", () => {
   it("splits into consecutive fixed-size batches preserving order", () => {
@@ -32,17 +25,5 @@ describe("batchesOf", () => {
       [1, 2],
       [3, 4],
     ]);
-  });
-});
-
-describe("getResidualHanziChapters", () => {
-  it("pre-filters in SQL with the shared CJK class instead of loading all chapter bodies", () => {
-    expect(source).toContain("RESIDUAL_CJK_SQL_RE");
-    expect(source).toContain("~ ${RESIDUAL_CJK_SQL_RE}");
-  });
-
-  it("fetches translatedContent only for flagged chapter ids", () => {
-    expect(source).toContain("inArray(");
-    expect(source).toContain("flagged.map((c) => c.id)");
   });
 });

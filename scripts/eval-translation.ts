@@ -7,7 +7,7 @@ import { novels, chapters, glossaryTerms } from "@/lib/db/schema";
 import { chunkText } from "@/lib/translation/text/chunker";
 import { buildSystemPrompt, buildUserMessage } from "@/lib/translation/prompts/translation";
 import { normalizePair } from "@/lib/translation/prompts/language";
-import { findResidualSourceChars } from "@/lib/translation/text/residual";
+import { scanResidualScripts } from "@/lib/translation/text/residual";
 import {
   injectParagraphMarkers,
   restoreParagraphMarkers,
@@ -26,7 +26,7 @@ interface ChapterEvalResult {
   totalLatencyMs?: number;
   promptTokens?: number;
   completionTokens?: number;
-  residualHanzi?: number;
+  residualScriptLetters?: number;
   markerMismatches?: number;
   dotArtifactsCaught?: number;
   matchedGlossaryTerms?: number;
@@ -167,7 +167,7 @@ async function runEval() {
       let totalLatencyMs = 0;
       let promptTokens = 0;
       let completionTokens = 0;
-      let residualHanzi = 0;
+      let residualScriptLetters = 0;
       let markerMismatches = 0;
       let dotArtifactsCaught = 0;
       let matchedGlossaryTerms = 0;
@@ -234,8 +234,11 @@ async function runEval() {
         const actualMarkers = countParagraphMarkers(rawCompletion);
         markerMismatches += Math.abs(expectedMarkers - actualMarkers);
 
-        const hanzi = findResidualSourceChars(pair, restored);
-        residualHanzi += hanzi.length;
+        const residual = scanResidualScripts(pair, restored, {
+          sourceText: chunk.text,
+          protectedTerms: matchedTerms.map((term) => term.target),
+        });
+        residualScriptLetters += residual.letterCount;
 
         const dotMatches = (rawCompletion.match(/[.·‥…⋯⋅・⸰．‧]{2,}/g) || []).length;
         dotArtifactsCaught += dotMatches;
@@ -266,7 +269,7 @@ async function runEval() {
         totalLatencyMs,
         promptTokens,
         completionTokens,
-        residualHanzi,
+        residualScriptLetters,
         markerMismatches,
         dotArtifactsCaught,
         matchedGlossaryTerms,
@@ -297,7 +300,7 @@ async function runEval() {
       "Latency (s)": r.totalLatencyMs !== undefined ? (r.totalLatencyMs / 1000).toFixed(1) : "-",
       "Prompt Tok": r.promptTokens ?? "-",
       "Comp Tok": r.completionTokens ?? "-",
-      "Residual Hanzi": r.residualHanzi ?? "-",
+      "Foreign-script letters": r.residualScriptLetters ?? "-",
       "Marker Misses": r.markerMismatches ?? "-",
       "Dot Artifacts": r.dotArtifactsCaught ?? "-",
       "Glossary Match/Adhered":

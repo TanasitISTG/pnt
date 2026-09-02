@@ -87,6 +87,75 @@ export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapter
   },
   component: ReaderPage,
 });
+function getNextViewMode(viewMode: "side" | "translated" | "raw") {
+  return viewMode === "side" ? "translated" : viewMode === "translated" ? "raw" : "side";
+}
+
+interface ReaderHotkeysProps {
+  viewMode: "side" | "translated" | "raw";
+  theme: string | undefined;
+  user: unknown;
+  editing: boolean;
+  chapterLoaded: boolean;
+  jobRunning: boolean;
+  shortcutsOpen: boolean;
+  prevChapter: { id: string } | null;
+  nextChapter: { id: string } | null;
+  onUpdateViewMode: (next: "side" | "translated" | "raw") => void;
+  onSetTheme: (theme: string) => void;
+  onBeginEditing: () => void;
+  onRequestCancelEditing: () => void;
+  onSave: () => void;
+  onGoToChapter: (id: string) => void;
+  onSetShortcutsOpen: (open: boolean) => void;
+}
+
+function useReaderHotkeys({
+  viewMode,
+  theme,
+  user,
+  editing,
+  chapterLoaded,
+  jobRunning,
+  shortcutsOpen,
+  prevChapter,
+  nextChapter,
+  onUpdateViewMode,
+  onSetTheme,
+  onBeginEditing,
+  onRequestCancelEditing,
+  onSave,
+  onGoToChapter,
+  onSetShortcutsOpen,
+}: ReaderHotkeysProps) {
+  useHotkey("ArrowLeft", () => prevChapter && onGoToChapter(prevChapter.id), {
+    enabled: !!prevChapter,
+  });
+  useHotkey("H", () => prevChapter && onGoToChapter(prevChapter.id), { enabled: !!prevChapter });
+  useHotkey("ArrowRight", () => nextChapter && onGoToChapter(nextChapter.id), {
+    enabled: !!nextChapter,
+  });
+  useHotkey("L", () => nextChapter && onGoToChapter(nextChapter.id), { enabled: !!nextChapter });
+  useHotkey("V", () => onUpdateViewMode(getNextViewMode(viewMode)));
+  useHotkey("T", () => onSetTheme(theme === "dark" ? "light" : "dark"));
+  useHotkey("E", onBeginEditing, {
+    enabled: !!user && !editing && chapterLoaded && !jobRunning,
+  });
+  useHotkey("Escape", () => (editing ? onRequestCancelEditing() : onSetShortcutsOpen(false)), {
+    enabled: editing || shortcutsOpen,
+  });
+  useHotkey(
+    "Mod+S",
+    () => {
+      onSave();
+    },
+    {
+      enabled: editing && !!user,
+      preventDefault: true,
+    },
+  );
+  useHotkey("/", () => onSetShortcutsOpen(true));
+}
 
 function ReaderPage() {
   const { novelId, chapterId } = Route.useParams();
@@ -108,7 +177,6 @@ function ReaderPage() {
   const { data: novel } = useQuery(novelQueryOptions(novelId));
 
   useReaderScroll(novelId, chapterId, chapter);
-
   const { settings, update } = useReaderSettings();
   const { theme, setTheme } = useTheme();
   const viewMode = settings.viewMode;
@@ -139,13 +207,7 @@ function ReaderPage() {
     sourcePolicyDialogOpen,
     draft,
     updateDraft,
-  } = useChapterEditor({
-    chapterId,
-    novelId,
-    chapter,
-    canEdit: !!user,
-    jobRunning,
-  });
+  } = useChapterEditor({ chapterId, novelId, chapter, canEdit: !!user, jobRunning });
 
   const { prevChapter, nextChapter, goToChapter } = useChapterNav(novelId, chapterId, chapters);
 
@@ -178,37 +240,24 @@ function ReaderPage() {
     [chapter],
   );
 
-  const cycleViewMode = () => {
-    const next = viewMode === "side" ? "translated" : viewMode === "translated" ? "raw" : "side";
-    update({ viewMode: next });
-  };
-  useHotkey("ArrowLeft", () => prevChapter && goToChapter(prevChapter.id), {
-    enabled: !!prevChapter,
+  useReaderHotkeys({
+    viewMode,
+    theme,
+    user,
+    editing,
+    chapterLoaded: !!chapter,
+    jobRunning,
+    shortcutsOpen,
+    prevChapter,
+    nextChapter,
+    onUpdateViewMode: (next) => update({ viewMode: next }),
+    onSetTheme: setTheme,
+    onBeginEditing: beginEditing,
+    onRequestCancelEditing: requestCancelEditing,
+    onSave: () => void handleSaveRequest(),
+    onGoToChapter: goToChapter,
+    onSetShortcutsOpen: setShortcutsOpen,
   });
-  useHotkey("H", () => prevChapter && goToChapter(prevChapter.id), { enabled: !!prevChapter });
-  useHotkey("ArrowRight", () => nextChapter && goToChapter(nextChapter.id), {
-    enabled: !!nextChapter,
-  });
-  useHotkey("L", () => nextChapter && goToChapter(nextChapter.id), { enabled: !!nextChapter });
-  useHotkey("V", cycleViewMode);
-  useHotkey("T", () => setTheme(theme === "dark" ? "light" : "dark"));
-  useHotkey("E", beginEditing, {
-    enabled: !!user && !editing && !!chapter && !jobRunning,
-  });
-  useHotkey("Escape", () => (editing ? requestCancelEditing() : setShortcutsOpen(false)), {
-    enabled: editing || shortcutsOpen,
-  });
-  useHotkey(
-    "Mod+S",
-    () => {
-      void handleSaveRequest();
-    },
-    {
-      enabled: editing && !!user,
-      preventDefault: true,
-    },
-  );
-  useHotkey("/", () => setShortcutsOpen(true));
 
   if (isChapterError || isChaptersError) {
     return (

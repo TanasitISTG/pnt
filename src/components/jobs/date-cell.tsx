@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useHydrated } from "@/lib/use-hydrated";
 
 import { formatLocalDateTime, parseDateTime } from "@/lib/date-time";
 
 export function DateCell({ value }: { value: Date | string }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   const date = parseDateTime(value);
   const iso = date?.toISOString();

@@ -17,6 +17,7 @@ import {
 import { signOut } from "@/lib/auth/auth-client";
 import type { User as AuthUser } from "@/lib/auth/auth";
 import { useConsent } from "@/lib/consent";
+import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -214,8 +215,7 @@ export function AppShell({ user, children }: AppShellProps) {
 
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   const dark = mounted && resolvedTheme === "dark";
   return (

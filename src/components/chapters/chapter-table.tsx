@@ -14,7 +14,7 @@ export interface ChapterTableProps {
   isAdmin: boolean;
   activeJobs: Map<string, ActiveJobState>;
   readChapterIdSet: ReadonlySet<string>;
-  residualHanziMap: Map<string, number>;
+  residualScriptMap: Map<string, number>;
   costData: CostData;
   selectedIds: Set<string>;
   isTranslating: (chapterId: string, status: string) => boolean;
@@ -43,7 +43,7 @@ export const ChapterTable = memo(function ChapterTable({
   isAdmin,
   activeJobs,
   readChapterIdSet,
-  residualHanziMap,
+  residualScriptMap,
   costData,
   selectedIds,
   isTranslating,
@@ -87,7 +87,7 @@ export const ChapterTable = memo(function ChapterTable({
         viewer={isAdmin ? "admin" : "guest"}
         activeJob={activeJob}
         readState={readChapterIdSet.has(chapter.id) ? "read" : "unread"}
-        residualCount={residualHanziMap.get(chapter.id)}
+        residualScriptCount={residualScriptMap.get(chapter.id)}
         chapterCost={costData?.costs[chapter.id]}
         selected={selectedIds.has(chapter.id)}
         translationState={isRowTranslating ? "translating" : "idle"}

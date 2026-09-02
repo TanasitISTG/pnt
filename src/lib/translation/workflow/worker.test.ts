@@ -127,7 +127,7 @@ describe("translation worker guarded state transitions", () => {
       previousChunk: null,
     } as never);
     provider.generateChatCompletion.mockResolvedValueOnce({
-      content: "Translated Chunk 1",
+      content: "แปลแล้ว ชิ้นหนึ่ง",
       usage: { promptTokens: 10, completionTokens: 20 },
     });
 
@@ -137,7 +137,7 @@ describe("translation worker guarded state transitions", () => {
       "job-1",
       generation,
       0,
-      expect.objectContaining({ translation: "Translated Chunk 1" }),
+      expect.objectContaining({ translation: "แปลแล้ว ชิ้นหนึ่ง" }),
     );
   });
   it("repairs short residual spans with all translation context", async () => {
@@ -209,7 +209,7 @@ describe("translation worker guarded state transitions", () => {
     } as never);
     provider.generateChatCompletion
       .mockResolvedValueOnce({
-        content: "Translated 许野",
+        content: "แปลแล้ว 许野",
         usage: { promptTokens: 10, completionTokens: 20 },
       })
       .mockRejectedValueOnce(new Error("temporary span failure"))
@@ -262,7 +262,96 @@ describe("translation worker guarded state transitions", () => {
       "job-1",
       generation,
       0,
-      expect.objectContaining({ translation: "Translated สวี่เหยี่ย" }),
+      expect.objectContaining({ translation: "แปลแล้ว สวี่เหยี่ย" }),
+    );
+  });
+  it("repairs mixed foreign scripts in a Thai translation", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: { ...chunks[0], sourceText: "原文", textLength: 2 },
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion
+      .mockResolvedValueOnce({
+        content: "เนื้อหา Hello مرحبا мир จบ",
+        usage: { promptTokens: 10, completionTokens: 20 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ translations: ["แปลแล้ว"] }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(2);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "เนื้อหา แปลแล้ว จบ" }),
+    );
+    const repairRequest = provider.generateChatCompletion.mock.calls[1]?.[0] as {
+      messages: Array<{ content?: string }>;
+    };
+    expect(repairRequest.messages[1]?.content).toContain("Hello مرحبا мир");
+  });
+
+  it("rejects a residual replacement that remains off-script before retrying", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: { ...chunks[0], sourceText: "原文", textLength: 2 },
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion
+      .mockResolvedValueOnce({
+        content: "เนื้อหา Hello จบ",
+        usage: { promptTokens: 10, completionTokens: 20 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ translations: ["still English"] }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ translations: ["แปลแล้ว"] }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(3);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "เนื้อหา แปลแล้ว จบ" }),
+    );
+  });
+
+  it("protects approved glossary targets and exact source tags", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([
+      { source: "OpenAI", target: "OpenAI", category: "other", note: null },
+    ] as never);
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: { ...chunks[0], sourceText: "<em>OpenAI</em>", textLength: 15 },
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion.mockResolvedValueOnce({
+      content: "<em>OpenAI</em>",
+      usage: { promptTokens: 10, completionTokens: 20 },
+    });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(1);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "<em>OpenAI</em>" }),
     );
   });
 
@@ -275,14 +364,14 @@ describe("translation worker guarded state transitions", () => {
     } as never);
     provider.generateChatCompletion
       .mockResolvedValueOnce({
-        content: `Translated ${"许".repeat(201)}`,
+        content: `แปลแล้ว ${"许".repeat(201)}`,
         usage: { promptTokens: 10, completionTokens: 20 },
       })
       .mockRejectedValueOnce(new Error("temporary passage failure"))
       .mockRejectedValueOnce(new Error("temporary passage failure"))
       .mockRejectedValueOnce(new Error("temporary passage failure"))
       .mockResolvedValueOnce({
-        content: "Translated 许野",
+        content: "แปลแล้ว 许野",
         usage: { promptTokens: 1, completionTokens: 1 },
       })
       .mockResolvedValueOnce({
@@ -297,7 +386,51 @@ describe("translation worker guarded state transitions", () => {
       "job-1",
       generation,
       0,
-      expect.objectContaining({ translation: "Translated สวี่เหยี่ย" }),
+      expect.objectContaining({ translation: "แปลแล้ว สวี่เหยี่ย" }),
+    );
+  });
+  it("rejects whole-chunk repairs that change markers, tags, or protected terms", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([
+      { source: "术语", target: "OpenAI", category: "other", note: null },
+    ] as never);
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: {
+        ...chunks[0],
+        sourceText: "<em>术语</em>\n\n下一段",
+        textLength: 18,
+      },
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion
+      .mockResolvedValueOnce({
+        content: `<em>OpenAI</em> ${"许".repeat(201)}\n||¶||\nจบ`,
+        usage: { promptTokens: 10, completionTokens: 20 },
+      })
+      .mockResolvedValueOnce({
+        content: "<em>แปลแล้ว</em>\n||¶||\nจบ",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: "แปลแล้ว OpenAI",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      })
+      .mockResolvedValueOnce({
+        content: "<em>OpenAI แปลแล้ว</em>\n||¶||\nจบ",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(4);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({
+        translation: "<em>OpenAI แปลแล้ว</em>\n\nจบ",
+      }),
     );
   });
 
@@ -310,7 +443,7 @@ describe("translation worker guarded state transitions", () => {
     } as never);
     provider.generateChatCompletion
       .mockResolvedValueOnce({
-        content: "Translated 许野",
+        content: "แปลแล้ว 许野",
         usage: { promptTokens: 10, completionTokens: 20 },
       })
       .mockRejectedValue(new Error("span repair unavailable"));
@@ -322,7 +455,7 @@ describe("translation worker guarded state transitions", () => {
       "job-1",
       generation,
       0,
-      expect.objectContaining({ translation: "Translated 许野" }),
+      expect.objectContaining({ translation: "แปลแล้ว 许野" }),
     );
   });
 

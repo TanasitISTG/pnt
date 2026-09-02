@@ -59,7 +59,7 @@ function createProps(overrides: Partial<ChapterTableProps> = {}): ChapterTablePr
     isAdmin: true,
     activeJobs: new Map(),
     readChapterIdSet: new Set(),
-    residualHanziMap: new Map(),
+    residualScriptMap: new Map(),
     costData: undefined,
     selectedIds: new Set(),
     isTranslating: () => false,
@@ -110,6 +110,17 @@ describe("ChapterTable browsing behavior", () => {
       />,
     );
     expect(screen.getByLabelText("Translated title for chapter 1")).toBeTruthy();
+  });
+  it("shows foreign-script residue for admin rows", () => {
+    render(
+      <ChapterTable
+        {...createProps({
+          residualScriptMap: new Map([[CHAPTER.id, 13]]),
+        })}
+      />,
+    );
+
+    expect(screen.getByText("13 foreign-script letters")).toBeTruthy();
   });
 
   it("keeps translating rows disabled", () => {

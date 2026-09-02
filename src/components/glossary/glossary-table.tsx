@@ -1,15 +1,5 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronsUpDown,
-  Columns3,
-  Loader2,
-  MoreHorizontal,
-  Search,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ChevronsUpDown, Columns3, Loader2, MoreHorizontal, Search } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   columnVisibilityFeature,
   createColumnHelper,
@@ -25,8 +15,13 @@ import {
 } from "@tanstack/react-table";
 
 import { QueryErrorState } from "@/components/query-error-state";
-import { Badge } from "@/components/ui/badge";
+import {
+  DataTableEmptyState,
+  DataTablePagination,
+  DataTableSkeletonRows,
+} from "@/components/ui/data-table-parts";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -69,6 +64,7 @@ const glossaryTableFeatures = tableFeatures({
 
 type GlossaryTableFeatures = typeof glossaryTableFeatures;
 const columnHelper = createColumnHelper<GlossaryTableFeatures, GlossaryListRow>();
+const EMPTY_GLOSSARY_ROWS: GlossaryListRow[] = [];
 
 export type GlossarySearchChange = (
   changes: Partial<GlossaryListSearch>,
@@ -117,7 +113,6 @@ const statusItems: Record<string, string> = {
 };
 
 const pageSizeOptions = [10, 25, 50] as const;
-const pageSizeItems: Record<string, string> = { "10": "10", "25": "25", "50": "50" };
 const columnLabels: Record<string, string> = {
   source: "Source",
   target: "Target",
@@ -146,22 +141,6 @@ function formatRange(first: number, last: number, total: number) {
   return total === 0
     ? "0 terms"
     : `${first.toLocaleString()}–${last.toLocaleString()} of ${total.toLocaleString()} terms`;
-}
-
-function SkeletonRows({ columnCount }: { columnCount: number }) {
-  return (
-    <>
-      {Array.from({ length: 7 }, (_, skeletonIndex) => (
-        <TableRow key={`skeleton-${skeletonIndex}`} aria-hidden="true">
-          {Array.from({ length: columnCount }, (_cellPlaceholder, cellIndex) => (
-            <TableCell key={`skeleton-${skeletonIndex}-${cellIndex}`}>
-              <div className="h-4 animate-pulse rounded bg-muted motion-reduce:animate-none" />
-            </TableCell>
-          ))}
-        </TableRow>
-      ))}
-    </>
-  );
 }
 
 function SortableHeader<TValue>({
@@ -328,6 +307,73 @@ function createGlossaryColumns(actions: GlossaryTableActions) {
     }),
   ]);
 }
+const CLEAR_GLOSSARY_FILTERS: Partial<GlossaryListSearch> = {
+  q: "",
+  category: "all",
+  status: "approved",
+  sort: "source",
+  dir: "asc",
+  page: 1,
+};
+
+function GlossaryUpdateError({
+  visible,
+  error,
+  onRetry,
+}: {
+  visible: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  if (!visible) return null;
+  return (
+    <QueryErrorState
+      title="Unable to update glossary terms"
+      error={error}
+      onRetry={onRetry}
+      className="m-3 min-h-0 sm:m-4"
+    />
+  );
+}
+
+interface GlossaryTableBodyProps {
+  initialLoading: boolean;
+  noRows: boolean;
+  filtered: boolean;
+  visibleColumnCount: number;
+  rows: ReactNode;
+  onClearFilters: () => void;
+}
+
+function GlossaryTableBody({
+  initialLoading,
+  noRows,
+  filtered,
+  visibleColumnCount,
+  rows,
+  onClearFilters,
+}: GlossaryTableBodyProps) {
+  if (initialLoading) {
+    return (
+      <TableBody>
+        <DataTableSkeletonRows columnCount={visibleColumnCount} />
+      </TableBody>
+    );
+  }
+  if (!noRows) return <TableBody>{rows}</TableBody>;
+  return (
+    <DataTableEmptyState
+      columnCount={visibleColumnCount}
+      filtered={filtered}
+      emptyTitle="No glossary terms yet"
+      filteredTitle="No terms match these filters"
+      emptyDescription="Add a term or bulk import TSV mappings to keep translations consistent."
+      filteredDescription="Try a different search or clear the filters to see all terms."
+      onClearFilters={onClearFilters}
+    />
+  );
+}
+
 export function GlossaryTable({
   query,
   search,
@@ -352,7 +398,7 @@ export function GlossaryTable({
     [search.dir, search.sort],
   );
   const columns = useMemo(() => createGlossaryColumns(actions), [actions]);
-  const data = page?.rows ?? [];
+  const data = page?.rows ?? EMPTY_GLOSSARY_ROWS;
 
   const table = useTable({
     features: glossaryTableFeatures,
@@ -391,6 +437,20 @@ export function GlossaryTable({
   const noRows = Boolean(page && !isFetching && data.length === 0);
   const paginationBusy = isPlaceholderData || (isPending && !page);
   const visibleColumnCount = table.getVisibleLeafColumns().length;
+  const renderedRows = table.getRowModel().rows.map((row) => (
+    <TableRow key={row.id} className="h-[4.25rem]">
+      {row.getVisibleCells().map((cell) => (
+        <TableCell
+          key={cell.id}
+          className={`px-3 py-2 ${
+            cell.column.id === "actions" ? "sticky right-0 z-10 border-l border-border bg-card" : ""
+          }`}
+        >
+          <table.FlexRender cell={cell} />
+        </TableCell>
+      ))}
+    </TableRow>
+  ));
 
   if (isError && !page) {
     return (
@@ -416,14 +476,7 @@ export function GlossaryTable({
         onSearchChange={onSearchChange}
       />
 
-      {isError && page && (
-        <QueryErrorState
-          title="Unable to update glossary terms"
-          error={error}
-          onRetry={onRetry}
-          className="m-3 min-h-0 sm:m-4"
-        />
-      )}
+      <GlossaryUpdateError visible={isError && Boolean(page)} error={error} onRetry={onRetry} />
 
       <div className="overflow-x-auto">
         <Table className="min-w-[860px] text-caption">
@@ -445,65 +498,14 @@ export function GlossaryTable({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
-            {isPending && !page ? (
-              <SkeletonRows columnCount={visibleColumnCount} />
-            ) : noRows ? (
-              <TableRow>
-                <TableCell colSpan={visibleColumnCount} className="h-56 px-6 text-center">
-                  <div className="mx-auto max-w-sm">
-                    <p className="font-medium text-foreground">
-                      {filtered ? "No terms match these filters" : "No glossary terms yet"}
-                    </p>
-                    <p className="mt-1 text-caption text-muted-foreground">
-                      {filtered
-                        ? "Try a different search or clear the filters to see all terms."
-                        : "Add a term or bulk import TSV mappings to keep translations consistent."}
-                    </p>
-                    {filtered && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-4"
-                        onClick={() =>
-                          onSearchChange(
-                            {
-                              q: "",
-                              category: "all",
-                              status: "approved",
-                              sort: "source",
-                              dir: "asc",
-                              page: 1,
-                            },
-                            true,
-                          )
-                        }
-                      >
-                        Clear filters
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : data.length > 0 ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="h-[4.25rem]">
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={`px-3 py-2 ${
-                        cell.column.id === "actions"
-                          ? "sticky right-0 z-10 border-l border-border bg-card"
-                          : ""
-                      }`}
-                    >
-                      <table.FlexRender cell={cell} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : null}
-          </TableBody>
+          <GlossaryTableBody
+            initialLoading={isPending && !page}
+            noRows={noRows}
+            filtered={filtered}
+            visibleColumnCount={visibleColumnCount}
+            rows={renderedRows}
+            onClearFilters={() => onSearchChange(CLEAR_GLOSSARY_FILTERS, true)}
+          />
         </Table>
       </div>
 
@@ -723,81 +725,19 @@ function GlossaryTablePagination({
   const lastRow =
     rowCount === 0 ? 0 : Math.min(rowCount, firstRow + table.getRowModel().rows.length - 1);
   return (
-    <div className="flex flex-col gap-3 border-t border-border px-3 py-3 text-caption text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
-      <div className="tabular-nums">{formatRange(firstRow, lastRow, rowCount)}</div>
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <div className="flex items-center gap-2">
-          <span>Rows</span>
-          <Select
-            value={String(search.pageSize)}
-            items={pageSizeItems}
-            onValueChange={(value) => {
-              const pageSize = Number(value);
-              if (pageSizeOptions.includes(pageSize as (typeof pageSizeOptions)[number])) {
-                onSearchChange(
-                  {
-                    pageSize: pageSize as GlossaryListSearch["pageSize"],
-                    page: 1,
-                  },
-                  true,
-                );
-              }
-            }}
-          >
-            <SelectTrigger aria-label="Rows per page" className="h-9 w-[76px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {pageSizeOptions.map((pageSize) => (
-                <SelectItem key={pageSize} value={String(pageSize)}>
-                  {pageSize}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.firstPage()}
-            disabled={!table.getCanPreviousPage() || paginationBusy}
-            aria-label="First page"
-          >
-            <ChevronsLeft className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage() || paginationBusy}
-            aria-label="Previous page"
-          >
-            <ChevronLeft className="size-4" aria-hidden="true" />
-          </Button>
-          <span className="min-w-16 px-1 text-center tabular-nums text-foreground">
-            Page {currentPage} of {Math.max(1, table.getPageCount())}
-          </span>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage() || paginationBusy}
-            aria-label="Next page"
-          >
-            <ChevronRight className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.lastPage()}
-            disabled={!table.getCanLastPage() || paginationBusy}
-            aria-label="Last page"
-          >
-            <ChevronsRight className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-    </div>
+    <DataTablePagination
+      table={table}
+      firstRow={firstRow}
+      lastRow={lastRow}
+      rowCount={rowCount}
+      currentPage={currentPage}
+      busy={paginationBusy}
+      pageSize={search.pageSize}
+      pageSizeOptions={pageSizeOptions}
+      formatRange={formatRange}
+      onPageSizeChange={(pageSize) =>
+        onSearchChange({ pageSize: pageSize as GlossaryListSearch["pageSize"], page: 1 }, true)
+      }
+    />
   );
 }

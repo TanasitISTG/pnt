@@ -46,10 +46,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { cn } from "@/lib/utils";
-
-const subscribeToNothing = () => () => {};
-const getMountedSnapshot = () => true;
-const getServerMountedSnapshot = () => false;
+import { useHydrated } from "@/lib/use-hydrated";
 
 const subscribeToReducedMotion = (onStoreChange: () => void) => {
   if (typeof window === "undefined") return () => {};
@@ -159,11 +156,7 @@ function Sortable<T>({
   ...props
 }: SortableRootProps<T>) {
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
-  const mounted = useSyncExternalStore(
-    subscribeToNothing,
-    getMountedSnapshot,
-    getServerMountedSnapshot,
-  );
+  const mounted = useHydrated();
   const reducedMotion = useSyncExternalStore(
     subscribeToReducedMotion,
     getReducedMotionSnapshot,
@@ -373,11 +366,7 @@ export interface SortableOverlayProps extends Omit<
 
 function SortableOverlay({ children, className, dropAnimation, ...props }: SortableOverlayProps) {
   const { activeId, modifiers, reducedMotion } = useContext(SortableRootContext);
-  const mounted = useSyncExternalStore(
-    subscribeToNothing,
-    getMountedSnapshot,
-    getServerMountedSnapshot,
-  );
+  const mounted = useHydrated();
   if (!mounted || activeId === null) return null;
 
   const content =

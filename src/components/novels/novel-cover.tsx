@@ -14,6 +14,110 @@ interface NovelCoverProps {
   lazy?: boolean;
   priority?: boolean;
 }
+function buildCoverSources(
+  novelId: string | null | undefined,
+  coverVersion: NovelCoverProps["coverVersion"],
+) {
+  if (!novelId) return { url: null, srcSet: undefined };
+  const version = coverVersion instanceof Date ? coverVersion.getTime() : coverVersion;
+  const versionParam = version ? `&v=${version}` : "";
+  const coverBaseUrl = `/api/covers/${novelId}`;
+  return {
+    url: `${coverBaseUrl}?w=480${versionParam}`,
+    srcSet: [320, 480, 640]
+      .map((width) => `${coverBaseUrl}?w=${width}${versionParam} ${width}w`)
+      .join(", "),
+  };
+}
+
+function CoverFallback({
+  className,
+  fallbackSize,
+}: Pick<NovelCoverProps, "className"> & { fallbackSize: number }) {
+  return (
+    <div
+      className={`w-full h-full flex items-center justify-center bg-foreground/3 text-muted-foreground/60 rounded-[inherit] ${className}`}
+    >
+      <BookOpen style={{ width: fallbackSize * 4, height: fallbackSize * 4 }} />
+    </div>
+  );
+}
+
+interface ProductionCoverProps extends Pick<NovelCoverProps, "alt" | "className" | "sizes"> {
+  rootRef: React.RefObject<HTMLDivElement | null>;
+  url: string;
+  srcSet: string | undefined;
+  visible: boolean;
+  lazy: boolean;
+  priority: boolean;
+  onError: () => void;
+}
+
+function ProductionCover({
+  rootRef,
+  url,
+  srcSet,
+  alt,
+  className,
+  sizes,
+  visible,
+  lazy,
+  priority,
+  onError,
+}: ProductionCoverProps) {
+  return (
+    <div
+      ref={rootRef}
+      className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}
+    >
+      {visible ? (
+        <img
+          src={url}
+          srcSet={srcSet}
+          sizes={sizes}
+          alt={alt}
+          loading={lazy && !priority ? "lazy" : "eager"}
+          fetchPriority={priority ? "high" : "auto"}
+          decoding={priority ? "sync" : "async"}
+          onError={onError}
+          className="w-full h-full object-cover rounded-[inherit]"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DevelopmentCover({
+  devSrc,
+  alt,
+  className,
+  loaded,
+  onLoad,
+}: Pick<NovelCoverProps, "alt" | "className"> & {
+  devSrc: string | undefined;
+  loaded: boolean;
+  onLoad: () => void;
+}) {
+  return (
+    <div className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}>
+      <div
+        className={`absolute inset-0 bg-foreground/5 animate-pulse rounded-[inherit] transition-opacity duration-300 ${
+          loaded ? "opacity-0" : "opacity-100"
+        }`}
+      />
+      {devSrc ? (
+        <img
+          src={devSrc}
+          alt={alt}
+          onLoad={onLoad}
+          className={`w-full h-full object-cover rounded-[inherit] transition-opacity duration-300 ${
+            loaded ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 export function NovelCover({
   novelId,
@@ -29,15 +133,7 @@ export function NovelCover({
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(!lazy);
   const rootRef = useRef<HTMLDivElement>(null);
-  const version = coverVersion instanceof Date ? coverVersion.getTime() : coverVersion;
-  const coverBaseUrl = novelId ? `/api/covers/${novelId}` : null;
-  const versionParam = version ? `&v=${version}` : "";
-  const url = coverBaseUrl ? `${coverBaseUrl}?w=480${versionParam}` : null;
-  const srcSet = coverBaseUrl
-    ? [320, 480, 640]
-        .map((width) => `${coverBaseUrl}?w=${width}${versionParam} ${width}w`)
-        .join(", ")
-    : undefined;
+  const { url, srcSet } = buildCoverSources(novelId, coverVersion);
   const directImage = import.meta.env.PROD;
 
   useEffect(() => {
@@ -71,55 +167,33 @@ export function NovelCover({
   });
 
   if (!url || failed || isError) {
-    return (
-      <div
-        className={`w-full h-full flex items-center justify-center bg-foreground/3 text-muted-foreground/60 rounded-[inherit] ${className}`}
-      >
-        <BookOpen style={{ width: fallbackSize * 4, height: fallbackSize * 4 }} />
-      </div>
-    );
+    return <CoverFallback className={className} fallbackSize={fallbackSize} />;
   }
 
   if (directImage) {
     return (
-      <div
-        ref={rootRef}
-        className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}
-      >
-        {visible && (
-          <img
-            src={url}
-            srcSet={srcSet}
-            sizes={sizes}
-            alt={alt}
-            loading={lazy && !priority ? "lazy" : "eager"}
-            fetchPriority={priority ? "high" : "auto"}
-            decoding={priority ? "sync" : "async"}
-            onError={() => setFailed(true)}
-            className="w-full h-full object-cover rounded-[inherit]"
-          />
-        )}
-      </div>
+      <ProductionCover
+        rootRef={rootRef}
+        url={url}
+        srcSet={srcSet}
+        sizes={sizes}
+        alt={alt}
+        className={className}
+        visible={visible}
+        lazy={lazy}
+        priority={priority}
+        onError={() => setFailed(true)}
+      />
     );
   }
 
   return (
-    <div className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}>
-      <div
-        className={`absolute inset-0 bg-foreground/5 animate-pulse rounded-[inherit] transition-opacity duration-300 ${
-          loaded ? "opacity-0" : "opacity-100"
-        }`}
-      />
-      {devSrc && (
-        <img
-          src={devSrc}
-          alt={alt}
-          onLoad={() => setLoaded(true)}
-          className={`w-full h-full object-cover rounded-[inherit] transition-opacity duration-300 ${
-            loaded ? "opacity-100" : "opacity-0"
-          }`}
-        />
-      )}
-    </div>
+    <DevelopmentCover
+      devSrc={devSrc}
+      alt={alt}
+      className={className}
+      loaded={loaded}
+      onLoad={() => setLoaded(true)}
+    />
   );
 }
