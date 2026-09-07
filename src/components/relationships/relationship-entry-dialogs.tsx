@@ -53,6 +53,7 @@ const familiarityItems: Record<string, string> = {
 
 interface CharacterFormDialogProps {
   form: CharacterFormState | null;
+  targetLanguage: string;
   errors: Record<string, string>;
   saving: boolean;
   onChange: (form: CharacterFormState) => void;
@@ -62,6 +63,7 @@ interface CharacterFormDialogProps {
 
 export function CharacterFormDialog({
   form,
+  targetLanguage,
   errors,
   saving,
   onChange,
@@ -114,7 +116,7 @@ export function CharacterFormDialog({
             </FormField>
             <FormField
               id="character-target"
-              label="Thai name"
+              label={`${targetLanguage} name`}
               hint="An approved character glossary mapping wins at translation time."
               error={errors.targetName}
             >

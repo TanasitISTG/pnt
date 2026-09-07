@@ -53,11 +53,13 @@ describe("relationship analysis prompt", () => {
       currentChunk: "儿子说：我会回来。",
     });
 
-    expect(system).toContain("zh->th");
+    expect(system).toContain("Chinese-to-Thai dialogue-continuity analyst");
     expect(system).toContain("父亲");
     expect(system).toContain("พ่อ");
     expect(system).toContain("Do not invent");
-    expect(system).toContain("Never infer or output Thai speech choices");
+    expect(system).toContain(
+      "Never infer or output Thai speech choices from Chinese pronouns, names, particles, or kinship terms.",
+    );
     expect(system).not.toContain("selfPronoun");
     expect(system).not.toContain("addresseeTerm");
     expect(system).not.toContain("sentenceParticles");
@@ -65,6 +67,34 @@ describe("relationship analysis prompt", () => {
     expect(user).toContain("<<<BEGIN_CURRENT_SOURCE>>>");
     expect(user).toContain("儿子说：我会回来");
   });
+
+  it.each([
+    ["en->th", "English", "Thai", "father", "พ่อ"],
+    ["zh->en", "Chinese", "English", "父亲", "Father"],
+    ["zh->th", "Chinese", "Thai", "父亲", "พ่อ"],
+  ] as const)(
+    "uses the full source and target contract for %s",
+    (pair, source, target, name, mappedName) => {
+      const prompt = buildRelationshipAnalysisPrompt({
+        pair,
+        existingMap: emptyRelationshipMap(),
+        approvedMappings: [{ source: name, target: mappedName }],
+        currentChunk: `${name} speaks.`,
+      });
+
+      expect(prompt).toContain(`${source}-to-${target} dialogue-continuity analyst`);
+      expect(prompt).toContain(
+        `Exact ${target} pronouns, addressee terms, and sentence particles are outside automatic analysis.`,
+      );
+      expect(prompt).toContain(
+        `Never infer or output ${target} speech choices from ${source} pronouns, names, particles, or kinship terms.`,
+      );
+      expect(prompt).toContain(
+        `Approved character glossary mappings supply exact ${target} names and take precedence over any other target spelling.`,
+      );
+      if (pair === "zh->en") expect(prompt).not.toContain("Thai");
+    },
+  );
   it("strips legacy exact speech fields from provider output", () => {
     const relationship = parseRelationshipAnalysis(validResponse)?.relationships[0];
 

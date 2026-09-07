@@ -1,4 +1,5 @@
 const port = Number(process.env.E2E_OPENAI_PORT ?? "4010");
+const SLOW_TRANSLATION_MARKER = "慢速测试标记";
 
 interface ChatMessage {
   role: string;
@@ -31,13 +32,17 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
     .filter((message) => message.role === "user")
     .map((message) => message.content)
     .join("\n");
+  const chineseToEnglish =
+    system.includes("Chinese-to-English") ||
+    system.includes("Chinese to English") ||
+    system.includes("Chinese web novels into English");
 
   if (system.includes("dialogue-continuity analyst")) {
     return JSON.stringify({
       characters: [
         {
           sourceName: "父亲",
-          targetName: "พ่อ",
+          targetName: chineseToEnglish ? "Father" : "พ่อ",
           aliases: [],
           gender: "male",
           role: "father",
@@ -46,7 +51,7 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
         },
         {
           sourceName: "儿子",
-          targetName: "ลูกชาย",
+          targetName: chineseToEnglish ? "Son" : "ลูกชาย",
           aliases: [],
           gender: "male",
           role: "son",
@@ -61,9 +66,13 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
           relationship: "son",
           speakerStatus: "lower",
           familiarity: "close",
-          selfPronoun: "ฉัน",
-          addresseeTerm: "พ่อ",
-          sentenceParticles: null,
+          ...(chineseToEnglish
+            ? {}
+            : {
+                selfPronoun: "ฉัน",
+                addresseeTerm: "พ่อ",
+                sentenceParticles: null,
+              }),
           register: "respectful",
           notes: null,
           evidence: "儿子",
@@ -78,7 +87,7 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
   if (jsonResponse || system.includes("Return ONLY a JSON object")) {
     return system.includes('single key "reviews"') ? '{"reviews":[]}' : '{"terms":[]}';
   }
-  if (system.includes("chapter title")) return "ยามรุ่งอรุณ";
+  if (system.includes("chapter title")) return chineseToEnglish ? "Dawn" : "ยามรุ่งอรุณ";
   if (user.includes("Please summarize this chapter")) {
     return "The son speaks to his father at dawn and promises to return.\nDIALOGUE CONTINUITY: The son addresses his father as a lower-status speaker.";
   }
@@ -92,8 +101,12 @@ function responseContent(messages: ChatMessage[], jsonResponse: boolean): string
     const hasFatherSon = sourceMatch[1].includes("儿子") || sourceMatch[1].includes("父亲");
     const selfPronoun = system.includes('"selfPronoun":"ผม"') ? "ผม" : "ฉัน";
     const paragraphs = hasFatherSon
-      ? [`“${selfPronoun}จะ return مرحبا мир” ลูกชายบอกพ่อ`]
-      : ["At dawn, Lin opened the old gate.", "Beyond it, the silent road waited."];
+      ? chineseToEnglish
+        ? ['"I will return," Son said to Father.']
+        : [`“${selfPronoun}จะ return مرحبا мир” ลูกชายบอกพ่อ`]
+      : chineseToEnglish
+        ? ["At dawn, Lin opened the old gate.", "Beyond it, the silent road waited."]
+        : ["At dawn, Lin opened the old gate.", "Beyond it, the silent road waited."];
     return Array.from(
       { length: markerCount + 1 },
       (_, index) => paragraphs[index] ?? paragraphs[paragraphs.length - 1],
@@ -118,9 +131,24 @@ const server = Bun.serve({
       messages?: ChatMessage[];
       response_format?: { type?: string };
     };
-    return completion(
-      responseContent(body.messages ?? [], body.response_format?.type === "json_object"),
-    );
+    const messages = body.messages ?? [];
+    const jsonResponse = body.response_format?.type === "json_object";
+    const system = messages
+      .filter((message) => message.role === "system")
+      .map((message) => message.content)
+      .join("\n");
+    const user = messages
+      .filter((message) => message.role === "user")
+      .map((message) => message.content)
+      .join("\n");
+    if (
+      !jsonResponse &&
+      system.includes("You translate Chinese web novels into English.") &&
+      user.includes(SLOW_TRANSLATION_MARKER)
+    ) {
+      await Bun.sleep(5_000);
+    }
+    return completion(responseContent(messages, jsonResponse));
   },
 });
 

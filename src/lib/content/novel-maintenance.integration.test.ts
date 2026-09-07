@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
 import type * as ChapterOpsService from "./chapter-ops.service";
+import type * as NovelEditService from "./novel-edit.service";
+import type * as TranslationMutations from "@/lib/translation/api/mutations";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
@@ -11,6 +13,8 @@ let deleteAllNovelTranslationsForUser: typeof ChapterOpsService.deleteAllNovelTr
 let getResidualScriptChaptersForUser: typeof ChapterOpsService.getResidualScriptChaptersForUser;
 let deleteAllGlossaryTermsForUser: typeof import("../glossary/service").deleteAllGlossaryTermsForUser;
 let rejectAllPendingGlossaryTermsForUser: typeof import("../glossary/service").rejectAllPendingGlossaryTermsForUser;
+let updateNovelForUser: typeof NovelEditService.updateNovelForUser;
+let enqueueTranslationJob: typeof TranslationMutations.enqueueTranslationJob;
 const skipEagerDispatch = async () => {};
 
 type MaintenanceFixture = {
@@ -56,6 +60,25 @@ type NovelSnapshot = {
     usageJson: string | null;
   }>;
   terms: Array<{ id: string; status: string }>;
+};
+type PairChangeFixture = {
+  userId: string;
+  novelId: string;
+  chapterId: string;
+  relationshipMapJson: string;
+};
+
+type PairChangeSnapshot = {
+  sourceLang: string;
+  targetLang: string;
+  relationshipMapJson: string;
+  storySummary: string | null;
+  chapterStatus: string;
+  activeJobId: string | null;
+  translatedTitle: string | null;
+  translatedContent: string | null;
+  chapterSummary: string | null;
+  glossaryRows: Array<{ source: string; target: string; status: string }>;
 };
 
 async function seedMaintenanceFixture(): Promise<MaintenanceFixture> {
@@ -260,6 +283,105 @@ async function readJobChunks(jobIds: string[]) {
   }));
 }
 
+async function seedPairChangeFixture(): Promise<PairChangeFixture> {
+  const userId = `user-${randomUUID()}`;
+  const novelId = `novel-${randomUUID()}`;
+  const chapterId = `chapter-${randomUUID()}`;
+  const relationshipMapJson = `\n${JSON.stringify(
+    {
+      version: 1,
+      characters: [
+        {
+          id: "father",
+          sourceName: "父亲",
+          targetName: "Father",
+          aliases: [],
+          gender: "male",
+          role: "father",
+          notes: null,
+          enabled: true,
+          locked: false,
+          evidence: "父亲",
+          lastSeenChapter: 1,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      relationships: [],
+    },
+    null,
+    2,
+  )}\n`;
+  const rawContent = "父亲在黎明时等待。";
+
+  await sql`
+    INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
+    VALUES (${userId}, 'Pair Change Owner', ${`${userId}@example.test`}, true, now(), now())
+  `;
+  await sql`
+    INSERT INTO "novels" (
+      "id", "user_id", "title", "source_lang", "target_lang", "story_summary",
+      "relationship_map_json", "created_at", "updated_at"
+    ) VALUES (
+      ${novelId}, ${userId}, 'Pair Change Novel', 'zh', 'en', 'Persistent story summary',
+      ${relationshipMapJson}, now(), now()
+    )
+  `;
+  await sql`
+    INSERT INTO "chapters" (
+      "id", "novel_id", "number", "title", "translated_title", "raw_content",
+      "translated_content", "status", "summary", "raw_char_count", "translated_at",
+      "created_at", "updated_at"
+    ) VALUES (
+      ${chapterId}, ${novelId}, 1, '黎明', 'Dawn', ${rawContent},
+      'Father waits at dawn.', 'translated', 'The father waits.', ${rawContent.length}, now(),
+      now(), now()
+    )
+  `;
+  await sql`
+    INSERT INTO "glossary_terms" (
+      "id", "novel_id", "source", "target", "category", "status"
+    ) VALUES (
+      ${`term-${randomUUID()}`}, ${novelId}, '父亲', 'Father', 'character', 'approved'
+    )
+  `;
+
+  return { userId, novelId, chapterId, relationshipMapJson };
+}
+
+async function readPairChangeSnapshot(novelId: string): Promise<PairChangeSnapshot> {
+  const [row] = await sql<Omit<PairChangeSnapshot, "glossaryRows">[]>`
+    SELECT
+      n."source_lang" AS "sourceLang",
+      n."target_lang" AS "targetLang",
+      n."relationship_map_json" AS "relationshipMapJson",
+      n."story_summary" AS "storySummary",
+      c."status" AS "chapterStatus",
+      c."active_translation_job_id" AS "activeJobId",
+      c."translated_title" AS "translatedTitle",
+      c."translated_content" AS "translatedContent",
+      c."summary" AS "chapterSummary"
+    FROM "novels" n
+    INNER JOIN "chapters" c ON c."novel_id" = n."id"
+    WHERE n."id" = ${novelId}
+  `;
+  if (!row) throw new Error(`Missing pair-change fixture ${novelId}`);
+  const glossaryRows = await sql<PairChangeSnapshot["glossaryRows"]>`
+    SELECT "source", "target", "status"
+    FROM "glossary_terms"
+    WHERE "novel_id" = ${novelId}
+    ORDER BY "source"
+  `;
+  return { ...row, glossaryRows };
+}
+
+async function deletePairChangeFixture(fixture: PairChangeFixture) {
+  await sql`
+    DELETE FROM "translation_outbox"
+    WHERE "payload_json"::jsonb ->> 'novelId' = ${fixture.novelId}
+  `;
+  await sql`DELETE FROM "user" WHERE "id" = ${fixture.userId}`;
+}
+
 async function deleteFixture(fixture: MaintenanceFixture) {
   await sql`
     DELETE FROM "translation_outbox"
@@ -282,11 +404,132 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
       await import("./chapter-ops.service"));
     ({ deleteAllGlossaryTermsForUser, rejectAllPendingGlossaryTermsForUser } =
       await import("../glossary/service"));
+    ({ updateNovelForUser } = await import("./novel-edit.service"));
+    ({ enqueueTranslationJob } = await import("@/lib/translation/api/mutations"));
   });
 
   afterAll(async () => {
     if (sql) await sql.end({ timeout: 1 });
   });
+  it("preserves same-pair maps and atomically guards and resets changed pairs", async () => {
+    const fixture = await seedPairChangeFixture();
+    try {
+      await updateNovelForUser(fixture.userId, {
+        novelId: fixture.novelId,
+        title: "Renamed Pair Change Novel",
+      });
+      expect((await readPairChangeSnapshot(fixture.novelId)).relationshipMapJson).toBe(
+        fixture.relationshipMapJson,
+      );
+
+      await updateNovelForUser(fixture.userId, {
+        novelId: fixture.novelId,
+        sourceLang: "zh",
+        targetLang: "en",
+      });
+      expect((await readPairChangeSnapshot(fixture.novelId)).relationshipMapJson).toBe(
+        fixture.relationshipMapJson,
+      );
+
+      const jobId = `job-${randomUUID()}`;
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation",
+          "total_chunks", "done_chunks"
+        ) VALUES (${jobId}, ${fixture.chapterId}, 'pending', 1, 1, 1, 0)
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET "status" = 'queued', "active_translation_job_id" = ${jobId},
+            "translation_generation" = 1
+        WHERE "id" = ${fixture.chapterId}
+      `;
+
+      await expect(
+        updateNovelForUser(fixture.userId, {
+          novelId: fixture.novelId,
+          sourceLang: "en",
+          targetLang: "th",
+        }),
+      ).rejects.toThrow("Cancel active translations before changing the language pair");
+      const guarded = await readPairChangeSnapshot(fixture.novelId);
+      expect(guarded).toMatchObject({
+        sourceLang: "zh",
+        targetLang: "en",
+        relationshipMapJson: fixture.relationshipMapJson,
+        chapterStatus: "queued",
+        activeJobId: jobId,
+      });
+
+      await sql`
+        UPDATE "translation_jobs"
+        SET "status" = 'cancelled'
+        WHERE "id" = ${jobId}
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET "status" = 'translated', "active_translation_job_id" = NULL
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      const beforeReset = await readPairChangeSnapshot(fixture.novelId);
+
+      await updateNovelForUser(fixture.userId, {
+        novelId: fixture.novelId,
+        sourceLang: "en",
+        targetLang: "th",
+      });
+
+      expect(await readPairChangeSnapshot(fixture.novelId)).toEqual({
+        ...beforeReset,
+        sourceLang: "en",
+        targetLang: "th",
+        relationshipMapJson: '{"version":1,"characters":[],"relationships":[]}',
+      });
+    } finally {
+      await deletePairChangeFixture(fixture);
+    }
+  }, 30_000);
+
+  it("serializes language changes with concurrent translation enqueue", async () => {
+    const fixture = await seedPairChangeFixture();
+    try {
+      const [pairChange, enqueue] = await Promise.allSettled([
+        updateNovelForUser(fixture.userId, {
+          novelId: fixture.novelId,
+          sourceLang: "en",
+          targetLang: "th",
+        }),
+        enqueueTranslationJob(
+          fixture.userId,
+          fixture.chapterId,
+          { model: "integration-model" } as never,
+          skipEagerDispatch,
+        ),
+      ]);
+
+      expect(enqueue.status).toBe("fulfilled");
+      const snapshot = await readPairChangeSnapshot(fixture.novelId);
+      expect(snapshot.activeJobId).not.toBeNull();
+      if (pairChange.status === "fulfilled") {
+        expect(snapshot).toMatchObject({
+          sourceLang: "en",
+          targetLang: "th",
+          relationshipMapJson: '{"version":1,"characters":[],"relationships":[]}',
+        });
+      } else {
+        expect(pairChange.reason).toMatchObject({
+          message: "Cancel active translations before changing the language pair",
+        });
+        expect(snapshot).toMatchObject({
+          sourceLang: "zh",
+          targetLang: "en",
+          relationshipMapJson: fixture.relationshipMapJson,
+        });
+      }
+    } finally {
+      await deletePairChangeFixture(fixture);
+    }
+  }, 30_000);
 
   it("enforces ownership, resets translation artifacts, and retains history", async () => {
     const fixture = await seedMaintenanceFixture();

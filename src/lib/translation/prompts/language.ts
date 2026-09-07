@@ -1,11 +1,15 @@
 export type LanguagePair = "en->th" | "zh->en" | "zh->th";
 
-export function normalizePair(pair: string): LanguagePair {
+export function parseLanguagePair(pair: string): LanguagePair | null {
   const clean = pair.toLowerCase().replace(/\s+/g, "").replace("→", "->");
   if (clean === "en->th" || clean === "enth") return "en->th";
   if (clean === "zh->en" || clean === "zhen") return "zh->en";
   if (clean === "zh->th" || clean === "zhth") return "zh->th";
-  return "en->th";
+  return null;
+}
+
+export function normalizePair(pair: string): LanguagePair {
+  return parseLanguagePair(pair) ?? "en->th";
 }
 
 export const LANG_LABELS: Record<LanguagePair, { source: string; target: string }> = {

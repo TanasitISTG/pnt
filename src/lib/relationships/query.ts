@@ -2,7 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { getNovel } from "@/lib/content/novel.functions";
-import { getRelationshipMap } from "@/lib/relationships/functions";
+import { getRelationshipMap, getRelationshipWorkspace } from "@/lib/relationships/functions";
 
 export const relationshipMapViewSchema = z.enum(["characters", "relationships"]);
 export const relationshipMapStateSchema = z.enum(["all", "active", "inactive"]);
@@ -28,6 +28,11 @@ export const relationshipMapSearchSchema = z.object({
 });
 
 export type RelationshipMapSearch = z.infer<typeof relationshipMapSearchSchema>;
+export const relationshipWorkspaceQueryOptions = (novelId: string) =>
+  queryOptions({
+    queryKey: ["relationshipWorkspace", novelId] as const,
+    queryFn: () => getRelationshipWorkspace({ data: { novelId } }),
+  });
 
 export const relationshipNovelQueryOptions = (novelId: string) =>
   queryOptions({

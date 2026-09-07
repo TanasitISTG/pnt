@@ -526,7 +526,7 @@ function CharacterEmptyState({
       <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
         {filtered
           ? "No character profiles match these filters."
-          : "No character profiles yet. The next ZH→TH translation or retranslation will generate this map, or you can add a profile manually."}
+          : "No character profiles yet. The next translation or retranslation will generate this map, or you can add a profile manually."}
       </p>
       {filtered ? (
         <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
@@ -559,7 +559,7 @@ function RelationshipEmptyState({
       <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
         {filtered
           ? "No directed relationships match these filters."
-          : "No directed relationships yet. They are generated from evidenced dialogue during the next ZH→TH translation or retranslation, or can be added manually."}
+          : "No directed relationships yet. They are generated from evidenced dialogue during the next translation or retranslation, or can be added manually."}
       </p>
       {filtered ? (
         <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
@@ -753,7 +753,7 @@ export function CharacterProfilesTable({
         table={table}
         columnLabels={characterColumnLabels}
         searchLabel="Search characters"
-        description="Profiles and name mappings used by Chinese-to-Thai translation."
+        description="Profiles and name mappings used by translation."
       />
       <div className="overflow-x-auto">
         <Table className="min-w-[1000px] text-caption">

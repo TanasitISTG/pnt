@@ -15,6 +15,7 @@ import {
   updateNovelSchema,
   setNovelPublishedSchema,
 } from "@/lib/content/novel.schemas";
+import { updateNovelForUser } from "@/lib/content/novel-edit.service";
 
 export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
   const timing = createServerTiming();
@@ -182,46 +183,11 @@ export const updateNovel = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-
-      // Verify ownership
-      const [existing] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!existing) {
-        throw new SafeServerError("Novel not found or unauthorized");
-      }
-
-      const updateValues: Record<string, unknown> = {
-        title: data.title,
-        originalTitle: data.originalTitle,
-        author: data.author,
-        description: data.description,
-        sourceLang: data.sourceLang,
-        targetLang: data.targetLang,
-        customPrompt: data.customPrompt,
-        updatedAt: new Date(),
-      };
-
-      if (data.chunkSize !== undefined) updateValues.chunkSize = data.chunkSize;
-      if (data.contextTailLength !== undefined)
-        updateValues.contextTailLength = data.contextTailLength;
-
-      if (data.removeCover) {
-        updateValues.cover = null;
-        updateValues.coverMime = null;
-      } else if (data.cover) {
-        const coverBuffer = Buffer.from(data.cover, "base64");
+      const coverBuffer = data.cover ? Buffer.from(data.cover, "base64") : undefined;
+      if (coverBuffer) {
         assertCoverMagicBytes(coverBuffer, data.coverMime ?? "");
-        updateValues.cover = coverBuffer;
-        updateValues.coverMime = data.coverMime;
       }
-
-      await db.update(novels).set(updateValues).where(eq(novels.id, data.novelId));
-
-      return { id: data.novelId };
+      return updateNovelForUser(session.user.id, data, coverBuffer);
     });
   });
 

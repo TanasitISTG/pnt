@@ -3,7 +3,7 @@ import "@tanstack/react-start/server-only";
 import { createProviderClient } from "@/lib/translation/providers/provider-client";
 import { generateJsonCompletion } from "@/lib/translation/providers/json-completion";
 import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
-import { normalizePair } from "@/lib/translation/prompts/language";
+import { parseLanguagePair, type LanguagePair } from "@/lib/translation/prompts/language";
 import { canRunJob, isNextChunk } from "@/lib/translation/workflow/job-state";
 import {
   applyRelationshipAnalysis,
@@ -54,8 +54,8 @@ export async function analyzeChunkRelationships(
   const row = await loadJobChunk(jobId, chunkIndex);
   if (!row || !row.chunk) return emptyResult("Relationship analysis skipped: chunk not found.");
 
-  const pair = normalizePair(`${row.novel.sourceLang}->${row.novel.targetLang}`);
-  if (pair !== "zh->th") return emptyResult(null);
+  const pair = parseLanguagePair(`${row.novel.sourceLang}->${row.novel.targetLang}`);
+  if (!pair) return emptyResult(null);
   if (
     row.job.status !== "running" ||
     !canRunJob(row.job, row.chapter, generation) ||
@@ -137,7 +137,7 @@ export async function analyzeChunkRelationships(
 }
 
 export interface RelationshipSourceAnalysisOptions {
-  pair: string;
+  pair: LanguagePair;
   providerConfig: AIProviderClient;
   existingMap: RelationshipMapV1;
   approvedMappings: readonly ApprovedCharacterMapping[];

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
 
 import { relationshipAnalysisSchema } from "@/lib/relationships/schemas";
+import type * as RelationshipService from "@/lib/relationships/service";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
@@ -12,13 +13,16 @@ let completeChunk: typeof import("./job-store").completeChunk;
 let completeJob: typeof import("./job-store").completeJob;
 let applyRelationshipAnalysis: typeof import("./job-store").applyRelationshipAnalysis;
 let enqueueTranslationJob: typeof import("../api/mutations").enqueueTranslationJob;
-let setRelationshipEntryEnabledForUser: typeof import("@/lib/relationships/service").setRelationshipEntryEnabledForUser;
-let upsertCharacterProfileForUser: typeof import("@/lib/relationships/service").upsertCharacterProfileForUser;
+let setRelationshipEntryEnabledForUser: typeof RelationshipService.setRelationshipEntryEnabledForUser;
+let upsertCharacterProfileForUser: typeof RelationshipService.upsertCharacterProfileForUser;
+let getRelationshipMapForUser: typeof RelationshipService.getRelationshipMapForUser;
+let getRelationshipWorkspaceForUser: typeof RelationshipService.getRelationshipWorkspaceForUser;
 const skipEagerDispatch = async () => {};
 
 async function seedChapter(
   rawContent = "First paragraph.\n\nSecond paragraph.",
   targetLang = "en",
+  sourceLang = "zh",
 ) {
   const userId = `user-${randomUUID()}`;
   const novelId = `novel-${randomUUID()}`;
@@ -31,7 +35,7 @@ async function seedChapter(
   await sql`
     INSERT INTO "novels" (
       "id", "user_id", "title", "source_lang", "target_lang", "created_at", "updated_at"
-    ) VALUES (${novelId}, ${userId}, 'Integration Novel', 'zh', ${targetLang}, now(), now())
+    ) VALUES (${novelId}, ${userId}, 'Integration Novel', ${sourceLang}, ${targetLang}, now(), now())
   `;
   await sql`
     INSERT INTO "chapters" (
@@ -120,8 +124,12 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
     ({ completeChunk, completeJob, applyRelationshipAnalysis } = await import("./job-store"));
     ({ enqueueTranslationJob } = await import("../api/mutations"));
-    ({ setRelationshipEntryEnabledForUser, upsertCharacterProfileForUser } =
-      await import("@/lib/relationships/service"));
+    ({
+      setRelationshipEntryEnabledForUser,
+      upsertCharacterProfileForUser,
+      getRelationshipMapForUser,
+      getRelationshipWorkspaceForUser,
+    } = await import("@/lib/relationships/service"));
   });
 
   afterAll(async () => {
@@ -388,8 +396,33 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     const fixture = await seedChapter("儿子对父亲说：我会回来的。", "th");
     const jobId = `job-${randomUUID()}`;
     try {
+      await expect(getRelationshipMapForUser(fixture.userId, fixture.novelId)).resolves.toEqual({
+        version: 1,
+        characters: [],
+        relationships: [],
+      });
+      await expect(
+        getRelationshipWorkspaceForUser(fixture.userId, fixture.novelId),
+      ).resolves.toMatchObject({
+        novel: { sourceLang: "zh", targetLang: "th" },
+        map: { version: 1, characters: [], relationships: [] },
+      });
       await seedRunningAnalysisJob(fixture, jobId);
       const result = await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
+      const storedMap = await getRelationshipMapForUser(fixture.userId, fixture.novelId);
+      expect(storedMap.relationships).toEqual([
+        expect.objectContaining({
+          relationship: "son",
+          speakerStatus: "lower",
+          locked: false,
+        }),
+      ]);
+      await expect(
+        getRelationshipWorkspaceForUser(fixture.userId, fixture.novelId),
+      ).resolves.toMatchObject({
+        novel: { sourceLang: "zh", targetLang: "th" },
+        map: { relationships: [expect.objectContaining({ relationship: "son" })] },
+      });
       expect(result.applied).toBe(true);
       expect(result.map?.relationships).toHaveLength(1);
 
@@ -416,6 +449,24 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
           locked: false,
         }),
       ]);
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+  it("rejects owned relationship reads for unsupported language pairs", async () => {
+    const fixture = await seedChapter("An unsupported relationship fixture.", "en", "en");
+    try {
+      await expect(
+        getRelationshipWorkspaceForUser(fixture.userId, fixture.novelId),
+      ).resolves.toMatchObject({
+        novel: { sourceLang: "en", targetLang: "en" },
+        map: null,
+      });
+      await expect(
+        getRelationshipMapForUser(fixture.userId, fixture.novelId),
+      ).rejects.toMatchObject({
+        message: "Relationship maps are not supported for this language pair",
+      });
     } finally {
       await deleteFixture(fixture.userId);
     }

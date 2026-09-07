@@ -5,6 +5,9 @@ const adminPassword = "e2e-password-123";
 const novelTitle = "Father and Son at Dawn";
 const chapterTitle = "黎明";
 const draftNovelTitle = "Unpublished Draft at Noon";
+const zhEnNovelTitle = "Father and Son in English";
+const zhEnChapterTitle = "黎明（英文）";
+const slowTranslationMarker = "慢速测试标记";
 async function waitForReactHydration(page: import("@playwright/test").Page) {
   await page.waitForFunction(() => {
     const submit = document.querySelector('button[type="submit"]');
@@ -230,4 +233,120 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(page.getByText("return مرحبا мир")).toHaveCount(0);
   await expect(page.getByText("Machine-translated from Chinese.")).toBeVisible();
   await page.screenshot({ path: ".tura/e2e/guest-reader.png", fullPage: true });
+});
+test("admin translates Chinese-to-English relationships and resets them on pair change", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  await page.goto("/login");
+  await waitForReactHydration(page);
+  await rejectOptionalAnalytics(page);
+  await page.getByLabel("Email").fill(adminEmail);
+  await page.getByLabel("Password").fill(adminPassword);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  await page.getByRole("button", { name: "New Novel" }).click();
+  await page.getByLabel("Title *").fill(zhEnNovelTitle);
+  await page.locator("#sourceLang").click();
+  await page.getByRole("option", { name: "Chinese (ZH)" }).click();
+  await page.locator("#targetLang").click();
+  await page.getByRole("option", { name: "English (EN)" }).click();
+  await page.getByRole("button", { name: "Create Novel" }).click();
+
+  await expect(page.getByRole("heading", { name: zhEnNovelTitle })).toBeVisible();
+  await page.getByLabel("Number *").fill("1");
+  await page.getByLabel("Title *").last().fill(zhEnChapterTitle);
+  await page
+    .getByLabel("Raw Content *")
+    .fill(`儿子对父亲说：“我会回来的。”\n${slowTranslationMarker}`);
+  await page.getByRole("button", { name: "Add Chapter" }).click();
+
+  await page.getByRole("button", { name: "Relationships", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
+  await expect(page.getByText("ZH → EN", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Chinese-to-English dialogue/)).toBeVisible();
+  await page.getByRole("button", { name: "Add character profile" }).click();
+  await expect(page.getByLabel("English name")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Back to novel" }).click();
+
+  let chapterRow = page.getByRole("row", { name: new RegExp(zhEnChapterTitle) });
+  await chapterRow.getByRole("button", { name: "Translate chapter" }).click();
+  await expect(chapterRow.getByRole("button", { name: "Cancel translation" })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  await page.getByRole("button", { name: "Edit novel" }).click();
+  await expect(page.getByRole("heading", { name: zhEnNovelTitle })).toBeVisible();
+  const editUrl = page.url();
+  await page.locator("#sourceLang").click();
+  await page.getByRole("option", { name: "English (EN)" }).click();
+  await page.locator("#targetLang").click();
+  await page.getByRole("option", { name: "Thai (TH)" }).click();
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  await expect(
+    page.getByText("Cancel active translations before changing the language pair", { exact: true }),
+  ).toBeVisible();
+  expect(page.url()).toBe(editUrl);
+
+  await page.getByRole("button", { name: "Go back" }).click();
+  chapterRow = page.getByRole("row", { name: new RegExp(zhEnChapterTitle) });
+  await expect(chapterRow.getByRole("button", { name: "Cancel translation" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(chapterRow.getByRole("button", { name: "Cancel translation" })).toHaveCount(0, {
+    timeout: 90_000,
+  });
+  await expect(page.getByRole("link", { name: "Dawn", exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole("link", { name: "Dawn", exact: true }).click();
+  await page.getByRole("button", { name: "Translated", exact: true }).click();
+  await expect(
+    page.getByText('"I will return," Son said to Father.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(slowTranslationMarker, { exact: true })).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: zhEnNovelTitle })).toBeVisible();
+
+  await page.getByRole("button", { name: "Relationships", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
+  await expect(page.getByText("Father", { exact: true })).toBeVisible();
+  await expect(page.getByText("Son", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: /Directed relationships/ }).click();
+  const generatedRelationshipRow = page
+    .getByRole("row")
+    .filter({ hasText: "儿子" })
+    .filter({ hasText: "父亲" })
+    .last();
+  await expect(generatedRelationshipRow).toBeVisible();
+  await page.screenshot({ path: ".tura/e2e/relationships-zh-en.png", fullPage: true });
+
+  await page.getByRole("button", { name: "Back to novel" }).click();
+  await page.getByRole("button", { name: "Edit novel" }).click();
+  await page.locator("#sourceLang").click();
+  await page.getByRole("option", { name: "English (EN)" }).click();
+  await page.locator("#targetLang").click();
+  await page.getByRole("option", { name: "Thai (TH)" }).click();
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  await expect(page.getByText("Novel updated successfully", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: zhEnNovelTitle })).toBeVisible();
+
+  await page.getByRole("button", { name: "Relationships", exact: true }).click();
+  await expect(page.getByText("EN → TH", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(
+      "No character profiles yet. The next translation or retranslation will generate this map, or you can add a profile manually.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: /Directed relationships/ }).click();
+  await expect(
+    page.getByText(
+      "No directed relationships yet. They are generated from evidenced dialogue during the next translation or retranslation, or can be added manually.",
+      { exact: true },
+    ),
+  ).toBeVisible();
 });

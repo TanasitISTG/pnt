@@ -5,6 +5,7 @@ import {
   relationshipMapQueryOptions,
   relationshipMapSearchSchema,
   relationshipNovelQueryOptions,
+  relationshipWorkspaceQueryOptions,
 } from "@/lib/relationships/query";
 
 export const Route = createFileRoute("/_protected/novels/$novelId/relationships")({
@@ -12,13 +13,21 @@ export const Route = createFileRoute("/_protected/novels/$novelId/relationships"
   loaderDeps: () => ({}),
   shouldReload: false,
   loader: async ({ context, params }) => {
-    const [novel] = await Promise.all([
-      context.queryClient.ensureQueryData(relationshipNovelQueryOptions(params.novelId)),
-      context.queryClient.ensureQueryData(relationshipMapQueryOptions(params.novelId)),
-    ]);
-    if (!novel || novel.sourceLang !== "zh" || novel.targetLang !== "th") {
+    const workspace = await context.queryClient.fetchQuery({
+      ...relationshipWorkspaceQueryOptions(params.novelId),
+      staleTime: 0,
+    });
+    if (!workspace?.map) {
       throw redirect({ to: "/novels/$novelId", params: { novelId: params.novelId } });
     }
+    context.queryClient.setQueryData(
+      relationshipNovelQueryOptions(params.novelId).queryKey,
+      workspace.novel,
+    );
+    context.queryClient.setQueryData(
+      relationshipMapQueryOptions(params.novelId).queryKey,
+      workspace.map,
+    );
   },
   component: RelationshipsPage,
 });

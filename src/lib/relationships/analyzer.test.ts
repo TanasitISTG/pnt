@@ -372,6 +372,47 @@ describe("chunk relationship provider setup", () => {
     expect(result.promptTokens).toBe(3);
     expect(result.completionTokens).toBe(2);
   });
+  it.each(["en->th", "zh->en", "zh->th"] as const)(
+    "runs automatic analysis for %s",
+    async (pair) => {
+      const [sourceLang, targetLang] = pair.split("->");
+      const providerConfig = provider({
+        characters: [],
+        relationships: [],
+        activePairs: [],
+      });
+      vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+        ...runnableChunkRow,
+        novel: { ...runnableChunkRow.novel, sourceLang, targetLang },
+      } as never);
+      vi.mocked(providerClientModule.createProviderClient).mockResolvedValue(providerConfig);
+
+      const result = await analyzeChunkRelationships("job-1", 0, 3);
+
+      expect(providerClientModule.createProviderClient).toHaveBeenCalledWith("user-1");
+      expect(result.warning).toBeNull();
+      expect(result.promptTokens).toBe(3);
+      expect(result.completionTokens).toBe(2);
+      expect(result.context).toEqual(null);
+    },
+  );
+
+  it("silently skips unsupported pairs before creating a provider", async () => {
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...runnableChunkRow,
+      novel: { ...runnableChunkRow.novel, sourceLang: "en", targetLang: "en" },
+    } as never);
+
+    const result = await analyzeChunkRelationships("job-1", 0, 3);
+
+    expect(providerClientModule.createProviderClient).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      context: null,
+      warning: null,
+      promptTokens: 0,
+      completionTokens: 0,
+    });
+  });
 
   it("returns stored context when provider creation exhausts its retries", async () => {
     const storedMap = mapWith(

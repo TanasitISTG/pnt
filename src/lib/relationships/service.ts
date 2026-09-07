@@ -1,10 +1,11 @@
 import "@tanstack/react-start/server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { nanoid } from "@/lib/utils";
 import { db } from "@/lib/db";
 import { novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
+import { parseLanguagePair } from "@/lib/translation/prompts/language";
 import {
   deleteRelationshipEntrySchema,
   relationshipMapSchema,
@@ -22,18 +23,60 @@ import {
 import { parseRelationshipMap, serializeRelationshipMap } from "./map";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export async function getRelationshipWorkspaceForUser(userId: string, novelId: string) {
+  const [row] = await db
+    .select({
+      id: novels.id,
+      title: novels.title,
+      originalTitle: novels.originalTitle,
+      author: novels.author,
+      description: novels.description,
+      sourceLang: novels.sourceLang,
+      targetLang: novels.targetLang,
+      customPrompt: novels.customPrompt,
+      chunkSize: novels.chunkSize,
+      contextTailLength: novels.contextTailLength,
+      publishedAt: novels.publishedAt,
+      hasCover: sql<boolean>`${novels.cover} is not null`,
+      createdAt: novels.createdAt,
+      updatedAt: novels.updatedAt,
+      relationshipMapJson: novels.relationshipMapJson,
+    })
+    .from(novels)
+    .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+    .limit(1);
+
+  if (!row) return null;
+  const { relationshipMapJson, ...novel } = row;
+  const pair = parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`);
+  return {
+    novel: {
+      ...novel,
+      sourceLang: novel.sourceLang as "en" | "zh",
+      targetLang: novel.targetLang as "en" | "th",
+    },
+    map: pair ? parseStoredMap(relationshipMapJson) : null,
+  };
+}
 
 export async function getRelationshipMapForUser(
   userId: string,
   novelId: string,
 ): Promise<RelationshipMapV1> {
   const [novel] = await db
-    .select({ relationshipMapJson: novels.relationshipMapJson })
+    .select({
+      relationshipMapJson: novels.relationshipMapJson,
+      sourceLang: novels.sourceLang,
+      targetLang: novels.targetLang,
+    })
     .from(novels)
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1);
 
   if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`)) {
+    throw new SafeServerError("Relationship maps are not supported for this language pair");
+  }
   return parseStoredMap(novel.relationshipMapJson);
 }
 
@@ -205,12 +248,20 @@ export async function deleteRelationshipEntryForUser(
 
 async function lockOwnedNovel(tx: DbTransaction, userId: string, novelId: string) {
   const [novel] = await tx
-    .select({ id: novels.id, relationshipMapJson: novels.relationshipMapJson })
+    .select({
+      id: novels.id,
+      relationshipMapJson: novels.relationshipMapJson,
+      sourceLang: novels.sourceLang,
+      targetLang: novels.targetLang,
+    })
     .from(novels)
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1)
     .for("update");
   if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`)) {
+    throw new SafeServerError("Relationship maps are not supported for this language pair");
+  }
   return { novel, map: parseStoredMap(novel.relationshipMapJson) };
 }
 

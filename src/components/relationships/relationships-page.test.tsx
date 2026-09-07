@@ -69,8 +69,8 @@ const novel = {
   originalTitle: null,
   author: null,
   description: null,
-  sourceLang: "zh" as const,
-  targetLang: "th" as const,
+  sourceLang: "zh" as "en" | "zh",
+  targetLang: "th" as "en" | "th",
   customPrompt: null,
   chunkSize: 2_000,
   contextTailLength: 1_000,
@@ -128,17 +128,23 @@ const map: RelationshipMapV1 = { version: 1, characters, relationships };
 
 function renderRelationships(
   search: RelationshipMapSearch = defaultSearch,
-  relationshipMap: RelationshipMapV1 = map,
+  relationshipMap: RelationshipMapV1 | null = map,
+  novelOverride: Partial<typeof novel> = {},
 ) {
   routerState.search = search;
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   });
-  queryClient.setQueryData(relationshipNovelQueryOptions("novel-relationships").queryKey, novel);
-  queryClient.setQueryData(
-    relationshipMapQueryOptions("novel-relationships").queryKey,
-    relationshipMap,
-  );
+  queryClient.setQueryData(relationshipNovelQueryOptions("novel-relationships").queryKey, {
+    ...novel,
+    ...novelOverride,
+  });
+  if (relationshipMap) {
+    queryClient.setQueryData(
+      relationshipMapQueryOptions("novel-relationships").queryKey,
+      relationshipMap,
+    );
+  }
   render(
     <QueryClientProvider client={queryClient}>
       <Suspense fallback={<p>Loading</p>}>
@@ -195,6 +201,33 @@ describe("RelationshipsPage workspace", () => {
       page: 1,
       pageSize: 25,
     });
+  });
+  it("describes Chinese-to-English maps and keeps optional speech controls", () => {
+    renderRelationships(defaultSearch, map, { sourceLang: "zh", targetLang: "en" });
+
+    expect(screen.getByText("ZH → EN", { exact: true })).toBeTruthy();
+    expect(screen.getByText(/Chinese-to-English dialogue/)).toBeTruthy();
+    expect(screen.getByText(/Approved glossary mappings win for English names/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add character profile" }));
+    expect(screen.getByLabelText("English name")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel$/ }));
+
+    cleanup();
+    routerState.search = { ...defaultSearch, view: "relationships" };
+    renderRelationships(routerState.search, map, { sourceLang: "zh", targetLang: "en" });
+    fireEvent.click(screen.getByRole("button", { name: "Add directed relationship" }));
+    expect(screen.getByLabelText("Preferred self-pronoun")).toBeTruthy();
+    expect(screen.getByLabelText("Addressee term / title")).toBeTruthy();
+    expect(screen.getByLabelText("Sentence particles")).toBeTruthy();
+    expect(screen.getByLabelText("Register")).toBeTruthy();
+  });
+  it("renders unsupported pairs without requesting a relationship map", () => {
+    renderRelationships(defaultSearch, null, { sourceLang: "en", targetLang: "en" });
+
+    expect(screen.getByRole("heading", { name: "Relationship map unavailable" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to novel" })).toBeTruthy();
+    expect(serverFunctions.getRelationshipMap).not.toHaveBeenCalled();
   });
 
   it("disables all relationship creation actions until two characters exist", () => {

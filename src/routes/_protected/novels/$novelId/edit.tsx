@@ -9,6 +9,7 @@ import { NovelForm } from "@/components/novels/novel-form";
 import { PublishMenu } from "@/components/publish-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { emptyRelationshipMap } from "@/lib/relationships/map";
 
 const novelQueryOptions = (novelId: string) =>
   queryOptions({
@@ -31,11 +32,28 @@ function EditNovelPage() {
 
   const { mutateAsync: update, isPending } = useMutation({
     mutationFn: (vars: UpdateNovelInput) => updateNovel({ data: vars }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["novels"] });
-      queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
+    onSuccess: async (_result, variables) => {
+      if (novel) {
+        const nextSourceLang = variables.sourceLang ?? novel.sourceLang;
+        const nextTargetLang = variables.targetLang ?? novel.targetLang;
+        const languagePairChanged =
+          nextSourceLang !== novel.sourceLang || nextTargetLang !== novel.targetLang;
+        if (languagePairChanged) {
+          queryClient.setQueryData(["novel", novelId], {
+            ...novel,
+            sourceLang: nextSourceLang,
+            targetLang: nextTargetLang,
+          });
+          queryClient.setQueryData(["relationshipMap", novelId], emptyRelationshipMap());
+        }
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["novels"] }),
+        queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
+        queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] }),
+      ]);
       toast.success("Novel updated successfully");
-      navigate({ to: "/novels/$novelId", params: { novelId } });
+      await navigate({ to: "/novels/$novelId", params: { novelId } });
     },
     onError: (error) => {
       toast.error(error.message || "Failed to update novel");

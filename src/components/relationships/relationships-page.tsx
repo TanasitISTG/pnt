@@ -33,6 +33,7 @@ import {
   relationshipNovelQueryOptions,
   type RelationshipMapSearch,
 } from "@/lib/relationships/query";
+import { LANG_LABELS, parseLanguagePair } from "@/lib/translation/prompts/language";
 
 const relationshipsRoute = getRouteApi("/_protected/novels/$novelId/relationships");
 
@@ -41,7 +42,13 @@ export function RelationshipsPage() {
   const search = relationshipsRoute.useSearch();
   const navigate = relationshipsRoute.useNavigate();
   const novelQuery = useQuery(relationshipNovelQueryOptions(novelId));
-  const mapQuery = useQuery(relationshipMapQueryOptions(novelId));
+  const novel = novelQuery.data;
+  const pair = novel ? parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`) : null;
+  const languageLabels = pair ? LANG_LABELS[pair] : null;
+  const mapQuery = useQuery({
+    ...relationshipMapQueryOptions(novelId),
+    enabled: pair !== null,
+  });
   const {
     actions,
     characterErrors,
@@ -75,7 +82,6 @@ export function RelationshipsPage() {
   );
 
   const map = mapQuery.data;
-  const novel = novelQuery.data;
   const characterPage = useMemo(() => {
     if (!map || search.view !== "characters") return null;
     return buildCharacterTablePage(map, search);
@@ -106,6 +112,21 @@ export function RelationshipsPage() {
         <h2 className="text-card-title font-semibold text-foreground">Novel not found</h2>
         <Button className="mt-4" render={<Link to="/" />}>
           Back to Library
+        </Button>
+      </div>
+    );
+  }
+  if (!pair || !languageLabels) {
+    return (
+      <div className="py-12 text-center">
+        <h2 className="text-card-title font-semibold text-foreground">
+          Relationship map unavailable
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This language pair does not support relationship maps.
+        </p>
+        <Button className="mt-4" render={<Link to="/novels/$novelId" params={{ novelId }} />}>
+          Back to novel
         </Button>
       </div>
     );
@@ -151,14 +172,15 @@ export function RelationshipsPage() {
             </h1>
           </div>
           <Badge variant="outline" className="ml-auto uppercase">
-            ZH → TH
+            {novel.sourceLang.toUpperCase()} → {novel.targetLang.toUpperCase()}
           </Badge>
         </div>
         <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-          Keep directed speaker and listener choices consistent across Chinese-to-Thai dialogue.
-          Automatic analysis runs during the next translation or retranslation; you can also
-          populate critical facts manually. Manual changes affect not-yet-started chunks and future
-          retranslations, but never cancel a chunk already at the provider.
+          Keep directed speaker and listener choices consistent across {languageLabels.source}-to-
+          {languageLabels.target} dialogue. Automatic analysis runs during the next translation or
+          retranslation; you can also populate critical facts manually. Manual changes affect
+          not-yet-started chunks and future retranslations, but never cancel a chunk already at the
+          provider.
         </p>
       </header>
       {mapQuery.isRefetchError && map && (
@@ -197,8 +219,8 @@ export function RelationshipsPage() {
                     </h2>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Approved glossary mappings win for Thai names. Automatic profiles remain
-                    editable until you lock them.
+                    Approved glossary mappings win for {languageLabels.target} names. Automatic
+                    profiles remain editable until you lock them.
                   </p>
                 </div>
                 <Button size="sm" onClick={openCharacterAdd} aria-label="Add character profile">
@@ -268,6 +290,7 @@ export function RelationshipsPage() {
 
       <CharacterFormDialog
         form={characterForm}
+        targetLanguage={languageLabels.target}
         errors={characterErrors}
         saving={saveCharacterPending}
         onChange={setCharacterForm}

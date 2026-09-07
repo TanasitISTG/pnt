@@ -1,9 +1,9 @@
 import { MAX_RELATIONSHIP_PROMPT_ITEMS, relationshipAnalysisSchema } from "./schemas";
 import type { ApprovedCharacterMapping, RelationshipAnalysis, RelationshipMapV1 } from "./schemas";
-import { normalizePair } from "@/lib/translation/prompts/language";
+import { LANG_LABELS, type LanguagePair } from "@/lib/translation/prompts/language";
 
 export interface RelationshipAnalysisPromptOptions {
-  pair: string;
+  pair: LanguagePair;
   existingMap: RelationshipMapV1;
   approvedMappings: readonly ApprovedCharacterMapping[];
   storySummary?: string | null;
@@ -14,7 +14,7 @@ export interface RelationshipAnalysisPromptOptions {
 export function buildRelationshipAnalysisPrompt(
   options: RelationshipAnalysisPromptOptions,
 ): string {
-  const pair = normalizePair(options.pair);
+  const { source, target } = LANG_LABELS[options.pair];
   const relevanceText = [options.currentChunk, options.previousSourceTail]
     .filter((value): value is string => Boolean(value))
     .join("\n");
@@ -71,17 +71,17 @@ export function buildRelationshipAnalysisPrompt(
     .slice(0, MAX_RELATIONSHIP_PROMPT_ITEMS);
 
   return [
-    `You are a careful dialogue-continuity analyst for the ${pair} language pair.`,
+    `You are a careful ${source}-to-${target} dialogue-continuity analyst.`,
     "Analyze only the supplied source window and the enabled stored facts below.",
     "Do not invent a character, relationship, gender, role, or speech choice.",
     "Every character, relationship, and active-pair item must include a short literal source evidence excerpt copied exactly from currentChunk; never use the preceding tail as evidence.",
-    "Use source-language names as sourceName and as relationship speaker/listener values.",
+    `Use ${source}-language names as sourceName and as relationship speaker/listener values.`,
     "Resolve aliases to the established source identity when possible; do not create a second identity for the same person.",
     "Distinguish the speaker from the listener. activePairs must contain only directed pairs shown or clearly addressed in currentChunk.",
     "Leave gender, status, familiarity, and register as unknown/null when the source does not establish them.",
-    "Exact Thai pronouns, addressee terms, and sentence particles are outside automatic analysis.",
-    "Never infer or output Thai speech choices from Chinese 我, 你, 吧, names, or kinship terms.",
-    "Approved character glossary mappings supply exact Thai names and take precedence over any other target spelling.",
+    `Exact ${target} pronouns, addressee terms, and sentence particles are outside automatic analysis.`,
+    `Never infer or output ${target} speech choices from ${source} pronouns, names, particles, or kinship terms.`,
+    `Approved character glossary mappings supply exact ${target} names and take precedence over any other target spelling.`,
     "Return JSON only with exactly these top-level arrays: characters, relationships, activePairs.",
     "Character item shape: {sourceName,targetName,aliases,gender,role,notes,evidence}.",
     "Relationship item shape: {speaker,listener,relationship,speakerStatus,familiarity,register,notes,evidence}.",
@@ -144,7 +144,7 @@ function normalizeAnalysisShape(value: unknown): unknown {
         if (!isRecord(item)) return item;
         return {
           sourceName: item.sourceName ?? item.name ?? item.source,
-          targetName: item.targetName ?? item.thaiName ?? item.target ?? null,
+          targetName: item.targetName ?? item.target ?? null,
           aliases: Array.isArray(item.aliases)
             ? item.aliases
             : typeof item.alias === "string"

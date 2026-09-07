@@ -24,6 +24,7 @@ import { NovelCover } from "@/components/novels/novel-cover";
 import { PublishMenu } from "@/components/publish-menu";
 import type { ChapterRow } from "@/components/chapters/types";
 import { formatCost, formatTokens } from "@/lib/utils";
+import { parseLanguagePair } from "@/lib/translation/prompts/language";
 import type { getNovel } from "@/lib/content/novel.functions";
 import type { getGlossaryStats } from "@/lib/glossary/functions";
 import type { getNovelCosts } from "@/lib/translation/api/queries";
@@ -73,7 +74,7 @@ function AdminActions({
   onExportEpub,
   onDeleteNovel,
 }: AdminActionsProps) {
-  const showRelationships = novel.sourceLang === "zh" && novel.targetLang === "th";
+  const showRelationships = Boolean(parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`));
   return (
     <div className="flex w-full flex-wrap justify-end gap-1.5 sm:ml-auto sm:w-auto sm:gap-2">
       <PublishMenu

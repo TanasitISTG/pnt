@@ -13,11 +13,20 @@ import {
 import {
   deleteRelationshipEntryForUser,
   getRelationshipMapForUser,
+  getRelationshipWorkspaceForUser,
   setRelationshipEntryAutoManagedForUser,
   setRelationshipEntryEnabledForUser,
   upsertCharacterProfileForUser,
   upsertCharacterRelationshipForUser,
 } from "./service";
+export const getRelationshipWorkspace = createServerFn({ method: "GET" })
+  .validator(getRelationshipMapSchema)
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+      return getRelationshipWorkspaceForUser(session.user.id, data.novelId);
+    }),
+  );
 
 export const getRelationshipMap = createServerFn({ method: "GET" })
   .validator(getRelationshipMapSchema)
