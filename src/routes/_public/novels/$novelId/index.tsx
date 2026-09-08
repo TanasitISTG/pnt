@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useCallback } from "react";
 
 import { AddChapterSection } from "@/components/chapters/add-chapter-section";
 import { ChapterReorderDialogFallback } from "@/components/chapters/chapter-reorder-dialog-fallback";
@@ -18,6 +18,10 @@ import {
   useNovelDetailPage,
 } from "@/components/novels/use-novel-detail-page";
 import { Button } from "@/components/ui/button";
+import {
+  evalReviewSearchSchema,
+  type EvalReviewSearch,
+} from "@/lib/translation/evaluation/eval.schemas";
 
 const LazyChapterReorderDialog = lazy(async () => {
   const module = await import("@/components/chapters/chapter-reorder-dialog");
@@ -25,6 +29,9 @@ const LazyChapterReorderDialog = lazy(async () => {
 });
 
 export const Route = createFileRoute("/_public/novels/$novelId/")({
+  validateSearch: evalReviewSearchSchema,
+  loaderDeps: () => ({}),
+  shouldReload: false,
   loader: async ({ params, context }) => {
     const novelPromise = context.queryClient.ensureQueryData(novelQueryOptions(params.novelId));
     if (context.user) {
@@ -94,6 +101,30 @@ function NovelDetailPage() {
   const { novelId } = Route.useParams();
   const { user } = Route.useRouteContext();
   const isAdmin = !!user;
+  const reviewSearch = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const onReviewSearchChange = useCallback(
+    (patch: Partial<EvalReviewSearch>) => {
+      const includesReport = Object.prototype.hasOwnProperty.call(patch, "reviewReport");
+      void navigate({
+        search: (previous) => {
+          const next = { ...previous, ...patch };
+          if (includesReport && patch.reviewReport === undefined) {
+            return {
+              ...next,
+              reviewReport: undefined,
+              reviewFilter: "attention",
+              reviewPage: 1,
+              reviewPageSize: 25,
+            };
+          }
+          return next;
+        },
+        replace: !includesReport || patch.reviewReport === undefined,
+      });
+    },
+    [navigate],
+  );
   const {
     backfillTitles,
     backfillingTitles,
@@ -204,7 +235,13 @@ function NovelDetailPage() {
 
       <hr className="border-border" />
 
-      {isAdmin && chaptersReady && <TranslationQualityPanel novelId={novelId} />}
+      {isAdmin && chaptersReady ? (
+        <TranslationQualityPanel
+          novelId={novelId}
+          reviewSearch={reviewSearch}
+          onReviewSearchChange={onReviewSearchChange}
+        />
+      ) : null}
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

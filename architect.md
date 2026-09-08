@@ -71,6 +71,16 @@ For every canonical language pair, Inngest executes memoized `context-N` immedia
 
 Unlocked exact speech fields are scrubbed and never reach the translator as authoritative guidance. Locked admin character and directed-relationship entries are authoritative and preserve their exact target-language speech choices against conflicting automatic evidence. Analysis failures do not fail translation: the worker logs a warning and uses enabled stored entries whose names match the source window. Automatic map updates do not increment chapter source revision or cancel active work; they affect later not-yet-started context/translation steps and future retranslations.
 
+## Deterministic translation review
+
+- Evaluation selection uses shared validation for positive decimal numbers and inclusive ranges; `all` has no chapter-count cutoff. Chapter bodies stream through a 25-row numeric-order cursor; only compact results accumulate.
+- A quality report and its `translation/eval.requested` outbox event commit together. The report ID is the stable `runKey`. Attempts remain retryable; Inngest `onFailure` terminalizes active reports only after retries are exhausted.
+- Completed/error reports are immutable. Conditional completion cannot overwrite a terminal snapshot. Rechecking creates a new report and never edits chapter, glossary, or translation-job state.
+- Nonempty retained translations are evaluated regardless of chapter job status. Untranslated/whitespace-only content is skipped, not counted as clean or failed quality checks.
+- Version-1 snapshots retain chapter timestamps and a fingerprint of the language pair and approved source/target mappings. Detail reads compare these with current data; publication-only timestamp changes conservatively mark findings changed. Deleted chapters have no navigation action, including in legacy reports.
+- Stored JSON is validated before rendering. Malformed or inconsistent evidence is unavailable, not a clean result. Legacy reports preserve recorded metrics with unknown freshness and classification; new checks provide the missing metadata.
+- Owner-only summaries omit raw JSON; detail responses return 10/25/50 rows. Review URLs preserve report/filter/page across reader edits and browser Back. Guest pages never request review data.
+
 ## Boundaries
 
 - `translation/workflow/job-state.ts`: pure transition predicates and compatibility helpers.

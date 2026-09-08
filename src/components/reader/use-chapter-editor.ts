@@ -45,6 +45,7 @@ export function useChapterEditor({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] }),
         queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
+        queryClient.invalidateQueries({ queryKey: ["translation-eval-report", novelId] }),
       ]);
       setDraft(null);
       setEditErrors({});

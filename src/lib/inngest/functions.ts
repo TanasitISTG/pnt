@@ -22,10 +22,14 @@ import { log } from "@/lib/log";
 import { dispatchPendingTranslationOutbox } from "@/lib/translation/workflow/outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
 import { TRANSLATION_RETRY_COUNT } from "@/lib/translation/workflow/retry";
-import { runTranslationEvalReport } from "@/lib/translation/evaluation/eval-worker";
+import {
+  failTranslationEvalReport,
+  runTranslationEvalReport,
+} from "@/lib/translation/evaluation/eval-worker";
 
 // onFailure wraps the original trigger event: event.data.event.data.jobId.
 type FailedRunEventData = { event?: { data?: { jobId?: string; generation?: number } } };
+type FailedEvalRunEventData = { event?: { data?: { reportId?: string } } };
 
 // One run per translation job. Each chunk is a memoized step = its own HTTP
 // invocation (fresh 5-min Vercel budget) with automatic retries; a crash
@@ -173,13 +177,24 @@ export const cleanupExpiredEpubUploadsFn = inngest.createFunction(
   },
   async ({ step }) => step.run("cleanup", () => cleanupExpiredEpubUploads()),
 );
-
 export const translationEvalFn = inngest.createFunction(
   {
     id: "translation-eval",
     triggers: { event: "translation/eval.requested" },
     retries: 1,
     idempotency: "event.data.runKey",
+    onFailure: async ({ event, error }) => {
+      const reportId = (event.data as FailedEvalRunEventData).event?.data?.reportId;
+      if (!reportId) {
+        log("error", "Translation evaluation onFailure fired without reportId", {
+          event,
+          error: error.message,
+        });
+        return;
+      }
+      log("error", "Translation evaluation failed", { reportId, error: error.message });
+      await failTranslationEvalReport(reportId);
+    },
   },
   async ({ event, step }) => {
     const { reportId } = event.data as { reportId: string };
