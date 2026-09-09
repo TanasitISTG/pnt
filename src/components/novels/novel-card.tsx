@@ -3,101 +3,114 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { NovelCover } from "@/components/novels/novel-cover";
-import { publishState } from "@/lib/content/publish";
-
-interface Novel {
-  id: string;
-  title: string;
-  originalTitle?: string | null;
-  author?: string | null;
-  description?: string | null;
-  sourceLang: string;
-  targetLang: string;
-  chapterCount: number;
-  translatedCount: number;
-  hasCover: number;
-  publishedAt?: Date | string | null;
-  updatedAt?: Date | string | null;
-}
+import { publishState, type PublishState } from "@/lib/content/publish";
+import type { LibraryNovel } from "@/components/novels/library-search";
 
 interface NovelCardProps {
-  novel: Novel;
-  showPublishState?: boolean;
+  novel: LibraryNovel;
+  view: "grid" | "list";
+  isAdmin: boolean;
   lazyCover?: boolean;
   priorityCover?: boolean;
+}
+function formatPublicationState(state: PublishState): string {
+  return state === "live" ? "Live" : state === "scheduled" ? "Scheduled" : "Draft";
 }
 
 export function NovelCard({
   novel,
-  showPublishState = false,
+  view,
+  isAdmin,
   lazyCover = true,
   priorityCover = false,
 }: NovelCardProps) {
   const percent =
     novel.chapterCount > 0 ? Math.round((novel.translatedCount / novel.chapterCount) * 100) : 0;
   const state = publishState(novel.publishedAt);
+  const isList = view === "list";
 
   return (
     <Link
       to="/novels/$novelId"
       params={{ novelId: novel.id }}
-      className="no-underline group/card-link block h-full"
+      className="group/card-link block h-full no-underline"
     >
-      <Card className="hover:border-foreground/40 transition-colors h-full flex flex-col justify-between pt-0">
-        <div className="relative aspect-3/4 w-full overflow-hidden bg-foreground/3 border-b border-border flex items-center justify-center">
-          <NovelCover
-            novelId={novel.hasCover ? novel.id : null}
-            coverVersion={novel.updatedAt}
-            lazy={lazyCover}
-            priority={priorityCover}
-            sizes="(max-width: 767px) calc(50vw - 34px), (max-width: 1023px) calc(33.333vw - 32px), 270px"
-            alt={novel.title}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover/card-link:scale-[1.02]"
-            fallbackSize={12}
-          />
-          <Badge
-            variant="outline"
-            className="absolute top-3 left-3 z-20 uppercase font-semibold text-xs border-foreground/40 bg-background/85 backdrop-blur-xs shadow-sm"
+      <Card
+        className={
+          isList
+            ? "h-full transition-colors hover:border-foreground/40"
+            : "h-full pt-0 transition-colors hover:border-foreground/40"
+        }
+      >
+        <div
+          className={
+            isList
+              ? "flex min-w-0 gap-4 p-3 sm:gap-5 sm:p-4"
+              : "flex h-full flex-col justify-between"
+          }
+        >
+          <div
+            className={
+              isList
+                ? "relative h-24 w-16 shrink-0 overflow-hidden rounded-md bg-foreground/3 sm:h-30 sm:w-20"
+                : "relative aspect-3/4 w-full overflow-hidden border-b border-border bg-foreground/3"
+            }
           >
-            {novel.sourceLang} → {novel.targetLang}
-          </Badge>
-          {showPublishState && state !== "live" && (
-            <Badge
-              variant="secondary"
-              className="absolute top-3 right-3 z-20 uppercase font-semibold text-xs bg-background/85 backdrop-blur-xs"
-            >
-              {state}
-            </Badge>
-          )}
-        </div>
-        <CardContent className="flex flex-col gap-3 p-4 flex-1">
-          <div className="flex flex-col min-w-0">
-            <CardTitle className="text-body-lg font-semibold truncate text-foreground group-hover/card-link:text-foreground/80">
-              {novel.title}
-            </CardTitle>
-            {novel.author && (
-              <span className="text-caption text-muted-foreground truncate">{novel.author}</span>
-            )}
-          </div>
-          {novel.description && (
-            <p className="text-caption text-muted-foreground line-clamp-2 mt-0.5">
-              {novel.description}
-            </p>
-          )}
-          <div className="mt-auto pt-2 flex flex-col gap-1.5">
-            <div className="flex justify-between text-caption text-muted-foreground">
-              <span>
-                {novel.chapterCount} {novel.chapterCount === 1 ? "chapter" : "chapters"}
-              </span>
-              <span>{percent}%</span>
-            </div>
-            <Progress
-              value={percent}
-              aria-label={`${novel.title} translation progress`}
-              className="h-1.5"
+            <NovelCover
+              novelId={novel.hasCover ? novel.id : null}
+              coverVersion={novel.updatedAt}
+              lazy={lazyCover}
+              priority={priorityCover}
+              sizes={
+                isList
+                  ? "(max-width: 639px) 64px, 80px"
+                  : "(max-width: 767px) calc(50vw - 34px), (max-width: 1023px) calc(33.333vw - 32px), 270px"
+              }
+              alt={novel.title}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover/card-link:scale-[1.02]"
+              fallbackSize={isList ? 7 : 12}
             />
           </div>
-        </CardContent>
+          <CardContent
+            className={
+              isList ? "flex min-w-0 flex-1 flex-col gap-2 p-0" : "flex flex-1 flex-col gap-3 p-4"
+            }
+          >
+            <div className="min-w-0">
+              <CardTitle className="line-clamp-2 text-body-lg font-semibold text-foreground group-hover/card-link:text-foreground/80">
+                {novel.title}
+              </CardTitle>
+              <p className="mt-1 truncate text-caption text-muted-foreground">
+                {novel.sourceLang} → {novel.targetLang}
+                {novel.author ? ` · ${novel.author}` : ""}
+              </p>
+            </div>
+            {novel.description && !isList && (
+              <p className="mt-0.5 line-clamp-2 text-caption text-muted-foreground">
+                {novel.description}
+              </p>
+            )}
+            <div className="mt-auto flex flex-col gap-1.5 pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-caption text-muted-foreground">
+                <span>
+                  {novel.chapterCount} {novel.chapterCount === 1 ? "chapter" : "chapters"} ·{" "}
+                  {novel.translatedCount} translated
+                </span>
+                {isAdmin && <Badge variant="outline">{formatPublicationState(state)}</Badge>}
+              </div>
+              {isAdmin && (
+                <div className="flex items-center gap-2">
+                  <Progress
+                    value={percent}
+                    aria-label={`${novel.title} translation progress`}
+                    className="h-1.5"
+                  />
+                  <span className="shrink-0 text-caption text-muted-foreground">{percent}%</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </div>
       </Card>
     </Link>
   );

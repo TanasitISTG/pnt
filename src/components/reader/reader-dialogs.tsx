@@ -45,10 +45,10 @@ export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: R
         description="This chapter was manually edited. Re-translating will overwrite your manual changes with a new machine translation."
         confirmText="Overwrite & Translate"
         onConfirm={translation.onConfirm}
+        contentClassName="z-[60]"
       />
-
       <Dialog open={sourceEdit.open} onOpenChange={sourceEdit.onOpenChange}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>Source Changed</DialogTitle>
             <DialogDescription>
@@ -75,7 +75,7 @@ export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: R
       </Dialog>
 
       <Dialog open={discard.open} onOpenChange={discard.onOpenChange}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>Discard Unsaved Changes?</DialogTitle>
             <DialogDescription>
@@ -94,22 +94,26 @@ export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: R
       </Dialog>
 
       <Dialog open={shortcuts.open} onOpenChange={shortcuts.onOpenChange}>
-        <DialogContent>
+        <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>Reader shortcuts</DialogTitle>
             <DialogDescription>
-              Keyboard controls work when focus is outside form fields.
+              Shortcuts work from the page body and pause while a dialog or menu is open. While
+              editing, only Ctrl/⌘+S and Esc remain active.
             </DialogDescription>
           </DialogHeader>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-caption">
             <ShortcutKeys keys="← / h" label="Previous chapter" />
             <ShortcutKeys keys="→ / l" label="Next chapter" />
-            <ShortcutKeys keys="v" label="Cycle view mode" />
-            <ShortcutKeys keys="t" label="Toggle theme" />
+            <ShortcutKeys
+              keys="v"
+              label="Cycle view: Compare / Translation / Original (translated chapters)"
+            />
+            <ShortcutKeys keys="t" label="Toggle light/dark theme" />
             {shortcuts.canEdit && <ShortcutKeys keys="e" label="Edit chapter" />}
             {shortcuts.canEdit && <ShortcutKeys keys="Ctrl/⌘+S" label="Save chapter" />}
             <ShortcutKeys keys="Esc" label="Cancel edit or close help" />
-            <ShortcutKeys keys="/" label="Show this help" />
+            <ShortcutKeys keys="?" label="Show this help" />
           </dl>
         </DialogContent>
       </Dialog>

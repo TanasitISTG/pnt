@@ -45,9 +45,8 @@ export function getReaderProgress(novelId: string): ReaderProgress {
 
     const scrollFraction =
       typeof novelProgress.scrollFraction === "number" &&
-      !isNaN(novelProgress.scrollFraction) &&
-      novelProgress.scrollFraction > 0
-        ? novelProgress.scrollFraction
+      Number.isFinite(novelProgress.scrollFraction)
+        ? Math.max(0, Math.min(1, novelProgress.scrollFraction))
         : undefined;
 
     return { lastChapterId, readChapterIds, scrollFraction };
@@ -97,6 +96,7 @@ export function markChapterRead(novelId: string, chapterId: string): ReaderProgr
 }
 
 export function saveScrollPosition(novelId: string, fraction: number): void {
+  if (!Number.isFinite(fraction)) return;
   const storage = getStorage();
   if (!storage) return;
 

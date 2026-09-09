@@ -1,64 +1,36 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useHotkey } from "@tanstack/react-hotkeys";
-import { useTheme } from "next-themes";
 import sarabunThaiUrl from "@fontsource/sarabun/files/sarabun-thai-400-normal.woff2?url";
 
-import { getNovel } from "@/lib/content/novel.functions";
-import { getChapter, listChapters } from "@/lib/content/chapter.functions";
-import { QueryErrorState } from "@/components/query-error-state";
-import { useTranslationJob } from "@/components/translation/use-translation-job";
-import { alignParagraphs, splitParagraphs } from "@/lib/translation/text/paragraphs";
-import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader/settings";
-import { ReaderContent } from "@/components/reader/chapter-content";
-import { ChapterTitleRow } from "@/components/reader/chapter-title-row";
-import { ReaderFooterNav } from "@/components/reader/reader-footer-nav";
-import { ReaderToolbar } from "@/components/reader/reader-toolbar";
-import { ChapterEditor } from "@/components/reader/chapter-editor";
-import { ReaderDialogs } from "@/components/reader/reader-dialogs";
-import { useChapterEditor } from "@/components/reader/use-chapter-editor";
-import { useChapterNav } from "@/components/reader/use-chapter-nav";
-import { useReaderScroll } from "@/components/reader/use-reader-scroll";
-
-const chapterQueryOptions = (chapterId: string) =>
-  queryOptions({
-    queryKey: ["chapter", chapterId],
-    queryFn: () => getChapter({ data: { chapterId } }),
-  });
-
-const chaptersQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["chapters", novelId],
-    queryFn: () => listChapters({ data: { novelId } }),
-  });
-
-const novelQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["novel", novelId],
-    queryFn: () => getNovel({ data: { novelId } }),
-  });
+import { ReaderPage } from "@/components/reader/reader-page";
+import { ReaderPending } from "@/components/reader/reader-pending";
+import {
+  chapterQueryOptions,
+  chaptersQueryOptions,
+  novelQueryOptions,
+} from "@/components/reader/reader-queries";
 
 export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapterId")({
   loader: async ({ params, context }) => {
-    const [chapter, _chapters, novel] = await Promise.all([
+    const [chapter, chapters, novel] = await Promise.all([
       context.queryClient.ensureQueryData(chapterQueryOptions(params.chapterId)),
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
     ]);
-    if (!chapter) {
-      throw notFound();
-    }
+    if (!chapter || !novel || chapter.novelId !== params.novelId) throw notFound();
+    if (!chapters.some((item) => item.id === chapter.id)) throw notFound();
     return { chapter, novel };
   },
+  pendingMs: 100,
+  pendingMinMs: 200,
+  pendingComponent: ReaderPending,
   head: ({ loaderData }) => {
     const chapter = loaderData?.chapter;
     const novel = loaderData?.novel;
-    const chTitle = chapter
+    const chapterTitle = chapter
       ? `Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`
       : "Chapter";
     const novelTitle = novel?.title ?? "Novel";
-    const pageTitle = `${chTitle} | ${novelTitle} | Pnt - Personal Novel Translator`;
+    const pageTitle = `${chapterTitle} | ${novelTitle} | Pnt - Personal Novel Translator`;
     const description = novel?.description
       ? novel.description.length > 160
         ? `${novel.description.slice(0, 157)}...`
@@ -85,299 +57,13 @@ export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapter
       ],
     };
   },
-  component: ReaderPage,
+  remountDeps: ({ params }) => ({ chapterId: params.chapterId }),
+  component: ReaderRoutePage,
 });
-function getNextViewMode(viewMode: "side" | "translated" | "raw") {
-  return viewMode === "side" ? "translated" : viewMode === "translated" ? "raw" : "side";
-}
 
-interface ReaderHotkeysProps {
-  viewMode: "side" | "translated" | "raw";
-  theme: string | undefined;
-  user: unknown;
-  editing: boolean;
-  chapterLoaded: boolean;
-  jobRunning: boolean;
-  shortcutsOpen: boolean;
-  prevChapter: { id: string } | null;
-  nextChapter: { id: string } | null;
-  onUpdateViewMode: (next: "side" | "translated" | "raw") => void;
-  onSetTheme: (theme: string) => void;
-  onBeginEditing: () => void;
-  onRequestCancelEditing: () => void;
-  onSave: () => void;
-  onGoToChapter: (id: string) => void;
-  onSetShortcutsOpen: (open: boolean) => void;
-}
-
-function useReaderHotkeys({
-  viewMode,
-  theme,
-  user,
-  editing,
-  chapterLoaded,
-  jobRunning,
-  shortcutsOpen,
-  prevChapter,
-  nextChapter,
-  onUpdateViewMode,
-  onSetTheme,
-  onBeginEditing,
-  onRequestCancelEditing,
-  onSave,
-  onGoToChapter,
-  onSetShortcutsOpen,
-}: ReaderHotkeysProps) {
-  useHotkey("ArrowLeft", () => prevChapter && onGoToChapter(prevChapter.id), {
-    enabled: !!prevChapter,
-  });
-  useHotkey("H", () => prevChapter && onGoToChapter(prevChapter.id), { enabled: !!prevChapter });
-  useHotkey("ArrowRight", () => nextChapter && onGoToChapter(nextChapter.id), {
-    enabled: !!nextChapter,
-  });
-  useHotkey("L", () => nextChapter && onGoToChapter(nextChapter.id), { enabled: !!nextChapter });
-  useHotkey("V", () => onUpdateViewMode(getNextViewMode(viewMode)));
-  useHotkey("T", () => onSetTheme(theme === "dark" ? "light" : "dark"));
-  useHotkey("E", onBeginEditing, {
-    enabled: !!user && !editing && chapterLoaded && !jobRunning,
-  });
-  useHotkey("Escape", () => (editing ? onRequestCancelEditing() : onSetShortcutsOpen(false)), {
-    enabled: editing || shortcutsOpen,
-  });
-  useHotkey(
-    "Mod+S",
-    () => {
-      onSave();
-    },
-    {
-      enabled: editing && !!user,
-      preventDefault: true,
-    },
-  );
-  useHotkey("/", () => onSetShortcutsOpen(true));
-}
-
-function ReaderPage() {
+function ReaderRoutePage() {
   const { novelId, chapterId } = Route.useParams();
   const { user } = Route.useRouteContext();
-  const queryClient = useQueryClient();
 
-  const {
-    data: chapter,
-    isError: isChapterError,
-    error: chapterError,
-    refetch: refetchChapter,
-  } = useQuery(chapterQueryOptions(chapterId));
-  const {
-    data: chapters = [],
-    isError: isChaptersError,
-    error: chaptersError,
-    refetch: refetchChapters,
-  } = useQuery(chaptersQueryOptions(novelId));
-  const { data: novel } = useQuery(novelQueryOptions(novelId));
-
-  useReaderScroll(novelId, chapterId, chapter);
-  const { settings, update } = useReaderSettings();
-  const { theme, setTheme } = useTheme();
-  const viewMode = settings.viewMode;
-  const [retranslateConfirmOpen, setRetranslateConfirmOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
-
-  const { start: startTranslate, activeJobs } = useTranslationJob(novelId, !!user);
-  const activeJob = activeJobs.get(chapterId);
-  const jobRunning =
-    activeJob?.status === "pending" ||
-    activeJob?.status === "running" ||
-    chapter?.status === "queued" ||
-    chapter?.status === "translating";
-  const {
-    beginEditing,
-    blocker,
-    discardChanges,
-    discardDialogOpen,
-    editErrors,
-    editing,
-    handleDiscardDialogChange,
-    handleSaveRequest,
-    keepEditing,
-    persistDraft,
-    requestCancelEditing,
-    saving,
-    setSourcePolicyDialogOpen,
-    sourcePolicyDialogOpen,
-    draft,
-    updateDraft,
-  } = useChapterEditor({ chapterId, novelId, chapter, canEdit: !!user, jobRunning });
-
-  const { prevChapter, nextChapter, goToChapter } = useChapterNav(novelId, chapterId, chapters);
-
-  const prevJobStatus = useRef<string | null>(null);
-  useEffect(() => {
-    const prev = prevJobStatus.current;
-    const curr = activeJob?.status ?? null;
-    prevJobStatus.current = curr;
-    const wasRunning = prev === "pending" || prev === "running";
-    const isIdle = curr !== "pending" && curr !== "running";
-    if (wasRunning && isIdle) {
-      queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] });
-      queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
-    }
-  }, [activeJob?.status, chapterId, novelId, queryClient]);
-
-  const aligned = useMemo(
-    () =>
-      chapter?.translatedContent
-        ? alignParagraphs(chapter.rawContent, chapter.translatedContent)
-        : [],
-    [chapter],
-  );
-  const rawParagraphs = useMemo(
-    () => (chapter ? splitParagraphs(chapter.rawContent) : []),
-    [chapter],
-  );
-  const translatedParagraphs = useMemo(
-    () => (chapter?.translatedContent ? splitParagraphs(chapter.translatedContent) : []),
-    [chapter],
-  );
-
-  useReaderHotkeys({
-    viewMode,
-    theme,
-    user,
-    editing,
-    chapterLoaded: !!chapter,
-    jobRunning,
-    shortcutsOpen,
-    prevChapter,
-    nextChapter,
-    onUpdateViewMode: (next) => update({ viewMode: next }),
-    onSetTheme: setTheme,
-    onBeginEditing: beginEditing,
-    onRequestCancelEditing: requestCancelEditing,
-    onSave: () => void handleSaveRequest(),
-    onGoToChapter: goToChapter,
-    onSetShortcutsOpen: setShortcutsOpen,
-  });
-
-  if (isChapterError || isChaptersError) {
-    return (
-      <QueryErrorState
-        title="Failed to load chapter"
-        error={chapterError || chaptersError}
-        onRetry={() => {
-          refetchChapter();
-          refetchChapters();
-        }}
-        className="min-h-[40vh] my-12"
-      />
-    );
-  }
-
-  if (!chapter) {
-    throw notFound();
-  }
-
-  const hasTranslation = !!chapter.translatedContent;
-  const fontSizePx = READER_FONT_SIZE_PX[settings.fontSize];
-  const readerFontClass = settings.typeface === "reader" ? "font-reader" : undefined;
-
-  return (
-    <div className="flex flex-col gap-5">
-      <ReaderToolbar
-        novelId={novelId}
-        chapterId={chapterId}
-        chapter={chapter}
-        chapters={chapters}
-        prevChapter={prevChapter}
-        nextChapter={nextChapter}
-        hasTranslation={hasTranslation}
-        viewMode={viewMode}
-        settings={settings}
-        update={update}
-        theme={theme}
-        setTheme={setTheme}
-        isAdmin={!!user}
-        editing={editing}
-        jobRunning={jobRunning}
-        activeJob={activeJob}
-        onGoToChapter={goToChapter}
-        onEditRequest={beginEditing}
-        onTranslateRequest={() => {
-          if (chapter.editedAt) {
-            setRetranslateConfirmOpen(true);
-          } else {
-            startTranslate(chapterId);
-          }
-        }}
-      />
-
-      <ChapterTitleRow
-        number={chapter.number}
-        title={chapter.title}
-        translatedTitle={chapter.translatedTitle}
-        editedAt={chapter.editedAt}
-      />
-
-      {editing && draft ? (
-        <ChapterEditor
-          draft={draft}
-          errors={editErrors}
-          fontSizePx={fontSizePx}
-          readerFontClass={readerFontClass}
-          saving={saving}
-          onChange={updateDraft}
-          onSave={handleSaveRequest}
-          onCancel={requestCancelEditing}
-        />
-      ) : (
-        <ReaderContent
-          hasTranslation={hasTranslation}
-          viewMode={viewMode}
-          aligned={aligned}
-          rawParagraphs={rawParagraphs}
-          translatedParagraphs={translatedParagraphs}
-          fontSizePx={fontSizePx}
-          readerFontClass={readerFontClass}
-          sourceLang={novel?.sourceLang}
-          targetLang={novel?.targetLang}
-        />
-      )}
-
-      <ReaderFooterNav
-        novelId={novelId}
-        prevChapter={prevChapter}
-        nextChapter={nextChapter}
-        onGoToChapter={goToChapter}
-      />
-
-      <ReaderDialogs
-        translation={{
-          open: retranslateConfirmOpen,
-          onOpenChange: setRetranslateConfirmOpen,
-          onConfirm: () => {
-            setRetranslateConfirmOpen(false);
-            startTranslate(chapterId);
-          },
-        }}
-        sourceEdit={{
-          open: sourcePolicyDialogOpen,
-          saving,
-          onOpenChange: setSourcePolicyDialogOpen,
-          onClear: () => void persistDraft("clear"),
-          onKeep: () => void persistDraft("keep"),
-        }}
-        discard={{
-          open: discardDialogOpen || blocker.status === "blocked",
-          onOpenChange: handleDiscardDialogChange,
-          onKeep: keepEditing,
-          onDiscard: discardChanges,
-        }}
-        shortcuts={{
-          open: shortcutsOpen,
-          onOpenChange: setShortcutsOpen,
-          canEdit: !!user,
-        }}
-      />
-    </div>
-  );
+  return <ReaderPage novelId={novelId} chapterId={chapterId} user={user} />;
 }

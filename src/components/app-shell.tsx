@@ -23,9 +23,10 @@ import { cn } from "@/lib/utils";
 interface AppShellProps {
   user: AuthUser | null;
   children: React.ReactNode;
+  layout?: "default" | "reader";
 }
 
-export function AppShell({ user, children }: AppShellProps) {
+export function AppShell({ user, children, layout = "default" }: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
@@ -64,7 +65,12 @@ export function AppShell({ user, children }: AppShellProps) {
         hydrated && consent === "pending" && "pb-28 md:pb-20",
       )}
     >
-      <header className="sticky top-0 z-40 border-b border-border bg-background">
+      <header
+        className={cn(
+          "z-40 border-b border-border bg-background",
+          layout === "default" ? "sticky top-0" : "relative",
+        )}
+      >
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-6">
           <div className="flex items-center gap-8">
             <Link
@@ -192,7 +198,16 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
         )}
       </header>
-      <main className="mx-auto w-full max-w-[1200px] flex-1 px-6 py-8">{children}</main>
+      <main
+        className={cn(
+          "mx-auto w-full flex-1",
+          layout === "reader"
+            ? "max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6"
+            : "max-w-[1200px] px-6 py-8",
+        )}
+      >
+        {children}
+      </main>
       <footer className="mt-12 border-t border-border bg-background py-6">
         <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 px-6 sm:flex-row text-caption text-muted-foreground">
           <p>© {new Date().getFullYear()} Pnt — Personal Novel Translator</p>

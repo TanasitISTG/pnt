@@ -2,136 +2,182 @@ import { useEffect, useRef } from "react";
 
 import { getReaderProgress, markChapterRead, saveScrollPosition } from "@/lib/reader/progress";
 
-// Reader scroll lifecycle: marks the chapter read, restores the saved scroll
-// fraction on load, and persists scroll position while scrolling.
 interface MutableValue<T> {
   current: T;
 }
 
-function createScrollPersistence(
-  novelId: string,
-  chapterId: string,
-  isRestoringRef: MutableValue<boolean>,
-  restoredChapterRef: MutableValue<string | null>,
-) {
-  let timer: number | NodeJS.Timeout | undefined;
+interface ScrollOwner {
+  novelId: string;
+  chapterId: string;
+}
 
-  const handleScroll = () => {
-    if (isRestoringRef.current || restoredChapterRef.current !== chapterId || timer !== undefined) {
-      return;
-    }
-    timer = setTimeout(() => {
-      timer = undefined;
-      if (isRestoringRef.current || restoredChapterRef.current !== chapterId) return;
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      if (maxScroll > 50) {
-        const fraction = window.scrollY / maxScroll;
-        if (fraction > 0.005) saveScrollPosition(novelId, fraction);
-      }
-    }, 300);
-  };
+function isOwned(owner: MutableValue<ScrollOwner>, novelId: string, chapterId: string): boolean {
+  return owner.current.novelId === novelId && owner.current.chapterId === chapterId;
+}
 
-  const dispose = () => {
-    clearTimeout(timer);
-    timer = undefined;
-  };
-
-  return { handleScroll, dispose };
+function fractionForCurrentScroll(): number | null {
+  const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+  if (maxScroll <= 0) return null;
+  return Math.max(0, Math.min(1, window.scrollY / maxScroll));
 }
 
 export function useReaderScroll(
   novelId: string,
   chapterId: string,
   chapter: { id: string } | null | undefined,
-) {
+  settingsReady: boolean,
+): void {
+  const ownerRef = useRef<ScrollOwner>({ novelId, chapterId });
   const restoredChapterRef = useRef<string | null>(null);
   const isRestoringRef = useRef(false);
+  const restoreFrameRef = useRef<number | null>(null);
+  const userTookOverRef = useRef(false);
 
   useEffect(() => {
-    if (chapter?.id === chapterId) {
-      markChapterRead(novelId, chapterId);
-    }
-  }, [novelId, chapterId, chapter?.id]);
+    ownerRef.current = { novelId, chapterId };
+    restoredChapterRef.current = null;
+    isRestoringRef.current = false;
+    userTookOverRef.current = false;
+  }, [chapterId, novelId]);
 
   useEffect(() => {
-    if (!chapter) return;
-    if (restoredChapterRef.current === chapterId) return;
+    if (settingsReady && chapter?.id === chapterId) markChapterRead(novelId, chapterId);
+  }, [chapter?.id, chapterId, novelId, settingsReady]);
+
+  useEffect(() => {
+    if (!settingsReady || chapter?.id !== chapterId || restoredChapterRef.current === chapterId)
+      return;
 
     const progress = getReaderProgress(novelId);
-    if (
+    const savedFraction =
       progress.lastChapterId === chapterId &&
       typeof progress.scrollFraction === "number" &&
-      progress.scrollFraction > 0.01
-    ) {
-      const fraction = progress.scrollFraction;
-      isRestoringRef.current = true;
+      Number.isFinite(progress.scrollFraction)
+        ? Math.max(0, Math.min(1, progress.scrollFraction))
+        : null;
 
-      // The router's scrollRestoration scrolls to top on push navigation and can
-      // land AFTER our first scrollTo, wiping it out. Re-assert the target until
-      // it survives a few consecutive frames; bail early if the user takes over.
-      let frames = 0;
-      let stableFrames = 0;
-      let lastWritten = -1;
-
-      const tryScroll = () => {
-        frames++;
-        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-
-        if (maxScroll > 50) {
-          const target = maxScroll * fraction;
-          const y = window.scrollY;
-
-          if (lastWritten >= 0 && Math.abs(y - lastWritten) > 2 && y !== 0) {
-            // User grabbed the scroll position — stop fighting.
-            restoredChapterRef.current = chapterId;
-            setTimeout(() => {
-              isRestoringRef.current = false;
-            }, 150);
-            return;
-          }
-
-          if (lastWritten >= 0 && Math.abs(y - target) <= 2) {
-            stableFrames++;
-            if (stableFrames >= 3) {
-              restoredChapterRef.current = chapterId;
-              setTimeout(() => {
-                isRestoringRef.current = false;
-              }, 150);
-              return;
-            }
-          } else {
-            stableFrames = 0;
-            window.scrollTo({ top: target, behavior: "instant" as ScrollBehavior });
-            lastWritten = target;
-          }
-        }
-
-        if (frames < 90) {
-          requestAnimationFrame(tryScroll);
-        } else {
-          restoredChapterRef.current = chapterId;
-          isRestoringRef.current = false;
-        }
-      };
-
-      requestAnimationFrame(tryScroll);
-    } else {
+    if (savedFraction === null) {
       restoredChapterRef.current = chapterId;
       isRestoringRef.current = false;
+      return;
     }
-  }, [chapterId, novelId, chapter]);
+
+    isRestoringRef.current = true;
+    userTookOverRef.current = false;
+    let frames = 0;
+    let stableFrames = 0;
+    let lastWritten: number | null = null;
+
+    const cancelRestore = () => {
+      userTookOverRef.current = true;
+      if (restoreFrameRef.current !== null) cancelAnimationFrame(restoreFrameRef.current);
+      restoreFrameRef.current = null;
+      isRestoringRef.current = false;
+      restoredChapterRef.current = chapterId;
+    };
+
+    const tryScroll = () => {
+      if (!isOwned(ownerRef, novelId, chapterId) || userTookOverRef.current) return;
+      frames += 1;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (maxScroll > 0) {
+        const target = maxScroll * savedFraction;
+        const currentY = window.scrollY;
+        if (lastWritten !== null && Math.abs(currentY - lastWritten) > 2 && currentY !== 0) {
+          cancelRestore();
+          return;
+        }
+        if (lastWritten !== null && Math.abs(currentY - target) <= 2) {
+          stableFrames += 1;
+          if (stableFrames >= 3) {
+            restoredChapterRef.current = chapterId;
+            isRestoringRef.current = false;
+            restoreFrameRef.current = null;
+            return;
+          }
+        } else {
+          stableFrames = 0;
+          window.scrollTo({ top: target, behavior: "instant" as ScrollBehavior });
+          lastWritten = target;
+        }
+      }
+      if (frames < 90) {
+        restoreFrameRef.current = requestAnimationFrame(tryScroll);
+      } else {
+        restoredChapterRef.current = chapterId;
+        isRestoringRef.current = false;
+        restoreFrameRef.current = null;
+      }
+    };
+
+    const onUserInput = (event: Event) => {
+      if (event.type === "keydown") {
+        const key = (event as KeyboardEvent).key;
+        if (!["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(key)) {
+          return;
+        }
+      }
+      if (isRestoringRef.current) cancelRestore();
+    };
+
+    window.addEventListener("wheel", onUserInput, { passive: true });
+    window.addEventListener("touchstart", onUserInput, { passive: true });
+    window.addEventListener("keydown", onUserInput);
+    restoreFrameRef.current = requestAnimationFrame(tryScroll);
+
+    return () => {
+      if (restoreFrameRef.current !== null) cancelAnimationFrame(restoreFrameRef.current);
+      window.removeEventListener("wheel", onUserInput);
+      window.removeEventListener("touchstart", onUserInput);
+      window.removeEventListener("keydown", onUserInput);
+      restoreFrameRef.current = null;
+      isRestoringRef.current = false;
+    };
+  }, [chapter?.id, chapterId, novelId, settingsReady]);
 
   useEffect(() => {
-    const persistence = createScrollPersistence(
-      novelId,
-      chapterId,
-      isRestoringRef,
-      restoredChapterRef,
-    );
-    window.addEventListener("scroll", persistence.handleScroll, { passive: true });
-    return () => {
-      persistence.dispose();
-      window.removeEventListener("scroll", persistence.handleScroll);
+    let timer: number | null = null;
+    let capturedFraction: number | null = null;
+
+    const flushCaptured = () => {
+      window.clearTimeout(timer ?? undefined);
+      timer = null;
+      if (capturedFraction === null) return;
+      saveScrollPosition(novelId, capturedFraction);
+      capturedFraction = null;
     };
-  }, [novelId, chapterId]);
+
+    const captureCurrent = () => {
+      if (!settingsReady || isRestoringRef.current || restoredChapterRef.current !== chapterId)
+        return;
+      if (!isOwned(ownerRef, novelId, chapterId)) return;
+      const fraction = fractionForCurrentScroll();
+      if (fraction !== null) capturedFraction = fraction;
+    };
+
+    const handleScroll = () => {
+      captureCurrent();
+      if (capturedFraction === null || timer !== null) return;
+      timer = window.setTimeout(flushCaptured, 300);
+    };
+
+    const handlePageLifecycle = () => {
+      captureCurrent();
+      flushCaptured();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") handlePageLifecycle();
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("pagehide", handlePageLifecycle);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      flushCaptured();
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pagehide", handlePageLifecycle);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [chapterId, novelId, settingsReady]);
 }

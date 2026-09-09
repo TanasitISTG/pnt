@@ -1,6 +1,6 @@
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Network, Plus, Trash2, Users } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 
 import { QueryErrorState } from "@/components/query-error-state";
@@ -9,15 +9,11 @@ import {
   RelationshipFormDialog,
 } from "@/components/relationships/relationship-entry-dialogs";
 import {
-  CharacterProfilesTable,
-  DirectedRelationshipsTable,
-} from "@/components/relationships/relationship-map-table";
-import {
   buildCharacterTablePage,
   buildDirectedRelationshipTablePage,
 } from "@/components/relationships/relationship-table-data";
 import { useRelationshipsPageController } from "@/components/relationships/use-relationships-page-controller";
-import { Badge } from "@/components/ui/badge";
+import { RelationshipsWorkspace } from "@/components/relationships/relationships-workspace";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   relationshipMapQueryOptions,
   relationshipNovelQueryOptions,
@@ -154,139 +149,23 @@ export function RelationshipsPage() {
   if (!map) return null;
 
   return (
-    <div className="min-w-0 space-y-6">
-      <header className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            render={<Link to="/novels/$novelId" params={{ novelId }} />}
-            aria-label="Back to novel"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-          </Button>
-          <div className="min-w-0">
-            <p className="text-caption text-muted-foreground">{novel.title}</p>
-            <h1 className="text-section font-semibold tracking-tight text-foreground">
-              Character &amp; Relationships
-            </h1>
-          </div>
-          <Badge variant="outline" className="ml-auto uppercase">
-            {novel.sourceLang.toUpperCase()} → {novel.targetLang.toUpperCase()}
-          </Badge>
-        </div>
-        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-          Keep directed speaker and listener choices consistent across {languageLabels.source}-to-
-          {languageLabels.target} dialogue. Automatic analysis runs during the next translation or
-          retranslation; you can also populate critical facts manually. Manual changes affect
-          not-yet-started chunks and future retranslations, but never cancel a chunk already at the
-          provider.
-        </p>
-      </header>
-      {mapQuery.isRefetchError && map && (
-        <QueryErrorState
-          title="Unable to refresh relationship map"
-          error={mapQuery.error}
-          onRetry={() => void mapQuery.refetch()}
-          className="my-0 min-h-0"
-        />
-      )}
-
-      <Tabs value={search.view} onValueChange={switchView}>
-        <TabsList aria-label="Relationship map views">
-          <TabsTrigger value="characters">
-            <Users className="size-4" aria-hidden="true" />
-            Characters ({map.characters.length})
-          </TabsTrigger>
-          <TabsTrigger value="relationships">
-            <Network className="size-4" aria-hidden="true" />
-            Directed relationships ({map.relationships.length})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="characters">
-          {search.view === "characters" && characterPage && (
-            <section className="space-y-4" aria-labelledby="characters-heading">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Users className="size-4 text-muted-foreground" aria-hidden="true" />
-                    <h2
-                      id="characters-heading"
-                      className="text-card-title font-semibold text-foreground"
-                    >
-                      Characters
-                    </h2>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Approved glossary mappings win for {languageLabels.target} names. Automatic
-                    profiles remain editable until you lock them.
-                  </p>
-                </div>
-                <Button size="sm" onClick={openCharacterAdd} aria-label="Add character profile">
-                  <Plus className="size-4" aria-hidden="true" />
-                  Add character
-                </Button>
-              </div>
-              <CharacterProfilesTable
-                page={characterPage}
-                search={search}
-                onSearchChange={updateSearch}
-                actions={actions}
-                onAdd={openCharacterAdd}
-              />
-            </section>
-          )}
-        </TabsContent>
-
-        <TabsContent value="relationships">
-          {search.view === "relationships" && relationshipPage && (
-            <section className="space-y-4" aria-labelledby="relationships-heading">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Network className="size-4 text-muted-foreground" aria-hidden="true" />
-                    <h2
-                      id="relationships-heading"
-                      className="text-card-title font-semibold text-foreground"
-                    >
-                      Directed relationships
-                    </h2>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Speech fields belong to the speaker → listener direction. Reverse pairs are
-                    separate facts.
-                  </p>
-                </div>
-                <div className="flex flex-col items-start gap-1 sm:items-end">
-                  <Button
-                    size="sm"
-                    onClick={openRelationshipAdd}
-                    aria-label="Add directed relationship"
-                    disabled={map.characters.length < 2}
-                  >
-                    <Plus className="size-4" aria-hidden="true" />
-                    Add relationship
-                  </Button>
-                  {map.characters.length < 2 && (
-                    <p className="text-caption text-muted-foreground">
-                      Add at least 2 character profiles first.
-                    </p>
-                  )}
-                </div>
-              </div>
-              <DirectedRelationshipsTable
-                characters={map.characters}
-                page={relationshipPage}
-                search={search}
-                onSearchChange={updateSearch}
-                actions={actions}
-                onAdd={openRelationshipAdd}
-              />
-            </section>
-          )}
-        </TabsContent>
-      </Tabs>
+    <>
+      <RelationshipsWorkspace
+        novelId={novelId}
+        novel={novel}
+        languageLabels={languageLabels}
+        map={map}
+        search={search}
+        characterPage={characterPage}
+        relationshipPage={relationshipPage}
+        actions={actions}
+        refreshError={mapQuery.isRefetchError ? mapQuery.error : null}
+        onRefresh={() => void mapQuery.refetch()}
+        onSearchChange={updateSearch}
+        onViewChange={switchView}
+        onCharacterAdd={openCharacterAdd}
+        onRelationshipAdd={openRelationshipAdd}
+      />
 
       <CharacterFormDialog
         form={characterForm}
@@ -333,6 +212,6 @@ export function RelationshipsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

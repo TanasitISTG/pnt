@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createElement, useState, type ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ChaptersTableSection } from "./chapters-table-section";
 import type { ChapterTableProps } from "./chapter-table";
@@ -62,36 +62,104 @@ function createTableProps(
   };
 }
 
-describe("ChaptersTableSection", () => {
-  it("mounts one authenticated 50-chapter group at a time", async () => {
-    const chapters = createChapters(120);
-    const onToggleSelectAll = vi.fn();
+function SelectableChapterHarness({
+  chapters,
+  initialChapterId,
+}: {
+  chapters: ChapterRow[];
+  initialChapterId?: string | null;
+}) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
-    render(
+  const onToggleSelect = (id: string, checked: boolean) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const onToggleSelectAll = (ids: string[], checked: boolean) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      for (const id of ids) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+  return (
+    <>
+      <output aria-label="Selected chapter count">{selectedIds.size}</output>
       <ChaptersTableSection
         chapters={chapters}
         isAdmin
         loading={false}
-        tableProps={createTableProps({ onToggleSelectAll })}
-      />,
-    );
+        tableProps={createTableProps({
+          selectedIds,
+          isTranslating: (chapterId) => chapterId === "chapter-60",
+          onToggleSelect,
+          onToggleSelectAll,
+        })}
+        initialChapterId={initialChapterId}
+      />
+    </>
+  );
+}
 
-    expect(screen.getAllByRole("row")).toHaveLength(51);
-    expect(screen.getByText("Chapter 1")).toBeTruthy();
-    expect(screen.queryByText("Chapter 51")).toBeNull();
+afterEach(cleanup);
 
-    screen.getByRole("button", { name: "Chapters 51–100 (50)" }).click();
+describe("ChaptersTableSection", () => {
+  it("preserves visible-group selection and excludes translating rows", async () => {
+    const chapters = createChapters(120);
 
+    render(<SelectableChapterHarness chapters={chapters} />);
+    fireEvent.click(screen.getByRole("button", { name: "Chapters 51–100 (50)" }));
+    await waitFor(() => expect(screen.queryByText("Chapter 1")).toBeNull());
+
+    const translating = screen.getByRole("checkbox", {
+      name: "Select chapter 60",
+    }) as HTMLInputElement;
+    expect(translating.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select visible chapters" }));
     await waitFor(() => {
-      expect(screen.getAllByRole("row")).toHaveLength(51);
-      expect(screen.queryByText("Chapter 1")).toBeNull();
-      expect(screen.getByText("Chapter 51")).toBeTruthy();
+      expect(
+        (screen.getByRole("checkbox", { name: "Select chapter 51" }) as HTMLInputElement).checked,
+      ).toBe(true);
     });
+    expect(translating.checked).toBe(false);
+    expect(
+      (screen.getByRole("checkbox", { name: "Select chapter 100" }) as HTMLInputElement).checked,
+    ).toBe(true);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select all chapters" }));
-    expect(onToggleSelectAll).toHaveBeenCalledWith(
-      chapters.slice(50, 100).map((chapter) => chapter.id),
-      true,
+    fireEvent.click(screen.getByRole("button", { name: "Chapters 1–50 (50)" }));
+    await waitFor(() => expect(screen.queryByText("Chapter 51")).toBeNull());
+    expect(
+      (screen.getByRole("checkbox", { name: "Select chapter 1" }) as HTMLInputElement).checked,
+    ).toBe(false);
+    expect(screen.getByLabelText("Selected chapter count").textContent).toBe("49");
+  }, 15_000);
+
+  it("adopts late resume groups until the user explicitly chooses a group", async () => {
+    const chapters = createChapters(120);
+    const view = render(
+      <SelectableChapterHarness chapters={chapters} initialChapterId={undefined} />,
     );
-  });
+
+    expect(screen.getAllByText("Chapter 1").length).toBeGreaterThan(0);
+    view.rerender(<SelectableChapterHarness chapters={chapters} initialChapterId="chapter-75" />);
+    await waitFor(() => expect(screen.queryByText("Chapter 1")).toBeNull());
+    expect(screen.getAllByText("Chapter 75").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Chapters 1–50 (50)" }));
+    await waitFor(() => expect(screen.queryByText("Chapter 75")).toBeNull());
+    expect(screen.getByText("Chapter 1")).toBeTruthy();
+
+    view.rerender(<SelectableChapterHarness chapters={chapters} initialChapterId="chapter-115" />);
+    expect(screen.getByText("Chapter 1")).toBeTruthy();
+    expect(screen.queryByText("Chapter 101")).toBeNull();
+  }, 15_000);
 });

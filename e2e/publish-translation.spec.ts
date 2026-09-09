@@ -45,10 +45,12 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await page.getByRole("button", { name: "Create Novel" }).click();
 
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
+  await page.getByRole("tab", { name: "Add chapters" }).click();
   await page.getByLabel("Number *").fill("1");
   await page.getByLabel("Title *").last().fill(chapterTitle);
   await page.getByLabel("Raw Content *").fill("儿子对父亲说：“我会回来的。”\n父亲点了点头。");
   await page.getByRole("button", { name: "Add Chapter" }).click();
+  await page.getByRole("tab", { name: "Chapters", exact: true }).click();
 
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
@@ -207,6 +209,14 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
 
   await page.getByRole("link", { name: "Library", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("combobox", { name: "Filter by publication" })
+      .locator('[data-slot="select-value"]'),
+  ).toHaveText("All publication states");
+  await expect(
+    page.getByRole("combobox", { name: "Sort by" }).locator('[data-slot="select-value"]'),
+  ).toHaveText("Newest first");
   await page.getByRole("button", { name: "New Novel" }).click();
   await page.getByLabel("Title *").fill(draftNovelTitle);
   await page.getByRole("button", { name: "Create Novel" }).click();
@@ -254,14 +264,15 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   await page.locator("#targetLang").click();
   await page.getByRole("option", { name: "English (EN)" }).click();
   await page.getByRole("button", { name: "Create Novel" }).click();
-
   await expect(page.getByRole("heading", { name: zhEnNovelTitle })).toBeVisible();
+  await page.getByRole("tab", { name: "Add chapters" }).click();
   await page.getByLabel("Number *").fill("1");
   await page.getByLabel("Title *").last().fill(zhEnChapterTitle);
   await page
     .getByLabel("Raw Content *")
     .fill(`儿子对父亲说：“我会回来的。”\n${slowTranslationMarker}`);
   await page.getByRole("button", { name: "Add Chapter" }).click();
+  await page.getByRole("tab", { name: "Chapters", exact: true }).click();
 
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
@@ -278,7 +289,8 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
     timeout: 30_000,
   });
 
-  await page.getByRole("button", { name: "Edit novel" }).click();
+  await page.getByRole("button", { name: "Novel actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit novel" }).click();
   await expect(page.getByRole("heading", { name: zhEnNovelTitle })).toBeVisible();
   const editUrl = page.url();
   await page.locator("#sourceLang").click();
@@ -303,7 +315,9 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
     timeout: 30_000,
   });
   await page.getByRole("link", { name: "Dawn", exact: true }).click();
-  await page.getByRole("button", { name: "Translated", exact: true }).click();
+  await page.getByRole("button", { name: "Reading settings" }).click();
+  await page.getByRole("radio", { name: "Translation" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
   await expect(
     page.getByText('"I will return," Son said to Father.', { exact: true }),
   ).toBeVisible();
@@ -325,7 +339,8 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   await page.screenshot({ path: ".tura/e2e/relationships-zh-en.png", fullPage: true });
 
   await page.getByRole("button", { name: "Back to novel" }).click();
-  await page.getByRole("button", { name: "Edit novel" }).click();
+  await page.getByRole("button", { name: "Novel actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit novel" }).click();
   await page.locator("#sourceLang").click();
   await page.getByRole("option", { name: "English (EN)" }).click();
   await page.locator("#targetLang").click();

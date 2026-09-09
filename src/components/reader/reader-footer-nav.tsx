@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, List } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { ReaderChapterSummary } from "./reader-toolbar";
 
 export interface ReaderFooterNavProps {
@@ -18,52 +19,64 @@ export function ReaderFooterNav({
   onGoToChapter,
 }: ReaderFooterNavProps) {
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border pt-4">
-      <div className="flex justify-start min-w-0">
-        {prevChapter && (
+    <footer className="flex min-w-0 max-w-full flex-col gap-4 border-t border-border pt-6">
+      <div className="grid min-w-0 max-w-full gap-3 sm:grid-cols-2">
+        {prevChapter ? (
           <Button
             variant="outline"
-            size="sm"
-            className="min-w-0 max-w-full sm:max-w-64"
+            className="h-auto min-h-11 w-full min-w-0 max-w-full justify-start gap-1.5 overflow-hidden px-2.5 py-1 text-left sm:gap-2 sm:px-3"
             onClick={() => onGoToChapter(prevChapter.id)}
-            title={`Ch. ${Number(prevChapter.number)} — ${prevChapter.translatedTitle ?? prevChapter.title}`}
+            title={`Previous: ${chapterLabel(prevChapter)}`}
           >
-            <ChevronLeft className="size-4 shrink-0" />
-            <span className="truncate">
-              {`Ch. ${Number(prevChapter.number)} — ${prevChapter.translatedTitle ?? prevChapter.title}`}
+            <ChevronLeft className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 overflow-hidden">
+              <span className="block text-caption text-muted-foreground">Previous chapter</span>
+              <span className="block truncate">{chapterLabel(prevChapter)}</span>
             </span>
           </Button>
+        ) : null}
+        {nextChapter ? (
+          <Button
+            className={cn(
+              "h-auto min-h-11 w-full min-w-0 max-w-full justify-end gap-1.5 overflow-hidden px-2.5 py-1 text-right sm:gap-2 sm:px-3",
+              !prevChapter && "sm:col-start-2",
+            )}
+            onClick={() => onGoToChapter(nextChapter.id)}
+            title={`Next: ${chapterLabel(nextChapter)}`}
+          >
+            <span className="min-w-0 flex-1 overflow-hidden">
+              <span className="block text-caption opacity-75">Next chapter</span>
+              <span className="block truncate">{chapterLabel(nextChapter)}</span>
+            </span>
+            <ChevronRight className="size-3.5 shrink-0" />
+          </Button>
+        ) : (
+          <p
+            className={cn(
+              "flex min-h-11 min-w-0 max-w-full items-center justify-end overflow-hidden text-right text-sm text-muted-foreground",
+              !prevChapter && "sm:col-start-2",
+            )}
+          >
+            You’ve reached the last available chapter.
+          </p>
         )}
       </div>
       <div className="flex justify-center">
         <Button
           variant="ghost"
           size="sm"
-          className="shrink-0"
+          className="max-w-full"
           render={<Link to="/novels/$novelId" params={{ novelId }} />}
           aria-label="All chapters"
-          title="All chapters"
         >
-          <List className="size-4 sm:hidden" />
-          <span className="hidden sm:inline">All chapters</span>
+          <List className="size-4" />
+          All chapters
         </Button>
       </div>
-      <div className="flex justify-end min-w-0">
-        {nextChapter && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-w-0 max-w-full sm:max-w-64"
-            onClick={() => onGoToChapter(nextChapter.id)}
-            title={`Ch. ${Number(nextChapter.number)} — ${nextChapter.translatedTitle ?? nextChapter.title}`}
-          >
-            <span className="truncate">
-              {`Ch. ${Number(nextChapter.number)} — ${nextChapter.translatedTitle ?? nextChapter.title}`}
-            </span>
-            <ChevronRight className="size-4 shrink-0" />
-          </Button>
-        )}
-      </div>
-    </div>
+    </footer>
   );
+}
+
+function chapterLabel(chapter: ReaderChapterSummary): string {
+  return `Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`;
 }

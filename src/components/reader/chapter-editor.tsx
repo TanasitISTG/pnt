@@ -131,7 +131,7 @@ export function ChapterEditor({
         </Button>
         <Button type="submit" disabled={saving || sourceTitleInvalid || sourceContentInvalid}>
           <Check className="size-4" />
-          {saving ? "Saving..." : "Save Chapter"}
+          {saving ? "Saving…" : "Save Chapter"}
         </Button>
       </div>
     </form>

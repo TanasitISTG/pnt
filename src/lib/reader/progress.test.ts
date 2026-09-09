@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { getReaderProgress, markChapterRead } from "./progress";
+import { getReaderProgress, markChapterRead, saveScrollPosition } from "./progress";
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -118,5 +118,17 @@ describe("reader-progress", () => {
       lastChapterId: null,
       readChapterIds: [],
     });
+  });
+
+  it("preserves a zero scroll position and clamps finite values", () => {
+    markChapterRead("novel-1", "chap-1");
+    saveScrollPosition("novel-1", 0);
+    expect(getReaderProgress("novel-1").scrollFraction).toBe(0);
+
+    saveScrollPosition("novel-1", 2);
+    expect(getReaderProgress("novel-1").scrollFraction).toBe(1);
+
+    saveScrollPosition("novel-1", Number.NaN);
+    expect(getReaderProgress("novel-1").scrollFraction).toBe(1);
   });
 });

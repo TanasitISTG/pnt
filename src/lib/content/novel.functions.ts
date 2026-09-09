@@ -17,6 +17,22 @@ import {
 } from "@/lib/content/novel.schemas";
 import { updateNovelForUser } from "@/lib/content/novel-edit.service";
 
+export interface NovelListItem {
+  id: string;
+  title: string;
+  originalTitle: string | null;
+  author: string | null;
+  description: string | null;
+  sourceLang: string;
+  targetLang: string;
+  publishedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  hasCover: number;
+  chapterCount: number;
+  translatedCount: number;
+}
+
 export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
   const timing = createServerTiming();
   try {

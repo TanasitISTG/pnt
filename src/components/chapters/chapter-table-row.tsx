@@ -173,6 +173,9 @@ function ChapterTitleLink({
       >
         {chapter.translatedTitle ?? chapter.title}
       </Link>
+      {readState === "read" ? (
+        <span className="text-caption text-muted-foreground">Opened</span>
+      ) : null}
       {residualScriptCount ? (
         <Badge
           variant="outline"

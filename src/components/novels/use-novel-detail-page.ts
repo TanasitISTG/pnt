@@ -125,7 +125,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
 
   const firstChapter = chapters[0] ?? null;
   const chaptersReady = chaptersQuery.isSuccess && !chaptersQuery.isError;
-  const chapterUiLoading = isAdmin && (chaptersQuery.isPending || !readerProgressReady);
+  const readingActionsPending = chaptersQuery.isPending || !readerProgressReady;
+  const chapterUiLoading = isAdmin && readingActionsPending;
 
   const {
     start: startTranslate,
@@ -248,6 +249,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
   };
 
   return {
+    chapterTableProps,
     activeJobs,
     backfillTitles,
     backfillingTitles,
@@ -255,8 +257,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     batchRangeTo,
     batchStarting,
     cancelTranslate,
-    chapterTableProps,
     chapterUiLoading,
+    readingActionsPending,
     chapters,
     chaptersError: chaptersQuery.error,
     chaptersReady,

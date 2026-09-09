@@ -182,8 +182,7 @@ const evalStoredResultFields = {
 };
 
 export const legacyEvalStoredResultSchema = z
-  .object(evalStoredResultFields)
-  .strict()
+  .strictObject(evalStoredResultFields)
   .refine(
     (row) =>
       row.adheredGlossaryTerms <= row.matchedGlossaryTerms &&
@@ -195,7 +194,7 @@ export const legacyEvalStoredResultSchema = z
   );
 
 export const evalStoredResultSchema = z
-  .object({
+  .strictObject({
     ...evalStoredResultFields,
     evaluated: z.boolean(),
     chapterUpdatedAt: z.iso.datetime(),
@@ -205,7 +204,6 @@ export const evalStoredResultSchema = z
     residualSpanCount: z.number().int().nonnegative(),
     residualExamples: z.array(residualExampleSchema).max(3),
   })
-  .strict()
   .refine((row) => {
     if (row.adheredGlossaryTerms > row.matchedGlossaryTerms) return false;
     if (row.residualExamples.length !== Math.min(row.residualSpanCount, 3)) return false;
@@ -239,10 +237,10 @@ const evalSummaryFields = {
   adheredGlossaryTerms: z.number().int().nonnegative(),
 };
 
-export const legacyEvalSummarySchema = z.object(evalSummaryFields).strict();
+export const legacyEvalSummarySchema = z.strictObject(evalSummaryFields);
 
 export const evalSummarySchema = z
-  .object({
+  .strictObject({
     ...evalSummaryFields,
     version: z.literal(1),
     languagePair: z.string().min(1),
@@ -251,7 +249,6 @@ export const evalSummarySchema = z
     skippedChapterCount: z.number().int().nonnegative(),
     attentionChapterCount: z.number().int().nonnegative(),
   })
-  .strict()
   .refine(
     (summary) =>
       summary.evaluatedChapterCount + summary.skippedChapterCount === summary.chapterCount &&

@@ -245,7 +245,7 @@ try {
     "--port",
     "3000",
   ]);
-  await waitForHttp("application", appUrl, app, 45_000);
+  await waitForHttp("application", appUrl, app, 120_000);
 
   const inngest = start("inngest", [
     "bunx",

@@ -1,11 +1,7 @@
 import { useMemo } from "react";
-import { FileText } from "lucide-react";
-import {
-  Accordion,
-  AccordionItem,
-  AccordionPanel,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { FileText, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChapterGroupsAccordion } from "@/components/chapters/chapter-groups-accordion";
 import { ChapterTable, type ChapterTableProps } from "@/components/chapters/chapter-table";
 import type { ChapterRow } from "./types";
 
@@ -16,6 +12,9 @@ export interface ChaptersTableSectionProps {
   isAdmin: boolean;
   loading: boolean;
   tableProps: Omit<ChapterTableProps, "chapters">;
+  initialChapterId?: string | null;
+  groupResetKey?: string;
+  onAddChapters?: () => void;
 }
 
 export function ChaptersTableSection({
@@ -23,6 +22,9 @@ export function ChaptersTableSection({
   isAdmin,
   loading,
   tableProps,
+  initialChapterId,
+  groupResetKey = "",
+  onAddChapters,
 }: ChaptersTableSectionProps) {
   const chapterGroups = useMemo(() => {
     const groups: ChapterRow[][] = [];
@@ -31,6 +33,11 @@ export function ChaptersTableSection({
     }
     return groups;
   }, [chapters]);
+  const initialGroupIndex = useMemo(() => {
+    if (!initialChapterId) return 0;
+    const chapterIndex = chapters.findIndex((chapter) => chapter.id === initialChapterId);
+    return chapterIndex >= 0 ? Math.floor(chapterIndex / CHAPTER_GROUP_SIZE) : 0;
+  }, [chapters, initialChapterId]);
 
   if (loading) {
     return (
@@ -46,36 +53,32 @@ export function ChaptersTableSection({
   if (chapters.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 py-12 text-center">
-        <FileText className="size-8 text-muted-foreground mb-2" />
+        <FileText className="mb-2 size-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
-          {isAdmin
-            ? "No chapters in this novel yet. Paste one below to start."
-            : "No chapters published yet."}
+          {isAdmin ? "No chapters in this novel yet." : "No chapters published yet."}
         </p>
+        {isAdmin && onAddChapters ? (
+          <Button type="button" variant="outline" className="mt-5" onClick={onAddChapters}>
+            <Plus className="size-4" />
+            Add chapters
+          </Button>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
       {chapterGroups.length <= 1 ? (
         <ChapterTable chapters={chapters} {...tableProps} />
       ) : (
-        <Accordion defaultValue={[0]} {...(!isAdmin ? { multiple: true } : {})}>
-          {chapterGroups.map((group, gi) => (
-            <AccordionItem key={gi} value={gi}>
-              <AccordionTrigger>
-                <span>
-                  Chapters {Number(group[0].number)}–{Number(group[group.length - 1].number)}{" "}
-                  <span className="ml-2 font-normal text-muted-foreground">({group.length})</span>
-                </span>
-              </AccordionTrigger>
-              <AccordionPanel>
-                <ChapterTable chapters={group} {...tableProps} />
-              </AccordionPanel>
-            </AccordionItem>
-          ))}
-        </Accordion>
+        <ChapterGroupsAccordion
+          key={groupResetKey}
+          groups={chapterGroups}
+          initialGroupIndex={initialGroupIndex}
+          isAdmin={isAdmin}
+          tableProps={tableProps}
+        />
       )}
     </div>
   );

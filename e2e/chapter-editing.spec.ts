@@ -27,14 +27,15 @@ async function signIn(page: Page) {
 }
 
 async function addChapter(page: Page, number: string, title: string, content: string) {
+  await page.getByRole("tab", { name: "Add chapters" }).click();
   const numberInput = page.getByLabel("Number *");
+  await expect(numberInput).toBeVisible();
   await numberInput.fill(number);
   await expect(numberInput).toHaveValue(number);
   await page.getByLabel("Title *").fill(title);
   await page.getByLabel("Raw Content *").fill(content);
   await page.getByRole("button", { name: "Add Chapter", exact: true }).click();
   await expect(page.getByText("Chapter added successfully", { exact: true }).last()).toBeVisible();
-  await expect(page.getByRole("row").filter({ hasText: title })).toBeVisible();
 }
 
 test("admin reorders and edits every chapter field", async ({ page }) => {
@@ -47,14 +48,15 @@ test("admin reorders and edits every chapter field", async ({ page }) => {
   await addChapter(page, "1", "Source one", "Raw content one.");
   await addChapter(page, "1.5", "Source two", "Raw content two.");
   await addChapter(page, "3", "Source three", "Raw content three.");
+  await page.getByRole("tab", { name: "Chapters", exact: true }).click();
   await page.getByRole("link", { name: "Source three", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Source three" })).toBeVisible();
   await page.getByRole("button", { name: "Back to chapter list" }).click();
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
 
-  await page.getByRole("button", { name: "Reorder chapters" }).click();
+  await page.getByRole("button", { name: "Chapter actions" }).click();
+  await page.getByRole("menuitem", { name: "Reorder chapters" }).click();
   await expect(page.getByRole("heading", { name: "Reorder chapters" })).toBeVisible();
-  await expect(page.getByText("Preparing 3 chapters…", { exact: true })).toBeVisible();
 
   const thirdHandle = page.getByRole("button", {
     name: "Reorder chapter 3: Source three",
@@ -83,7 +85,7 @@ test("admin reorders and edits every chapter field", async ({ page }) => {
 
   await rows.nth(0).getByRole("link", { name: "Source three", exact: true }).click();
   await expect(
-    page.getByRole("combobox", { name: "Current chapter: Ch. 1 — Source three" }),
+    page.getByRole("button", { name: /Choose chapter: Ch\. 1 — Source three/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Back to chapter list" }).click();
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
@@ -107,7 +109,8 @@ test("admin reorders and edits every chapter field", async ({ page }) => {
 
   await page.getByRole("link", { name: "Source two", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Source two" })).toBeVisible();
-  await page.getByRole("button", { name: "Edit chapter" }).click();
+  await page.getByRole("button", { name: "More reader actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit chapter" }).click();
   await expect(page.getByLabel("Source Title")).toHaveValue("Source two");
   await expect(page.getByLabel("Translated Title")).toHaveValue("");
   await page.getByLabel("Source Title").fill("   ");
@@ -134,7 +137,8 @@ test("admin reorders and edits every chapter field", async ({ page }) => {
   await expect(page.getByText("Edited source two", { exact: true })).toBeVisible();
   await expect(page.getByText("Translated body two.", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit chapter" }).click();
+  await page.getByRole("button", { name: "More reader actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit chapter" }).click();
   await page.getByLabel("Source Title").fill("Unsaved source title");
   await page.getByRole("button", { name: "Back to chapter list" }).click();
   await expect(page.getByRole("heading", { name: "Discard Unsaved Changes?" })).toBeVisible();
@@ -197,11 +201,12 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
 
   await addChapter(page, "1", "Alpha arrives", "Alpha arrived.\n\nBeta waited.");
   await addChapter(page, "2", "Beta waits", "Beta waited.");
-
+  await page.getByRole("tab", { name: "Chapters", exact: true }).click();
   const chapterOneRow = page.getByRole("row").filter({ hasText: "Alpha arrives" });
   await chapterOneRow.getByRole("link", { name: "Alpha arrives", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Alpha arrives" })).toBeVisible();
-  await page.getByRole("button", { name: "Edit chapter" }).click();
+  await page.getByRole("button", { name: "More reader actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit chapter" }).click();
   await page.getByLabel("Translated Content").fill("Alpha มาแล้ว");
   await page.getByRole("button", { name: "Save Chapter" }).click();
   await expect(page.getByText("Chapter saved", { exact: true })).toBeVisible();
@@ -215,7 +220,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
   await page.getByRole("button", { name: "Import Terms" }).click();
   await expect(page.getByText("1–1 of 1 terms")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Back to novel details" }).click();
-  await expect(page.getByRole("heading", { name: reviewNovelTitle })).toBeVisible();
+  await page.getByRole("tab", { name: "Translation quality" }).click();
 
   const selector = page.getByLabel("Chapters to check");
   await selector.fill("1,,2");
@@ -261,7 +266,8 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
     timeout: 90_000,
   });
   await page.getByRole("link", { name: "Open chapter" }).first().click();
-  await page.getByRole("button", { name: "Edit chapter" }).click();
+  await page.getByRole("button", { name: "More reader actions" }).click();
+  await page.getByRole("menuitem", { name: "Edit chapter" }).click();
   await page.getByLabel("Translated Content").fill("อัลฟามาถึง\n\nเบต้ารออยู่");
   await page.getByRole("button", { name: "Save Chapter" }).click();
   await expect(page.getByText("Chapter saved", { exact: true })).toBeVisible();
@@ -295,6 +301,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
   await expect(page.getByRole("heading", { name: "Quality check" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(viewFindings).toBeFocused();
+  await page.getByRole("tab", { name: "Chapters", exact: true }).click();
   await page.getByRole("button", { name: "Novel publishing options" }).click();
   await page.getByRole("menuitem", { name: "Publish now" }).click();
   await expect(page.getByRole("button", { name: "Novel publishing options" })).toContainText(

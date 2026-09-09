@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { ReaderFontSize, ReaderSettings } from "./types";
+import type { ReaderFontSize, ReaderSettings, ReaderTypeface, ReaderViewMode } from "./types";
 
 const STORAGE_KEY = "pnt-reader-settings";
 
@@ -10,7 +10,6 @@ const DEFAULTS: ReaderSettings = {
   viewMode: "side",
 };
 
-// Reader body sizes on top of the 16px/1.5 body base
 export const READER_FONT_SIZE_PX: Record<ReaderFontSize, number> = {
   S: 14,
   M: 16,
@@ -18,40 +17,49 @@ export const READER_FONT_SIZE_PX: Record<ReaderFontSize, number> = {
   XL: 20,
 };
 
+function isReaderFontSize(value: unknown): value is ReaderFontSize {
+  return value === "S" || value === "M" || value === "L" || value === "XL";
+}
+
+function isReaderTypeface(value: unknown): value is ReaderTypeface {
+  return value === "default" || value === "reader";
+}
+
+function isReaderViewMode(value: unknown): value is ReaderViewMode {
+  return value === "side" || value === "translated" || value === "raw";
+}
+
 function load(): ReaderSettings {
   if (typeof window === "undefined") return DEFAULTS;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
-    const parsed = JSON.parse(raw) as Partial<ReaderSettings>;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return DEFAULTS;
+    const stored = parsed as Record<string, unknown>;
     return {
-      fontSize: parsed.fontSize ?? DEFAULTS.fontSize,
-      typeface: parsed.typeface ?? DEFAULTS.typeface,
-      viewMode: parsed.viewMode ?? DEFAULTS.viewMode,
+      fontSize: isReaderFontSize(stored.fontSize) ? stored.fontSize : DEFAULTS.fontSize,
+      typeface: isReaderTypeface(stored.typeface) ? stored.typeface : DEFAULTS.typeface,
+      viewMode: isReaderViewMode(stored.viewMode) ? stored.viewMode : DEFAULTS.viewMode,
     };
   } catch {
     return DEFAULTS;
   }
 }
 
-// Module-level cache: survives SPA navigations, so client-side route changes
-// render the stored settings synchronously (no flash). Null on fresh page load.
 let cached: ReaderSettings | null = null;
 
 export function useReaderSettings() {
-  // The first render matches SSR defaults; stored settings are applied after
-  // mount. Later SPA navigations read the module cache synchronously.
   const [settings, setSettings] = useState<ReaderSettings>(() => cached ?? DEFAULTS);
+  const [ready, setReady] = useState(() => cached !== null);
 
   useEffect(() => {
     if (!cached) cached = load();
     setSettings(cached);
+    setReady(true);
   }, []);
 
   const update = useCallback((patch: Partial<ReaderSettings>) => {
-    // `cached` mirrors `settings` post-mount (the effect below sets both), so it
-    // is the current value here — keeping side effects out of the state updater,
-    // which React may invoke more than once.
     const next = { ...(cached ?? DEFAULTS), ...patch };
     cached = next;
     try {
@@ -62,5 +70,5 @@ export function useReaderSettings() {
     setSettings(next);
   }, []);
 
-  return { settings, update };
+  return { settings, update, ready };
 }

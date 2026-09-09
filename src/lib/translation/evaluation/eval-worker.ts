@@ -52,6 +52,11 @@ function canonicalTimestamp(value: string): string {
   return timestamp.toISOString();
 }
 
+function containsLiteralText(text: string, candidate: string): boolean {
+  if (candidate.length === 0) return true;
+  return text.includes(candidate);
+}
+
 function truncateUnicode(value: string): string {
   let offset = 0;
   let count = 0;
@@ -116,9 +121,9 @@ function createEvalResult(
   let adheredTerms = 0;
   const missingTerms: ApprovedTerm[] = [];
   for (const term of approvedTerms) {
-    if (!chapter.rawContent.includes(term.source)) continue;
+    if (!containsLiteralText(chapter.rawContent, term.source)) continue;
     matchedTerms++;
-    if (translatedText.includes(term.target)) adheredTerms++;
+    if (containsLiteralText(translatedText, term.target)) adheredTerms++;
     else if (missingTerms.length < 5) missingTerms.push(term);
   }
 

@@ -17,6 +17,7 @@ export interface ConfirmDialogProps {
   cancelText?: string;
   variant?: ComponentProps<typeof Button>["variant"];
   titleClassName?: string;
+  contentClassName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
@@ -30,6 +31,7 @@ export function ConfirmDialog({
   cancelText = "Cancel",
   variant = "default",
   titleClassName,
+  contentClassName,
   open,
   onOpenChange,
   onConfirm,
@@ -37,7 +39,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className={contentClassName}>
         <DialogHeader>
           <DialogTitle className={titleClassName ?? "font-semibold text-foreground"}>
             {title}
