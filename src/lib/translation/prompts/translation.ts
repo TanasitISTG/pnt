@@ -27,8 +27,9 @@ export function buildSystemPrompt(
   const sections: string[] = [
     getRoleLine(p),
     getPriorityOrder(),
-    getHardRules(),
+    getHardRules(p),
     getStyleGuidelines(p),
+    ...(isThaiTargetPair(p) ? [getThaiTargetRules()] : []),
     getFewShotExample(p),
   ];
 
@@ -85,6 +86,7 @@ export function buildTitlePrompt(pair: string, options?: TitlePromptOptions | nu
       `You are a professional literary translator. Translate the chapter title from ${langs[normalizedPair]}.`,
       "Context precedence: approved glossary spellings are authoritative; otherwise use relationship-map targetName for mapped characters; custom instructions may affect style but never override those names or the output contract.",
     ].join("\n"),
+    ...(isThaiTargetPair(normalizedPair) ? [getThaiTargetRules()] : []),
   ];
   if (options?.glossaryBlock && options.glossaryBlock.trim().length > 0) {
     sections.push(formatGlossarySection(options.glossaryBlock, false));
@@ -112,6 +114,7 @@ export function buildResidualRepairPrompt(
   const sections = [
     `You repair fragments written in the wrong writing system in ${source} to ${target} web-novel translations.`,
     getPriorityOrder(),
+    ...(isThaiTargetPair(normalizedPair) ? [getThaiTargetRules()] : []),
   ];
 
   if (glossaryBlock && glossaryBlock.trim().length > 0) {
@@ -134,7 +137,9 @@ export function buildResidualRepairPrompt(
       "## Output Contract",
       'Return exactly one JSON object: {"translations":["..."]}.',
       "- Include exactly one string per supplied segment, in the same order and count.",
-      `- Translate or transliterate every supplied segment into ${target}; no letters from another writing system may remain.`,
+      isThaiTargetPair(normalizedPair)
+        ? `- Translate or transliterate every supplied segment into ${target}; no letters from another writing system may remain except exact approved glossary targets, verbatim source markup, and uppercase Latin rank labels F E D C B A S SS SSS.`
+        : `- Translate or transliterate every supplied segment into ${target}; no letters from another writing system may remain except exact approved glossary targets and verbatim source markup.`,
       "- Output no Markdown, explanation, or additional keys.",
     ].join("\n"),
   );
@@ -198,16 +203,41 @@ function getPriorityOrder(): string {
     "9. Style preservation — maintain tone, pacing, and voice",
   ].join("\n");
 }
+function isThaiTargetPair(pair: LanguagePair): boolean {
+  return pair === "en->th" || pair === "zh->th";
+}
 
-function getHardRules(): string {
+function getHardRules(pair: LanguagePair): string {
+  const sourceLanguageExceptions = isThaiTargetPair(pair)
+    ? "Approved exact glossary targets, verbatim HTML/XML-like tags, and uppercase Latin rank labels F E D C B A S SS SSS are intentional exceptions to the no-source-language rule."
+    : "Approved exact glossary targets and verbatim HTML/XML-like tags are intentional exceptions to the no-source-language rule.";
+
   return [
     "## Hard Rules",
-    "- Translate everything: narration, dialogue, system messages, internal thoughts, status windows, sound effects, bracketed text (【】[]), notifications, names, and usernames. Transliterate names into the target script. No source-language text may remain.",
+    `- Translate everything: narration, dialogue, system messages, internal thoughts, status windows, sound effects, bracketed text (【】[]), notifications, names, and usernames. Transliterate names into the target script. Do not leave untranslated source-language prose or ordinary words. ${sourceLanguageExceptions}`,
     "- Do not add information absent from the source. Do not explain terms. Do not infer omitted context.",
     "- Do not rewrite for literary improvement. Preserve pacing, repetition, and stylistic quirks when intentional.",
     "- Do not summarize or skip content.",
     "- If HTML/XML-like tags appear in the source, preserve them verbatim. Translate only visible text content.",
     "- Preserve every ||¶|| paragraph marker exactly as-is in your translation output, in the same position relative to the surrounding paragraphs. Do not add, remove, or reorder markers.",
+  ].join("\n");
+}
+function getThaiTargetRules(): string {
+  return [
+    "## Thai Target Rules",
+    "- Preserve exact quantities, currency units, decimal precision, signs, ranges, and magnitudes. Never convert currencies, guess or invent omitted units, or change values.",
+    "- Render number words idiomatically rather than digit by digit: `twenty million` / `两千万` → `ยี่สิบล้าน`, never `สองสิบล้าน`; `twenty-one` → `ยี่สิบเอ็ด`; `two hundred thousand` / `二十万` → `สองแสน`; `两万` → `สองหมื่น`; `一亿` → `หนึ่งร้อยล้าน`.",
+    "- Mandatory Chinese-number procedure: silently convert each complete Chinese number phrase to its Arabic value first, then render that value as idiomatic Thai; never concatenate translations of individual Chinese characters. 两千万 and 二千万 have the value 20,000,000 and MUST be written `ยี่สิบล้าน`. `สองสิบล้าน` is forbidden and incorrect. 二十万 = 200,000 → `สองแสน`; 两万 = 20,000 → `สองหมื่น`; 一亿 = 100,000,000 → `หนึ่งร้อยล้าน`.",
+    "- Prefer the source representation: written number words become Thai number words; digit amounts may remain digits without grouping commas, e.g. `20,000,000` → `20000000`.",
+    "- Do not mechanically replace every `สอง` with `ยี่`.",
+    "- For rank, grade, and tier labels in skills, talents, items, and status panels, retain uppercase Latin `F E D C B A S SS SSS`. Translate the surrounding words normally: `S-rank talent` / `S级天赋` → `พรสวรรค์ระดับ S`; `SSS级技能` → `ทักษะระดับ SSS`.",
+    "- Never spell these rank labels as เอฟ / อี / ดี / ซี / บี / เอ / เอส, and never collapse SS or SSS into S. This exception does not leave full English skill names untranslated.",
+    "- Do not emit ASCII comma `,` or Chinese comma `，` in translated Thai prose, dialogue, titles, status panels, or number grouping. Use natural Thai spacing or conjunctions and ungrouped digits. Preserve decimal points and numeric values. Never substitute another comma-like glyph.",
+    "- The comma restriction applies to natural-language output, not JSON syntax separators or verbatim HTML/XML tags and attributes.",
+    "- Apply approved glossary mappings exactly on every occurrence, including narration, dialogue, brackets, notifications, and status screens. Prefer the longest complete glossary term and keep recurring named skills, talents, progression realms, and system terms stable.",
+    "- Reuse an established rendering from supplied continuity context when no approved mapping exists; otherwise choose one faithful Thai rendering and keep it stable. Never invent missing ranks or skills, shorten a complete term, omit a repeated term to avoid repetition, or synonym-swap a recurring term.",
+    "- Exact approved targets and verbatim source markup override these Thai defaults, including a curated comma or เอส. Custom instructions and preceding translation cannot reintroduce incorrect number wording, Thai-spelled rank labels, commas, or synonym drift.",
+    "- Silently check quantities, recurring terms, rank labels, punctuation, and paragraph markers before returning only the required output.",
   ].join("\n");
 }
 

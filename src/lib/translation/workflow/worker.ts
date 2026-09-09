@@ -214,7 +214,11 @@ async function repairResidualScripts(
     ),
   );
 
-  const { target } = LANG_LABELS[normalizePair(langPair)];
+  const normalizedPair = normalizePair(langPair);
+  const { target } = LANG_LABELS[normalizedPair];
+  const thaiRankInstruction = normalizedPair.endsWith("->th")
+    ? " Preserve uppercase Latin rank labels F E D C B A S SS SSS according to the system rules."
+    : "";
   if (residual.spans.some((span) => span.letterCount > LONG_SPAN_LIMIT)) {
     try {
       const repaired = await retryTranslationOperation(async () => {
@@ -225,7 +229,7 @@ async function repairResidualScripts(
             { role: "assistant", content: text },
             {
               role: "user",
-              content: `Your translation contains ${residual.letterCount} letters from writing systems other than ${target}. Re-output the COMPLETE translation with every off-script word translated or transliterated into ${target} — including bracketed lines, notifications, names, and usernames. Preserve every ||¶|| marker and source HTML/XML-like tag exactly. Output only the corrected translation.`,
+              content: `Your translation contains ${residual.letterCount} letters from writing systems other than ${target}. Re-output the COMPLETE translation with every off-script word translated or transliterated into ${target} — including bracketed lines, notifications, names, and usernames. Preserve every ||¶|| marker, source HTML/XML-like tag, and exact approved glossary target.${thaiRankInstruction} Output only the corrected translation.`,
             },
           ],
         });

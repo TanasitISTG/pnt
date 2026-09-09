@@ -19,6 +19,24 @@ describe("scanResidualScripts", () => {
       letterCount: 13,
     });
   });
+  it("preserves uppercase Latin rank labels in Thai output", () => {
+    const text = "พรสวรรค์ระดับ S ทักษะระดับ SS ขั้น SSS ระดับS Sขั้น [F] E D C B A";
+
+    for (const pair of ["en->th", "zh->th"]) {
+      expect(scanResidualScripts(pair, text)).toEqual({
+        spans: [],
+        letterCount: 0,
+      });
+    }
+  });
+
+  it("repairs foreign text without consuming adjacent Thai rank labels", () => {
+    const text = "ทักษะ S Hello SSS จบ";
+    const spans = scanResidualScripts("en->th", text).spans;
+
+    expect(spans).toEqual([{ start: 8, end: 13, text: "Hello", letterCount: 5 }]);
+    expect(spliceResidualSpans(text, spans, ["สวัสดี"])).toBe("ทักษะ S สวัสดี SSS จบ");
+  });
 
   it("detects representative non-Thai scripts and supplementary letters", () => {
     for (const sample of ["漢", "мир", "مرحبا", "Γεια", "שלום", "ພາສາ", "かな", "한글", "𐐀"]) {
@@ -75,6 +93,21 @@ describe("scanResidualScripts", () => {
     expect(scanResidualScripts("en->th", "ไทย 𐐀 ไทย").spans).toEqual([
       { start: 4, end: 6, text: "𐐀", letterCount: 1 },
     ]);
+  });
+  it("does not exempt rank-looking text inside non-rank tokens", () => {
+    const text = "CLASS SSSS AS S1 _S s S\u0301 éS";
+    for (const pair of ["en->th", "zh->th"]) {
+      expect(scanResidualScripts(pair, text)).toEqual({
+        spans: [{ start: 0, end: text.length, text, letterCount: 17 }],
+        letterCount: 17,
+      });
+    }
+
+    const supplementary = "𐐀S S𐐀";
+    expect(scanResidualScripts("en->th", supplementary)).toEqual({
+      spans: [{ start: 0, end: supplementary.length, text: supplementary, letterCount: 4 }],
+      letterCount: 4,
+    });
   });
 
   it("falls back to Thai validation for unknown pairs", () => {

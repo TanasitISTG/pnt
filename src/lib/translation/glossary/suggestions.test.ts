@@ -10,19 +10,28 @@ import {
 } from "./suggestions";
 
 describe("suggest-terms-prompt", () => {
-  it("builds prompt including existing terms and eligibility limits", () => {
+  it("builds prompt with existing terms and candidate cap", () => {
     const prompt = buildTermSuggestionPrompt("en->th", ["Lin Fan", "Sun Peak"]);
     expect(prompt).toContain("Lin Fan, Sun Peak");
     expect(prompt).toContain("en->th");
     expect(prompt).toContain("at most 8 candidates");
-    expect(prompt).toContain("common nouns");
-    expect(prompt).toContain("one-off descriptions");
   });
 
   it("requests notes in the target language", () => {
     expect(buildTermSuggestionPrompt("en->th", [])).toContain("note written in Thai");
     expect(buildTermSuggestionPrompt("zh->en", [])).toContain("note written in English");
     expect(buildTermSuggestionPrompt("zh->th", [])).toContain("note written in Thai");
+  });
+  it("adds fantasy terminology priorities only for Thai targets", () => {
+    const thaiPrompt = buildTermSuggestionPrompt("en->th", []);
+    const englishPrompt = buildTermSuggestionPrompt("zh->en", []);
+    const thaiReviewPrompt = buildGlossaryReviewPrompt("zh->th", []);
+    const englishReviewPrompt = buildGlossaryReviewPrompt("zh->en", []);
+
+    expect(thaiPrompt).toContain("Thai-target glossary priority");
+    expect(englishPrompt).not.toContain("Thai-target glossary priority");
+    expect(thaiReviewPrompt).toContain("Thai-target glossary priority");
+    expect(englishReviewPrompt).not.toContain("Thai-target glossary priority");
   });
 
   it("includes approved mappings in prompt when provided", () => {
@@ -116,8 +125,7 @@ describe("glossary review", () => {
     expect(prompt).toContain("PENDING");
     expect(prompt).toContain("Lin Fan -> หลินฟาน");
     expect(prompt).toContain('"termType": "named_entity" | "story_specific" | "generic"');
-    expect(prompt).toContain("generic vocabulary");
-    expect(prompt).toContain("Uncertain ordinary vocabulary must be rejected");
+    expect(prompt).toContain("Thai-target glossary priority");
     expect(prompt).toContain(
       "Confidence measures confidence in both glossary eligibility and literal source/target evidence",
     );

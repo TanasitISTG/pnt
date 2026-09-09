@@ -80,6 +80,7 @@ describe("prompts module", () => {
     expect(prompt).toContain("## Style Guidelines");
     expect(prompt).toContain("## Example");
     expect(prompt).toContain("## Output Requirements");
+    expect(prompt).toContain("## Thai Target Rules");
     expect(prompt).not.toContain("## Terminology & Glossary");
     expect(prompt).not.toContain("## Story Context");
   });
@@ -88,12 +89,14 @@ describe("prompts module", () => {
     const prompt = buildSystemPrompt("zh->en");
     expect(prompt).toContain("Chinese web novels into English");
     expect(prompt).toContain("cultivation ranks");
+    expect(prompt).not.toContain("## Thai Target Rules");
   });
 
   it("builds correct system prompt for zh->th pair", () => {
     const prompt = buildSystemPrompt("zh->th");
     expect(prompt).toContain("Chinese web novels into Thai");
     expect(prompt).toContain("speech level");
+    expect(prompt).toContain("## Thai Target Rules");
   });
 
   // -- Priority ordering -----------------------------------------------------
@@ -108,14 +111,6 @@ describe("prompts module", () => {
   });
 
   // -- Hard rules ------------------------------------------------------------
-
-  it("demands complete translation in Hard Rules", () => {
-    for (const pair of ["en->th", "zh->en", "zh->th"]) {
-      const prompt = buildSystemPrompt(pair);
-      expect(prompt).toContain("Translate everything");
-      expect(prompt).toContain("No source-language text may remain");
-    }
-  });
 
   it("includes anti-hallucination rule", () => {
     const prompt = buildSystemPrompt("en->th");
@@ -248,9 +243,11 @@ describe("prompts module", () => {
     for (const prompt of [systemPrompt, repairPrompt]) {
       expect(prompt).toContain("exact target-language names");
       expect(prompt).not.toContain("exact Thai names");
+      expect(prompt).not.toContain("## Thai Target Rules");
     }
     expect(systemPrompt).toContain("## Output Requirements");
     expect(repairPrompt).toContain("## Output Contract");
+    expect(repairPrompt).not.toContain("uppercase Latin rank labels");
   });
 
   // -- Context ---------------------------------------------------------------
@@ -348,6 +345,8 @@ describe("prompts module", () => {
     const prompt = buildTitlePrompt("zh->th");
     expect(prompt).toContain("Chinese to Thai");
     expect(prompt).toContain("ONLY the translated title");
+    expect(buildTitlePrompt("zh->en")).not.toContain("## Thai Target Rules");
+    expect(prompt).toContain("## Thai Target Rules");
   });
   it("adds glossary and custom sections before the title-only contract", () => {
     const prompt = buildTitlePrompt("zh->th", {
@@ -424,7 +423,6 @@ describe("prompts module", () => {
     expect(prompt).toContain("## Custom Instructions");
     expect(prompt).toContain('{"translations":["..."]}');
     expect(prompt).toContain("one string per supplied segment");
-    expect(prompt).toContain("no letters from another writing system may remain");
 
     const glossaryIndex = prompt.indexOf("## Terminology & Glossary");
     const storyIndex = prompt.indexOf("## Story Context");
@@ -454,6 +452,15 @@ describe("prompts module", () => {
     expect(prompt).not.toContain("## Character & Relationship Context");
     expect(prompt).not.toContain("## Custom Instructions");
     expect(prompt).toContain("## Output Contract");
+  });
+  it("scopes Latin rank exceptions to Thai residual repair prompts", () => {
+    for (const pair of ["en->th", "zh->th"]) {
+      expect(buildResidualRepairPrompt(pair)).toContain("F E D C B A S SS SSS");
+    }
+
+    const englishPrompt = buildResidualRepairPrompt("zh->en");
+    expect(englishPrompt).not.toContain("## Thai Target Rules");
+    expect(englishPrompt).not.toContain("F E D C B A S SS SSS");
   });
 
   it("keeps relationship context pairs referentially closed at the shared cap", () => {

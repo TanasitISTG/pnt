@@ -140,6 +140,29 @@ describe("translation worker guarded state transitions", () => {
       expect.objectContaining({ translation: "แปลแล้ว ชิ้นหนึ่ง" }),
     );
   });
+  it("does not repair Latin rank labels already valid in Thai output", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: { ...chunks[0], sourceText: "原文", textLength: 2 },
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion.mockResolvedValueOnce({
+      content: "พรสวรรค์ระดับ S ทักษะระดับ SSS",
+      usage: { promptTokens: 10, completionTokens: 20 },
+    });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(1);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "พรสวรรค์ระดับ S ทักษะระดับ SSS" }),
+    );
+  });
+
   it("repairs short residual spans with all translation context", async () => {
     provider.generateChatCompletion.mockReset();
     const relationshipContext = buildRelationshipPromptContextForText(
@@ -296,6 +319,37 @@ describe("translation worker guarded state transitions", () => {
     };
     expect(repairRequest.messages[1]?.content).toContain("Hello مرحبا мир");
   });
+  it("repairs only non-rank spans in a Thai translation", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: { ...chunks[0], sourceText: "原文", textLength: 2 },
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion
+      .mockResolvedValueOnce({
+        content: "ทักษะ S Hello SSS จบ",
+        usage: { promptTokens: 10, completionTokens: 20 },
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ translations: ["สวัสดี"] }),
+        usage: { promptTokens: 1, completionTokens: 1 },
+      });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(2);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "ทักษะ S สวัสดี SSS จบ" }),
+    );
+    const repairRequest = provider.generateChatCompletion.mock.calls[1]?.[0] as {
+      messages: Array<{ content?: string }>;
+    };
+    expect(repairRequest.messages[1]?.content).toBe(JSON.stringify({ segments: ["Hello"] }));
+  });
 
   it("rejects a residual replacement that remains off-script before retrying", async () => {
     provider.generateChatCompletion.mockReset();
@@ -364,14 +418,14 @@ describe("translation worker guarded state transitions", () => {
     } as never);
     provider.generateChatCompletion
       .mockResolvedValueOnce({
-        content: `แปลแล้ว ${"许".repeat(201)}`,
+        content: `แปลแล้ว S ${"许".repeat(201)} SSS`,
         usage: { promptTokens: 10, completionTokens: 20 },
       })
       .mockRejectedValueOnce(new Error("temporary passage failure"))
       .mockRejectedValueOnce(new Error("temporary passage failure"))
       .mockRejectedValueOnce(new Error("temporary passage failure"))
       .mockResolvedValueOnce({
-        content: "แปลแล้ว 许野",
+        content: "แปลแล้ว S 许野 SSS",
         usage: { promptTokens: 1, completionTokens: 1 },
       })
       .mockResolvedValueOnce({
@@ -382,13 +436,52 @@ describe("translation worker guarded state transitions", () => {
     await translateChunk("job-1", 0, generation);
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(6);
+    const longRetryRequest = provider.generateChatCompletion.mock.calls[4]?.[0] as {
+      messages: Array<{ content?: string }>;
+    };
+    expect(longRetryRequest.messages.at(-1)?.content).toContain(
+      "Preserve uppercase Latin rank labels F E D C B A S SS SSS according to the system rules.",
+    );
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
       "job-1",
       generation,
       0,
-      expect.objectContaining({ translation: "แปลแล้ว สวี่เหยี่ย" }),
+      expect.objectContaining({ translation: "แปลแล้ว S สวี่เหยี่ย SSS" }),
     );
   });
+  it("does not send Thai rank exceptions during English long-span repair", async () => {
+    provider.generateChatCompletion.mockReset();
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      novel: { ...mockNovel, targetLang: "en" },
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    provider.generateChatCompletion
+      .mockResolvedValueOnce({
+        content: `Done ${"ก".repeat(201)}`,
+        usage: { promptTokens: 10, completionTokens: 20 },
+      })
+      .mockResolvedValueOnce({
+        content: "Done",
+        usage: { promptTokens: 1, completionTokens: 1 },
+      });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(2);
+    const repairRequest = provider.generateChatCompletion.mock.calls[1]?.[0] as {
+      messages: Array<{ content?: string }>;
+    };
+    expect(repairRequest.messages.at(-1)?.content).not.toContain("uppercase Latin rank labels");
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "Done" }),
+    );
+  });
+
   it("rejects whole-chunk repairs that change markers, tags, or protected terms", async () => {
     provider.generateChatCompletion.mockReset();
     vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([

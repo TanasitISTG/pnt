@@ -15,6 +15,8 @@ export function buildTermSuggestionPrompt(
   existingSources: string[],
   context?: TermSuggestionContext,
 ): string {
+  const normalizedPair = normalizePair(languagePair);
+  const targetLanguage = LANG_LABELS[normalizedPair].target;
   const existingList =
     existingSources.length > 0
       ? `Do NOT include any of the following terms which are already present in the glossary:\n${existingSources.slice(0, 100).join(", ")}`
@@ -25,8 +27,16 @@ export function buildTermSuggestionPrompt(
     `Analyze the source and translated chapter excerpts and identify only terms whose stable rendering materially improves consistency across the novel.`,
     `Eligible terms include character names, aliases, titles, named places or organizations, explicitly named skills, items, or systems, and coined story-specific concepts whose rendering must remain stable.`,
     `Do NOT suggest common nouns, verbs, or adjectives; generic roles or locations; everyday objects or food; broad school or business topics; actions or events; dates or numbers; public brands or people without a story-specific rendering; one-off descriptions; or substring fragments.`,
-    `For each eligible term, extract its source text (original language), target translation (as used in the translated chapter), category ("character", "place", "skill", "item", or "other"), and an optional brief note written in ${LANG_LABELS[normalizePair(languagePair)].target}.`,
+    `For each eligible term, extract its source text (original language), target translation (as used in the translated chapter), category ("character", "place", "skill", "item", or "other"), and an optional brief note written in ${targetLanguage}.`,
     `Prefer an empty array when nothing qualifies. Return at most 8 candidates, ordered by the value of preserving their translation consistently.`,
+    ...(normalizedPair === "en->th" || normalizedPair === "zh->th"
+      ? [
+          "Thai-target glossary priority: Within the same eight shared candidate slots, prioritize complete named combat techniques, named active or passive skills, named talents, cultivation or progression realm names, and coined system concepts that need stable rendering, including terms in brackets, notifications, and status panels. Keep characters, places, items, and other high-value names eligible and order all candidates by consistency value.",
+          "Classify only a genuinely named technique, talent, or realm as a stable glossary candidate; ordinary labels such as skill, talent, level, rank, or attack are generic and should not be suggested. A coined but non-name story concept may be suggested only when it is recurring and clearly evidenced; review will keep it story_specific and pending under the existing policy.",
+          "Do not suggest standalone F E D C B A S SS SSS entries or rank-letter-to-Thai-name mappings. A full named skill containing a rank label is eligible only when the complete term is independently named and evidenced.",
+          "Use the complete source phrase and the target literally present in the bilingual evidence. Do not shorten a named term, invent a preferred target, or suggest a synonym or variant of an approved mapping.",
+        ]
+      : []),
     existingList,
   ];
 
@@ -119,6 +129,7 @@ export function buildGlossaryReviewPrompt(
   languagePair: string,
   approvedMappings: { source: string; target: string }[],
 ): string {
+  const normalizedPair = normalizePair(languagePair);
   const mappingLines = approvedMappings.slice(0, 50).map((m) => `${m.source} -> ${m.target}`);
 
   return [
@@ -126,6 +137,13 @@ export function buildGlossaryReviewPrompt(
     `Review each suggested term against the supplied bilingual chapter evidence and classify its glossary value before choosing an action.`,
     `Eligible terms include character names, aliases, titles, named places or organizations, explicitly named skills, items, or systems, and coined story-specific concepts whose rendering must remain stable.`,
     `Common nouns, verbs, or adjectives; generic roles or locations; everyday objects or food; broad school or business topics; actions or events; dates or numbers; public brands or people without a story-specific rendering; one-off descriptions; and substring fragments are not glossary terms.`,
+    ...(normalizedPair === "en->th" || normalizedPair === "zh->th"
+      ? [
+          "Thai-target glossary priority: Prioritize complete named combat techniques, named active or passive skills, named talents, cultivation or progression realm names, and coined system concepts that require stable terminology, including terms shown in brackets, notifications, and status panels. A genuinely named technique, talent, or realm is named_entity; a coined but non-name story concept is story_specific and remains pending under the existing policy; ordinary labels such as skill, talent, level, rank, or attack are generic and must be rejected.",
+          "Do not suggest standalone F E D C B A S SS SSS entries or rank-letter-to-Thai-name mappings. A full named skill containing a rank label is eligible only on its own naming and literal-evidence merits.",
+          "Require the complete source phrase and the target literally present in the bilingual evidence. Never shorten a named term, invent a preferred target, or create a synonym or variant of an approved mapping.",
+        ]
+      : []),
     ``,
     `APPROVE only a high-confidence named_entity when the source and target are both literally evidenced, the term is not a duplicate or variant of an existing approved term, and stable naming matters across the novel.`,
     `REJECT generic vocabulary, weak or unsupported candidates, duplicates, and terms without clear source or target evidence.`,

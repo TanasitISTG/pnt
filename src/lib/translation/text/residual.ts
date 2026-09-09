@@ -7,6 +7,8 @@ const NEWLINE_RE = /\r|\n/u;
 const THAI_SCRIPT_RE = /\p{Script_Extensions=Thai}/u;
 const LATIN_SCRIPT_RE = /\p{Script_Extensions=Latin}/u;
 const SOURCE_TAG_RE = /<[^<>]+>/g;
+const THAI_RANK_RE =
+  /(?:^|[^\p{L}\p{M}\p{N}_]|\p{Script_Extensions=Thai})(SSS|SS|[A-FS])(?=$|[^\p{L}\p{M}\p{N}_]|\p{Script_Extensions=Thai})/gu;
 
 interface ProtectedRange {
   start: number;
@@ -43,6 +45,7 @@ function getProtectedRanges(
   text: string,
   sourceText: string | undefined,
   protectedTerms: readonly string[] | undefined,
+  allowThaiRanks: boolean,
 ): ProtectedRange[] {
   const ranges: ProtectedRange[] = [];
   for (const term of protectedTerms ?? []) {
@@ -52,6 +55,14 @@ function getProtectedRanges(
   if (sourceText) {
     for (const match of sourceText.matchAll(SOURCE_TAG_RE)) {
       addOccurrences(text, match[0], ranges);
+    }
+  }
+  if (allowThaiRanks) {
+    for (const match of text.matchAll(THAI_RANK_RE)) {
+      const rank = match[1];
+      if (match.index === undefined || !rank) continue;
+      const start = match.index + match[0].length - rank.length;
+      ranges.push({ start, end: start + rank.length });
     }
   }
 
@@ -167,7 +178,12 @@ export function scanResidualScripts(
   options?: { sourceText?: string; protectedTerms?: readonly string[] },
 ): { spans: ResidualScriptSpan[]; letterCount: number } {
   const normalizedPair = normalizePair(pair);
-  const protectedRanges = getProtectedRanges(text, options?.sourceText, options?.protectedTerms);
+  const protectedRanges = getProtectedRanges(
+    text,
+    options?.sourceText,
+    options?.protectedTerms,
+    normalizedPair.endsWith("->th"),
+  );
   const spans: ResidualScriptSpan[] = [];
   for (const region of getUnprotectedRegions(text, protectedRanges)) {
     for (const line of getLineRegions(text, region)) {
