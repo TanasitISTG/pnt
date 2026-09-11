@@ -5,6 +5,7 @@ import {
   startTranslationJob,
   startTranslationJobs,
   cancelTranslationJob,
+  cancelTranslationJobs,
   retryTranslationJob,
 } from "@/lib/translation/api/mutations";
 import {
@@ -247,6 +248,43 @@ export function useTranslationJob(novelId: string, enabled = true) {
     },
     [novelId, invalidate, updateJob],
   );
+  const cancelMany = useCallback(
+    async (chapterIds: string[]) => {
+      try {
+        const res = await cancelTranslationJobs({ data: { novelId, chapterIds } });
+        const cancelledChapterIds = res.cancelled.map(({ chapterId }) => chapterId);
+        const skippedChapterIds = res.skipped.map(({ chapterId }) => chapterId);
+
+        setActiveJobs((prev) => {
+          let next: Map<string, ActiveJobState> | null = null;
+          for (const { chapterId, jobId } of res.cancelled) {
+            if (prev.get(chapterId)?.jobId !== jobId) continue;
+            next ??= new Map(prev);
+            next.delete(chapterId);
+          }
+          return next ?? prev;
+        });
+
+        if (cancelledChapterIds.length > 0) {
+          toast.info(
+            `Cancellation requested for ${cancelledChapterIds.length} translation${cancelledChapterIds.length === 1 ? "" : "s"}`,
+          );
+        }
+        if (skippedChapterIds.length > 0) {
+          toast.warning(
+            `Skipped ${skippedChapterIds.length} chapter${skippedChapterIds.length === 1 ? "" : "s"} with no active translation`,
+          );
+        }
+
+        invalidate();
+        return { cancelledChapterIds, skippedChapterIds };
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to stop selected translations");
+        return null;
+      }
+    },
+    [invalidate, novelId],
+  );
 
   const cancel = useCallback(
     async (jobId: string, chapterId: string) => {
@@ -291,6 +329,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     start,
     startMany,
     cancel,
+    cancelMany,
     retry,
     clearActiveJobs,
     activeJobs,

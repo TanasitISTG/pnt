@@ -17,6 +17,7 @@ import {
   startTranslationJobSchema,
   startTranslationJobsSchema,
   cancelTranslationJobSchema,
+  cancelTranslationJobsSchema,
   retryTranslationJobSchema,
 } from "./schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
@@ -30,6 +31,126 @@ const dispatchOutboxBestEffort = createServerOnlyFn(async (outboxId: string) => 
   const { dispatchTranslationOutboxEventBestEffort } = await import("../workflow/outbox");
   await dispatchTranslationOutboxEventBestEffort(outboxId);
 });
+async function cancelTranslationRunsForUser(
+  userId: string,
+  target: { jobIds: readonly string[] } | { novelId: string; chapterIds: readonly string[] },
+): Promise<{
+  matchedJobIds: string[];
+  cancelled: Array<{ chapterId: string; jobId: string }>;
+  outboxIds: string[];
+}> {
+  return db.transaction(async (tx) => {
+    let candidates: Array<{
+      job: typeof translationJobs.$inferSelect;
+      chapter: typeof chapters.$inferSelect;
+    }>;
+
+    if ("jobIds" in target) {
+      candidates = await tx
+        .select({ job: translationJobs, chapter: chapters })
+        .from(translationJobs)
+        .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+        .innerJoin(novels, eq(chapters.novelId, novels.id))
+        .where(and(inArray(translationJobs.id, [...target.jobIds]), eq(novels.userId, userId)))
+        .for("update");
+    } else {
+      const chapterRows = await tx
+        .select({ chapter: chapters })
+        .from(chapters)
+        .innerJoin(novels, eq(chapters.novelId, novels.id))
+        .where(
+          and(
+            inArray(chapters.id, [...target.chapterIds]),
+            eq(chapters.novelId, target.novelId),
+            eq(novels.userId, userId),
+          ),
+        )
+        .for("update");
+
+      const activeJobIds = chapterRows.flatMap(({ chapter }) =>
+        chapter.activeTranslationJobId ? [chapter.activeTranslationJobId] : [],
+      );
+      if (activeJobIds.length === 0) {
+        candidates = [];
+      } else {
+        const jobs = await tx
+          .select()
+          .from(translationJobs)
+          .where(inArray(translationJobs.id, activeJobIds))
+          .for("update");
+        const jobsById = new Map(jobs.map((job) => [job.id, job]));
+        candidates = chapterRows.flatMap(({ chapter }) => {
+          const jobId = chapter.activeTranslationJobId;
+          const job = jobId ? jobsById.get(jobId) : undefined;
+          return job && job.chapterId === chapter.id ? [{ job, chapter }] : [];
+        });
+      }
+    }
+
+    const targetOrder = new Map(
+      ("jobIds" in target ? target.jobIds : target.chapterIds).map((id, index) => [id, index]),
+    );
+    const getOrder = (candidate: (typeof candidates)[number]) =>
+      targetOrder.get("jobIds" in target ? candidate.job.id : candidate.chapter.id) ??
+      Number.MAX_SAFE_INTEGER;
+    candidates.sort((left, right) => getOrder(left) - getOrder(right));
+
+    const matchedJobIds = candidates.map(({ job }) => job.id);
+    const cancelled: Array<{ chapterId: string; jobId: string }> = [];
+    const cancellationOutboxRows: Array<{
+      id: string;
+      eventName: "translation/job.cancelled";
+      payloadJson: string;
+    }> = [];
+
+    for (const { job, chapter } of candidates) {
+      if (
+        !["pending", "running"].includes(job.status) ||
+        chapter.activeTranslationJobId !== job.id
+      ) {
+        continue;
+      }
+
+      const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
+      logs.push(createLog("warn", "Job cancelled by user."));
+      await tx
+        .update(translationJobs)
+        .set({ status: "cancelled", logsJson: JSON.stringify(logs), updatedAt: new Date() })
+        .where(
+          and(
+            eq(translationJobs.id, job.id),
+            sql`${translationJobs.status} IN ('pending', 'running')`,
+          ),
+        );
+      await tx
+        .update(chapters)
+        .set({
+          activeTranslationJobId: null,
+          status: chapter.translatedContent ? "translated" : "raw",
+          updatedAt: new Date(),
+        })
+        .where(and(eq(chapters.id, chapter.id), eq(chapters.activeTranslationJobId, job.id)));
+
+      const outboxId = nanoid();
+      cancellationOutboxRows.push({
+        id: outboxId,
+        eventName: "translation/job.cancelled",
+        payloadJson: JSON.stringify(translationRunIdentity(job)),
+      });
+      cancelled.push({ chapterId: chapter.id, jobId: job.id });
+    }
+
+    if (cancellationOutboxRows.length > 0) {
+      await tx.insert(translationOutbox).values(cancellationOutboxRows);
+    }
+
+    return {
+      matchedJobIds,
+      cancelled,
+      outboxIds: cancellationOutboxRows.map(({ id }) => id),
+    };
+  });
+}
 
 export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTranslationJob(
   userId: string,
@@ -183,58 +304,41 @@ export const cancelTranslationJob = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const outboxId = await db.transaction(async (tx) => {
-        const [row] = await tx
-          .select({ job: translationJobs, chapter: chapters })
-          .from(translationJobs)
-          .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-          .innerJoin(novels, eq(chapters.novelId, novels.id))
-          .where(and(eq(translationJobs.id, data.jobId), eq(novels.userId, session.user.id)))
-          .limit(1)
-          .for("update");
-
-        if (!row) throw new SafeServerError("Job not found or unauthorized");
-        if (
-          !["pending", "running"].includes(row.job.status) ||
-          row.chapter.activeTranslationJobId !== row.job.id
-        ) {
-          return null;
-        }
-
-        const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
-        logs.push(createLog("warn", "Job cancelled by user."));
-        await tx
-          .update(translationJobs)
-          .set({ status: "cancelled", logsJson: JSON.stringify(logs), updatedAt: new Date() })
-          .where(
-            and(
-              eq(translationJobs.id, row.job.id),
-              sql`${translationJobs.status} IN ('pending', 'running')`,
-            ),
-          );
-        await tx
-          .update(chapters)
-          .set({
-            activeTranslationJobId: null,
-            status: row.chapter.translatedContent ? "translated" : "raw",
-            updatedAt: new Date(),
-          })
-          .where(
-            and(eq(chapters.id, row.chapter.id), eq(chapters.activeTranslationJobId, row.job.id)),
-          );
-        const id = nanoid();
-        await tx.insert(translationOutbox).values({
-          id,
-          eventName: "translation/job.cancelled",
-          payloadJson: JSON.stringify(translationRunIdentity(row.job)),
-        });
-        return id;
+      const result = await cancelTranslationRunsForUser(session.user.id, {
+        jobIds: [data.jobId],
       });
 
-      if (outboxId) await dispatchOutboxBestEffort(outboxId);
+      if (!result.matchedJobIds.includes(data.jobId)) {
+        throw new SafeServerError("Job not found or unauthorized");
+      }
 
+      await Promise.all(result.outboxIds.map(dispatchOutboxBestEffort));
       return { success: true };
+    }),
+  );
+
+export const cancelTranslationJobs = createServerFn({ method: "POST" })
+  .validator(cancelTranslationJobsSchema)
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+      const chapterIds = [...new Set(data.chapterIds)];
+      const result = await cancelTranslationRunsForUser(session.user.id, {
+        novelId: data.novelId,
+        chapterIds,
+      });
+
+      await Promise.all(result.outboxIds.map(dispatchOutboxBestEffort));
+
+      const cancelledChapterIds = new Set(result.cancelled.map(({ chapterId }) => chapterId));
+      return {
+        cancelled: result.cancelled,
+        skipped: chapterIds.flatMap((chapterId) =>
+          cancelledChapterIds.has(chapterId)
+            ? []
+            : [{ chapterId, reason: "No active translation" as const }],
+        ),
+      };
     }),
   );
 

@@ -1,4 +1,4 @@
-import { Loader2, Play, X } from "lucide-react";
+import { Loader2, Play, Square, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,12 @@ export interface ChapterSelectionControlsProps {
   selectedCount: number;
   hiddenSelectedCount: number;
   selectableCount: number;
+  selectedTranslatableCount: number;
+  selectedActiveCount: number;
   batchStarting: boolean;
+  batchStopping: boolean;
   onBatchTranslate: () => void;
+  onRequestBatchStop: () => void;
   onClearSelection: () => void;
   batchRangeFrom: string;
   batchRangeTo: string;
@@ -21,8 +25,12 @@ export function ChapterSelectionControls({
   selectedCount,
   hiddenSelectedCount,
   selectableCount,
+  selectedTranslatableCount,
+  selectedActiveCount,
   batchStarting,
+  batchStopping,
   onBatchTranslate,
+  onRequestBatchStop,
   onClearSelection,
   batchRangeFrom,
   batchRangeTo,
@@ -31,19 +39,37 @@ export function ChapterSelectionControls({
   onSelectRange,
 }: ChapterSelectionControlsProps) {
   if (selectedCount > 0) {
+    const batchPending = batchStarting || batchStopping;
     return (
       <>
         <span className="self-center text-caption text-muted-foreground">
           {selectedCount}/{selectableCount} selected
           {hiddenSelectedCount > 0 ? ` · ${hiddenSelectedCount} hidden by search` : ""}
         </span>
-        <Button size="sm" onClick={onBatchTranslate} disabled={batchStarting}>
+        <Button
+          size="sm"
+          onClick={onBatchTranslate}
+          disabled={selectedTranslatableCount === 0 || batchPending}
+        >
           {batchStarting ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Play className="size-4" />
           )}
-          {batchStarting ? "Queueing…" : "Translate selected"}
+          {`Translate selected (${selectedTranslatableCount})`}
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={onRequestBatchStop}
+          disabled={selectedActiveCount === 0 || batchPending}
+        >
+          {batchStopping ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Square className="size-4" />
+          )}
+          {`Stop selected (${selectedActiveCount})`}
         </Button>
         <Button variant="ghost" size="sm" onClick={onClearSelection}>
           <X className="size-4" />

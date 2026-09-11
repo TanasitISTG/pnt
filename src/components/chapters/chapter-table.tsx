@@ -65,13 +65,7 @@ export const ChapterTable = memo(function ChapterTable({
   onCancelEdit,
   onDeleteChapter,
 }: ChapterTableProps) {
-  const selectableIds = useMemo(
-    () =>
-      chapters.flatMap((chapter) =>
-        isTranslating(chapter.id, chapter.status) ? [] : [chapter.id],
-      ),
-    [chapters, isTranslating],
-  );
+  const selectableIds = useMemo(() => chapters.map((chapter) => chapter.id), [chapters]);
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
 
   const rows = chapters.map((chapter) => {

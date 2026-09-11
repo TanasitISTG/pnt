@@ -112,7 +112,7 @@ function SelectableChapterHarness({
 afterEach(cleanup);
 
 describe("ChaptersTableSection", () => {
-  it("preserves visible-group selection and excludes translating rows", async () => {
+  it("selects every row in a visible group, including translating rows", async () => {
     const chapters = createChapters(120);
 
     render(<SelectableChapterHarness chapters={chapters} />);
@@ -122,7 +122,7 @@ describe("ChaptersTableSection", () => {
     const translating = screen.getByRole("checkbox", {
       name: "Select chapter 60",
     }) as HTMLInputElement;
-    expect(translating.disabled).toBe(true);
+    expect(translating.disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Select visible chapters" }));
     await waitFor(() => {
@@ -130,17 +130,18 @@ describe("ChaptersTableSection", () => {
         (screen.getByRole("checkbox", { name: "Select chapter 51" }) as HTMLInputElement).checked,
       ).toBe(true);
     });
-    expect(translating.checked).toBe(false);
+    expect(translating.checked).toBe(true);
     expect(
       (screen.getByRole("checkbox", { name: "Select chapter 100" }) as HTMLInputElement).checked,
     ).toBe(true);
+    expect(screen.getByLabelText("Selected chapter count").textContent).toBe("50");
 
     fireEvent.click(screen.getByRole("button", { name: "Chapters 1–50 (50)" }));
     await waitFor(() => expect(screen.queryByText("Chapter 51")).toBeNull());
     expect(
       (screen.getByRole("checkbox", { name: "Select chapter 1" }) as HTMLInputElement).checked,
     ).toBe(false);
-    expect(screen.getByLabelText("Selected chapter count").textContent).toBe("49");
+    expect(screen.getByLabelText("Selected chapter count").textContent).toBe("50");
   }, 15_000);
 
   it("adopts late resume groups until the user explicitly chooses a group", async () => {

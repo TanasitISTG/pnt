@@ -6,8 +6,12 @@ export interface ChaptersToolbarProps {
   selectedCount: number;
   hiddenSelectedCount: number;
   selectableCount: number;
+  selectedTranslatableCount: number;
+  selectedActiveCount: number;
   batchStarting: boolean;
+  batchStopping: boolean;
   onBatchTranslate: () => void;
+  onRequestBatchStop: () => void;
   onClearSelection: () => void;
   batchRangeFrom: string;
   batchRangeTo: string;
@@ -32,8 +36,12 @@ export function ChaptersToolbar({
   selectedCount,
   hiddenSelectedCount,
   selectableCount,
+  selectedTranslatableCount,
+  selectedActiveCount,
   batchStarting,
+  batchStopping,
   onBatchTranslate,
+  onRequestBatchStop,
   onClearSelection,
   batchRangeFrom,
   batchRangeTo,
@@ -60,8 +68,12 @@ export function ChaptersToolbar({
         selectedCount={selectedCount}
         hiddenSelectedCount={hiddenSelectedCount}
         selectableCount={selectableCount}
+        selectedTranslatableCount={selectedTranslatableCount}
+        selectedActiveCount={selectedActiveCount}
         batchStarting={batchStarting}
+        batchStopping={batchStopping}
         onBatchTranslate={onBatchTranslate}
+        onRequestBatchStop={onRequestBatchStop}
         onClearSelection={onClearSelection}
         batchRangeFrom={batchRangeFrom}
         batchRangeTo={batchRangeTo}

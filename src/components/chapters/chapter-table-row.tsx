@@ -50,19 +50,14 @@ function AdminSelectionCell({
   chapter,
   viewer,
   selected,
-  translationState,
   onToggleSelect,
-}: Pick<
-  ChapterTableRowProps,
-  "chapter" | "viewer" | "selected" | "translationState" | "onToggleSelect"
->) {
+}: Pick<ChapterTableRowProps, "chapter" | "viewer" | "selected" | "onToggleSelect">) {
   if (viewer !== "admin") return null;
   return (
     <TableCell className="w-10">
       <input
         type="checkbox"
         checked={selected}
-        disabled={translationState === "translating"}
         onChange={(event) => onToggleSelect(chapter.id, event.target.checked)}
         aria-label={`Select chapter ${Number(chapter.number)}`}
         className="size-4 accent-primary align-middle"
@@ -418,7 +413,6 @@ const ChapterTableRowCells = memo(function ChapterTableRowCells(props: ChapterTa
         chapter={chapter}
         viewer={props.viewer}
         selected={props.selected}
-        translationState={props.translationState}
         onToggleSelect={props.onToggleSelect}
       />
       <TableCell className="font-medium">{Number(chapter.number)}</TableCell>

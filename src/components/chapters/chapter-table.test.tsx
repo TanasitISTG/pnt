@@ -123,7 +123,7 @@ describe("ChapterTable browsing behavior", () => {
     expect(screen.getByText("13 foreign-script letters")).toBeTruthy();
   });
 
-  it("keeps translating rows disabled", () => {
+  it("allows selecting translating rows while keeping edit actions disabled", () => {
     render(
       <ChapterTable
         {...createProps({
@@ -135,7 +135,7 @@ describe("ChapterTable browsing behavior", () => {
 
     expect(
       (screen.getByRole("checkbox", { name: "Select chapter 1" }) as HTMLInputElement).disabled,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       (screen.getByRole("button", { name: "Edit chapter" }) as HTMLButtonElement).disabled,
     ).toBe(true);

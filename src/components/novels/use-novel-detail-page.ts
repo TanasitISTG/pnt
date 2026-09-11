@@ -117,7 +117,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
   const [deleteAllTranslationsOpen, setDeleteAllTranslationsOpen] = useState(false);
   const [logChapterId, setLogChapterId] = useState<string | null>(null);
   const [reorderOpen, setReorderOpen] = useState(false);
-
+  const [stopSelectedOpen, setStopSelectedOpen] = useState(false);
   const lastReadChapter = useMemo(() => {
     if (!readerProgress.lastChapterId) return null;
     return chapters.find((chapter) => chapter.id === readerProgress.lastChapterId) ?? null;
@@ -132,6 +132,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     start: startTranslate,
     startMany: startBatchTranslate,
     cancel: cancelTranslate,
+    cancelMany,
     retry: retryTranslate,
     clearActiveJobs,
     activeJobs,
@@ -146,17 +147,25 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     selectedIds,
     setSelectedIds,
     selectableIds,
+    selectedTranslatableIds,
+    selectedActiveIds,
     toggleSelect,
     toggleSelectMany,
     selectByRange,
     batchStarting,
+    batchStopping,
     batchRangeFrom,
     setBatchRangeFrom,
     batchRangeTo,
     setBatchRangeTo,
     handleBatchTranslate,
+    handleBatchStop,
     isRowTranslating,
-  } = useChapterSelection(chapters, activeJobs, startBatchTranslate);
+  } = useChapterSelection(chapters, activeJobs, startBatchTranslate, cancelMany);
+
+  const confirmStopSelectedTranslations = useCallback(async () => {
+    if (await handleBatchStop()) setStopSelectedOpen(false);
+  }, [handleBatchStop]);
 
   const {
     editState,
@@ -256,12 +265,14 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     batchRangeFrom,
     batchRangeTo,
     batchStarting,
+    batchStopping,
     cancelTranslate,
     chapterUiLoading,
     readingActionsPending,
     chapters,
     chaptersError: chaptersQuery.error,
     chaptersReady,
+    confirmStopSelectedTranslations,
     deleteAllTranslations,
     deleteAllTranslationsOpen,
     deleteChapterId,
@@ -273,6 +284,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     firstChapter,
     costData: costsQuery.data,
     glossaryStats: glossaryStatsQuery.data,
+    handleBatchStop,
     handleBatchTranslate,
     handleExportEpub,
     handleExportTxt,
@@ -300,17 +312,22 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     reorderingChapters,
     retryTranslate,
     selectableIds,
+    selectedActiveCount: selectedActiveIds.length,
+    selectedActiveIds,
     selectedIds,
-    setDeleteAllTranslationsOpen,
+    selectedTranslatableIds,
     setBatchRangeFrom,
     setBatchRangeTo,
+    setDeleteAllTranslationsOpen,
     setDeleteChapterId,
     setDeleteNovelOpen,
     setLogChapterId,
     setRetranslateChapterId,
     setReorderOpen,
     setSelectedIds,
+    setStopSelectedOpen,
     startTranslate,
+    stopSelectedOpen,
     unpublishedCount,
     logChapterId,
     selectByRange,

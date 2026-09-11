@@ -26,6 +26,11 @@ export interface NovelDetailDialogDetail {
   setLogChapterId: (chapterId: string | null) => void;
   retranslateChapterId: string | null;
   setRetranslateChapterId: (chapterId: string | null) => void;
+  stopSelectedOpen: boolean;
+  setStopSelectedOpen: (open: boolean) => void;
+  selectedActiveCount: number;
+  batchStopping: boolean;
+  confirmStopSelectedTranslations: () => Promise<void>;
   startTranslate: (chapterId: string) => void;
 }
 
@@ -56,6 +61,11 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
     setLogChapterId,
     retranslateChapterId,
     setRetranslateChapterId,
+    stopSelectedOpen,
+    setStopSelectedOpen,
+    selectedActiveCount,
+    batchStopping,
+    confirmStopSelectedTranslations,
     startTranslate,
   } = detail;
 
@@ -84,6 +94,16 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
         onOpenChange={setDeleteAllTranslationsOpen}
         onConfirm={deleteAllTranslations}
         pending={deletingAllTranslations}
+      />
+      <ConfirmDialog
+        title="Stop selected translations?"
+        description={`This will cancel ${selectedActiveCount} queued or running translation${selectedActiveCount === 1 ? "" : "s"}. Existing completed translations will stay unchanged.`}
+        confirmText={batchStopping ? "Stopping…" : "Stop translations"}
+        variant="destructive"
+        open={stopSelectedOpen}
+        onOpenChange={setStopSelectedOpen}
+        onConfirm={confirmStopSelectedTranslations}
+        pending={batchStopping}
       />
       <DeleteConfirmDialog
         title="Delete Chapter"

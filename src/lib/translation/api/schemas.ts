@@ -13,6 +13,11 @@ export const cancelTranslationJobSchema = z.object({
   jobId: z.string().min(1),
 });
 
+export const cancelTranslationJobsSchema = z.object({
+  novelId: z.string().min(1),
+  chapterIds: z.array(z.string().min(1)).min(1).max(500),
+});
+
 export const retryTranslationJobSchema = z.object({
   jobId: z.string().min(1),
 });

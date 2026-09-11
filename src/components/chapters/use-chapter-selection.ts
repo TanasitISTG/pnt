@@ -7,9 +7,13 @@ export function useChapterSelection(
   chapters: ChapterRow[],
   activeJobs: Map<string, ActiveJobState>,
   startBatchTranslate: (chapterIds: string[]) => Promise<number>,
+  cancelMany: (
+    chapterIds: string[],
+  ) => Promise<{ cancelledChapterIds: string[]; skippedChapterIds: string[] } | null>,
 ) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchStarting, setBatchStarting] = useState(false);
+  const [batchStopping, setBatchStopping] = useState(false);
   const [batchRangeFrom, setBatchRangeFrom] = useState("");
   const [batchRangeTo, setBatchRangeTo] = useState("");
 
@@ -26,13 +30,22 @@ export function useChapterSelection(
     [activeJobs],
   );
 
-  const selectableIds = useMemo(
-    () =>
-      chapters.flatMap((chapter) =>
-        isRowTranslating(chapter.id, chapter.status) ? [] : [chapter.id],
-      ),
-    [chapters, isRowTranslating],
-  );
+  const selectableIds = useMemo(() => chapters.map((chapter) => chapter.id), [chapters]);
+  const { selectedTranslatableIds, selectedActiveIds } = useMemo(() => {
+    const translatableIds: string[] = [];
+    const activeIds: string[] = [];
+
+    for (const chapter of chapters) {
+      if (!selectedIds.has(chapter.id)) continue;
+      if (isRowTranslating(chapter.id, chapter.status)) {
+        activeIds.push(chapter.id);
+      } else {
+        translatableIds.push(chapter.id);
+      }
+    }
+
+    return { selectedTranslatableIds: translatableIds, selectedActiveIds: activeIds };
+  }, [chapters, isRowTranslating, selectedIds]);
 
   const toggleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -63,10 +76,10 @@ export function useChapterSelection(
     }
     const inRange = chapters.filter((chapter) => {
       const num = Number(chapter.number);
-      return num >= from && num <= to && !isRowTranslating(chapter.id, chapter.status);
+      return num >= from && num <= to;
     });
     if (inRange.length === 0) {
-      toast.info("No eligible chapters in that range");
+      toast.info("No chapters in that range");
       return;
     }
     setSelectedIds((prev) => {
@@ -75,31 +88,63 @@ export function useChapterSelection(
       return next;
     });
     toast.info(`Selected ${inRange.length} chapter(s) in range ${from}–${to}`);
-  }, [batchRangeFrom, batchRangeTo, chapters, isRowTranslating]);
+  }, [batchRangeFrom, batchRangeTo, chapters]);
 
   const handleBatchTranslate = useCallback(async () => {
+    if (selectedTranslatableIds.length === 0) return;
     setBatchStarting(true);
     try {
-      const count = await startBatchTranslate([...selectedIds]);
-      if (count > 0) setSelectedIds(new Set());
+      const count = await startBatchTranslate(selectedTranslatableIds);
+      if (count > 0) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const chapterId of selectedTranslatableIds) next.delete(chapterId);
+          return next;
+        });
+      }
     } finally {
       setBatchStarting(false);
     }
-  }, [selectedIds, startBatchTranslate]);
+  }, [selectedTranslatableIds, startBatchTranslate]);
+
+  const handleBatchStop = useCallback(async () => {
+    if (selectedActiveIds.length === 0) return true;
+    setBatchStopping(true);
+    try {
+      const result = await cancelMany(selectedActiveIds);
+      if (!result) return false;
+
+      const cancelledIds = new Set(result.cancelledChapterIds);
+      if (cancelledIds.size > 0) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const chapterId of cancelledIds) next.delete(chapterId);
+          return next;
+        });
+      }
+      return true;
+    } finally {
+      setBatchStopping(false);
+    }
+  }, [cancelMany, selectedActiveIds]);
 
   return {
     selectedIds,
     setSelectedIds,
     selectableIds,
+    selectedTranslatableIds,
+    selectedActiveIds,
     toggleSelect,
     toggleSelectMany,
     selectByRange,
     batchStarting,
+    batchStopping,
     batchRangeFrom,
     setBatchRangeFrom,
     batchRangeTo,
     setBatchRangeTo,
     handleBatchTranslate,
+    handleBatchStop,
     isRowTranslating,
   };
 }

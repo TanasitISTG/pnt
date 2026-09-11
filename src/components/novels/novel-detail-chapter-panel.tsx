@@ -16,10 +16,14 @@ export interface NovelDetailChapterPanelDetail {
   isChaptersPending: boolean;
   lastReadChapter: ChapterRow | null;
   selectedIds: Set<string>;
+  selectedTranslatableIds: string[];
+  selectedActiveIds: string[];
   selectableIds: string[];
   batchStarting: boolean;
+  batchStopping: boolean;
   handleBatchTranslate: () => void;
   setSelectedIds: Dispatch<SetStateAction<Set<string>>>;
+  setStopSelectedOpen: (open: boolean) => void;
   batchRangeFrom: string;
   batchRangeTo: string;
   setBatchRangeFrom: (value: string) => void;
@@ -131,10 +135,14 @@ export function NovelDetailChapterPanel({
     isChaptersPending,
     lastReadChapter,
     selectedIds,
+    selectedTranslatableIds,
+    selectedActiveIds,
     selectableIds,
     batchStarting,
+    batchStopping,
     handleBatchTranslate,
     setSelectedIds,
+    setStopSelectedOpen,
     batchRangeFrom,
     batchRangeTo,
     setBatchRangeFrom,
@@ -176,49 +184,51 @@ export function NovelDetailChapterPanel({
         disabled={titleEditing}
         onChange={onReviewSearchChange}
       />
+      {!chapterTableLoading && (
+        <ChaptersToolbar
+          isAdmin={isAdmin}
+          selectedCount={selectedIds.size}
+          hiddenSelectedCount={hiddenSelectedCount}
+          selectableCount={selectableIds.length}
+          selectedTranslatableCount={selectedTranslatableIds.length}
+          selectedActiveCount={selectedActiveIds.length}
+          batchStarting={batchStarting}
+          batchStopping={batchStopping}
+          onBatchTranslate={handleBatchTranslate}
+          onRequestBatchStop={() => setStopSelectedOpen(true)}
+          onClearSelection={() => setSelectedIds(new Set())}
+          batchRangeFrom={batchRangeFrom}
+          batchRangeTo={batchRangeTo}
+          onBatchRangeFromChange={setBatchRangeFrom}
+          onBatchRangeToChange={setBatchRangeTo}
+          onSelectRange={selectByRange}
+          unpublishedCount={unpublishedCount}
+          onPublishAll={() => publishAllChapters()}
+          publishingAll={publishingAll}
+          missingTitleCount={missingTitleCount}
+          onBackfillTitles={() => backfillTitles()}
+          backfillingTitles={backfillingTitles}
+          onReorderChapters={() => setReorderOpen(true)}
+          reorderDisabled={reorderDisabled}
+          chapterCount={chapters.length}
+          deletingAllTranslations={deletingAllTranslations}
+          onDeleteAllTranslations={() => setDeleteAllTranslationsOpen(true)}
+        />
+      )}
       {!chapterTableLoading && filteredChapters.length === 0 && chapters.length > 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-10 text-center">
           <p className="text-sm text-muted-foreground">No chapters match this search.</p>
         </div>
       ) : (
-        <>
-          {!chapterTableLoading && (
-            <ChaptersToolbar
-              isAdmin={isAdmin}
-              selectedCount={selectedIds.size}
-              hiddenSelectedCount={hiddenSelectedCount}
-              selectableCount={selectableIds.length}
-              batchStarting={batchStarting}
-              onBatchTranslate={handleBatchTranslate}
-              onClearSelection={() => setSelectedIds(new Set())}
-              batchRangeFrom={batchRangeFrom}
-              batchRangeTo={batchRangeTo}
-              onBatchRangeFromChange={setBatchRangeFrom}
-              onBatchRangeToChange={setBatchRangeTo}
-              onSelectRange={selectByRange}
-              unpublishedCount={unpublishedCount}
-              onPublishAll={() => publishAllChapters()}
-              publishingAll={publishingAll}
-              missingTitleCount={missingTitleCount}
-              onBackfillTitles={() => backfillTitles()}
-              backfillingTitles={backfillingTitles}
-              onReorderChapters={() => setReorderOpen(true)}
-              reorderDisabled={reorderDisabled}
-              chapterCount={chapters.length}
-              deletingAllTranslations={deletingAllTranslations}
-              onDeleteAllTranslations={() => setDeleteAllTranslationsOpen(true)}
-            />
-          )}
-          <ChaptersTableSection
-            chapters={filteredChapters}
-            isAdmin={isAdmin}
-            loading={chapterTableLoading}
-            tableProps={chapterTableProps}
-            initialChapterId={lastReadChapter?.id}
-            groupResetKey={chapterQuery}
-            onAddChapters={onAddChapters}
-          />
-        </>
+        <ChaptersTableSection
+          chapters={filteredChapters}
+          isAdmin={isAdmin}
+          loading={chapterTableLoading}
+          tableProps={chapterTableProps}
+          initialChapterId={lastReadChapter?.id}
+          groupResetKey={chapterQuery}
+          onAddChapters={onAddChapters}
+        />
       )}
     </div>
   );

@@ -365,3 +365,113 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
     ),
   ).toBeVisible();
 });
+
+test("admin stops selected translations and reviews card metadata in both views", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const bulkNovelTitle = "Bulk Stop Translation";
+
+  await page.goto("/login");
+  await waitForReactHydration(page);
+  await rejectOptionalAnalytics(page);
+  await page.getByLabel("Email").fill(adminEmail);
+  await page.getByLabel("Password").fill(adminPassword);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  await page.getByRole("button", { name: "New Novel" }).click();
+  await page.getByLabel("Title *").fill(bulkNovelTitle);
+  await page.locator("#sourceLang").click();
+  await page.getByRole("option", { name: "Chinese (ZH)" }).click();
+  await page.locator("#targetLang").click();
+  await page.getByRole("option", { name: "English (EN)" }).click();
+  await page.getByRole("button", { name: "Create Novel" }).click();
+  await expect(page.getByRole("heading", { name: bulkNovelTitle })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Add chapters" }).click();
+  const addChapter = async (number: number, title: string, content: string) => {
+    await page.getByLabel("Number *").fill(String(number));
+    await page.getByLabel("Title *").fill(title);
+    await page.getByLabel("Raw Content *").fill(content);
+    await page.getByRole("button", { name: "Add Chapter" }).click();
+    await expect(
+      page.getByText("Chapter added successfully", { exact: true }).first(),
+    ).toBeVisible();
+  };
+
+  await addChapter(1, "Bulk chapter one", `儿子对父亲说：“我会回来的。”\n${slowTranslationMarker}`);
+  await addChapter(2, "Bulk chapter two", `父亲点了点头。\n${slowTranslationMarker}`);
+  await addChapter(3, "Idle chapter", "儿子在黎明时回家。");
+  await page.getByRole("tab", { name: "Chapters", exact: true }).click();
+
+  const firstRow = page.getByRole("row", { name: /Bulk chapter one/ });
+  const secondRow = page.getByRole("row", { name: /Bulk chapter two/ });
+  const idleRow = page.getByRole("row", { name: /Idle chapter/ });
+  await firstRow.getByRole("button", { name: "Translate chapter" }).click();
+  await expect(firstRow.getByRole("button", { name: "Cancel translation" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await secondRow.getByRole("button", { name: "Translate chapter" }).click();
+  await expect(secondRow.getByRole("button", { name: "Cancel translation" })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  await firstRow.getByRole("checkbox", { name: "Select chapter 1" }).check();
+  await secondRow.getByRole("checkbox", { name: "Select chapter 2" }).check();
+  await idleRow.getByRole("checkbox", { name: "Select chapter 3" }).check();
+  await expect(page.getByRole("button", { name: "Stop selected (2)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Translate selected (1)" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Stop selected (2)" }).click();
+  await expect(page.getByRole("heading", { name: "Stop selected translations?" })).toBeVisible();
+
+  await page.context().setOffline(true);
+  await page.getByRole("button", { name: "Stop translations" }).click();
+  await expect(page.getByRole("heading", { name: "Stop selected translations?" })).toBeVisible();
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: /failed|fetch|network|error/i }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("3/3 selected", { exact: true })).toBeVisible();
+  await page.context().setOffline(false);
+
+  await page.getByRole("button", { name: "Stop translations" }).click();
+  await expect(page.getByRole("heading", { name: "Stop selected translations?" })).toBeHidden();
+  await expect(firstRow.getByRole("button", { name: "Translate chapter" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(secondRow.getByRole("button", { name: "Translate chapter" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(idleRow.getByRole("checkbox", { name: "Select chapter 3" })).toBeChecked();
+  await expect(page.getByText("1/3 selected", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Translate selected (1)" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "Translate selected (1)" }).click();
+  await expect(page.getByText(/Queued 1 chapter/, { exact: false })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(idleRow.getByRole("checkbox", { name: "Select chapter 3" })).not.toBeChecked();
+
+  await page.getByRole("link", { name: "Library", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  const expectCardMetadata = async () => {
+    const card = page.getByRole("link", { name: new RegExp(bulkNovelTitle) }).first();
+    await expect(card).toBeVisible();
+    await expect(card.getByText("Chapters", { exact: true })).toBeVisible();
+    await expect(card.getByText("Translated", { exact: true })).toBeVisible();
+    await expect(card.getByText("Publication", { exact: true })).toBeVisible();
+    await expect(card.getByText("Draft", { exact: true })).toBeVisible();
+    await expect(
+      card.getByRole("progressbar", { name: `${bulkNovelTitle} translation progress` }),
+    ).toBeVisible();
+  };
+
+  await expectCardMetadata();
+  await page.getByRole("button", { name: "List view" }).click();
+  await expect(page.getByRole("button", { name: "List view" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expectCardMetadata();
+});

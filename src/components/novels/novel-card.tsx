@@ -90,22 +90,35 @@ export function NovelCard({
                 {novel.description}
               </p>
             )}
-            <div className="mt-auto flex flex-col gap-1.5 pt-2">
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-caption text-muted-foreground">
-                <span>
-                  {novel.chapterCount} {novel.chapterCount === 1 ? "chapter" : "chapters"} ·{" "}
-                  {novel.translatedCount} translated
-                </span>
-                {isAdmin && <Badge variant="outline">{formatPublicationState(state)}</Badge>}
-              </div>
+            <div className="mt-auto flex flex-col gap-2 pt-2">
+              <dl className="grid gap-x-3 gap-y-2 text-caption text-muted-foreground sm:grid-cols-2">
+                <div className="flex items-center justify-between gap-2">
+                  <dt>Chapters</dt>
+                  <dd className="shrink-0 tabular-nums text-foreground">{novel.chapterCount}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <dt>Translated</dt>
+                  <dd className="shrink-0 tabular-nums text-foreground">{novel.translatedCount}</dd>
+                </div>
+                {isAdmin && (
+                  <div className="flex flex-col items-start gap-1 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
+                    <dt>Publication</dt>
+                    <dd className="shrink-0">
+                      <Badge variant="outline">{formatPublicationState(state)}</Badge>
+                    </dd>
+                  </div>
+                )}
+              </dl>
               {isAdmin && (
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <Progress
                     value={percent}
                     aria-label={`${novel.title} translation progress`}
-                    className="h-1.5"
+                    className="h-1.5 min-w-0 flex-1 gap-0"
                   />
-                  <span className="shrink-0 text-caption text-muted-foreground">{percent}%</span>
+                  <span className="shrink-0 tabular-nums text-caption text-muted-foreground">
+                    {percent}%
+                  </span>
                 </div>
               )}
             </div>
