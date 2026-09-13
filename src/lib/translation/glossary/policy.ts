@@ -116,14 +116,13 @@ export function applyGlossarySuggestionPolicy({
     }
 
     const status =
-      review.termType === "named_entity" && review.action === "approve"
+      review.action === "approve" &&
+      (review.termType === "named_entity" || review.termType === "story_specific")
         ? "approved"
-        : review.termType === "story_specific" &&
-            (review.action === "approve" || review.action === "pending")
+        : review.action === "pending" &&
+            (review.termType === "named_entity" || review.termType === "story_specific")
           ? "pending"
-          : review.termType === "named_entity" && review.action === "pending"
-            ? "pending"
-            : null;
+          : null;
 
     if (!status) {
       discardedCount++;

@@ -93,6 +93,78 @@ describe("suggestAndReviewTerms", () => {
     expect(result.approvedCount).toBe(1);
     expect(result.rejectedCount).toBe(1);
   });
+  it("auto-approves literally evidenced Thai story-specific domain terms", async () => {
+    const sourceText = "强化师的强化器分为，黑银紫金红一共五个颜色。";
+    const translatedText =
+      "อุปกรณ์เสริมพลังของนักเสริมพลังแบ่งออกเป็นห้าสี ได้แก่ ดำ เงิน ม่วง ทอง และแดง";
+    const domainExtractionResponse = JSON.stringify({
+      terms: [
+        { source: "强化师", target: "นักเสริมพลัง", category: "other" },
+        { source: "强化器", target: "อุปกรณ์เสริมพลัง", category: "item" },
+      ],
+    });
+    const domainReviewResponse = JSON.stringify({
+      reviews: [
+        {
+          source: "强化师",
+          target: "นักเสริมพลัง",
+          termType: "story_specific",
+          action: "approve",
+          confidence: "high",
+          reason: "Defined enhancer profession",
+        },
+        {
+          source: "强化器",
+          target: "อุปกรณ์เสริมพลัง",
+          termType: "story_specific",
+          action: "approve",
+          confidence: "high",
+          reason: "Defined enhancement-device class",
+        },
+      ],
+    });
+    vi.mocked(jsonCompletion.generateJsonCompletion)
+      .mockResolvedValueOnce({
+        content: domainExtractionResponse,
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      })
+      .mockResolvedValueOnce({
+        content: domainReviewResponse,
+        promptTokens: 10,
+        completionTokens: 5,
+        usedPlainFallback: false,
+      });
+
+    const result = await suggestAndReviewTerms({
+      providerConfig,
+      novel,
+      chunkList: [{ index: 0, text: sourceText }],
+      fullTranslation: translatedText,
+      logs: [],
+    });
+
+    expect(result.rowsToInsert).toEqual([
+      expect.objectContaining({
+        novelId: "novel-1",
+        source: "强化师",
+        target: "นักเสริมพลัง",
+        category: "other",
+        status: "approved",
+      }),
+      expect.objectContaining({
+        novelId: "novel-1",
+        source: "强化器",
+        target: "อุปกรณ์เสริมพลัง",
+        category: "item",
+        status: "approved",
+      }),
+    ]);
+    expect(result.approvedCount).toBe(2);
+    expect(result.pendingCount).toBe(0);
+    expect(result.rejectedCount).toBe(0);
+  });
   it("retries malformed extraction before reviewing terms", async () => {
     vi.mocked(jsonCompletion.generateJsonCompletion)
       .mockResolvedValueOnce({

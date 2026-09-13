@@ -31,10 +31,10 @@ export function buildTermSuggestionPrompt(
     `Prefer an empty array when nothing qualifies. Return at most 8 candidates, ordered by the value of preserving their translation consistently.`,
     ...(normalizedPair === "en->th" || normalizedPair === "zh->th"
       ? [
-          "Thai-target glossary priority: Within the same eight shared candidate slots, prioritize complete named combat techniques, named active or passive skills, named talents, cultivation or progression realm names, and coined system concepts that need stable rendering, including terms in brackets, notifications, and status panels. Keep characters, places, items, and other high-value names eligible and order all candidates by consistency value.",
-          "Classify only a genuinely named technique, talent, or realm as a stable glossary candidate; ordinary labels such as skill, talent, level, rank, or attack are generic and should not be suggested. A coined but non-name story concept may be suggested only when it is recurring and clearly evidenced; review will keep it story_specific and pending under the existing policy.",
-          "Do not suggest standalone F E D C B A S SS SSS entries or rank-letter-to-Thai-name mappings. A full named skill containing a rank label is eligible only when the complete term is independently named and evidenced.",
-          "Use the complete source phrase and the target literally present in the bilingual evidence. Do not shorten a named term, invent a preferred target, or suggest a synonym or variant of an approved mapping.",
+          "Thai-target glossary priority: Within the same eight shared candidate slots, prioritize stable setting terminology as well as proper names: occupations, classes, or professions; equipment, artifact, and item types; power or cultivation stages; grades, tiers, and rarity systems; materials, resources, currencies, attributes, and system/UI labels; complete named techniques, skills, and talents; and coined concepts used by the novel's rules or world-building.",
+          "For Thai targets, judge a term by its function in this story, not by whether its words are common in isolation. The common-vocabulary exclusions above apply only to ordinary descriptive use. A common-looking role, object, color, level, or rank is eligible when the evidence defines or uses it as a stable domain concept or explicit taxonomy.",
+          "An explicit definition, classification, or enumeration in the current chapter is sufficient evidence of glossary value; do not require multiple occurrences in the excerpt. For example, when a sentence defines an enhancer profession, its enhancement-device class, and a five-color equipment grading system, extract the profession and equipment class as glossary candidates rather than rejecting them as generic nouns.",
+          "Do not emit isolated one-character color or grade labels, standalone F E D C B A S SS SSS entries, or rank-label-to-Thai-name mappings. Extract the smallest complete multi-character source phrase that carries the domain meaning, and use only the exact target phrase literally present in the bilingual evidence; never invent, shorten, or synonym-swap a mapping.",
         ]
       : []),
     existingList,
@@ -139,13 +139,20 @@ export function buildGlossaryReviewPrompt(
     `Common nouns, verbs, or adjectives; generic roles or locations; everyday objects or food; broad school or business topics; actions or events; dates or numbers; public brands or people without a story-specific rendering; one-off descriptions; and substring fragments are not glossary terms.`,
     ...(normalizedPair === "en->th" || normalizedPair === "zh->th"
       ? [
-          "Thai-target glossary priority: Prioritize complete named combat techniques, named active or passive skills, named talents, cultivation or progression realm names, and coined system concepts that require stable terminology, including terms shown in brackets, notifications, and status panels. A genuinely named technique, talent, or realm is named_entity; a coined but non-name story concept is story_specific and remains pending under the existing policy; ordinary labels such as skill, talent, level, rank, or attack are generic and must be rejected.",
-          "Do not suggest standalone F E D C B A S SS SSS entries or rank-letter-to-Thai-name mappings. A full named skill containing a rank label is eligible only on its own naming and literal-evidence merits.",
-          "Require the complete source phrase and the target literally present in the bilingual evidence. Never shorten a named term, invent a preferred target, or create a synonym or variant of an approved mapping.",
+          "Thai-target glossary priority: Treat stable setting terminology as glossary material even when its words are common in isolation: occupations, classes, or professions; equipment, artifact, and item types; power or cultivation stages; grades, tiers, and rarity systems; materials, resources, currencies, attributes, and system/UI labels; complete named techniques, skills, and talents; and coined concepts used by the novel's rules or world-building.",
+          "For Thai targets, the common-vocabulary exclusions above apply only to ordinary descriptive use. Classify a term as story_specific when the chapter defines or uses it as a stable domain concept or explicit taxonomy, even if the same word could be an ordinary role, object, color, level, or rank outside the story. An explicit definition, classification, or enumeration is sufficient; repetition within the excerpt is not required.",
+          "When source and target phrases are exact and the domain role is unambiguous, emit termType \"story_specific\", action \"approve\", and confidence \"high\". Use action \"pending\" only when glossary eligibility and the literal mapping are clear but the term's lasting domain role still requires manual confirmation; reject ordinary descriptive uses as \"generic\".",
+          "In an enhancer example with an enhancement-device class and five color grades, approve the profession and equipment class when literally evidenced; do not review isolated one-character color or grade labels, standalone F E D C B A S SS SSS entries, or rank-label-to-Thai-name mappings. Never shorten a source phrase, invent a preferred target, or create a synonym or variant of an approved mapping.",
         ]
       : []),
     ``,
-    `APPROVE only a high-confidence named_entity when the source and target are both literally evidenced, the term is not a duplicate or variant of an existing approved term, and stable naming matters across the novel.`,
+    ...(normalizedPair === "en->th" || normalizedPair === "zh->th"
+      ? [
+          `APPROVE only a high-confidence named_entity or story_specific term when the source and target are both literally evidenced, the term is not a duplicate or variant of an existing approved term, and stable naming matters across the novel.`,
+        ]
+      : [
+          `APPROVE only a high-confidence named_entity when the source and target are both literally evidenced, the term is not a duplicate or variant of an existing approved term, and stable naming matters across the novel.`,
+        ]),
     `REJECT generic vocabulary, weak or unsupported candidates, duplicates, and terms without clear source or target evidence.`,
     `Use PENDING only for a high-confidence named_entity or story_specific term that may need manual confirmation. Uncertain ordinary vocabulary must be rejected, not sent to manual review.`,
     `Confidence measures confidence in both glossary eligibility and literal source/target evidence, not confidence in the chosen action alone.`,

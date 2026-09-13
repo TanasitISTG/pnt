@@ -22,16 +22,47 @@ describe("suggest-terms-prompt", () => {
     expect(buildTermSuggestionPrompt("zh->en", [])).toContain("note written in English");
     expect(buildTermSuggestionPrompt("zh->th", [])).toContain("note written in Thai");
   });
-  it("adds fantasy terminology priorities only for Thai targets", () => {
-    const thaiPrompt = buildTermSuggestionPrompt("en->th", []);
-    const englishPrompt = buildTermSuggestionPrompt("zh->en", []);
-    const thaiReviewPrompt = buildGlossaryReviewPrompt("zh->th", []);
-    const englishReviewPrompt = buildGlossaryReviewPrompt("zh->en", []);
+  it.each(["en->th", "zh->th"])(
+    "aligns Thai extraction and review guidance for %s",
+    (languagePair) => {
+      const extractionPrompt = buildTermSuggestionPrompt(languagePair, []);
+      const reviewPrompt = buildGlossaryReviewPrompt(languagePair, []);
 
-    expect(thaiPrompt).toContain("Thai-target glossary priority");
-    expect(englishPrompt).not.toContain("Thai-target glossary priority");
-    expect(thaiReviewPrompt).toContain("Thai-target glossary priority");
-    expect(englishReviewPrompt).not.toContain("Thai-target glossary priority");
+      expect(extractionPrompt).toContain("judge a term by its function in this story");
+      expect(reviewPrompt).toContain(
+        "common-vocabulary exclusions above apply only to ordinary descriptive use",
+      );
+      expect(extractionPrompt).toContain(
+        "explicit definition, classification, or enumeration",
+      );
+      expect(reviewPrompt).toContain(
+        "explicit definition, classification, or enumeration",
+      );
+      expect(extractionPrompt).toContain("enhancer profession");
+      expect(extractionPrompt).toContain("enhancement-device class");
+      expect(reviewPrompt).toContain("enhancement-device class");
+      expect(extractionPrompt).toContain("isolated one-character color or grade labels");
+      expect(reviewPrompt).toContain("isolated one-character color or grade labels");
+      expect(extractionPrompt).toContain("stable domain concept or explicit taxonomy");
+      expect(reviewPrompt).toContain(
+        'termType "story_specific", action "approve", and confidence "high"',
+      );
+    },
+  );
+
+  it("omits Thai-only terminology guidance for ZH→EN", () => {
+    const extractionPrompt = buildTermSuggestionPrompt("zh->en", []);
+    const reviewPrompt = buildGlossaryReviewPrompt("zh->en", []);
+    const thaiOnlyGuidance = [
+      "Thai-target glossary priority",
+      "enhancement-device class",
+      "isolated one-character color or grade labels",
+    ];
+
+    for (const guidance of thaiOnlyGuidance) {
+      expect(extractionPrompt).not.toContain(guidance);
+      expect(reviewPrompt).not.toContain(guidance);
+    }
   });
 
   it("includes approved mappings in prompt when provided", () => {

@@ -124,23 +124,36 @@ describe("glossary suggestion policy", () => {
     expect(result.discardedCount).toBe(2);
   });
 
-  it("approves named entities and leaves story-specific terms pending", () => {
+  it("approves named entities and eligible story-specific terms", () => {
     const result = applyGlossarySuggestionPolicy({
-      suggestions: [suggestion("许野", "สวี่เหยี่ย"), suggestion("灵脉", "เส้นพลังวิญญาณ")],
+      suggestions: [
+        suggestion("许野", "สวี่เหยี่ย"),
+        suggestion("强化器", "อุปกรณ์เสริมพลัง"),
+        suggestion("灵脉", "เส้นพลังวิญญาณ"),
+      ],
       reviews: [
         review("许野", "สวี่เหยี่ย"),
+        review("强化器", "อุปกรณ์เสริมพลัง", {
+          termType: "story_specific",
+          action: "approve",
+        }),
         review("灵脉", "เส้นพลังวิญญาณ", {
           termType: "story_specific",
           action: "pending",
         }),
       ],
-      fullRawSource: "许野 灵脉",
-      fullTranslation: "สวี่เหยี่ย เส้นพลังวิญญาณ",
+      fullRawSource: "许野 强化器 灵脉",
+      fullTranslation: "สวี่เหยี่ย อุปกรณ์เสริมพลัง เส้นพลังวิญญาณ",
       existingSources: [],
     });
 
     expect(result.accepted).toEqual([
       expect.objectContaining({ source: "许野", target: "สวี่เหยี่ย", status: "approved" }),
+      expect.objectContaining({
+        source: "强化器",
+        target: "อุปกรณ์เสริมพลัง",
+        status: "approved",
+      }),
       expect.objectContaining({ source: "灵脉", target: "เส้นพลังวิญญาณ", status: "pending" }),
     ]);
   });
