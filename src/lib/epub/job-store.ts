@@ -109,6 +109,7 @@ export async function importOneStagedChapter(
         status: importJobs.status,
         added: importJobs.added,
         skipped: importJobs.skipped,
+        nextNumber: importJobs.nextNumber,
       })
       .from(importJobs)
       .where(eq(importJobs.id, jobId))
@@ -116,6 +117,14 @@ export async function importOneStagedChapter(
 
     if (!job || job.status !== "running") {
       return { stop: true };
+    }
+    if (job.nextNumber > sequence) {
+      return { stop: false };
+    }
+    if (job.nextNumber < sequence) {
+      throw new Error(
+        `EPUB import cursor out of order: expected ${job.nextNumber}, received ${sequence}`,
+      );
     }
 
     // Lock staged item row
@@ -199,31 +208,6 @@ async function cleanupEpubResources(
   await tx.delete(epubUploads).where(eq(epubUploads.id, uploadId));
 }
 
-export async function cancelEpubImportJob(jobId: string): Promise<boolean> {
-  return await db.transaction(async (tx) => {
-    const [job] = await tx
-      .select({
-        id: importJobs.id,
-        status: importJobs.status,
-        epubUploadId: importJobs.epubUploadId,
-      })
-      .from(importJobs)
-      .where(eq(importJobs.id, jobId))
-      .for("update");
-
-    if (!job || (job.status !== "pending" && job.status !== "running")) {
-      return false;
-    }
-
-    await tx
-      .update(importJobs)
-      .set({ status: "cancelled", updatedAt: new Date() })
-      .where(eq(importJobs.id, jobId));
-    await cleanupEpubResources(tx, job.id, job.epubUploadId);
-    return true;
-  });
-}
-
 export async function markEpubImportJobDone(jobId: string): Promise<void> {
   await db.transaction(async (tx) => {
     const [job] = await tx
@@ -269,33 +253,6 @@ export async function markEpubImportJobError(jobId: string, message: string): Pr
       .set({ status: "error", error: message, updatedAt: new Date() })
       .where(eq(importJobs.id, jobId));
     await cleanupEpubResources(tx, job.id, job.epubUploadId);
-  });
-}
-
-export async function markEpubEnqueueError(jobId: string, message: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    const [job] = await tx
-      .select({
-        id: importJobs.id,
-        status: importJobs.status,
-        epubUploadId: importJobs.epubUploadId,
-      })
-      .from(importJobs)
-      .where(eq(importJobs.id, jobId))
-      .for("update");
-
-    if (!job || (job.status !== "pending" && job.status !== "running")) return;
-
-    await tx
-      .update(importJobs)
-      .set({ status: "error", error: message, updatedAt: new Date() })
-      .where(eq(importJobs.id, jobId));
-    if (!job.epubUploadId) return;
-    await tx.delete(epubUploadChunks).where(eq(epubUploadChunks.uploadId, job.epubUploadId));
-    await tx
-      .update(epubUploads)
-      .set({ status: "error", updatedAt: new Date() })
-      .where(eq(epubUploads.id, job.epubUploadId));
   });
 }
 

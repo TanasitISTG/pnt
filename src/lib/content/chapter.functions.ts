@@ -8,7 +8,11 @@ import { ensureSession, getSession } from "@/lib/auth/functions";
 import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
-import { novelLive, chapterLive } from "@/lib/content/publish";
+import {
+  chapterTranslationPresent,
+  novelLive,
+  chapterVisibleToGuests,
+} from "@/lib/content/publish";
 import { normalizePunctuation } from "@/lib/translation/text/paragraphs";
 import {
   createChapterSchema,
@@ -19,7 +23,12 @@ import {
   setNovelPublishedSchema,
   setChapterPublishedSchema,
 } from "@/lib/content/novel.schemas";
+import {
+  setAllChaptersPublishedForUser,
+  setChapterPublishedForUser,
+} from "@/lib/content/publish.service";
 import { reorderChaptersForUser, updateChapterForUser } from "@/lib/content/chapter-edit.service";
+import { deleteChapterForUser } from "@/lib/content/chapter-delete.service";
 
 export const listChapters = createServerFn({ method: "GET" })
   .validator(z.object({ novelId: z.string() }))
@@ -50,6 +59,7 @@ export const listChapters = createServerFn({ method: "GET" })
           number: chapters.number,
           title: chapters.title,
           translatedTitle: chapters.translatedTitle,
+          hasTranslation: chapterTranslationPresent(),
           rawCharCount: chapters.rawCharCount,
           status: chapters.status,
           publishedAt: chapters.publishedAt,
@@ -62,11 +72,51 @@ export const listChapters = createServerFn({ method: "GET" })
         .where(
           session
             ? eq(chapters.novelId, data.novelId)
-            : and(eq(chapters.novelId, data.novelId), chapterLive()),
+            : and(eq(chapters.novelId, data.novelId), chapterVisibleToGuests()),
         )
         .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
 
       return chapterList;
+    });
+  });
+
+export const getReaderChapterManifest = createServerFn({ method: "GET" })
+  .validator(z.object({ novelId: z.string() }))
+  .handler(async ({ data }) => {
+    return withSafeHandler(async () => {
+      const session = await getSession();
+      if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
+
+      const rows = await db
+        .select({
+          id: chapters.id,
+          number: chapters.number,
+          title: chapters.title,
+          translatedTitle: chapters.translatedTitle,
+        })
+        .from(chapters)
+        .innerJoin(novels, eq(chapters.novelId, novels.id))
+        .where(
+          session
+            ? and(eq(chapters.novelId, data.novelId), eq(novels.userId, session.user.id))
+            : and(eq(chapters.novelId, data.novelId), novelLive(), chapterVisibleToGuests()),
+        )
+        .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
+
+      if (rows.length === 0) {
+        const [novel] = await db
+          .select({ id: novels.id })
+          .from(novels)
+          .where(
+            session
+              ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
+              : and(eq(novels.id, data.novelId), novelLive()),
+          )
+          .limit(1);
+        if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+      }
+
+      return rows;
     });
   });
 
@@ -100,7 +150,7 @@ export const getChapter = createServerFn({ method: "GET" })
         .where(
           session
             ? and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id))
-            : and(eq(chapters.id, data.chapterId), chapterLive(), novelLive()),
+            : and(eq(chapters.id, data.chapterId), chapterVisibleToGuests(), novelLive()),
         )
         .limit(1);
 
@@ -189,77 +239,28 @@ export const updateChapterTranslation = createServerFn({ method: "POST" })
 
 export const deleteChapter = createServerFn({ method: "POST" })
   .validator(z.object({ chapterId: z.string() }))
-  .handler(async ({ data }) => {
-    return withSafeHandler(async () => {
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
       const session = await ensureSession();
-
-      // Verify ownership by inner joining
-      const [existing] = await db
-        .select({ id: chapters.id })
-        .from(chapters)
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!existing) {
-        throw new SafeServerError("Chapter not found or unauthorized");
-      }
-
-      await db.delete(chapters).where(eq(chapters.id, data.chapterId));
-
-      return { success: true };
-    });
-  });
+      return deleteChapterForUser(session.user.id, data.chapterId);
+    }),
+  );
 
 export const setChapterPublished = createServerFn({ method: "POST" })
   .validator(setChapterPublishedSchema)
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const [existing] = await db
-        .select({ id: chapters.id })
-        .from(chapters)
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!existing) {
-        throw new SafeServerError("Chapter not found or unauthorized");
-      }
-
-      await db
-        .update(chapters)
-        .set({ publishedAt: data.publishedAt, updatedAt: new Date() })
-        .where(eq(chapters.id, data.chapterId));
-
-      return { id: data.chapterId };
+      return setChapterPublishedForUser(session.user.id, data);
     });
   });
 
-// Bulk publish/unpublish every chapter of a novel (same value for all rows).
+// Bulk publish ready chapters, or unpublish every chapter of a novel.
 export const setAllChaptersPublished = createServerFn({ method: "POST" })
-  .validator(setNovelPublishedSchema) // same shape: { novelId, publishedAt }
+  .validator(setNovelPublishedSchema)
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const [novel] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
-      }
-
-      const updated = await db
-        .update(chapters)
-        .set({ publishedAt: data.publishedAt, updatedAt: new Date() })
-        .where(eq(chapters.novelId, data.novelId))
-        .returning({ id: chapters.id });
-
-      return { id: data.novelId, count: updated.length };
+      return setAllChaptersPublishedForUser(session.user.id, data.novelId, data.publishedAt);
     });
   });

@@ -12,6 +12,7 @@ import {
   translationJobs,
 } from "@/lib/db/schema";
 import type {
+  JobActivity,
   JobHistoryEpubRow,
   JobHistoryPage,
   JobHistoryRow,
@@ -19,6 +20,7 @@ import type {
   JobHistorySearch,
   JobHistoryStatus,
   JobHistoryTranslationRow,
+  JobHistoryType,
 } from "@/lib/job-dashboard/contracts";
 import { normalizeJobStats } from "@/lib/job-dashboard/contracts";
 import type { ScrapeProvider } from "@/lib/scrape/types";
@@ -38,6 +40,8 @@ type RawJobHistoryRow = {
   chapterTitle: string | null;
   totalChunks: number | null;
   doneChunks: number | null;
+  provider: string | null;
+  model: string | null;
   baseUrl: string | null;
   scrapeProvider: string | null;
   sourceFileName: string | null;
@@ -123,6 +127,8 @@ function buildTranslationRows(userId: string, input: JobHistorySearch) {
       chapterTitle: sql<string | null>`${chapters.title}::text`.as("chapterTitle"),
       totalChunks: sql<number | null>`${translationJobs.totalChunks}::int`.as("totalChunks"),
       doneChunks: sql<number | null>`${translationJobs.doneChunks}::int`.as("doneChunks"),
+      provider: sql<string | null>`${translationJobs.provider}::text`.as("provider"),
+      model: sql<string | null>`${translationJobs.model}::text`.as("model"),
       baseUrl: sql<string | null>`NULL::text`.as("baseUrl"),
       scrapeProvider: sql<string | null>`NULL::text`.as("scrapeProvider"),
       sourceFileName: sql<string | null>`NULL::text`.as("sourceFileName"),
@@ -168,6 +174,8 @@ function buildImportRows(userId: string, input: JobHistorySearch, kind: "scrape"
       chapterTitle: sql<string | null>`NULL::text`.as("chapterTitle"),
       totalChunks: sql<number | null>`NULL::int`.as("totalChunks"),
       doneChunks: sql<number | null>`NULL::int`.as("doneChunks"),
+      provider: sql<string | null>`NULL::text`.as("provider"),
+      model: sql<string | null>`NULL::text`.as("model"),
       baseUrl: sql<string | null>`${importJobs.baseUrl}::text`.as("baseUrl"),
       scrapeProvider:
         kind === "scrape"
@@ -229,6 +237,9 @@ function mapJobHistoryRow(row: RawJobHistoryRow): JobHistoryRow {
       chapterTitle: row.chapterTitle ?? "",
       totalChunks,
       doneChunks,
+      provider: row.provider,
+      model: row.model,
+      isLegacyProviderFallback: row.provider === null || row.model === null,
       progress: progress(doneChunks, totalChunks),
       canRetry: row.status === "error" || row.status === "cancelled",
     };
@@ -245,6 +256,7 @@ function mapJobHistoryRow(row: RawJobHistoryRow): JobHistoryRow {
   const processed = added + skipped + failed;
 
   if (row.type === "scrape") {
+    const completedWithFailures = row.status === "done" && failed > 0;
     const scrapeRow: JobHistoryScrapeRow = {
       ...common,
       type: "scrape",
@@ -256,9 +268,10 @@ function mapJobHistoryRow(row: RawJobHistoryRow): JobHistoryRow {
       added,
       skipped,
       failed,
+      completedWithFailures,
       progress: progress(processed, Math.max(0, toNumber - fromNumber + 1)),
       canRetry:
-        (row.status === "error" || row.status === "cancelled") &&
+        (row.status === "error" || row.status === "cancelled" || completedWithFailures) &&
         Boolean(row.baseUrl) &&
         provider !== null,
     };
@@ -341,7 +354,7 @@ export async function loadJobStats(userId: string, timing: ServerTiming) {
       db
         .select({
           activeJobs: sql<number>`COUNT(*) FILTER (WHERE ${importJobs.status} IN ('pending', 'running'))::int`,
-          failedJobs: sql<number>`COUNT(*) FILTER (WHERE ${importJobs.status} = 'error')::int`,
+          failedJobs: sql<number>`COUNT(*) FILTER (WHERE ${importJobs.status} = 'error' OR (${importJobs.status} = 'done' AND ${importJobs.failed} > 0))::int`,
         })
         .from(importJobs)
         .innerJoin(novels, eq(importJobs.novelId, novels.id))
@@ -363,4 +376,93 @@ export async function loadJobStats(userId: string, timing: ServerTiming) {
   ]);
 
   return normalizeJobStats(chunkStats[0], translationStats[0], importStats[0]);
+}
+
+export async function loadJobActivity(
+  userId: string,
+  timing: ServerTiming,
+): Promise<JobActivity[]> {
+  const [translationRows, importRows] = await Promise.all([
+    timing.measure("job-activity-translations", () =>
+      db
+        .select({
+          id: sql<string>`${translationJobs.id}::text`,
+          type: sql<JobHistoryType>`'translation'::text`,
+          status: sql<JobHistoryStatus>`${translationJobs.status}::text`,
+          novelId: sql<string>`${novels.id}::text`,
+          error: sql<string | null>`${translationJobs.error}::text`,
+          updatedAt: translationJobs.updatedAt,
+          doneChunks: sql<number>`${translationJobs.doneChunks}::int`,
+          totalChunks: sql<number>`${translationJobs.totalChunks}::int`,
+        })
+        .from(translationJobs)
+        .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+        .innerJoin(novels, eq(chapters.novelId, novels.id))
+        .where(
+          and(eq(novels.userId, userId), sql`${translationJobs.status} IN ('pending', 'running')`),
+        ),
+    ),
+    timing.measure("job-activity-imports", () =>
+      db
+        .select({
+          id: sql<string>`${importJobs.id}::text`,
+          type: sql<JobHistoryType>`${importJobs.kind}::text`,
+          status: sql<JobHistoryStatus>`${importJobs.status}::text`,
+          novelId: sql<string>`${novels.id}::text`,
+          error: sql<string | null>`${importJobs.error}::text`,
+          updatedAt: importJobs.updatedAt,
+          fromNumber: sql<number>`${importJobs.fromNumber}::int`,
+          toNumber: sql<number>`${importJobs.toNumber}::int`,
+          added: sql<number>`${importJobs.added}::int`,
+          skipped: sql<number>`${importJobs.skipped}::int`,
+          failed: sql<number>`${importJobs.failed}::int`,
+        })
+        .from(importJobs)
+        .innerJoin(novels, eq(importJobs.novelId, novels.id))
+        .where(and(eq(novels.userId, userId), sql`${importJobs.status} IN ('pending', 'running')`)),
+    ),
+  ]);
+
+  const activities: JobActivity[] = translationRows.map((row) => {
+    const doneChunks = Math.max(0, Number(row.doneChunks ?? 0));
+    const totalChunks = Math.max(0, Number(row.totalChunks ?? 0));
+    return {
+      id: row.id,
+      type: row.type,
+      status: row.status,
+      novelId: row.novelId,
+      error: row.error,
+      updatedAt: row.updatedAt,
+      progress: progress(doneChunks, totalChunks),
+      doneChunks,
+      totalChunks,
+    };
+  });
+
+  for (const row of importRows) {
+    const fromNumber = Math.max(0, Number(row.fromNumber ?? 0));
+    const toNumber = Math.max(0, Number(row.toNumber ?? 0));
+    const processed =
+      Math.max(0, Number(row.added ?? 0)) +
+      Math.max(0, Number(row.skipped ?? 0)) +
+      Math.max(0, Number(row.failed ?? 0));
+    activities.push({
+      id: row.id,
+      type: row.type,
+      status: row.status,
+      novelId: row.novelId,
+      error: row.error,
+      updatedAt: row.updatedAt,
+      progress: progress(processed, Math.max(0, toNumber - fromNumber + 1), toNumber === 0),
+      added: Math.max(0, Number(row.added ?? 0)),
+      skipped: Math.max(0, Number(row.skipped ?? 0)),
+      failed: Math.max(0, Number(row.failed ?? 0)),
+    });
+  }
+
+  return activities.toSorted(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime() ||
+      left.id.localeCompare(right.id),
+  );
 }

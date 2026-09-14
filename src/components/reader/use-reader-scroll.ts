@@ -21,11 +21,24 @@ function fractionForCurrentScroll(): number | null {
   return Math.max(0, Math.min(1, window.scrollY / maxScroll));
 }
 
+function findReaderAnchor(anchor: string): HTMLElement | null {
+  const direct = document.getElementById(anchor);
+  if (direct) return direct;
+  if (anchor.startsWith("reader-paragraph-")) {
+    return document.getElementById(anchor.replace("reader-paragraph-", "reader-pair-"));
+  }
+  if (anchor.startsWith("reader-pair-")) {
+    return document.getElementById(anchor.replace("reader-pair-", "reader-paragraph-"));
+  }
+  return null;
+}
+
 export function useReaderScroll(
   novelId: string,
   chapterId: string,
   chapter: { id: string } | null | undefined,
   settingsReady: boolean,
+  targetAnchor: string | null = null,
 ): void {
   const ownerRef = useRef<ScrollOwner>({ novelId, chapterId });
   const restoredChapterRef = useRef<string | null>(null);
@@ -38,14 +51,19 @@ export function useReaderScroll(
     restoredChapterRef.current = null;
     isRestoringRef.current = false;
     userTookOverRef.current = false;
-  }, [chapterId, novelId]);
+  }, [chapterId, novelId, targetAnchor]);
 
   useEffect(() => {
     if (settingsReady && chapter?.id === chapterId) markChapterRead(novelId, chapterId);
   }, [chapter?.id, chapterId, novelId, settingsReady]);
 
   useEffect(() => {
-    if (!settingsReady || chapter?.id !== chapterId || restoredChapterRef.current === chapterId)
+    if (
+      !settingsReady ||
+      chapter?.id !== chapterId ||
+      restoredChapterRef.current === chapterId ||
+      targetAnchor
+    )
       return;
 
     const progress = getReaderProgress(novelId);
@@ -133,7 +151,37 @@ export function useReaderScroll(
       restoreFrameRef.current = null;
       isRestoringRef.current = false;
     };
-  }, [chapter?.id, chapterId, novelId, settingsReady]);
+  }, [chapter?.id, chapterId, novelId, settingsReady, targetAnchor]);
+
+  useEffect(() => {
+    if (!targetAnchor || !settingsReady || chapter?.id !== chapterId) return;
+
+    let frame: number | null = null;
+    let attempts = 0;
+    const focusAnchor = () => {
+      const target = findReaderAnchor(targetAnchor);
+      if (target) {
+        target.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
+        restoredChapterRef.current = chapterId;
+        isRestoringRef.current = false;
+        frame = null;
+        return;
+      }
+      attempts++;
+      if (attempts >= 90) {
+        restoredChapterRef.current = chapterId;
+        isRestoringRef.current = false;
+        frame = null;
+        return;
+      }
+      frame = requestAnimationFrame(focusAnchor);
+    };
+
+    frame = requestAnimationFrame(focusAnchor);
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [chapter?.id, chapterId, settingsReady, targetAnchor]);
 
   useEffect(() => {
     let timer: number | null = null;
@@ -179,5 +227,5 @@ export function useReaderScroll(
       window.removeEventListener("pagehide", handlePageLifecycle);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [chapterId, novelId, settingsReady]);
+  }, [chapterId, novelId, settingsReady, targetAnchor]);
 }

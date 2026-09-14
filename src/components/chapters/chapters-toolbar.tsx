@@ -6,11 +6,13 @@ export interface ChaptersToolbarProps {
   selectedCount: number;
   hiddenSelectedCount: number;
   selectableCount: number;
-  selectedTranslatableCount: number;
+  selectedMissingCount: number;
+  selectedTranslatedCount: number;
   selectedActiveCount: number;
   batchStarting: boolean;
   batchStopping: boolean;
   onBatchTranslate: () => void;
+  onRequestBatchRetranslate: () => void;
   onRequestBatchStop: () => void;
   onClearSelection: () => void;
   batchRangeFrom: string;
@@ -18,7 +20,8 @@ export interface ChaptersToolbarProps {
   onBatchRangeFromChange: (value: string) => void;
   onBatchRangeToChange: (value: string) => void;
   onSelectRange: () => void;
-  unpublishedCount: number;
+  readyUnpublishedCount: number;
+  unreadyCount: number;
   onPublishAll: () => void;
   publishingAll: boolean;
   missingTitleCount: number;
@@ -36,11 +39,13 @@ export function ChaptersToolbar({
   selectedCount,
   hiddenSelectedCount,
   selectableCount,
-  selectedTranslatableCount,
+  selectedMissingCount,
+  selectedTranslatedCount,
   selectedActiveCount,
   batchStarting,
   batchStopping,
   onBatchTranslate,
+  onRequestBatchRetranslate,
   onRequestBatchStop,
   onClearSelection,
   batchRangeFrom,
@@ -48,7 +53,8 @@ export function ChaptersToolbar({
   onBatchRangeFromChange,
   onBatchRangeToChange,
   onSelectRange,
-  unpublishedCount,
+  readyUnpublishedCount,
+  unreadyCount,
   onPublishAll,
   publishingAll,
   missingTitleCount,
@@ -68,11 +74,13 @@ export function ChaptersToolbar({
         selectedCount={selectedCount}
         hiddenSelectedCount={hiddenSelectedCount}
         selectableCount={selectableCount}
-        selectedTranslatableCount={selectedTranslatableCount}
+        selectedMissingCount={selectedMissingCount}
+        selectedTranslatedCount={selectedTranslatedCount}
         selectedActiveCount={selectedActiveCount}
         batchStarting={batchStarting}
         batchStopping={batchStopping}
         onBatchTranslate={onBatchTranslate}
+        onRequestBatchRetranslate={onRequestBatchRetranslate}
         onRequestBatchStop={onRequestBatchStop}
         onClearSelection={onClearSelection}
         batchRangeFrom={batchRangeFrom}
@@ -82,7 +90,8 @@ export function ChaptersToolbar({
         onSelectRange={onSelectRange}
       />
       <ChapterActionsControls
-        unpublishedCount={unpublishedCount}
+        readyUnpublishedCount={readyUnpublishedCount}
+        unreadyCount={unreadyCount}
         onPublishAll={onPublishAll}
         publishingAll={publishingAll}
         missingTitleCount={missingTitleCount}

@@ -1,4 +1,4 @@
-import { Loader2, Play, Square, X } from "lucide-react";
+import { Loader2, Play, RotateCw, Square, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,11 +7,13 @@ export interface ChapterSelectionControlsProps {
   selectedCount: number;
   hiddenSelectedCount: number;
   selectableCount: number;
-  selectedTranslatableCount: number;
+  selectedMissingCount: number;
+  selectedTranslatedCount: number;
   selectedActiveCount: number;
   batchStarting: boolean;
   batchStopping: boolean;
   onBatchTranslate: () => void;
+  onRequestBatchRetranslate: () => void;
   onRequestBatchStop: () => void;
   onClearSelection: () => void;
   batchRangeFrom: string;
@@ -25,11 +27,13 @@ export function ChapterSelectionControls({
   selectedCount,
   hiddenSelectedCount,
   selectableCount,
-  selectedTranslatableCount,
+  selectedMissingCount,
+  selectedTranslatedCount,
   selectedActiveCount,
   batchStarting,
   batchStopping,
   onBatchTranslate,
+  onRequestBatchRetranslate,
   onRequestBatchStop,
   onClearSelection,
   batchRangeFrom,
@@ -46,18 +50,31 @@ export function ChapterSelectionControls({
           {selectedCount}/{selectableCount} selected
           {hiddenSelectedCount > 0 ? ` · ${hiddenSelectedCount} hidden by search` : ""}
         </span>
-        <Button
-          size="sm"
-          onClick={onBatchTranslate}
-          disabled={selectedTranslatableCount === 0 || batchPending}
-        >
-          {batchStarting ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Play className="size-4" />
-          )}
-          {`Translate selected (${selectedTranslatableCount})`}
-        </Button>
+        {selectedMissingCount > 0 ? (
+          <Button size="sm" onClick={onBatchTranslate} disabled={batchPending}>
+            {batchStarting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Play className="size-4" />
+            )}
+            {`Translate selected (${selectedMissingCount})`}
+          </Button>
+        ) : null}
+        {selectedTranslatedCount > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRequestBatchRetranslate}
+            disabled={batchPending}
+          >
+            {batchStarting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RotateCw className="size-4" />
+            )}
+            {`Re-translate selected (${selectedTranslatedCount})`}
+          </Button>
+        ) : null}
         <Button
           variant="destructive"
           size="sm"

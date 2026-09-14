@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import { createProviderClient } from "@/lib/translation/providers/provider-client";
+import { loadProviderRuntimeForJob } from "@/lib/translation/providers/provider-client";
 import { generateJsonCompletion } from "@/lib/translation/providers/json-completion";
 import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
 import { parseLanguagePair, type LanguagePair } from "@/lib/translation/prompts/language";
@@ -87,7 +87,9 @@ export async function analyzeChunkRelationships(
 
   let providerConfig: AIProviderClient;
   try {
-    providerConfig = await retryTranslationOperation(() => createProviderClient(row.novel.userId));
+    providerConfig = await retryTranslationOperation(() =>
+      loadProviderRuntimeForJob(row.novel.userId, row.job),
+    );
   } catch (error) {
     return {
       context: buildRelationshipPromptContextForText(storedMap, row.chunk.sourceText),

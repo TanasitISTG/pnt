@@ -7,6 +7,7 @@ export interface ChapterRow {
   number: string;
   title: string;
   translatedTitle: string | null;
+  hasTranslation: boolean;
   status: ChapterStatus;
   rawCharCount: number;
   publishedAt: Date | string | null;

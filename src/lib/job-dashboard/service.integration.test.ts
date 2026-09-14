@@ -120,6 +120,11 @@ integrationDescribe("job observability PostgreSQL contracts", () => {
         `;
       }
       await transaction`
+        UPDATE "translation_jobs"
+        SET "provider" = 'openai', "model" = 'gpt-5.6-luna'
+        WHERE "id" = ${translationJobIds[25]}
+      `;
+      await transaction`
         UPDATE "import_jobs"
         SET
           "kind" = 'epub',
@@ -202,7 +207,16 @@ integrationDescribe("job observability PostgreSQL contracts", () => {
       );
       expect(translationRows.rowCount).toBe(26);
       expect(translationRows.rows.every((row) => row.type === "translation")).toBe(true);
-
+      expect(translationRows.rows.find((row) => row.id === translationJobIds[25])).toMatchObject({
+        provider: "openai",
+        model: "gpt-5.6-luna",
+        isLegacyProviderFallback: false,
+      });
+      expect(translationRows.rows.find((row) => row.id === translationJobIds[0])).toMatchObject({
+        provider: null,
+        model: null,
+        isLegacyProviderFallback: true,
+      });
       const scrapeRows = await loadJobHistory(
         ownerUserId,
         search({ type: "scrape", pageSize: 50 }),

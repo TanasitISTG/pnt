@@ -9,7 +9,7 @@ import type {
   finishEpubImportJob as FinishEpubImportJob,
   cleanupExpiredEpubUploads as CleanupExpiredEpubUploads,
 } from "./worker";
-import type { cancelEpubImportJob as CancelEpubImportJob } from "./job-store";
+import type { cancelImportJobForUser as CancelImportJobForUser } from "@/lib/import/commands";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
@@ -20,7 +20,7 @@ let initEpubImportJob: typeof InitEpubImportJob;
 let importEpubChapterBatch: typeof ImportEpubChapterBatch;
 let finishEpubImportJob: typeof FinishEpubImportJob;
 let cleanupExpiredEpubUploads: typeof CleanupExpiredEpubUploads;
-let cancelEpubImportJob: typeof CancelEpubImportJob;
+let cancelImportJobForUser: typeof CancelImportJobForUser;
 
 function createTestEpubBuffer(): Uint8Array {
   const containerXml = `<?xml version="1.0"?>
@@ -83,7 +83,7 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
       finishEpubImportJob,
       cleanupExpiredEpubUploads,
     } = await import("./worker"));
-    ({ cancelEpubImportJob } = await import("./job-store"));
+    ({ cancelImportJobForUser } = await import("@/lib/import/commands"));
 
     // Seed user and novel
     await sql`
@@ -240,7 +240,9 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
       )
     `;
 
-    expect(await cancelEpubImportJob(canceledJobId)).toBe(true);
+    const cancellation = await cancelImportJobForUser(userId, canceledJobId, async () => {});
+    expect(cancellation.cancelled).toBe(true);
+    expect(cancellation.outboxIds).toHaveLength(1);
     expect(await importEpubChapterBatch(canceledJobId, 1, 1)).toEqual({ stop: true });
 
     const [job] = await sql`SELECT "status" FROM "import_jobs" WHERE "id" = ${canceledJobId}`;
@@ -249,6 +251,7 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     expect(items).toHaveLength(0);
     const uploads = await sql`SELECT * FROM "epub_uploads" WHERE "id" = ${canceledUploadId}`;
     expect(uploads).toHaveLength(0);
+    await sql`DELETE FROM "workflow_outbox" WHERE "id" = ${cancellation.outboxIds[0]}`;
   });
 
   it("keeps legacy scrape jobs on the scrape kind default", async () => {

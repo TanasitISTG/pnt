@@ -369,3 +369,12 @@
     line-height: 1.5;
   }
 }
+
+@layer components {
+  :where([id^="reader-paragraph-"], [id^="reader-pair-"]):target {
+    border-radius: 0.5rem;
+    background-color: var(--muted);
+    outline: 1px solid var(--border);
+    outline-offset: 0.5rem;
+  }
+}

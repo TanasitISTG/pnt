@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -231,7 +231,7 @@ describe("GlossaryPage list workspace", () => {
       />,
     );
     expect(screen.getByText("Loading glossary page…")).toBeTruthy();
-    expect(screen.getByText("Source 01")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("Source 01")).toBeTruthy();
   });
 
   it("debounces filters and replaces URL state for controls", async () => {
@@ -302,6 +302,14 @@ describe("GlossaryPage list workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Actions for Source 03" }));
     expect(screen.getByRole("menuitem", { name: "Restore" })).toBeTruthy();
+  });
+  it("keeps glossary row actions reachable in compact mobile rows", () => {
+    renderGlossary(createPage(mixedRows, 3), { ...defaultSearch, status: "all" });
+    const mobileGlossary = within(screen.getByRole("region", { name: "Mobile glossary terms" }));
+
+    expect(mobileGlossary.getAllByRole("button", { name: "Edit" })).toHaveLength(3);
+    fireEvent.click(mobileGlossary.getAllByRole("button", { name: "Edit" })[0]);
+    expect(screen.getByRole("heading", { name: "Edit glossary term" })).toBeTruthy();
   });
 
   it("opens add and edit dialogs and keeps replacement preview in one dialog", async () => {
@@ -383,8 +391,10 @@ describe("GlossaryPage list workspace", () => {
 
   it("distinguishes filtered empty results and renders a retry state", async () => {
     renderGlossary(createPage([], 0), { ...defaultSearch, q: "missing" });
-    expect(screen.getByText("No terms match these filters")).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Clear filters" })).toHaveLength(2);
+    expect(
+      within(screen.getByRole("table")).getByText("No terms match these filters"),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Clear filters" })).toHaveLength(3);
 
     cleanup();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

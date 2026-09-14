@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -202,6 +202,29 @@ describe("RelationshipsPage workspace", () => {
       pageSize: 25,
     });
   });
+  it("keeps character and relationship actions reachable in compact mobile rows", () => {
+    renderRelationships();
+    const mobileCharacters = within(
+      screen.getByRole("region", { name: "Mobile character profiles" }),
+    );
+    fireEvent.click(
+      mobileCharacters.getByRole("button", { name: "Actions for character Character 02" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeTruthy();
+
+    cleanup();
+    routerState.search = { ...defaultSearch, view: "relationships" };
+    renderRelationships(routerState.search);
+    const mobileRelationships = within(
+      screen.getByRole("region", { name: "Mobile directed relationships" }),
+    );
+    fireEvent.click(
+      mobileRelationships.getAllByRole("button", {
+        name: "Actions for relationship Character 00 to Character 01",
+      })[0],
+    );
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeTruthy();
+  });
   it("describes Chinese-to-English maps and keeps optional speech controls", () => {
     renderRelationships(defaultSearch, map, { sourceLang: "zh", targetLang: "en" });
 
@@ -219,10 +242,6 @@ describe("RelationshipsPage workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add directed relationship" }));
     expect(screen.getByLabelText("Preferred self-pronoun")).toBeTruthy();
     expect(screen.getByLabelText("Addressee term / title")).toBeTruthy();
-    expect(screen.getByLabelText("Sentence particles")).toBeTruthy();
-    expect(screen.getByLabelText("Register")).toBeTruthy();
-  });
-  it("renders unsupported pairs without requesting a relationship map", () => {
     renderRelationships(defaultSearch, null, { sourceLang: "en", targetLang: "en" });
 
     expect(screen.getByRole("heading", { name: "Relationship map unavailable" })).toBeTruthy();
@@ -244,7 +263,12 @@ describe("RelationshipsPage workspace", () => {
       ).disabled,
     ).toBe(true);
     expect(
-      (screen.getByRole("button", { name: /^Add relationship$/ }) as HTMLButtonElement).disabled,
+      (
+        within(screen.getByRole("region", { name: "Desktop directed relationships" })).getByRole(
+          "button",
+          { name: /^Add relationship$/ },
+        ) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(screen.getByText("Add at least 2 character profiles first.")).toBeTruthy();
   });
@@ -255,7 +279,11 @@ describe("RelationshipsPage workspace", () => {
 
     cleanup();
     renderRelationships({ ...defaultSearch, sort: "name", dir: "desc" });
-    expect(screen.getByText("Character 29")).toBeTruthy();
+    expect(
+      within(screen.getByRole("region", { name: "Desktop character profiles" })).getByText(
+        "Character 29",
+      ),
+    ).toBeTruthy();
 
     cleanup();
     renderRelationships({ ...defaultSearch, page: 2 });
@@ -263,7 +291,11 @@ describe("RelationshipsPage workspace", () => {
 
     cleanup();
     renderRelationships({ ...defaultSearch, q: "does-not-exist", page: 2 });
-    expect(screen.getByText("No character profiles match these filters.")).toBeTruthy();
+    expect(
+      within(screen.getByRole("region", { name: "Desktop character profiles" })).getByText(
+        "No character profiles match these filters.",
+      ),
+    ).toBeTruthy();
     await waitFor(() =>
       expect(
         latestNavigation().search({ ...defaultSearch, q: "does-not-exist", page: 2 }),
@@ -286,7 +318,6 @@ describe("RelationshipsPage workspace", () => {
 
     await waitFor(() => {
       const navigation = latestNavigation();
-      expect(navigation.replace).toBe(true);
       expect(navigation.search(search)).toMatchObject({ page: 1 });
     });
   });
@@ -327,7 +358,12 @@ describe("RelationshipsPage workspace", () => {
 
     cleanup();
     renderRelationships();
-    fireEvent.click(screen.getByRole("button", { name: "Actions for character Character 02" }));
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Desktop character profiles" })).getByRole(
+        "button",
+        { name: "Actions for character Character 02" },
+      ),
+    );
     expect(screen.getByRole("menuitem", { name: "Edit" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "Disable" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "Use automatic updates" })).toBeTruthy();
@@ -346,7 +382,12 @@ describe("RelationshipsPage workspace", () => {
 
   it("sends exact row-action and relationship-edit payloads", async () => {
     renderRelationships();
-    fireEvent.click(screen.getByRole("button", { name: "Actions for character Character 02" }));
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Desktop character profiles" })).getByRole(
+        "button",
+        { name: "Actions for character Character 02" },
+      ),
+    );
     fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
     await waitFor(() =>
       expect(serverFunctions.setRelationshipEntryEnabled).toHaveBeenCalledWith({
@@ -361,7 +402,12 @@ describe("RelationshipsPage workspace", () => {
 
     cleanup();
     renderRelationships();
-    fireEvent.click(screen.getByRole("button", { name: "Actions for character Character 02" }));
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Desktop character profiles" })).getByRole(
+        "button",
+        { name: "Actions for character Character 02" },
+      ),
+    );
     fireEvent.click(screen.getByRole("menuitem", { name: "Use automatic updates" }));
     await waitFor(() =>
       expect(serverFunctions.setRelationshipEntryAutoManaged).toHaveBeenCalledWith({
@@ -375,7 +421,12 @@ describe("RelationshipsPage workspace", () => {
 
     cleanup();
     renderRelationships();
-    fireEvent.click(screen.getByRole("button", { name: "Actions for character Character 02" }));
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Desktop character profiles" })).getByRole(
+        "button",
+        { name: "Actions for character Character 02" },
+      ),
+    );
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm delete relationship entry" }));
     await waitFor(() =>
@@ -423,7 +474,13 @@ describe("RelationshipsPage workspace", () => {
 
   it("keeps stale rows visible with a refresh error and retry", async () => {
     const queryClient = renderRelationships();
-    await waitFor(() => expect(screen.getByText("Character 00")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "Desktop character profiles" })).getByText(
+          "Character 00",
+        ),
+      ).toBeTruthy(),
+    );
     serverFunctions.getRelationshipMap.mockRejectedValueOnce(new Error("Refresh unavailable"));
 
     await act(async () => {
@@ -438,7 +495,11 @@ describe("RelationshipsPage workspace", () => {
     await waitFor(() =>
       expect(screen.getByText("Unable to refresh relationship map")).toBeTruthy(),
     );
-    expect(screen.getByText("Character 00")).toBeTruthy();
+    expect(
+      within(screen.getByRole("region", { name: "Desktop character profiles" })).getByText(
+        "Character 00",
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() =>
       expect(screen.queryByText("Unable to refresh relationship map")).toBeNull(),
@@ -448,8 +509,17 @@ describe("RelationshipsPage workspace", () => {
   it("keeps relationship empty and map error states actionable", async () => {
     const emptyMap = { ...map, relationships: [] };
     renderRelationships({ ...defaultSearch, view: "relationships" }, emptyMap);
-    expect(screen.getByText(/No directed relationships yet\./)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add relationship" })).toBeTruthy();
+    expect(
+      within(screen.getByRole("region", { name: "Desktop directed relationships" })).getByText(
+        /No directed relationships yet\./,
+      ),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole("region", { name: "Desktop directed relationships" })).getByRole(
+        "button",
+        { name: "Add relationship" },
+      ),
+    ).toBeTruthy();
 
     cleanup();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

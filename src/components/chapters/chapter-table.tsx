@@ -4,8 +4,8 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components
 import type { TitleEditState } from "@/components/chapters/use-chapter-title-edit";
 import { ChapterTableRow } from "./chapter-table-row";
 import type { ChapterRow } from "./types";
+import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 import type { NovelCostData, ActiveJobState } from "@/lib/translation/types/api";
-
 type CostData = NovelCostData | undefined;
 
 export interface ChapterTableProps {
@@ -24,7 +24,7 @@ export interface ChapterTableProps {
   onPublishChapter: (vars: { chapterId: string; publishedAt: Date | null }) => void;
   onCancelTranslate: (jobId: string, chapterId: string) => void;
   onRetryTranslate: (jobId: string, chapterId: string) => void;
-  onStartTranslate: (chapterId: string) => void;
+  onStartTranslate: (chapterId: string, mode: TranslationStartMode) => void;
   onRequestRetranslate: (chapterId: string) => void;
   onViewLogs: (chapterId: string) => void;
   titleEdit: TitleEditState | null;

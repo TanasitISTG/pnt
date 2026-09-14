@@ -6,12 +6,11 @@ import { db } from "@/lib/db";
 import { novels, chapters, importJobs } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
-import { inngest } from "@/lib/inngest/client";
 import { findSource } from "@/lib/scrape";
 import { fetchAndParse } from "@/lib/scrape/server";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
-import { log } from "@/lib/log";
-import { cancelActiveImportJobsForNovel, cancelImportJobById } from "@/lib/import/job-control";
+import { cancelImportJobForUser, startScrapeImportForUser } from "@/lib/import/commands";
+import { MAX_IMPORT_CHAPTER_NUMBER, MAX_IMPORT_RANGE_LENGTH } from "@/lib/import/range";
 
 const providerEnum = z
   .enum(["auto", "direct", "zenrows", "scrapingbee", "firecrawl"])
@@ -70,78 +69,27 @@ export const importChapter = createServerFn({ method: "POST" })
     }),
   );
 
-const startImportJobSchema = z.object({
-  novelId: z.string().min(1),
-  baseUrl: z.string().min(1),
-  from: z.number().int().min(1),
-  to: z.number().int().min(1),
-  provider: providerEnum,
-});
+const importChapterNumberSchema = z.number().int().min(1).max(MAX_IMPORT_CHAPTER_NUMBER);
+
+export const startImportJobSchema = z
+  .object({
+    novelId: z.string().min(1),
+    baseUrl: z.string().min(1),
+    from: importChapterNumberSchema,
+    to: importChapterNumberSchema,
+    provider: providerEnum,
+  })
+  .refine(({ from, to }) => from <= to && to - from + 1 <= MAX_IMPORT_RANGE_LENGTH, {
+    path: ["to"],
+    message: "Invalid range (from ≤ to, max 500 chapters)",
+  });
 
 export const startImportJob = createServerFn({ method: "POST" })
   .validator(startImportJobSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      // Cheap input validation first — these errors don't need a session.
-      if (data.from > data.to || data.to - data.from > 500) {
-        throw new SafeServerError("Invalid range (from ≤ to, max 500 chapters)");
-      }
-      findSource(data.baseUrl); // validates host before the URL is stored
-
       const session = await ensureSession();
-
-      const [novel] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
-        .limit(1);
-      if (!novel) throw new SafeServerError("Novel not found or unauthorized");
-
-      await cancelActiveImportJobsForNovel(data.novelId);
-
-      const jobId = nanoid();
-      await db.insert(importJobs).values({
-        id: jobId,
-        novelId: data.novelId,
-        kind: "scrape",
-        baseUrl: data.baseUrl,
-        fromNumber: data.from,
-        toNumber: data.to,
-        nextNumber: data.from,
-        scrapeProvider: data.provider,
-      });
-
-      try {
-        await inngest.send({ name: "scrape/import.requested", data: { jobId, runKey: nanoid() } });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        let code: string | undefined;
-        if (err && typeof err === "object") {
-          if ("code" in err && typeof err.code === "string") {
-            code = err.code;
-          } else if (
-            "cause" in err &&
-            err.cause &&
-            typeof err.cause === "object" &&
-            "code" in err.cause &&
-            typeof err.cause.code === "string"
-          ) {
-            code = err.cause.code;
-          }
-        }
-        log("error", "Failed to send Inngest event in startImportJob", {
-          jobId,
-          error: msg,
-        });
-        if (msg.includes("fetch failed") || code === "ECONNREFUSED") {
-          throw new SafeServerError(
-            "Inngest dev server is not running. Please run 'bun run inngest' in a separate terminal alongside 'bun dev'.",
-          );
-        }
-        throw new SafeServerError(`Failed to enqueue import job: ${msg}`);
-      }
-
-      return { jobId };
+      return startScrapeImportForUser(session.user.id, data);
     }),
   );
 
@@ -150,7 +98,7 @@ export const cancelImportJob = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-      await cancelImportJobById(data.jobId, session.user.id);
+      await cancelImportJobForUser(session.user.id, data.jobId);
       return { success: true };
     }),
   );

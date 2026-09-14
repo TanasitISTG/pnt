@@ -22,7 +22,7 @@ describe("translation workflow compatibility contract", () => {
 
   it("uses a durable outbox instead of compensating a failed send by erroring the job", () => {
     const translationFunctions = source("../api/mutations.ts");
-    expect(translationFunctions).toContain("translationOutbox");
+    expect(translationFunctions).toContain("workflowOutbox");
     expect(translationFunctions).not.toContain('error: "Inngest dispatch failed"');
   });
 
@@ -43,10 +43,14 @@ describe("translation workflow compatibility contract", () => {
     const functions = source("../../inngest/functions.ts");
     const translationFunctions = source("../api/mutations.ts");
     const chapterEditService = source("../../content/chapter-edit.service.ts");
+    const cancellation = source("./cancel.ts");
 
     expect(functions).toContain("if: TRANSLATION_CANCEL_IF");
-    expect(translationFunctions.match(/translationRunIdentity\(cancelled\)/g)).toHaveLength(2);
-    expect(translationFunctions).toContain("translationRunIdentity(row.job)");
-    expect(chapterEditService.match(/translationRunIdentity\(cancelledJob\)/g)).toHaveLength(1);
+    expect(translationFunctions).toContain("cancelActiveTranslationJobsInTransaction");
+    expect(chapterEditService).toContain("cancelActiveTranslationJobsInTransaction");
+    expect(cancellation).toContain("eq(translationJobs.generation, candidate.generation)");
+    expect(cancellation).toContain(
+      "payloadJson: JSON.stringify({ jobId: cancelled.id, generation: cancelled.generation })",
+    );
   });
 });

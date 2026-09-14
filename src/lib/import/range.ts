@@ -1,0 +1,2 @@
+export const MAX_IMPORT_CHAPTER_NUMBER = 999_999;
+export const MAX_IMPORT_RANGE_LENGTH = 500;

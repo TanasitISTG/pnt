@@ -1,12 +1,10 @@
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
-import { getNovel } from "@/lib/content/novel.functions";
+import { getAdminNovelDetailMetrics, getNovel } from "@/lib/content/novel.functions";
+import type { getAdminNovelDetailCore } from "@/lib/content/novel.functions";
 import { listChapters } from "@/lib/content/chapter.functions";
-import { getResidualScriptChapters } from "@/lib/content/chapter-ops.functions";
 import type { ReaderProgress } from "@/lib/reader/types";
-import { getGlossaryStats } from "@/lib/glossary/functions";
-import { getNovelCosts } from "@/lib/translation/api/queries";
 import { getReaderProgress } from "@/lib/reader/progress";
 import { useChapterSelection } from "@/components/chapters/use-chapter-selection";
 import { useChapterTitleEdit } from "@/components/chapters/use-chapter-title-edit";
@@ -31,51 +29,45 @@ export const novelQueryOptions = (novelId: string) =>
   queryOptions({
     queryKey: ["novel", novelId],
     queryFn: () => getNovel({ data: { novelId } }),
+    staleTime: 10_000,
   });
 
 export const chaptersQueryOptions = (novelId: string) =>
   queryOptions({
     queryKey: ["chapters", novelId],
     queryFn: () => listChapters({ data: { novelId } }),
+    staleTime: 10_000,
   });
 
-export const glossaryStatsQueryOptions = (novelId: string) =>
+export const adminNovelDetailMetricsQueryOptions = (novelId: string) =>
   queryOptions({
-    queryKey: ["glossaryStats", novelId],
-    queryFn: () => getGlossaryStats({ data: { novelId } }),
+    queryKey: ["adminNovelDetailMetrics", novelId],
+    queryFn: () => getAdminNovelDetailMetrics({ data: { novelId } }),
+    staleTime: 5_000,
   });
 
-export const costsQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["costs", novelId],
-    queryFn: () => getNovelCosts({ data: { novelId } }),
-  });
+type AdminNovelDetailCore = NonNullable<Awaited<ReturnType<typeof getAdminNovelDetailCore>>>;
 
-export const residualScriptQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["residualScripts", novelId],
-    queryFn: () => getResidualScriptChapters({ data: { novelId } }),
-  });
+export function hydrateAdminNovelDetailCore(
+  queryClient: QueryClient,
+  core: AdminNovelDetailCore,
+): void {
+  queryClient.setQueryData(["novel", core.novel.id], core.novel);
+  queryClient.setQueryData(["chapters", core.novel.id], core.chapters);
+}
 
 export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
   const queryClient = useQueryClient();
   const novelQuery = useQuery(novelQueryOptions(novelId));
   const chaptersQuery = useQuery(chaptersQueryOptions(novelId));
-  const glossaryStatsQuery = useQuery({
-    ...glossaryStatsQueryOptions(novelId),
-    enabled: isAdmin && chaptersQuery.isSuccess,
-  });
-  const costsQuery = useQuery({
-    ...costsQueryOptions(novelId),
-    enabled: isAdmin && chaptersQuery.isSuccess,
-  });
-  const residualScriptQuery = useQuery({
-    ...residualScriptQueryOptions(novelId),
-    enabled: isAdmin && chaptersQuery.isSuccess,
+  const metricsQuery = useQuery({
+    ...adminNovelDetailMetricsQueryOptions(novelId),
+    enabled: isAdmin,
   });
 
   const chapters = chaptersQuery.data ?? EMPTY_CHAPTERS;
-  const residualScriptChapters = residualScriptQuery.data ?? EMPTY_RESIDUAL_SCRIPTS;
+  const metrics = metricsQuery.data;
+  const residualScriptChapters = metrics?.residualScriptChapters ?? EMPTY_RESIDUAL_SCRIPTS;
   const residualScriptMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of residualScriptChapters) {
@@ -118,6 +110,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
   const [logChapterId, setLogChapterId] = useState<string | null>(null);
   const [reorderOpen, setReorderOpen] = useState(false);
   const [stopSelectedOpen, setStopSelectedOpen] = useState(false);
+  const [batchRetranslateOpen, setBatchRetranslateOpen] = useState(false);
   const lastReadChapter = useMemo(() => {
     if (!readerProgress.lastChapterId) return null;
     return chapters.find((chapter) => chapter.id === readerProgress.lastChapterId) ?? null;
@@ -136,6 +129,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     retry: retryTranslate,
     clearActiveJobs,
     activeJobs,
+    activeJobsError,
+    refetchActiveJobs,
   } = useTranslationJob(novelId, isAdmin && chaptersReady);
 
   const handleTranslationsDeleted = useCallback(() => {
@@ -147,7 +142,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     selectedIds,
     setSelectedIds,
     selectableIds,
-    selectedTranslatableIds,
+    selectedMissingIds,
+    selectedTranslatedIds,
     selectedActiveIds,
     toggleSelect,
     toggleSelectMany,
@@ -159,6 +155,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     batchRangeTo,
     setBatchRangeTo,
     handleBatchTranslate,
+    handleBatchRetranslate,
     handleBatchStop,
     isRowTranslating,
   } = useChapterSelection(chapters, activeJobs, startBatchTranslate, cancelMany);
@@ -166,6 +163,11 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
   const confirmStopSelectedTranslations = useCallback(async () => {
     if (await handleBatchStop()) setStopSelectedOpen(false);
   }, [handleBatchStop]);
+
+  const confirmBatchRetranslate = useCallback(async () => {
+    await handleBatchRetranslate();
+    setBatchRetranslateOpen(false);
+  }, [handleBatchRetranslate]);
 
   const {
     editState,
@@ -176,6 +178,11 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     handleSaveEdit,
     handleTitleChange,
   } = useChapterTitleEdit(novelId);
+  const handleCancelEdit = useCallback(() => setEditState(null), [setEditState]);
+  const missingTitleCount = useMemo(
+    () => chapters.filter((chapter) => !chapter.translatedTitle?.trim()).length,
+    [chapters],
+  );
 
   const {
     removeNovel,
@@ -206,27 +213,26 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
   );
   const reorderDisabled =
     reorderingChapters || chapters.some((chapter) => isRowTranslating(chapter.id, chapter.status));
-  const handleCancelEdit = useCallback(() => {
-    setEditState(null);
-  }, [setEditState]);
   const invalidateChapters = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
   }, [queryClient, novelId]);
-
-  const missingTitleCount = useMemo(
-    () =>
-      chapters.filter((chapter) => chapter.status === "translated" && !chapter.translatedTitle)
-        .length,
-    [chapters],
-  );
-  const unpublishedCount = useMemo(
-    () =>
-      chapters.filter(
-        (chapter) => !chapter.publishedAt || new Date(chapter.publishedAt) > new Date(),
-      ).length,
-    [chapters],
-  );
+  const { readyUnpublishedCount, unreadyCount } = useMemo(() => {
+    const now = new Date();
+    let readyCount = 0;
+    let unreadyChapterCount = 0;
+    for (const chapter of chapters) {
+      const ready = chapter.status === "translated" && chapter.hasTranslation;
+      if (!ready) {
+        unreadyChapterCount++;
+      } else if (!chapter.publishedAt || new Date(chapter.publishedAt) > now) {
+        readyCount++;
+      }
+    }
+    return { readyUnpublishedCount: readyCount, unreadyCount: unreadyChapterCount };
+  }, [chapters]);
   const { exporting, handleExportTxt, handleExportEpub } = useNovelExport(novelId);
 
   const chapterTableProps = {
@@ -235,7 +241,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     activeJobs,
     readChapterIdSet,
     residualScriptMap,
-    costData: costsQuery.data,
+    costData: metrics?.costData,
     selectedIds,
     isTranslating: isRowTranslating,
     onToggleSelect: toggleSelect,
@@ -258,8 +264,11 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
   };
 
   return {
+    novelId,
     chapterTableProps,
     activeJobs,
+    activeJobsError,
+    refetchActiveJobs,
     backfillTitles,
     backfillingTitles,
     batchRangeFrom,
@@ -271,8 +280,14 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     readingActionsPending,
     chapters,
     chaptersError: chaptersQuery.error,
+    metricsError: metricsQuery.error,
+    isMetricsError: metricsQuery.isError,
+    refetchMetrics: metricsQuery.refetch,
     chaptersReady,
+    confirmBatchRetranslate,
     confirmStopSelectedTranslations,
+    batchRetranslateOpen,
+    setBatchRetranslateOpen,
     deleteAllTranslations,
     deleteAllTranslationsOpen,
     deleteChapterId,
@@ -282,11 +297,12 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     deletingNovel,
     exporting,
     firstChapter,
-    costData: costsQuery.data,
-    glossaryStats: glossaryStatsQuery.data,
+    costData: metrics?.costData,
+    glossaryStats: metrics?.glossaryStats,
     handleBatchStop,
     handleBatchTranslate,
     handleExportEpub,
+    onRequestBatchRetranslate: () => setBatchRetranslateOpen(true),
     handleExportTxt,
     handleSaveChapterOrder,
     invalidateChapters,
@@ -312,10 +328,12 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     reorderingChapters,
     retryTranslate,
     selectableIds,
+    selectedTranslatedCount: selectedTranslatedIds.length,
     selectedActiveCount: selectedActiveIds.length,
     selectedActiveIds,
+    selectedMissingIds,
+    selectedTranslatedIds,
     selectedIds,
-    selectedTranslatableIds,
     setBatchRangeFrom,
     setBatchRangeTo,
     setDeleteAllTranslationsOpen,
@@ -328,7 +346,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     setStopSelectedOpen,
     startTranslate,
     stopSelectedOpen,
-    unpublishedCount,
+    readyUnpublishedCount,
+    unreadyCount,
     logChapterId,
     selectByRange,
     retranslateChapterId,

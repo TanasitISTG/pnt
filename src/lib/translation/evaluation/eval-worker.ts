@@ -7,8 +7,9 @@ import { glossaryTerms, novels, translationEvalReports } from "@/lib/db/schema";
 import { log } from "@/lib/log";
 import {
   parseEvalSelection,
+  type EvalFinding,
   type EvalSelection,
-  type EvalStoredResult,
+  type EvalStoredResultV2,
 } from "@/lib/translation/evaluation/eval.schemas";
 import {
   createEvalContextFingerprint,
@@ -21,12 +22,13 @@ const REPORT_STATUSES_IN_PROGRESS = ["pending", "running"] as const;
 const CURSOR_BATCH_SIZE = 25;
 const RESIDUAL_EXAMPLE_LIMIT = 120;
 const RESIDUAL_EXAMPLE_COUNT = 3;
+const FINDING_LIMIT = 20;
 
 type EvalChapterCursorRow = {
   id: string;
   number: string;
+  status: EvalStoredResultV2["status"];
   title: string;
-  status: EvalStoredResult["status"];
   rawContent: string;
   translatedContent: string | null;
   updatedAt: string;
@@ -57,11 +59,11 @@ function containsLiteralText(text: string, candidate: string): boolean {
   return text.includes(candidate);
 }
 
-function truncateUnicode(value: string): string {
+function truncateUnicode(value: string, limit = RESIDUAL_EXAMPLE_LIMIT): string {
   let offset = 0;
   let count = 0;
   for (const char of value) {
-    if (++count === RESIDUAL_EXAMPLE_LIMIT) {
+    if (++count === limit) {
       return offset + char.length === value.length ? value : `${value.slice(0, offset)}…`;
     }
     offset += char.length;
@@ -81,16 +83,105 @@ function compareTerms(left: ApprovedTerm, right: ApprovedTerm): number {
           : 0;
 }
 
+interface ParagraphLocation {
+  index: number;
+  text: string;
+  start: number;
+  end: number;
+}
+
+function locateParagraphs(text: string): ParagraphLocation[] {
+  const paragraphs = splitParagraphs(text);
+  let cursor = 0;
+  return paragraphs.map((paragraph, index) => {
+    const foundStart = text.indexOf(paragraph, cursor);
+    const start = foundStart >= 0 ? foundStart : cursor;
+    const end = Math.min(text.length, start + paragraph.length);
+    cursor = end;
+    return { index: index + 1, text: paragraph, start, end };
+  });
+}
+
+function paragraphForSpan(
+  paragraphs: readonly ParagraphLocation[],
+  span: { start: number; end: number },
+): ParagraphLocation | undefined {
+  return paragraphs.find((paragraph) => span.start < paragraph.end && span.end > paragraph.start);
+}
+
+function createEvalFindings(
+  rawParagraphs: readonly ParagraphLocation[],
+  translatedParagraphs: readonly ParagraphLocation[],
+  residualSpans: readonly { start: number; end: number; text: string }[],
+  missingTerms: readonly ApprovedTerm[],
+): EvalFinding[] {
+  const findings: EvalFinding[] = [];
+
+  for (const span of residualSpans) {
+    const translatedParagraph = paragraphForSpan(translatedParagraphs, span);
+    const sourceParagraph = translatedParagraph
+      ? rawParagraphs[translatedParagraph.index - 1]
+      : undefined;
+    findings.push({
+      type: "residual-script",
+      paragraphIndex: translatedParagraph?.index ?? null,
+      sourceExcerpt: sourceParagraph ? truncateUnicode(sourceParagraph.text, 160) : null,
+      translationExcerpt: translatedParagraph
+        ? truncateUnicode(translatedParagraph.text, 160)
+        : truncateUnicode(span.text, 160),
+      sourceTerm: null,
+      targetTerm: null,
+    });
+  }
+
+  for (const term of missingTerms) {
+    const sourceParagraph = rawParagraphs.find((paragraph) =>
+      containsLiteralText(paragraph.text, term.source),
+    );
+    const translatedParagraph = sourceParagraph
+      ? translatedParagraphs[sourceParagraph.index - 1]
+      : undefined;
+    findings.push({
+      type: "glossary-miss",
+      paragraphIndex: sourceParagraph?.index ?? null,
+      sourceExcerpt: sourceParagraph ? truncateUnicode(sourceParagraph.text, 160) : null,
+      translationExcerpt: translatedParagraph
+        ? truncateUnicode(translatedParagraph.text, 160)
+        : null,
+      sourceTerm: term.source,
+      targetTerm: term.target,
+    });
+  }
+
+  if (rawParagraphs.length !== translatedParagraphs.length) {
+    findings.push({
+      type: "paragraph-mismatch",
+      paragraphIndex: null,
+      sourceExcerpt: null,
+      translationExcerpt: null,
+      sourceTerm: null,
+      targetTerm: null,
+    });
+  }
+
+  return findings.slice(0, FINDING_LIMIT);
+}
+
 function createEvalResult(
   chapter: EvalChapterCursorRow,
   languagePair: string,
   protectedTerms: readonly string[],
   approvedTerms: readonly ApprovedTerm[],
-): EvalStoredResult {
+): EvalStoredResultV2 {
   const translatedText = chapter.translatedContent;
+  const rawParagraphs = locateParagraphs(chapter.rawContent);
+  const translatedParagraphs =
+    translatedText !== null && translatedText.trim().length > 0
+      ? locateParagraphs(translatedText)
+      : [];
   const evaluated = translatedText !== null && translatedText.trim().length > 0;
-  const rawParagraphCount = splitParagraphs(chapter.rawContent).length;
-  const translatedParagraphCount = evaluated ? splitParagraphs(translatedText).length : 0;
+  const rawParagraphCount = rawParagraphs.length;
+  const translatedParagraphCount = translatedParagraphs.length;
 
   if (!evaluated) {
     return {
@@ -110,6 +201,7 @@ function createEvalResult(
       missingGlossaryTerms: [],
       residualSpanCount: 0,
       residualExamples: [],
+      findings: [],
     };
   }
 
@@ -120,11 +212,15 @@ function createEvalResult(
   let matchedTerms = 0;
   let adheredTerms = 0;
   const missingTerms: ApprovedTerm[] = [];
+  const missingFindingTerms: ApprovedTerm[] = [];
   for (const term of approvedTerms) {
     if (!containsLiteralText(chapter.rawContent, term.source)) continue;
     matchedTerms++;
     if (containsLiteralText(translatedText, term.target)) adheredTerms++;
-    else if (missingTerms.length < 5) missingTerms.push(term);
+    else {
+      missingFindingTerms.push(term);
+      if (missingTerms.length < 5) missingTerms.push(term);
+    }
   }
 
   return {
@@ -147,10 +243,16 @@ function createEvalResult(
     residualExamples: residual.spans
       .slice(0, RESIDUAL_EXAMPLE_COUNT)
       .map((span) => truncateUnicode(span.text)),
+    findings: createEvalFindings(
+      rawParagraphs,
+      translatedParagraphs,
+      residual.spans,
+      missingFindingTerms,
+    ),
   };
 }
 
-function hasAttention(result: EvalStoredResult): boolean {
+function hasAttention(result: EvalStoredResultV2): boolean {
   return (
     result.evaluated &&
     (result.residualScriptLetters > 0 ||
@@ -159,7 +261,7 @@ function hasAttention(result: EvalStoredResult): boolean {
   );
 }
 
-function addToAggregate(aggregate: EvalAggregate, result: EvalStoredResult): void {
+function addToAggregate(aggregate: EvalAggregate, result: EvalStoredResultV2): void {
   aggregate.chapterCount += 1;
   if (!result.evaluated) {
     aggregate.skippedChapterCount += 1;
@@ -248,7 +350,7 @@ export async function runTranslationEvalReport(reportId: string) {
       approvedTerms,
     );
     const protectedTerms = approvedTerms.map((term) => term.target);
-    const results: EvalStoredResult[] = [];
+    const results: EvalStoredResultV2[] = [];
     const aggregate: EvalAggregate = {
       chapterCount: 0,
       residualScriptLetters: 0,
@@ -268,7 +370,7 @@ export async function runTranslationEvalReport(reportId: string) {
 
     const summary = {
       ...aggregate,
-      version: 1 as const,
+      version: 2 as const,
       languagePair,
       contextFingerprint,
     };

@@ -1,16 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, asc, desc } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
-import { novels, importJobs, epubUploads, epubUploadChunks } from "@/lib/db/schema";
+import { novels, epubUploads, epubUploadChunks } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
-import { inngest } from "@/lib/inngest/client";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
-import { log } from "@/lib/log";
-import { cancelActiveImportJobsForNovel } from "@/lib/import/job-control";
-import { markEpubEnqueueError } from "@/lib/epub/job-store";
+import { completeEpubImportForUser } from "@/lib/import/commands";
 
 const CHUNK_SIZE = 1024 * 1024; // 1 MiB
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MiB
@@ -201,159 +198,7 @@ export const completeEpubUpload = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const [upload] = await db
-        .select({
-          id: epubUploads.id,
-          novelId: epubUploads.novelId,
-          fileName: epubUploads.fileName,
-          status: epubUploads.status,
-          expiresAt: epubUploads.expiresAt,
-        })
-        .from(epubUploads)
-        .innerJoin(novels, eq(epubUploads.novelId, novels.id))
-        .where(and(eq(epubUploads.id, data.uploadId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!upload) {
-        throw new SafeServerError("Upload not found or unauthorized");
-      }
-      if (upload.status !== "uploading") {
-        const [existingJob] = await db
-          .select({ id: importJobs.id })
-          .from(importJobs)
-          .where(
-            and(eq(importJobs.novelId, upload.novelId), eq(importJobs.epubUploadId, upload.id)),
-          )
-          .orderBy(desc(importJobs.createdAt))
-          .limit(1);
-        if (existingJob) return { jobId: existingJob.id };
-        throw new SafeServerError("Upload is no longer in uploading state");
-      }
-      if (upload.expiresAt < new Date()) {
-        throw new SafeServerError("Upload session has expired");
-      }
-
-      await cancelActiveImportJobsForNovel(upload.novelId);
-      const runKey = nanoid();
-      const result = await db.transaction(async (tx) => {
-        const [lockedUpload] = await tx
-          .select({
-            id: epubUploads.id,
-            novelId: epubUploads.novelId,
-            fileName: epubUploads.fileName,
-            fileSize: epubUploads.fileSize,
-            chunkCount: epubUploads.chunkCount,
-            receivedBytes: epubUploads.receivedBytes,
-            status: epubUploads.status,
-            expiresAt: epubUploads.expiresAt,
-          })
-          .from(epubUploads)
-          .where(eq(epubUploads.id, data.uploadId))
-          .for("update");
-
-        if (!lockedUpload) {
-          throw new SafeServerError("Upload not found or unauthorized");
-        }
-        if (lockedUpload.status !== "uploading") {
-          const [existingJob] = await tx
-            .select({ id: importJobs.id })
-            .from(importJobs)
-            .where(
-              and(
-                eq(importJobs.novelId, lockedUpload.novelId),
-                eq(importJobs.epubUploadId, lockedUpload.id),
-              ),
-            )
-            .orderBy(desc(importJobs.createdAt))
-            .limit(1);
-          if (existingJob) {
-            return { jobId: null, existingJobId: existingJob.id };
-          }
-          throw new SafeServerError("Upload is no longer in uploading state");
-        }
-        if (lockedUpload.expiresAt < new Date()) {
-          throw new SafeServerError("Upload session has expired");
-        }
-
-        const chunks = await tx
-          .select({ chunkIndex: epubUploadChunks.chunkIndex })
-          .from(epubUploadChunks)
-          .where(eq(epubUploadChunks.uploadId, lockedUpload.id))
-          .orderBy(asc(epubUploadChunks.chunkIndex));
-        const complete =
-          chunks.length === lockedUpload.chunkCount &&
-          chunks.every((chunk, index) => chunk.chunkIndex === index) &&
-          lockedUpload.receivedBytes === lockedUpload.fileSize;
-        if (!complete) {
-          throw new SafeServerError("Upload is incomplete: missing chunks");
-        }
-
-        const jobId = nanoid();
-        await tx.insert(importJobs).values({
-          id: jobId,
-          novelId: lockedUpload.novelId,
-          kind: "epub",
-          baseUrl: `epub://${lockedUpload.id}`,
-          sourceFileName: lockedUpload.fileName,
-          epubUploadId: lockedUpload.id,
-          fromNumber: 1,
-          toNumber: 0,
-          nextNumber: 1,
-          scrapeProvider: "epub",
-        });
-        await tx
-          .update(epubUploads)
-          .set({ status: "queued", updatedAt: new Date() })
-          .where(eq(epubUploads.id, lockedUpload.id));
-
-        return { jobId, existingJobId: null };
-      });
-
-      if (result.existingJobId) return { jobId: result.existingJobId };
-      if (!result.jobId) {
-        throw new SafeServerError("Failed to create EPUB import job");
-      }
-      const jobId = result.jobId;
-
-      try {
-        await inngest.send({ name: "epub/import.requested", data: { jobId, runKey } });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        let code: string | undefined;
-        if (err && typeof err === "object") {
-          if ("code" in err && typeof err.code === "string") {
-            code = err.code;
-          } else if (
-            "cause" in err &&
-            err.cause &&
-            typeof err.cause === "object" &&
-            "code" in err.cause &&
-            typeof err.cause.code === "string"
-          ) {
-            code = err.cause.code;
-          }
-        }
-
-        log("error", "Failed to send Inngest event in completeEpubUpload", {
-          jobId,
-          error: msg,
-        });
-        await markEpubEnqueueError(jobId, msg).catch((cleanupError) => {
-          log("error", "Failed to clean up EPUB job after event failure", {
-            jobId,
-            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-          });
-        });
-        if (msg.includes("fetch failed") || code === "ECONNREFUSED") {
-          throw new SafeServerError(
-            "Inngest dev server is not running. Please run 'bun run inngest' in a separate terminal alongside 'bun dev'.",
-          );
-        }
-        throw new SafeServerError(`Failed to enqueue import job: ${msg}`);
-      }
-
-      return { jobId };
+      return completeEpubImportForUser(session.user.id, data.uploadId);
     }),
   );
 

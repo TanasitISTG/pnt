@@ -26,6 +26,13 @@ export class ProviderNotConfiguredError extends Error {
   }
 }
 
+export class ProviderSnapshotMismatchError extends Error {
+  constructor() {
+    super("The configured AI provider changed after this job was queued; retry the job.");
+    this.name = "ProviderSnapshotMismatchError";
+  }
+}
+
 export class OpenAIProviderClient implements AIProviderClient {
   provider: ProviderType = "openai";
   model: string;
@@ -33,9 +40,10 @@ export class OpenAIProviderClient implements AIProviderClient {
   temperature: number;
   reasoningEffort?: ReasoningEffort | null;
   baseUrl: string;
+  inputPricePer1M?: number | null;
+  outputPricePer1M?: number | null;
   requestTimeoutSec?: number | null;
   private client: OpenAI;
-
   constructor(config: {
     apiKey: string;
     baseUrl: string;
@@ -44,9 +52,13 @@ export class OpenAIProviderClient implements AIProviderClient {
     temperature: number;
     reasoningEffort?: ReasoningEffort | null;
     requestTimeoutSec?: number | null;
+    inputPricePer1M?: number | null;
+    outputPricePer1M?: number | null;
   }) {
     this.model = config.model;
     this.fastModel = config.fastModel;
+    this.inputPricePer1M = config.inputPricePer1M;
+    this.outputPricePer1M = config.outputPricePer1M;
     this.temperature = config.temperature;
     this.reasoningEffort = config.reasoningEffort;
     this.baseUrl = normalizeOpenCodeBaseUrl(config.baseUrl);
@@ -108,6 +120,8 @@ export class GeminiProviderClient implements AIProviderClient {
   fastModel?: string | null;
   temperature: number;
   baseUrl: string;
+  inputPricePer1M?: number | null;
+  outputPricePer1M?: number | null;
   requestTimeoutSec?: number | null;
   private ai: GoogleGenAI;
 
@@ -118,9 +132,13 @@ export class GeminiProviderClient implements AIProviderClient {
     fastModel?: string | null;
     temperature: number;
     requestTimeoutSec?: number | null;
+    inputPricePer1M?: number | null;
+    outputPricePer1M?: number | null;
   }) {
     this.model = config.model;
     this.fastModel = config.fastModel;
+    this.inputPricePer1M = config.inputPricePer1M;
+    this.outputPricePer1M = config.outputPricePer1M;
     this.temperature = config.temperature;
     this.baseUrl = config.baseUrl || "https://generativelanguage.googleapis.com";
     this.requestTimeoutSec = config.requestTimeoutSec;
@@ -173,7 +191,16 @@ export class GeminiProviderClient implements AIProviderClient {
   }
 }
 
-export async function createProviderClient(userId: string): Promise<AIProviderClient> {
+export interface ProviderClientOverrides {
+  provider?: ProviderType;
+  model?: string;
+  fastModel?: string | null;
+}
+
+export async function createProviderClient(
+  userId: string,
+  overrides: ProviderClientOverrides = {},
+): Promise<AIProviderClient> {
   const [settings] = await db
     .select()
     .from(providerSettings)
@@ -185,26 +212,87 @@ export async function createProviderClient(userId: string): Promise<AIProviderCl
   }
 
   const apiKey = decrypt(settings.apiKeyEnc);
-  const provider = (settings.provider as ProviderType) || "openai";
+  const configuredProvider = (settings.provider as ProviderType) ?? "openai";
+  if (overrides.provider && overrides.provider !== configuredProvider) {
+    throw new ProviderSnapshotMismatchError();
+  }
+  const provider = overrides.provider ?? configuredProvider;
+  const model = overrides.model ?? settings.model;
+  const fastModel = "fastModel" in overrides ? overrides.fastModel : settings.fastModel;
+  const pricing = {
+    inputPricePer1M: settings.inputPricePer1M,
+    outputPricePer1M: settings.outputPricePer1M,
+  };
 
   if (provider === "gemini") {
     return new GeminiProviderClient({
       apiKey,
       baseUrl: settings.baseUrl,
-      model: settings.model,
-      fastModel: settings.fastModel,
+      model,
+      fastModel,
       temperature: settings.temperature,
       requestTimeoutSec: settings.requestTimeoutSec,
+      ...pricing,
     });
   }
 
   return new OpenAIProviderClient({
     apiKey,
     baseUrl: settings.baseUrl,
-    model: settings.model,
-    fastModel: settings.fastModel,
+    model,
+    fastModel,
     reasoningEffort: settings.reasoningEffort as ReasoningEffort | null,
     temperature: settings.temperature,
     requestTimeoutSec: settings.requestTimeoutSec,
+    ...pricing,
+  });
+}
+export interface ProviderRuntimeSnapshot {
+  provider: ProviderType;
+  model: string;
+  fastModel: string | null;
+  inputPricePer1M: number | null;
+  outputPricePer1M: number | null;
+}
+
+export interface StoredProviderSnapshot {
+  provider?: string | null;
+  model?: string | null;
+  fastModel?: string | null;
+}
+
+export interface ProviderRuntime {
+  client: AIProviderClient;
+  snapshot: ProviderRuntimeSnapshot;
+}
+
+export async function loadProviderRuntime(userId: string): Promise<ProviderRuntime> {
+  const client = await createProviderClient(userId);
+  return {
+    client,
+    snapshot: {
+      provider: client.provider,
+      model: client.model,
+      fastModel: client.fastModel ?? null,
+      inputPricePer1M: client.inputPricePer1M ?? null,
+      outputPricePer1M: client.outputPricePer1M ?? null,
+    },
+  };
+}
+
+export async function loadProviderRuntimeForJob(
+  userId: string,
+  storedSnapshot: StoredProviderSnapshot,
+): Promise<AIProviderClient> {
+  if (storedSnapshot.provider == null || storedSnapshot.model == null) {
+    return createProviderClient(userId);
+  }
+  if (storedSnapshot.provider !== "openai" && storedSnapshot.provider !== "gemini") {
+    throw new ProviderSnapshotMismatchError();
+  }
+  return createProviderClient(userId, {
+    provider: storedSnapshot.provider,
+    model: storedSnapshot.model,
+    fastModel: storedSnapshot.fastModel ?? null,
   });
 }

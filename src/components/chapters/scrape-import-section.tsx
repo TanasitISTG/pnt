@@ -33,10 +33,16 @@ export function ScrapeImportSection({
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
 
-  const { importJob, importActive, startImport, cancelImport } = useImportJob(
-    novelId,
-    invalidateChapters,
-  );
+  const {
+    importJob,
+    importActive,
+    startImport,
+    cancelImport,
+    retryImport,
+    importStatusError,
+    canRetryImport,
+    retryImportStatus,
+  } = useImportJob(novelId, invalidateChapters);
 
   const handleRangeImport = async () => {
     const from = Number(rangeFrom);
@@ -195,6 +201,31 @@ export function ScrapeImportSection({
           {importActive ? " (runs server-side — safe to close this tab)" : ""}
         </p>
       )}
+      {importStatusError ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-caption text-destructive"
+          role="alert"
+        >
+          <span>{importStatusError.message}</span>
+          <Button type="button" size="sm" variant="outline" onClick={retryImportStatus}>
+            Retry status
+          </Button>
+        </div>
+      ) : null}
+      {canRetryImport &&
+      importJob &&
+      (importJob.status === "error" || importJob.status === "cancelled") ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border bg-background/50 p-2 text-caption">
+          <span className="text-muted-foreground">
+            {importJob.status === "error"
+              ? "This import stopped. Already imported chapters remain saved."
+              : "This import was cancelled. You can resume the same range."}
+          </span>
+          <Button type="button" size="sm" variant="outline" onClick={() => void retryImport()}>
+            Retry import
+          </Button>
+        </div>
+      ) : null}
       <p className="text-caption text-muted-foreground">Supported: {SUPPORTED_SITES_LABEL}</p>
     </div>
   );

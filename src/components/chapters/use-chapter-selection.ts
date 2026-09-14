@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { ChapterRow } from "@/components/chapters/types";
+import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 import type { ActiveJobState } from "@/lib/translation/types/api";
 
 export function useChapterSelection(
   chapters: ChapterRow[],
   activeJobs: Map<string, ActiveJobState>,
-  startBatchTranslate: (chapterIds: string[]) => Promise<number>,
+  startBatchTranslate: (chapterIds: string[], mode: TranslationStartMode) => Promise<number>,
   cancelMany: (
     chapterIds: string[],
   ) => Promise<{ cancelledChapterIds: string[]; skippedChapterIds: string[] } | null>,
@@ -31,20 +32,27 @@ export function useChapterSelection(
   );
 
   const selectableIds = useMemo(() => chapters.map((chapter) => chapter.id), [chapters]);
-  const { selectedTranslatableIds, selectedActiveIds } = useMemo(() => {
-    const translatableIds: string[] = [];
+  const { selectedMissingIds, selectedTranslatedIds, selectedActiveIds } = useMemo(() => {
+    const missingIds: string[] = [];
+    const translatedIds: string[] = [];
     const activeIds: string[] = [];
 
     for (const chapter of chapters) {
       if (!selectedIds.has(chapter.id)) continue;
       if (isRowTranslating(chapter.id, chapter.status)) {
         activeIds.push(chapter.id);
+      } else if (chapter.hasTranslation) {
+        translatedIds.push(chapter.id);
       } else {
-        translatableIds.push(chapter.id);
+        missingIds.push(chapter.id);
       }
     }
 
-    return { selectedTranslatableIds: translatableIds, selectedActiveIds: activeIds };
+    return {
+      selectedMissingIds: missingIds,
+      selectedTranslatedIds: translatedIds,
+      selectedActiveIds: activeIds,
+    };
   }, [chapters, isRowTranslating, selectedIds]);
 
   const toggleSelect = useCallback((id: string, checked: boolean) => {
@@ -91,21 +99,38 @@ export function useChapterSelection(
   }, [batchRangeFrom, batchRangeTo, chapters]);
 
   const handleBatchTranslate = useCallback(async () => {
-    if (selectedTranslatableIds.length === 0) return;
+    if (selectedMissingIds.length === 0) return;
     setBatchStarting(true);
     try {
-      const count = await startBatchTranslate(selectedTranslatableIds);
+      const count = await startBatchTranslate(selectedMissingIds, "missing");
       if (count > 0) {
         setSelectedIds((prev) => {
           const next = new Set(prev);
-          for (const chapterId of selectedTranslatableIds) next.delete(chapterId);
+          for (const chapterId of selectedMissingIds) next.delete(chapterId);
           return next;
         });
       }
     } finally {
       setBatchStarting(false);
     }
-  }, [selectedTranslatableIds, startBatchTranslate]);
+  }, [selectedMissingIds, startBatchTranslate]);
+
+  const handleBatchRetranslate = useCallback(async () => {
+    if (selectedTranslatedIds.length === 0) return;
+    setBatchStarting(true);
+    try {
+      const count = await startBatchTranslate(selectedTranslatedIds, "overwrite");
+      if (count > 0) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const chapterId of selectedTranslatedIds) next.delete(chapterId);
+          return next;
+        });
+      }
+    } finally {
+      setBatchStarting(false);
+    }
+  }, [selectedTranslatedIds, startBatchTranslate]);
 
   const handleBatchStop = useCallback(async () => {
     if (selectedActiveIds.length === 0) return true;
@@ -132,7 +157,8 @@ export function useChapterSelection(
     selectedIds,
     setSelectedIds,
     selectableIds,
-    selectedTranslatableIds,
+    selectedMissingIds,
+    selectedTranslatedIds,
     selectedActiveIds,
     toggleSelect,
     toggleSelectMany,
@@ -144,6 +170,7 @@ export function useChapterSelection(
     batchRangeTo,
     setBatchRangeTo,
     handleBatchTranslate,
+    handleBatchRetranslate,
     handleBatchStop,
     isRowTranslating,
   };

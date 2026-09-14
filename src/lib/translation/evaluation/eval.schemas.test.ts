@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   EVAL_SELECTOR_ERROR,
+  evalFindingSchema,
   evalReviewSearchSchema,
+  evalSummaryV2Schema,
   parseEvalSelection,
   startTranslationEvalSchema,
 } from "./eval.schemas";
@@ -62,5 +64,46 @@ describe("evaluation schemas", () => {
         chapterSelector: `1${" ".repeat(512)}`,
       }),
     ).toThrow(EVAL_SELECTOR_ERROR);
+  });
+
+  it("bounds v2 finding excerpts by Unicode code points and requires glossary terms", () => {
+    const base = {
+      type: "residual-script" as const,
+      paragraphIndex: 2,
+      sourceExcerpt: "ส".repeat(160),
+      translationExcerpt: "𐐀".repeat(160),
+      sourceTerm: null,
+      targetTerm: null,
+    };
+    expect(evalFindingSchema.parse(base)).toEqual(base);
+    expect(() =>
+      evalFindingSchema.parse({ ...base, sourceExcerpt: `${"ส".repeat(160)}x` }),
+    ).toThrow();
+    expect(() =>
+      evalFindingSchema.parse({
+        ...base,
+        type: "glossary-miss",
+        sourceTerm: null,
+        targetTerm: null,
+      }),
+    ).toThrow();
+  });
+
+  it("accepts version two summaries with the same aggregate invariants", () => {
+    expect(
+      evalSummaryV2Schema.parse({
+        version: 2,
+        languagePair: "en->th",
+        contextFingerprint: "a".repeat(64),
+        chapterCount: 1,
+        evaluatedChapterCount: 1,
+        skippedChapterCount: 0,
+        attentionChapterCount: 0,
+        residualScriptLetters: 0,
+        markerMismatches: 0,
+        matchedGlossaryTerms: 0,
+        adheredGlossaryTerms: 0,
+      }),
+    ).toMatchObject({ version: 2, chapterCount: 1 });
   });
 });

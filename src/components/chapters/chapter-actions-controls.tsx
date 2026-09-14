@@ -12,7 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 export interface ChapterActionsControlsProps {
-  unpublishedCount: number;
+  readyUnpublishedCount: number;
+  unreadyCount: number;
   onPublishAll: () => void;
   publishingAll: boolean;
   missingTitleCount: number;
@@ -26,7 +27,8 @@ export interface ChapterActionsControlsProps {
 }
 
 export function ChapterActionsControls({
-  unpublishedCount,
+  readyUnpublishedCount,
+  unreadyCount,
   onPublishAll,
   publishingAll,
   missingTitleCount,
@@ -50,11 +52,16 @@ export function ChapterActionsControls({
         <DropdownMenuGroup>
           <DropdownMenuLabel>Maintenance</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {unpublishedCount > 0 ? (
+          {readyUnpublishedCount > 0 ? (
             <DropdownMenuItem onClick={onPublishAll} disabled={publishingAll}>
               <Check className="size-4" />
-              {publishingAll ? "Publishing…" : `Publish all (${unpublishedCount})`}
+              {publishingAll ? "Publishing…" : `Publish ready chapters (${readyUnpublishedCount})`}
             </DropdownMenuItem>
+          ) : null}
+          {unreadyCount > 0 ? (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              {unreadyCount} chapter{unreadyCount === 1 ? "" : "s"} not ready to publish
+            </p>
           ) : null}
           {missingTitleCount > 0 ? (
             <DropdownMenuItem onClick={onBackfillTitles} disabled={backfillingTitles}>

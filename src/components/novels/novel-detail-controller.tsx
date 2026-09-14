@@ -76,8 +76,8 @@ export function NovelDetailController({
     );
   }
 
-  const viewModel: NovelDetailViewModel = { ...detail, novel: detail.novel };
-  const dialogDetail: NovelDetailDialogDetail = detail;
+  const viewModel: NovelDetailViewModel = { ...detail, novel: detail.novel, novelId };
+  const dialogDetail: NovelDetailDialogDetail = { ...detail, novelId };
 
   return (
     <div className="flex flex-col gap-8">

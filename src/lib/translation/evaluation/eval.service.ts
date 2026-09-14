@@ -10,14 +10,16 @@ import {
   glossaryTerms,
   novels,
   translationEvalReports,
-  translationOutbox,
+  workflowOutbox,
 } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import {
   EVAL_SELECTOR_ERROR,
-  getTranslationEvalReportSchema,
   evalStoredResultSchema,
+  evalStoredResultV2Schema,
   evalSummarySchema,
+  evalSummaryV2Schema,
+  getTranslationEvalReportSchema,
   legacyEvalStoredResultSchema,
   legacyEvalSummarySchema,
   startTranslationEvalSchema,
@@ -25,11 +27,12 @@ import {
   type EvalReportSummary,
   type EvalReviewRow,
   type EvalStoredResult,
+  type EvalStoredResultV2,
   type GetTranslationEvalReportInput,
   type LegacyEvalStoredResult,
   type StartTranslationEvalInput,
 } from "@/lib/translation/evaluation/eval.schemas";
-import { dispatchTranslationOutboxEventBestEffort } from "@/lib/translation/workflow/outbox";
+import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { nanoid } from "@/lib/utils";
 
 export const EVAL_FAILURE_ERROR = "Quality check failed. Run it again.";
@@ -55,19 +58,21 @@ type EvalReportRecord = {
 };
 
 type ParsedStoredReport =
+  | { kind: "v2"; summary: z.infer<typeof evalSummaryV2Schema>; rows: EvalStoredResultV2[] }
   | { kind: "v1"; summary: z.infer<typeof evalSummarySchema>; rows: EvalStoredResult[] }
   | {
       kind: "legacy";
       summary: z.infer<typeof legacyEvalSummarySchema>;
       rows: LegacyEvalStoredResult[];
     };
-
 function parseReportMeta(summaryJson: string | null) {
   if (!summaryJson) return null;
   try {
     const parsed: unknown = JSON.parse(summaryJson);
-    const result = evalSummarySchema.safeParse(parsed);
-    if (!result.success) return null;
+    const v2 = evalSummaryV2Schema.safeParse(parsed);
+    const v1 = v2.success ? null : evalSummarySchema.safeParse(parsed);
+    const result = v2.success ? v2 : v1;
+    if (!result || !result.success) return null;
     return {
       languagePair: result.data.languagePair,
       evaluatedChapterCount: result.data.evaluatedChapterCount,
@@ -118,7 +123,7 @@ export function createEvalContextFingerprint(
 export async function queueTranslationEvalForUser(
   userId: string,
   input: StartTranslationEvalInput,
-  dispatch: OutboxDispatch = dispatchTranslationOutboxEventBestEffort,
+  dispatch: OutboxDispatch = dispatchWorkflowOutboxEventBestEffort,
 ): Promise<{ reportId: string }> {
   const parsed = startTranslationEvalSchema.safeParse(input);
   if (!parsed.success) {
@@ -141,7 +146,7 @@ export async function queueTranslationEvalForUser(
       status: "pending",
       chapterSelector: parsed.data.chapterSelector,
     });
-    await tx.insert(translationOutbox).values({
+    await tx.insert(workflowOutbox).values({
       id: nextOutboxId,
       eventName: "translation/eval.requested",
       payloadJson: JSON.stringify({ reportId: nextReportId, runKey: nextReportId }),
@@ -190,6 +195,58 @@ export async function listTranslationEvalReportsForUser(
   return rows.map(toReportSummary);
 }
 
+type CurrentStoredRow = Pick<
+  EvalReviewRow,
+  | "chapterId"
+  | "evaluated"
+  | "residualScriptLetters"
+  | "markerMismatches"
+  | "matchedGlossaryTerms"
+  | "adheredGlossaryTerms"
+>;
+
+function currentReportIsConsistent(
+  summary: {
+    chapterCount: number;
+    evaluatedChapterCount: number;
+    skippedChapterCount: number;
+    attentionChapterCount: number;
+    residualScriptLetters: number;
+    markerMismatches: number;
+    matchedGlossaryTerms: number;
+    adheredGlossaryTerms: number;
+  },
+  rows: readonly CurrentStoredRow[],
+): boolean {
+  if (summary.chapterCount !== rows.length) return false;
+  const ids = new Set<string>();
+  const totals = {
+    chapterCount: 0,
+    evaluatedChapterCount: 0,
+    skippedChapterCount: 0,
+    attentionChapterCount: 0,
+    residualScriptLetters: 0,
+    markerMismatches: 0,
+    matchedGlossaryTerms: 0,
+    adheredGlossaryTerms: 0,
+  };
+  for (const row of rows) {
+    if (ids.has(row.chapterId)) return false;
+    ids.add(row.chapterId);
+    totals.chapterCount++;
+    if (row.evaluated) totals.evaluatedChapterCount++;
+    else totals.skippedChapterCount++;
+    if (hasAttention(row)) totals.attentionChapterCount++;
+    totals.residualScriptLetters += row.residualScriptLetters;
+    totals.markerMismatches += row.markerMismatches;
+    totals.matchedGlossaryTerms += row.matchedGlossaryTerms;
+    totals.adheredGlossaryTerms += row.adheredGlossaryTerms;
+  }
+  for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
+    if (totals[key] !== summary[key]) return false;
+  }
+  return true;
+}
 function parseStoredReport(
   summaryJson: string | null,
   resultsJson: string | null,
@@ -201,38 +258,18 @@ function parseStoredReport(
     const resultsValue: unknown = JSON.parse(resultsJson);
     if (!Array.isArray(resultsValue)) return null;
 
-    const currentSummary = evalSummarySchema.safeParse(summaryValue);
-    if (currentSummary.success) {
-      const currentRows = z.array(evalStoredResultSchema).safeParse(resultsValue);
-      if (!currentRows.success || currentSummary.data.chapterCount !== currentRows.data.length)
-        return null;
-      const ids = new Set<string>();
-      const totals = {
-        chapterCount: 0,
-        evaluatedChapterCount: 0,
-        skippedChapterCount: 0,
-        attentionChapterCount: 0,
-        residualScriptLetters: 0,
-        markerMismatches: 0,
-        matchedGlossaryTerms: 0,
-        adheredGlossaryTerms: 0,
-      };
-      for (const row of currentRows.data) {
-        if (ids.has(row.chapterId)) return null;
-        ids.add(row.chapterId);
-        totals.chapterCount++;
-        if (row.evaluated) totals.evaluatedChapterCount++;
-        else totals.skippedChapterCount++;
-        if (hasAttention(row)) totals.attentionChapterCount++;
-        totals.residualScriptLetters += row.residualScriptLetters;
-        totals.markerMismatches += row.markerMismatches;
-        totals.matchedGlossaryTerms += row.matchedGlossaryTerms;
-        totals.adheredGlossaryTerms += row.adheredGlossaryTerms;
-      }
-      for (const key of Object.keys(totals) as Array<keyof typeof totals>) {
-        if (totals[key] !== currentSummary.data[key]) return null;
-      }
-      return { kind: "v1", summary: currentSummary.data, rows: currentRows.data };
+    const v2Summary = evalSummaryV2Schema.safeParse(summaryValue);
+    if (v2Summary.success) {
+      const v2Rows = z.array(evalStoredResultV2Schema).safeParse(resultsValue);
+      if (!v2Rows.success || !currentReportIsConsistent(v2Summary.data, v2Rows.data)) return null;
+      return { kind: "v2", summary: v2Summary.data, rows: v2Rows.data };
+    }
+
+    const v1Summary = evalSummarySchema.safeParse(summaryValue);
+    if (v1Summary.success) {
+      const v1Rows = z.array(evalStoredResultSchema).safeParse(resultsValue);
+      if (!v1Rows.success || !currentReportIsConsistent(v1Summary.data, v1Rows.data)) return null;
+      return { kind: "v1", summary: v1Summary.data, rows: v1Rows.data };
     }
 
     const legacySummary = legacyEvalSummarySchema.safeParse(summaryValue);
@@ -274,11 +311,16 @@ function normalizeLegacyRow(row: LegacyEvalStoredResult): EvalReviewRow {
     missingGlossaryTerms: null,
     residualSpanCount: null,
     residualExamples: null,
+    findings: null,
     snapshotState: "unknown",
   };
 }
 
 function normalizeCurrentRow(row: EvalStoredResult): EvalReviewRow {
+  return { ...row, findings: null, snapshotState: "unknown" };
+}
+
+function normalizeV2Row(row: EvalStoredResultV2): EvalReviewRow {
   return { ...row, snapshotState: "unknown" };
 }
 
@@ -411,9 +453,11 @@ export async function getTranslationEvalReportForUser(
   }
 
   const normalizedRows = sortReviewRows(
-    parsed.kind === "v1"
-      ? parsed.rows.map(normalizeCurrentRow)
-      : parsed.rows.map(normalizeLegacyRow),
+    parsed.kind === "v2"
+      ? parsed.rows.map(normalizeV2Row)
+      : parsed.kind === "v1"
+        ? parsed.rows.map(normalizeCurrentRow)
+        : parsed.rows.map(normalizeLegacyRow),
   );
   const filteredRows = normalizedRows.filter((reviewRow) => {
     if (filter === "all") return true;
@@ -426,7 +470,7 @@ export async function getTranslationEvalReportForUser(
   const pageRows = filteredRows.slice((page - 1) * input.pageSize, page * input.pageSize);
 
   let contextChanged: boolean | null = null;
-  if (parsed.kind === "v1") {
+  if (parsed.kind !== "legacy") {
     const terms = await db
       .select({ source: glossaryTerms.source, target: glossaryTerms.target })
       .from(glossaryTerms)

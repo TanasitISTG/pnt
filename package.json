@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run --exclude '**/*.integration.test.ts' --exclude 'e2e/**'",
-    "test:integration": "vitest run src/lib/translation/workflow/workflow.integration.test.ts src/lib/translation/workflow/outbox.integration.test.ts src/lib/translation/workflow/chunk-migration.integration.test.ts src/lib/export/stream.integration.test.ts src/lib/content/novel-maintenance.integration.test.ts src/lib/content/chapter-edit.integration.test.ts src/lib/epub/import.integration.test.ts src/lib/job-dashboard/service.integration.test.ts src/lib/glossary/service.integration.test.ts src/lib/translation/evaluation/eval.integration.test.ts --fileParallelism=false --reporter=dot",
+    "test:integration": "vitest run src/lib/translation/workflow/workflow.integration.test.ts src/lib/inngest/outbox.integration.test.ts src/lib/translation/workflow/chunk-migration.integration.test.ts src/lib/export/stream.integration.test.ts src/lib/content/novel-maintenance.integration.test.ts src/lib/content/chapter-edit.integration.test.ts src/lib/content/publish.integration.test.ts src/lib/import/workflow.integration.test.ts src/lib/epub/import.integration.test.ts src/lib/job-dashboard/service.integration.test.ts src/lib/glossary/service.integration.test.ts src/lib/translation/evaluation/eval.integration.test.ts src/lib/auth/session-revocation.integration.test.ts --fileParallelism=false --reporter=dot",
     "test:e2e": "bun scripts/e2e/run.ts",
     "audit:release": "bun audit --audit-level=moderate",
     "lint": "oxlint",
@@ -63,7 +63,7 @@
     "posthog-js": "1.407.3",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "sharp": "0.35.3",
+    "sharp": "0.35.4",
     "sonner": "2.0.7",
     "tailwind-merge": "3.6.0",
     "tailwindcss": "4.3.3",
@@ -90,19 +90,21 @@
     "react-doctor": "0.9.2",
     "typescript": "6.0.3",
     "vite": "8.1.5",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   },
   "resolutions": {
     "postcss/nanoid": "3.3.18"
   },
   "overrides": {
-    "adm-zip": "0.6.0",
+    "adm-zip": "0.6.1",
+    "baseline-browser-mapping": "2.11.23",
     "brace-expansion": "5.0.9",
+    "browserslist": "4.28.9",
     "dompurify": "3.4.14",
     "esbuild": "0.25.12",
-    "fast-uri": "3.1.5",
+    "fast-uri": "3.1.6",
     "gaxios": "7.3.0",
-    "js-yaml": "4.3.1",
+    "js-yaml": "4.3.2",
     "postcss": "8.5.23",
     "undici": "7.29.0"
   },

@@ -91,6 +91,13 @@ function jobSecondaryLine(job: JobHistoryRow) {
   return job.sourceFileName ? `EPUB · ${job.sourceFileName}` : "EPUB import";
 }
 
+export function translationRuntime(job: JobHistoryTranslationRow) {
+  if (job.isLegacyProviderFallback || job.provider === null || job.model === null) {
+    return "Current provider settings · legacy fallback";
+  }
+  return `${job.provider} · ${job.model}`;
+}
+
 function jobRange(job: JobHistoryRow) {
   if (job.type === "translation") return `${job.doneChunks}/${job.totalChunks} chunks`;
   if (job.type === "epub" && job.toNumber === 0) return "Preparing…";
@@ -135,14 +142,25 @@ export function createJobHistoryColumns(actions: JobHistoryColumnActions) {
     columnHelper.accessor("type", {
       id: "type",
       header: ({ column }) => <SortableHeader column={column} label="Type" />,
-      cell: ({ row }) => (
-        <div className="min-w-[112px]">
-          <Badge variant="outline" className="font-medium">
-            {typeLabels[row.original.type]}
-          </Badge>
-          <p className="mt-1 text-[11px] text-muted-foreground">{typeDetail(row.original)}</p>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const job = row.original;
+        return (
+          <div className="min-w-[112px]">
+            <Badge variant="outline" className="font-medium">
+              {typeLabels[job.type]}
+            </Badge>
+            <p className="mt-1 text-[11px] text-muted-foreground">{typeDetail(job)}</p>
+            {job.type === "translation" ? (
+              <p
+                className="mt-0.5 max-w-[180px] truncate text-[11px] text-muted-foreground"
+                title={`Runtime · ${translationRuntime(job)}`}
+              >
+                Runtime · {translationRuntime(job)}
+              </p>
+            ) : null}
+          </div>
+        );
+      },
     }),
     columnHelper.accessor("status", {
       id: "status",

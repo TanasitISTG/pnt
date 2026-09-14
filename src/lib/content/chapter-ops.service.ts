@@ -3,18 +3,11 @@ import "@tanstack/react-start/server-only";
 import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import {
-  chapters,
-  glossaryTerms,
-  novels,
-  translationJobs,
-  translationOutbox,
-} from "@/lib/db/schema";
+import { chapters, glossaryTerms, novels, translationJobs } from "@/lib/db/schema";
 import { mapWithConcurrency } from "@/lib/async";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { nanoid } from "@/lib/utils";
-import { dispatchTranslationOutboxEventBestEffort } from "@/lib/translation/workflow/outbox";
-import { translationRunIdentity } from "@/lib/translation/workflow/job-state";
+import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
+import { cancelActiveTranslationJobsInTransaction } from "@/lib/translation/workflow/cancel";
 import { loadApprovedTermsForContext } from "@/lib/translation/workflow/job-store";
 import { createProviderClient } from "@/lib/translation/providers/provider-client";
 import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
@@ -38,8 +31,7 @@ export interface ResidualScriptChapter {
   count: number;
 }
 
-export async function getResidualScriptChaptersForUser(
-  userId: string,
+export async function getResidualScriptChaptersForOwnedNovel(
   novelId: string,
 ): Promise<ResidualScriptChapter[]> {
   const [novel] = await db
@@ -48,7 +40,7 @@ export async function getResidualScriptChaptersForUser(
       targetLang: novels.targetLang,
     })
     .from(novels)
-    .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+    .where(eq(novels.id, novelId))
     .limit(1);
 
   if (!novel) {
@@ -104,6 +96,18 @@ export async function getResidualScriptChaptersForUser(
   }
 
   return residualChapters;
+}
+export async function getResidualScriptChaptersForUser(
+  userId: string,
+  novelId: string,
+): Promise<ResidualScriptChapter[]> {
+  const [novel] = await db
+    .select({ id: novels.id })
+    .from(novels)
+    .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+    .limit(1);
+  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  return getResidualScriptChaptersForOwnedNovel(novelId);
 }
 
 export async function translateMissingTitlesForUser(
@@ -179,7 +183,7 @@ export async function translateMissingTitlesForUser(
 export async function deleteAllNovelTranslationsForUser(
   userId: string,
   novelId: string,
-  dispatch: (outboxId: string) => Promise<void> = dispatchTranslationOutboxEventBestEffort,
+  dispatch: (outboxId: string) => Promise<void> = dispatchWorkflowOutboxEventBestEffort,
 ): Promise<{ chaptersCleared: number; jobsCancelled: number }> {
   const result = await db.transaction(async (tx) => {
     const [novel] = await tx
@@ -200,28 +204,33 @@ export async function deleteAllNovelTranslationsForUser(
 
     const chapterIds = novelChapters.map((chapter) => chapter.id);
     const now = new Date();
-    const cancelledJobs =
+    const activeJobs =
       chapterIds.length === 0
         ? []
         : await tx
-            .update(translationJobs)
-            .set({ status: "cancelled", updatedAt: now })
+            .select({
+              id: translationJobs.id,
+              generation: translationJobs.generation,
+              logsJson: translationJobs.logsJson,
+            })
+            .from(translationJobs)
             .where(
               and(
                 inArray(translationJobs.chapterId, chapterIds),
                 sql`${translationJobs.status} IN ('pending', 'running')`,
               ),
             )
-            .returning({ id: translationJobs.id, generation: translationJobs.generation });
-
-    const cancellationOutboxRows = cancelledJobs.map((job) => ({
-      id: nanoid(),
-      eventName: "translation/job.cancelled",
-      payloadJson: JSON.stringify(translationRunIdentity(job)),
-    }));
-    if (cancellationOutboxRows.length > 0) {
-      await tx.insert(translationOutbox).values(cancellationOutboxRows);
-    }
+            .for("update");
+    const cancellation = await cancelActiveTranslationJobsInTransaction(
+      tx,
+      activeJobs.map((job) => ({
+        jobId: job.id,
+        generation: job.generation,
+        logsJson: job.logsJson,
+        message: "Translation cancelled because all translations were deleted.",
+      })),
+      now,
+    );
 
     const chaptersToClear = novelChapters.filter(
       (chapter) =>
@@ -262,9 +271,9 @@ export async function deleteAllNovelTranslationsForUser(
     }
 
     return {
-      outboxIds: cancellationOutboxRows.map((row) => row.id),
+      outboxIds: cancellation.outboxIds,
       chaptersCleared: chaptersToClear.length,
-      jobsCancelled: cancelledJobs.length,
+      jobsCancelled: cancellation.cancelledJobs.length,
     };
   });
 

@@ -165,10 +165,12 @@ export function ImportJobDetailsDialog({ jobId, open, onOpenChange }: ImportJobD
     queryKey: ["import-job-details", jobId],
     queryFn: () => getImportJobStatus({ data: { jobId: jobId! } }),
     enabled: open && jobId !== null,
+    staleTime: 2_000,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === "pending" || status === "running" ? 1_500 : false;
+      return status === "pending" || status === "running" ? 5_000 : false;
     },
+    refetchIntervalInBackground: false,
   });
 
   if (!open || jobId === null) return null;
@@ -185,6 +187,14 @@ export function ImportJobDetailsDialog({ jobId, open, onOpenChange }: ImportJobD
             Inspect the source, range, counters, and worker result for this import run.
           </DialogDescription>
         </DialogHeader>
+        {jobQuery.isError && job ? (
+          <QueryErrorState
+            title="Unable to refresh import details"
+            error={jobQuery.error}
+            onRetry={() => void jobQuery.refetch()}
+            className="my-0 min-h-0 rounded-lg p-3"
+          />
+        ) : null}
 
         <ImportDialogBody
           job={job}

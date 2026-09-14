@@ -1,6 +1,6 @@
 import { getRouteApi } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -10,9 +10,12 @@ import { JobLogsDialog } from "@/components/translation/job-logs-dialog";
 import { Metric } from "@/components/jobs/metric";
 import { Button } from "@/components/ui/button";
 import {
+  activityQueryOptions,
+  JOB_ACTIVITY_QUERY_KEY,
   historyQueryOptions,
   JOB_HISTORY_QUERY_KEY,
   JOB_STATS_QUERY_KEY,
+  mergeJobActivityIntoHistory,
   statsQueryOptions,
 } from "@/lib/job-dashboard/query";
 import type {
@@ -57,6 +60,23 @@ export function JobsPage() {
   const queryClient = useQueryClient();
   const historyQuery = useQuery(historyQueryOptions(search));
   const statsQuery = useQuery(statsQueryOptions());
+  const activityQuery = useQuery(activityQueryOptions());
+  const previousActivityIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const activities = activityQuery.data;
+    if (!activities) return;
+    const currentIds = new Set(activities.map((activity) => activity.id));
+    const previousIds = previousActivityIdsRef.current;
+    previousActivityIdsRef.current = currentIds;
+    if (previousIds.size === 0) return;
+    const activityEnded = [...previousIds].some((id) => !currentIds.has(id));
+    if (activityEnded) {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: JOB_HISTORY_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: JOB_STATS_QUERY_KEY }),
+      ]);
+    }
+  }, [activityQuery.data, queryClient]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [operation, setOperation] = useState<Operation>(null);
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
@@ -80,7 +100,11 @@ export function JobsPage() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const results = await Promise.allSettled([historyQuery.refetch(), statsQuery.refetch()]);
+      const results = await Promise.allSettled([
+        historyQuery.refetch(),
+        statsQuery.refetch(),
+        activityQuery.refetch(),
+      ]);
       const failed = results.some(
         (result) =>
           result.status === "rejected" || (result.status === "fulfilled" && result.value.isError),
@@ -95,9 +119,12 @@ export function JobsPage() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: JOB_HISTORY_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: JOB_STATS_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: ["chapters", job.novelId] }),
+      queryClient.invalidateQueries({ queryKey: JOB_ACTIVITY_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: ["novels"] }),
+      queryClient.invalidateQueries({ queryKey: ["chapters", job.novelId] }),
+      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", job.novelId] }),
       queryClient.invalidateQueries({ queryKey: ["costs", job.novelId] }),
+      queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", job.novelId] }),
     ]);
   };
 
@@ -185,6 +212,13 @@ export function JobsPage() {
   );
 
   const stats = statsQuery.data ?? EMPTY_STATS;
+  const history = useMemo(
+    () =>
+      historyQuery.data
+        ? mergeJobActivityIntoHistory(historyQuery.data, activityQuery.data ?? [])
+        : undefined,
+    [activityQuery.data, historyQuery.data],
+  );
   const totalTokens = Number(stats.promptTokens) + Number(stats.completionTokens);
   const compactTokenCount = useMemo(
     () =>
@@ -212,6 +246,17 @@ export function JobsPage() {
           {isRefreshing ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
+      {activityQuery.isError ? (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          <span>Live job progress is unavailable; retained history is still shown.</span>
+          <Button size="sm" variant="outline" onClick={() => void activityQuery.refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
@@ -224,7 +269,7 @@ export function JobsPage() {
           }
         />
         <Metric
-          label="Failed jobs"
+          label="Needs attention"
           value={stats.failedTranslationJobs + stats.failedImportJobs}
           detail={
             <>
@@ -246,15 +291,15 @@ export function JobsPage() {
       </div>
 
       <JobHistoryTable
+        search={search}
         query={{
-          page: historyQuery.data,
+          page: history,
           isPending: historyQuery.isPending,
           isFetching: historyQuery.isFetching,
           isPlaceholderData: historyQuery.isPlaceholderData,
           isError: historyQuery.isError,
           error: historyQuery.error,
         }}
-        search={search}
         onRetry={() => void historyQuery.refetch()}
         onSearchChange={updateSearch}
         pendingJobId={pendingJobId}

@@ -4,12 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 import type { JobHistorySearch } from "@/lib/job-dashboard/contracts";
 
 vi.mock("@/lib/job-dashboard/functions", () => ({
+  getJobActivity: vi.fn(),
   getJobHistory: vi.fn(),
   getJobStats: vi.fn(),
 }));
 import {
+  activityQueryOptions,
   historyQueryOptions,
   hydrateJobDashboardQueries,
+  JOB_ACTIVITY_QUERY_KEY,
   JOB_HISTORY_QUERY_KEY,
   JOB_STATS_QUERY_KEY,
   statsQueryOptions,
@@ -50,16 +53,13 @@ describe("Jobs query contracts", () => {
     );
   });
 
-  it("keeps history and stats on independent cadences", () => {
-    expect(historyQueryOptions(search)).toMatchObject({
-      refetchInterval: 5_000,
-      placeholderData: expect.any(Function),
-    });
-    expect(statsQueryOptions()).toMatchObject({
-      queryKey: JOB_STATS_QUERY_KEY,
-      refetchInterval: 60_000,
-      staleTime: 60_000,
-    });
+  it("polls only active activity and leaves retained queries focus-driven", () => {
+    expect(historyQueryOptions(search).placeholderData).toEqual(expect.any(Function));
+    expect(historyQueryOptions(search).refetchInterval).toBeUndefined();
+    expect(statsQueryOptions().refetchInterval).toBeUndefined();
+    expect(statsQueryOptions().staleTime).toBe(60_000);
+    expect(activityQueryOptions().queryKey).toEqual(JOB_ACTIVITY_QUERY_KEY);
+    expect(typeof activityQueryOptions().refetchInterval).toBe("function");
   });
 
   it("hydrates the exact history page and stats cache entries", () => {

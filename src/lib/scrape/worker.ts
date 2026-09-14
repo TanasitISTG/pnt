@@ -13,9 +13,7 @@ import { fetchAndParse, fetchHtml } from "@/lib/scrape/server";
 import {
   loadImportJob,
   markImportJobRunning,
-  bumpImportJob,
-  findChapterByNumber,
-  insertRawChapter,
+  commitScrapeImportChapter,
   markImportJobDone,
   markImportJobError,
 } from "@/lib/import/job-store";
@@ -74,15 +72,12 @@ export async function importOneChapter(
   if (source.name === "twkan" || source.name === "biquge") {
     const foundUrl = chapterUrls ? chapterUrls[n] : undefined;
     if (!foundUrl) {
+      const error = `Chapter ${n} URL missing in TOC`;
       log("warn", "Scrape worker chapter import failed: missing URL in TOC", {
         jobId,
         chapterNumber: n,
       });
-      await bumpImportJob(jobId, n + 1, {
-        failed: job.failed + 1,
-        error: `Chapter ${n} URL missing in TOC`,
-      });
-      return { stop: false as const, created: false };
+      return commitScrapeImportChapter(jobId, n, { kind: "failed", error });
     }
     targetUrl = foundUrl;
   } else {
@@ -93,34 +88,21 @@ export async function importOneChapter(
   try {
     scraped = await fetchAndParse(targetUrl, provider);
   } catch (e) {
-    const errorMsg = e instanceof Error ? e.message : String(e);
+    const error = e instanceof Error ? e.message : String(e);
     log("warn", "Scrape worker chapter import failed", {
       jobId,
       chapterNumber: n,
-      error: errorMsg,
+      error,
     });
-    await bumpImportJob(jobId, n + 1, {
-      failed: job.failed + 1,
-      error: errorMsg,
-    });
-    return { stop: false as const, created: false };
+    return commitScrapeImportChapter(jobId, n, { kind: "failed", error });
   }
 
-  const existing = await findChapterByNumber(job.novelId, n.toString());
-
-  if (existing) {
-    await bumpImportJob(jobId, n + 1, { skipped: job.skipped + 1 });
-    return { stop: false as const, created: false };
-  }
-
-  await insertRawChapter({
-    novelId: job.novelId,
+  return commitScrapeImportChapter(jobId, n, {
+    kind: "added",
     number: n.toString(),
     title: scraped.title,
     content: scraped.content,
   });
-  await bumpImportJob(jobId, n + 1, { added: job.added + 1 });
-  return { stop: false as const, created: true };
 }
 
 export async function finishImportJob(jobId: string) {

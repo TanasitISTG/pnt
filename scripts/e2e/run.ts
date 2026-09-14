@@ -262,7 +262,7 @@ try {
     "warn",
   ]);
   await waitForHttp("Inngest", `${inngestUrl}/health`, inngest, 45_000);
-  await Bun.sleep(1_000);
+  await Bun.sleep(5_000);
 
   await run(
     ["node", "node_modules/@playwright/test/cli.js", "test", "--config", "playwright.config.ts"],

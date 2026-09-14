@@ -34,6 +34,10 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["glossaryTerms", novelId] });
     queryClient.invalidateQueries({ queryKey: ["glossaryStats", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["chapter"] });
+    queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
   };
 
   const { mutateAsync: addTerm, isPending: addingTerm } = useMutation({

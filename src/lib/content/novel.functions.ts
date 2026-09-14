@@ -9,13 +9,17 @@ import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { createServerTiming } from "@/lib/server-timing";
-import { novelLive, chapterLive } from "@/lib/content/publish";
+import { novelLive, chapterVisibleToGuests } from "@/lib/content/publish";
 import {
   createNovelSchema,
   updateNovelSchema,
   setNovelPublishedSchema,
 } from "@/lib/content/novel.schemas";
 import { updateNovelForUser } from "@/lib/content/novel-edit.service";
+import {
+  getAdminNovelDetailCoreForUser,
+  getAdminNovelDetailMetricsForUser,
+} from "@/lib/content/admin-novel-detail.service";
 
 export interface NovelListItem {
   id: string;
@@ -63,7 +67,7 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
             chapters,
             session
               ? eq(chapters.novelId, novels.id)
-              : and(eq(chapters.novelId, novels.id), chapterLive()),
+              : and(eq(chapters.novelId, novels.id), chapterVisibleToGuests()),
           )
           .where(session ? eq(novels.userId, session.user.id) : novelLive())
           .groupBy(novels.id)
@@ -124,6 +128,64 @@ export const getNovel = createServerFn({ method: "GET" })
         customPrompt: session ? novel.customPrompt : null,
       };
     });
+  });
+
+export const getReaderNovel = createServerFn({ method: "GET" })
+  .validator(z.object({ novelId: z.string() }))
+  .handler(async ({ data }) => {
+    return withSafeHandler(async () => {
+      const session = await getSession();
+      if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
+
+      const [novel] = await db
+        .select({
+          id: novels.id,
+          title: novels.title,
+          description: novels.description,
+          sourceLang: novels.sourceLang,
+          targetLang: novels.targetLang,
+        })
+        .from(novels)
+        .where(
+          session
+            ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
+            : and(eq(novels.id, data.novelId), novelLive()),
+        )
+        .limit(1);
+
+      return novel ?? null;
+    });
+  });
+export const getAdminNovelDetailCore = createServerFn({ method: "GET" })
+  .validator(z.object({ novelId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const timing = createServerTiming();
+    try {
+      return await withSafeHandler(async () => {
+        const session = await timing.measure("auth", () => ensureSession());
+        return timing.measure("core", () =>
+          getAdminNovelDetailCoreForUser(session.user.id, data.novelId),
+        );
+      });
+    } finally {
+      timing.flush();
+    }
+  });
+
+export const getAdminNovelDetailMetrics = createServerFn({ method: "GET" })
+  .validator(z.object({ novelId: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const timing = createServerTiming();
+    try {
+      return await withSafeHandler(async () => {
+        const session = await timing.measure("auth", () => ensureSession());
+        return timing.measure("metrics", () =>
+          getAdminNovelDetailMetricsForUser(session.user.id, data.novelId),
+        );
+      });
+    } finally {
+      timing.flush();
+    }
   });
 
 export function assertCoverMagicBytes(buffer: Uint8Array, mime: string): void {

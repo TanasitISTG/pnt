@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ReaderSettings } from "@/lib/reader/types";
 import { useTranslationJob } from "@/components/translation/use-translation-job";
-import { alignParagraphs, splitParagraphs } from "@/lib/translation/text/paragraphs";
+import { alignParagraphArrays, splitParagraphs } from "@/lib/translation/text/paragraphs";
+import type { ReaderTranslationStatus } from "./reader-content-types";
 import { useChapterEditor } from "./use-chapter-editor";
 import { useChapterNav } from "./use-chapter-nav";
 import { useReaderHotkeys } from "./reader-page-hotkeys";
@@ -13,6 +14,21 @@ import {
   type ReaderNovelData,
   type ReaderPageViewProps,
 } from "./reader-page-view";
+
+function getReaderTranslationStatus(
+  activeJobStatus: string | undefined,
+  chapterStatus: string,
+): ReaderTranslationStatus {
+  if (activeJobStatus === "pending") return "queued";
+  if (activeJobStatus === "running") return "running";
+  if (activeJobStatus === "error") return "error";
+  if (activeJobStatus === "cancelled") return "cancelled";
+  if (chapterStatus === "queued") return "queued";
+  if (chapterStatus === "translating") return "running";
+  if (chapterStatus === "error") return "error";
+  if (chapterStatus === "cancelled") return "cancelled";
+  return "idle";
+}
 
 export interface ReaderPageControllerProps {
   novelId: string;
@@ -48,13 +64,19 @@ export function useReaderPageController({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [panel, setPanel] = useState<"chapters" | "settings" | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const { start: startTranslate, activeJobs } = useTranslationJob(novelId, !!user);
+  const {
+    start: startTranslate,
+    activeJobs,
+    activeJobsError,
+    refetchActiveJobs,
+  } = useTranslationJob(novelId, !!user);
   const activeJob = activeJobs.get(chapterId);
   const jobRunning =
     activeJob?.status === "pending" ||
     activeJob?.status === "running" ||
     chapter.status === "queued" ||
     chapter.status === "translating";
+  const translationStatus = getReaderTranslationStatus(activeJob?.status, chapter.status);
   const editor = useChapterEditor({
     chapterId,
     novelId,
@@ -71,9 +93,9 @@ export function useReaderPageController({
   const aligned = useMemo(
     () =>
       translatedParagraphs.length > 0
-        ? alignParagraphs(chapter.rawContent, chapter.translatedContent ?? "")
+        ? alignParagraphArrays(rawParagraphs, translatedParagraphs)
         : [],
-    [chapter.rawContent, chapter.translatedContent, translatedParagraphs.length],
+    [rawParagraphs, translatedParagraphs],
   );
   const hasTranslation = translatedParagraphs.length > 0;
   const overlayOpen =
@@ -114,21 +136,21 @@ export function useReaderPageController({
     const isIdle = currentStatus !== "pending" && currentStatus !== "running";
     if (wasRunning && isIdle) {
       void queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] });
-      void queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      void queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
     }
   }, [activeJob?.status, chapterId, novelId, queryClient]);
 
   const handleTranslateRequest = useCallback(() => {
-    if (chapter.editedAt) {
+    if (hasTranslation) {
       setRetranslateConfirmOpen(true);
       return;
     }
-    void startTranslate(chapterId);
-  }, [chapter.editedAt, chapterId, startTranslate]);
+    void startTranslate(chapterId, "missing");
+  }, [chapterId, hasTranslation, startTranslate]);
 
   const handleConfirmRetranslate = useCallback(() => {
     setRetranslateConfirmOpen(false);
-    void startTranslate(chapterId);
+    void startTranslate(chapterId, "overwrite");
   }, [chapterId, startTranslate]);
 
   const readerFontClass = settings.typeface === "reader" ? "font-reader" : undefined;
@@ -149,11 +171,14 @@ export function useReaderPageController({
     readerFontClass,
     settings,
     update,
-    theme,
-    setTheme,
     isAdmin: !!user,
     editing: editor.editing,
     jobRunning,
+    translationStatus,
+    translationStatusError: activeJobsError,
+    retryTranslationStatus: refetchActiveJobs,
+    theme,
+    setTheme,
     activeJob,
     panel,
     onPanelChange: setPanel,

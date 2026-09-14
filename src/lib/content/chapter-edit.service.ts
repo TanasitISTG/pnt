@@ -3,11 +3,10 @@ import "@tanstack/react-start/server-only";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { chapters, novels, translationJobs, translationOutbox } from "@/lib/db/schema";
+import { chapters, novels, translationJobs } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { dispatchTranslationOutboxEventBestEffort } from "@/lib/translation/workflow/outbox";
-import { translationRunIdentity } from "@/lib/translation/workflow/job-state";
-import { nanoid } from "@/lib/utils";
+import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
+import { cancelActiveTranslationJobsInTransaction } from "@/lib/translation/workflow/cancel";
 import type { ReorderChaptersInput } from "@/lib/content/novel.schemas";
 
 type OutboxDispatch = (outboxId: string) => Promise<void>;
@@ -29,7 +28,7 @@ function normalizeTranslatedTitle(value: string | null): string | null {
 export async function updateChapterForUser(
   userId: string,
   input: ChapterUpdateInput,
-  dispatch: OutboxDispatch = dispatchTranslationOutboxEventBestEffort,
+  dispatch: OutboxDispatch = dispatchWorkflowOutboxEventBestEffort,
 ): Promise<{ id: string }> {
   const outboxId = await db.transaction(async (tx) => {
     const [existing] = await tx
@@ -118,19 +117,32 @@ export async function updateChapterForUser(
           : chapter.editedAt;
     const clearDerivedArtifacts = sourceChanged || translatedContentChanged;
 
-    let cancelledJob: { id: string; generation: number } | undefined;
+    let cancellationOutboxId: string | null = null;
     if (chapter.activeTranslationJobId) {
-      const [job] = await tx
-        .update(translationJobs)
-        .set({ status: "cancelled", updatedAt: now })
-        .where(
-          and(
-            eq(translationJobs.id, chapter.activeTranslationJobId),
-            sql`${translationJobs.status} IN ('pending', 'running')`,
-          ),
-        )
-        .returning({ id: translationJobs.id, generation: translationJobs.generation });
-      cancelledJob = job;
+      const [activeJob] = await tx
+        .select({
+          id: translationJobs.id,
+          generation: translationJobs.generation,
+          logsJson: translationJobs.logsJson,
+        })
+        .from(translationJobs)
+        .where(eq(translationJobs.id, chapter.activeTranslationJobId))
+        .for("update");
+      if (activeJob) {
+        const cancellation = await cancelActiveTranslationJobsInTransaction(
+          tx,
+          [
+            {
+              jobId: activeJob.id,
+              generation: activeJob.generation,
+              logsJson: activeJob.logsJson,
+              message: "Translation cancelled because the chapter was edited.",
+            },
+          ],
+          now,
+        );
+        cancellationOutboxId = cancellation.outboxIds[0] ?? null;
+      }
     }
 
     const updateValues: Record<string, unknown> = {
@@ -160,15 +172,7 @@ export async function updateChapterForUser(
         .where(eq(novels.id, chapter.novelId));
     }
 
-    if (!cancelledJob) return null;
-
-    const id = nanoid();
-    await tx.insert(translationOutbox).values({
-      id,
-      eventName: "translation/job.cancelled",
-      payloadJson: JSON.stringify(translationRunIdentity(cancelledJob)),
-    });
-    return id;
+    return cancellationOutboxId;
   });
 
   if (outboxId) await dispatch(outboxId);

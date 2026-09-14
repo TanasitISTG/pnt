@@ -1,3 +1,4 @@
+import { QueryErrorState } from "@/components/query-error-state";
 import { NovelHeader } from "@/components/novels/novel-header";
 import { AddChapterSection } from "@/components/chapters/add-chapter-section";
 import { NovelDetailChapterPanel } from "@/components/novels/novel-detail-chapter-panel";
@@ -9,7 +10,6 @@ import type { EvalReviewSearch } from "@/lib/translation/evaluation/eval.schemas
 import type { DetailSection, NovelDetailSearch } from "@/components/novels/novel-detail-search";
 import type { ChapterRow } from "@/components/chapters/types";
 import type { NovelHeaderProps } from "@/components/novels/novel-header";
-
 export interface NovelDetailViewModel
   extends NovelDetailChapterPanelDetail, NovelDetailDialogDetail {
   novel: NovelHeaderProps["novel"] | undefined;
@@ -24,6 +24,9 @@ export interface NovelDetailViewModel
   publishNovel: NovelHeaderProps["onPublishNovel"];
   chaptersReady: boolean;
   invalidateChapters: () => void;
+  metricsError: unknown;
+  isMetricsError: boolean;
+  refetchMetrics: () => Promise<unknown>;
 }
 
 export interface NovelDetailSectionsProps {
@@ -97,8 +100,18 @@ export function NovelDetailSections({
         onExportEpub={handleExportEpub}
         onDeleteNovel={() => setDeleteNovelOpen(true)}
       />
-
       <hr className="border-border" />
+
+      {isAdmin && detail.isMetricsError ? (
+        <QueryErrorState
+          title="Failed to refresh novel metrics"
+          error={detail.metricsError}
+          onRetry={() => {
+            void detail.refetchMetrics();
+          }}
+          className="my-0 p-4"
+        />
+      ) : null}
 
       {isAdmin ? (
         <Tabs value={section} onValueChange={onSectionChange}>

@@ -376,7 +376,7 @@ async function readPairChangeSnapshot(novelId: string): Promise<PairChangeSnapsh
 
 async function deletePairChangeFixture(fixture: PairChangeFixture) {
   await sql`
-    DELETE FROM "translation_outbox"
+    DELETE FROM "workflow_outbox"
     WHERE "payload_json"::jsonb ->> 'novelId' = ${fixture.novelId}
   `;
   await sql`DELETE FROM "user" WHERE "id" = ${fixture.userId}`;
@@ -384,7 +384,7 @@ async function deletePairChangeFixture(fixture: PairChangeFixture) {
 
 async function deleteFixture(fixture: MaintenanceFixture) {
   await sql`
-    DELETE FROM "translation_outbox"
+    DELETE FROM "workflow_outbox"
     WHERE "payload_json"::jsonb ->> 'jobId' IN (${fixture.doneJobId}, ${fixture.runningJobId})
   `;
   await sql`DELETE FROM "user" WHERE "id" IN (${fixture.ownerUserId}, ${fixture.otherUserId})`;
@@ -503,6 +503,7 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
           fixture.userId,
           fixture.chapterId,
           { model: "integration-model" } as never,
+          "overwrite",
           skipEagerDispatch,
         ),
       ]);
@@ -641,7 +642,7 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
         Array<{ status: string; payload: { jobId: string; generation: number } }>
       >`
         SELECT "status", "payload_json"::jsonb AS "payload"
-        FROM "translation_outbox"
+        FROM "workflow_outbox"
         WHERE "event_name" = 'translation/job.cancelled'
           AND "payload_json"::jsonb ->> 'jobId' = ${fixture.runningJobId}
       `;
@@ -664,7 +665,7 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
       expect(afterRepeat.updatedAt).toBe(beforeRepeat.updatedAt);
       const repeatedEvents = await sql`
         SELECT "id"
-        FROM "translation_outbox"
+        FROM "workflow_outbox"
         WHERE "event_name" = 'translation/job.cancelled'
           AND "payload_json"::jsonb ->> 'jobId' = ${fixture.runningJobId}
       `;

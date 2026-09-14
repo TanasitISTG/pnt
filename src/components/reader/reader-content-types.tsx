@@ -1,3 +1,5 @@
+export type ReaderTranslationStatus = "idle" | "queued" | "running" | "error" | "cancelled";
+
 export interface ReaderContentProps {
   hasTranslation: boolean;
   viewMode: "side" | "translated" | "raw";
@@ -8,4 +10,9 @@ export interface ReaderContentProps {
   readerFontClass?: string;
   sourceLang?: string;
   targetLang?: string;
+  isAdmin?: boolean;
+  translationStatus?: ReaderTranslationStatus;
+  jobRunning?: boolean;
+  onTranslateRequest?: () => void;
+  onEditRequest?: () => void;
 }

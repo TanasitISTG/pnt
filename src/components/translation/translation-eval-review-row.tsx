@@ -38,7 +38,7 @@ export function TranslationEvalReviewRow({
               {snapshotLabel(row.snapshotState)}
             </Badge>
           </div>
-          <ReviewRowDetails row={row} />
+          <ReviewRowDetails novelId={novelId} row={row} />
         </div>
 
         <div className="flex flex-wrap gap-2 lg:justify-end">

@@ -374,6 +374,94 @@ function GlossaryTableBody({
   );
 }
 
+function GlossaryMobileRows({
+  rows,
+  actions,
+}: {
+  rows: GlossaryListRow[];
+  actions: GlossaryTableActions;
+}) {
+  return (
+    <div
+      className="divide-y divide-border md:hidden"
+      aria-label="Mobile glossary terms"
+      role="region"
+    >
+      {rows.map((term) => (
+        <article key={term.id} className="space-y-3 p-4">
+          <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+            <div className="min-w-0">
+              <p className="text-caption text-muted-foreground">Source</p>
+              <p className="break-words font-medium text-foreground">{term.source}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-caption text-muted-foreground">Target</p>
+              <p className="break-words text-foreground">{term.target}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <CategoryBadge category={term.category} />
+            <StatusBadge status={term.status} />
+          </div>
+          {term.note ? (
+            <p className="break-words text-caption text-muted-foreground">{term.note}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              className="min-h-11"
+              variant="outline"
+              disabled={actions.pending}
+              onClick={() => actions.onEdit(term)}
+            >
+              Edit
+            </Button>
+            {term.status === "pending" ? (
+              <>
+                <Button
+                  size="sm"
+                  className="min-h-11"
+                  disabled={actions.pending}
+                  onClick={() => actions.onApprove(term.id)}
+                >
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  className="min-h-11"
+                  variant="outline"
+                  disabled={actions.pending}
+                  onClick={() => actions.onReject(term.id)}
+                >
+                  Reject
+                </Button>
+              </>
+            ) : term.status === "rejected" ? (
+              <Button
+                size="sm"
+                className="min-h-11"
+                disabled={actions.pending}
+                onClick={() => actions.onApprove(term.id)}
+              >
+                Restore
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              className="min-h-11"
+              variant="destructive"
+              disabled={actions.pending}
+              onClick={() => actions.onDelete(term.id)}
+            >
+              Delete
+            </Button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 export function GlossaryTable({
   query,
   search,
@@ -477,8 +565,39 @@ export function GlossaryTable({
       />
 
       <GlossaryUpdateError visible={isError && Boolean(page)} error={error} onRetry={onRetry} />
+      {isPending && !page ? (
+        <div className="p-6 text-center text-sm text-muted-foreground md:hidden" aria-live="polite">
+          Loading glossary terms…
+        </div>
+      ) : noRows ? (
+        <div className="space-y-2 p-6 text-center md:hidden">
+          <p className="text-sm font-medium text-foreground">
+            {filtered ? "No terms match these filters" : "No glossary terms yet"}
+          </p>
+          <p className="text-caption text-muted-foreground">
+            {filtered
+              ? "Try a different search or clear the filters."
+              : "Add a term to get started."}
+          </p>
+          {filtered ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onSearchChange(CLEAR_GLOSSARY_FILTERS, true)}
+            >
+              Clear filters
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <GlossaryMobileRows rows={data} actions={actions} />
+      )}
 
-      <div className="overflow-x-auto">
+      <div
+        className="hidden overflow-x-auto md:block"
+        aria-label="Desktop glossary terms"
+        role="region"
+      >
         <Table className="min-w-[860px] text-caption">
           <TableHeader className="bg-muted/20">
             {table.getHeaderGroups().map((headerGroup) => (

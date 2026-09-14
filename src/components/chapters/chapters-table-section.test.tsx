@@ -22,6 +22,7 @@ function createChapters(count: number): ChapterRow[] {
     number: String(index + 1),
     title: `Chapter ${index + 1}`,
     translatedTitle: null,
+    hasTranslation: false,
     status: "raw",
     rawCharCount: 1000,
     publishedAt: null,

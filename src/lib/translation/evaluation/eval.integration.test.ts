@@ -3,10 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
 import type * as EvalService from "./eval.service";
 import type * as EvalWorker from "./eval-worker";
-import type * as Outbox from "@/lib/translation/workflow/outbox";
+import type * as Outbox from "@/lib/inngest/outbox";
 import type * as ChapterEdit from "@/lib/content/chapter-edit.service";
-
-import { EVAL_SELECTOR_ERROR, evalStoredResultSchema, evalSummarySchema } from "./eval.schemas";
+import { EVAL_SELECTOR_ERROR, evalStoredResultV2Schema, evalSummaryV2Schema } from "./eval.schemas";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
@@ -15,7 +14,7 @@ let sql: Sql;
 let queueTranslationEvalForUser: typeof EvalService.queueTranslationEvalForUser;
 let listTranslationEvalReportsForUser: typeof EvalService.listTranslationEvalReportsForUser;
 let getTranslationEvalReportForUser: typeof EvalService.getTranslationEvalReportForUser;
-let dispatchTranslationOutboxEvent: typeof Outbox.dispatchTranslationOutboxEvent;
+let dispatchWorkflowOutboxEvent: typeof Outbox.dispatchWorkflowOutboxEvent;
 let runTranslationEvalReport: typeof EvalWorker.runTranslationEvalReport;
 let failTranslationEvalReport: typeof EvalWorker.failTranslationEvalReport;
 let updateChapterForUser: typeof ChapterEdit.updateChapterForUser;
@@ -112,7 +111,7 @@ async function seedFixture(
 async function cleanupFixture(fixture: Fixture): Promise<void> {
   for (const reportId of fixture.reportIds) {
     await sql`
-      DELETE FROM "translation_outbox"
+      DELETE FROM "workflow_outbox"
       WHERE "payload_json"::jsonb ->> 'reportId' = ${reportId}
     `;
   }
@@ -148,9 +147,13 @@ async function readReport(reportId: string): Promise<ReportRow> {
 }
 
 function parseCurrentSnapshot(row: ReportRow) {
-  const summary = evalSummarySchema.parse(JSON.parse(row.summaryJson ?? "null"));
-  const results = evalStoredResultSchema.array().parse(JSON.parse(row.resultsJson ?? "null"));
+  const summary = evalSummaryV2Schema.parse(JSON.parse(row.summaryJson ?? "null"));
+  const results = evalStoredResultV2Schema.array().parse(JSON.parse(row.resultsJson ?? "null"));
   return { summary, results };
+}
+
+function unicodeLength(value: string | null): number {
+  return value ? [...value].length : 0;
 }
 
 integrationDescribe("translation evaluation workflow PostgreSQL invariants", () => {
@@ -168,7 +171,7 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
       getTranslationEvalReportForUser,
     } = await import("./eval.service"));
     ({ runTranslationEvalReport, failTranslationEvalReport } = await import("./eval-worker"));
-    ({ dispatchTranslationOutboxEvent } = await import("@/lib/translation/workflow/outbox"));
+    ({ dispatchWorkflowOutboxEvent } = await import("@/lib/inngest/outbox"));
     ({ updateChapterForUser } = await import("@/lib/content/chapter-edit.service"));
   });
 
@@ -196,7 +199,7 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
       const [counts] = await sql<{ reports: number; outbox: number }[]>`
         SELECT
           (SELECT count(*)::int FROM "translation_eval_reports" WHERE "novel_id" = ${fixture.novelId}) AS "reports",
-          (SELECT count(*)::int FROM "translation_outbox" o JOIN "translation_eval_reports" r ON o."payload_json"::jsonb ->> 'reportId' = r.id WHERE r.novel_id = ${fixture.novelId}) AS "outbox"
+          (SELECT count(*)::int FROM "workflow_outbox" o JOIN "translation_eval_reports" r ON o."payload_json"::jsonb ->> 'reportId' = r.id WHERE r.novel_id = ${fixture.novelId}) AS "outbox"
       `;
       expect(counts).toEqual({ reports: 0, outbox: 0 });
 
@@ -307,7 +310,7 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
         fixture.ownerUserId,
         { novelId: fixture.novelId, chapterSelector: "all" },
         async (outboxId) => {
-          await dispatchTranslationOutboxEvent(outboxId, async () => {
+          await dispatchWorkflowOutboxEvent(outboxId, async () => {
             sendAttempts += 1;
             if (sendAttempts === 1) throw new Error("network unavailable");
           });
@@ -315,21 +318,21 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
       );
       fixture.reportIds.push(reportId);
       const [pending] = await sql<{ status: string; attempts: number }[]>`
-        SELECT "status", "attempts" FROM "translation_outbox"
+        SELECT "status", "attempts" FROM "workflow_outbox"
         WHERE "payload_json"::jsonb ->> 'reportId' = ${reportId}
       `;
       expect(pending).toEqual({ status: "pending", attempts: 1 });
 
       await sql`
-        UPDATE "translation_outbox" SET "available_at" = now() - interval '1 second'
+        UPDATE "workflow_outbox" SET "available_at" = now() - interval '1 second'
         WHERE "payload_json"::jsonb ->> 'reportId' = ${reportId}
       `;
       const [outbox] = await sql<{ id: string }[]>`
-        SELECT "id" FROM "translation_outbox"
+        SELECT "id" FROM "workflow_outbox"
         WHERE "payload_json"::jsonb ->> 'reportId' = ${reportId}
       `;
       await expect(
-        dispatchTranslationOutboxEvent(outbox.id, async () => {
+        dispatchWorkflowOutboxEvent(outbox.id, async () => {
           sendAttempts += 1;
         }),
       ).resolves.toBe(true);
@@ -390,7 +393,34 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
         rawParagraphCount: 2,
         translatedParagraphCount: 1,
         missingGlossaryTerms: [{ source: "Alpha", target: "อัลฟา" }],
+        findings: expect.arrayContaining([
+          expect.objectContaining({
+            type: "residual-script",
+            paragraphIndex: 1,
+            sourceExcerpt: "Alpha arrived.",
+            translationExcerpt: "Alpha มาแล้ว",
+            sourceTerm: null,
+            targetTerm: null,
+          }),
+          expect.objectContaining({
+            type: "glossary-miss",
+            paragraphIndex: 1,
+            sourceTerm: "Alpha",
+            targetTerm: "อัลฟา",
+          }),
+          expect.objectContaining({
+            type: "paragraph-mismatch",
+            paragraphIndex: null,
+          }),
+        ]),
       });
+      expect(
+        snapshot.results[0]!.findings.every(
+          (finding) =>
+            unicodeLength(finding.sourceExcerpt) <= 160 &&
+            unicodeLength(finding.translationExcerpt) <= 160,
+        ),
+      ).toBe(true);
       expect(snapshot.results[1]).toMatchObject({
         evaluated: false,
         markerMismatches: 0,
@@ -657,14 +687,14 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
           RETURN NEW;
         END $$`);
       await sql.unsafe(
-        `CREATE TRIGGER ${triggerName} BEFORE INSERT ON translation_outbox FOR EACH ROW EXECUTE FUNCTION ${triggerName}()`,
+        `CREATE TRIGGER ${triggerName} BEFORE INSERT ON workflow_outbox FOR EACH ROW EXECUTE FUNCTION ${triggerName}()`,
       );
       await expect(queueReport(fixture, "all")).rejects.toThrow();
       expect(await listTranslationEvalReportsForUser(fixture.ownerUserId, fixture.novelId)).toEqual(
         [],
       );
     } finally {
-      await sql.unsafe(`DROP TRIGGER IF EXISTS ${triggerName} ON translation_outbox`);
+      await sql.unsafe(`DROP TRIGGER IF EXISTS ${triggerName} ON workflow_outbox`);
       await sql.unsafe(`DROP FUNCTION IF EXISTS ${triggerName}()`);
       await cleanupFixture(fixture);
     }

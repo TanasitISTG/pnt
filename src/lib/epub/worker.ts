@@ -98,7 +98,10 @@ export async function prepareEpubImportJob(
   }
 
   const total = await stageImportJobItems(jobId, job.epubUploadId, items);
-  if (total === 0) return { skip: true };
+  if (total === 0) {
+    await markEpubImportJobError(jobId, "EPUB contains no importable chapters.");
+    return { skip: true };
+  }
   return { skip: false, total };
 }
 

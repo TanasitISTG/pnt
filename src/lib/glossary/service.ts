@@ -1,10 +1,12 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
-
 import { db } from "@/lib/db";
-import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
+import { chapters, glossaryTerms, novels, translationJobs } from "@/lib/db/schema";
+import { mapWithConcurrency } from "@/lib/async";
+import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
+import { cancelActiveTranslationJobsInTransaction } from "@/lib/translation/workflow/cancel";
 import {
   type GlossaryListInput,
   type GlossaryListPage,
@@ -81,11 +83,43 @@ export async function listGlossaryTermsForUser(
 
   return { rows, rowCount, page, pageSize: input.pageSize };
 }
+export async function getGlossaryStatsForOwnedNovel(novelId: string) {
+  const [row] = await db
+    .select({
+      total: count(glossaryTerms.id),
+      approved: sql<number>`count(case when ${glossaryTerms.status} = 'approved' then 1 end)::int`,
+      pending: sql<number>`count(case when ${glossaryTerms.status} = 'pending' then 1 end)::int`,
+      rejected: sql<number>`count(case when ${glossaryTerms.status} = 'rejected' then 1 end)::int`,
+    })
+    .from(glossaryTerms)
+    .where(eq(glossaryTerms.novelId, novelId));
+
+  return {
+    total: row?.total ?? 0,
+    approved: row?.approved ?? 0,
+    pending: row?.pending ?? 0,
+    rejected: row?.rejected ?? 0,
+  };
+}
+
+export async function getGlossaryStatsForUser(userId: string, novelId: string) {
+  const [novel] = await db
+    .select({ id: novels.id })
+    .from(novels)
+    .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+    .limit(1);
+  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  return getGlossaryStatsForOwnedNovel(novelId);
+}
 
 type UpdateTermData = z.infer<typeof updateTermSchema>;
 
-export async function updateGlossaryTermAtomic(userId: string, data: UpdateTermData) {
-  return db.transaction(async (tx) => {
+export async function updateGlossaryTermAtomic(
+  userId: string,
+  data: UpdateTermData,
+  dispatch: (outboxId: string) => Promise<void> = dispatchWorkflowOutboxEventBestEffort,
+) {
+  const outboxIds = await db.transaction(async (tx) => {
     const [term] = await tx
       .select({
         id: glossaryTerms.id,
@@ -100,7 +134,8 @@ export async function updateGlossaryTermAtomic(userId: string, data: UpdateTermD
 
     if (!term) throw new SafeServerError("Glossary term not found or unauthorized");
 
-    const updateData: Partial<typeof glossaryTerms.$inferInsert> = { updatedAt: new Date() };
+    const now = new Date();
+    const updateData: Partial<typeof glossaryTerms.$inferInsert> = { updatedAt: now };
     if (data.source !== undefined) updateData.source = data.source.trim();
     if (data.target !== undefined) updateData.target = data.target.trim();
     if (data.category !== undefined) updateData.category = data.category;
@@ -124,29 +159,82 @@ export async function updateGlossaryTermAtomic(userId: string, data: UpdateTermD
       }
     }
 
-    if (data.applyToChapters && data.target !== undefined) {
-      const oldTarget = term.target;
-      const newTarget = data.target.trim();
-      if (newTarget !== oldTarget) {
+    let propagationOutboxIds: string[] = [];
+    const oldTarget = term.target;
+    const newTarget = data.target?.trim();
+    if (data.applyToChapters && newTarget !== undefined && newTarget !== oldTarget) {
+      const affectedChapters = await tx
+        .select({
+          id: chapters.id,
+          activeTranslationJobId: chapters.activeTranslationJobId,
+        })
+        .from(chapters)
+        .where(
+          and(
+            eq(chapters.novelId, term.novelId),
+            sql`strpos(${chapters.translatedContent}, ${oldTarget}) > 0`,
+          ),
+        )
+        .orderBy(asc(chapters.id))
+        .for("update");
+      const chapterIds = affectedChapters.map((chapter) => chapter.id);
+      const activeJobIds = [
+        ...new Set(
+          affectedChapters.flatMap((chapter) =>
+            chapter.activeTranslationJobId ? [chapter.activeTranslationJobId] : [],
+          ),
+        ),
+      ];
+      const activeJobs =
+        activeJobIds.length === 0
+          ? []
+          : await tx
+              .select({
+                id: translationJobs.id,
+                generation: translationJobs.generation,
+                logsJson: translationJobs.logsJson,
+              })
+              .from(translationJobs)
+              .where(inArray(translationJobs.id, activeJobIds))
+              .for("update");
+      const cancellation = await cancelActiveTranslationJobsInTransaction(
+        tx,
+        activeJobs.map((job) => ({
+          jobId: job.id,
+          generation: job.generation,
+          logsJson: job.logsJson,
+          message: "Translation cancelled because glossary terms were propagated.",
+        })),
+        now,
+      );
+      propagationOutboxIds = cancellation.outboxIds;
+
+      if (chapterIds.length > 0) {
         await tx
           .update(chapters)
           .set({
             translatedContent: sql`replace(${chapters.translatedContent}, ${oldTarget}, ${newTarget})`,
-            editedAt: new Date(),
-            updatedAt: new Date(),
+            status: "translated",
+            summary: null,
+            activeTranslationJobId: null,
+            translatedAt: now,
+            editedAt: now,
+            updatedAt: now,
           })
-          .where(
-            and(
-              eq(chapters.novelId, term.novelId),
-              sql`strpos(${chapters.translatedContent}, ${oldTarget}) > 0`,
-            ),
-          );
+          .where(inArray(chapters.id, chapterIds));
+        await tx
+          .update(novels)
+          .set({ storySummary: null, updatedAt: now })
+          .where(eq(novels.id, term.novelId));
       }
     }
 
     await tx.update(glossaryTerms).set(updateData).where(eq(glossaryTerms.id, data.termId));
-    return { success: true as const };
+    return propagationOutboxIds;
   });
+
+  await mapWithConcurrency(outboxIds, 2, dispatch);
+  return { success: true as const };
 }
 
 export async function deleteAllGlossaryTermsForUser(

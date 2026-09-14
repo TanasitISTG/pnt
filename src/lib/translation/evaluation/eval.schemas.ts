@@ -149,6 +149,39 @@ export const evalMissingGlossaryTermSchema = z.object({
   target: z.string(),
 });
 
+const evalFindingExcerptSchema = z.string().refine((value) => {
+  let length = 0;
+  for (let offset = 0; offset < value.length; offset++) {
+    const codePoint = value.codePointAt(offset);
+    if (codePoint !== undefined && codePoint > 0xffff) offset++;
+    if (++length > 160) return false;
+  }
+  return true;
+}, "Evaluation finding excerpts must contain at most 160 Unicode code points");
+
+export const evalFindingTypeSchema = z.enum([
+  "residual-script",
+  "glossary-miss",
+  "paragraph-mismatch",
+]);
+
+export const evalFindingSchema = z
+  .strictObject({
+    type: evalFindingTypeSchema,
+    paragraphIndex: z.number().int().positive().nullable(),
+    sourceExcerpt: evalFindingExcerptSchema.nullable(),
+    translationExcerpt: evalFindingExcerptSchema.nullable(),
+    sourceTerm: z.string().min(1).max(500).nullable(),
+    targetTerm: z.string().min(1).max(500).nullable(),
+  })
+  .refine(
+    (finding) =>
+      finding.type === "glossary-miss"
+        ? finding.sourceTerm !== null && finding.targetTerm !== null
+        : finding.sourceTerm === null && finding.targetTerm === null,
+    "Only glossary findings may contain source and target terms",
+  );
+
 const storedChapterStatusSchema = z.enum(["raw", "queued", "translating", "translated", "error"]);
 
 const residualExampleSchema = z.string().refine((value) => {
@@ -229,6 +262,44 @@ export const evalStoredResultSchema = z
           row.translatedParagraphCount === 0;
   }, "Inconsistent stored evaluation metrics");
 
+export const evalStoredResultV2Schema = z
+  .strictObject({
+    ...evalStoredResultFields,
+    evaluated: z.boolean(),
+    chapterUpdatedAt: z.iso.datetime(),
+    rawParagraphCount: z.number().int().nonnegative(),
+    translatedParagraphCount: z.number().int().nonnegative(),
+    missingGlossaryTerms: z.array(evalMissingGlossaryTermSchema).max(5),
+    residualSpanCount: z.number().int().nonnegative(),
+    residualExamples: z.array(residualExampleSchema).max(3),
+    findings: z.array(evalFindingSchema).max(20),
+  })
+  .refine((row) => {
+    if (row.adheredGlossaryTerms > row.matchedGlossaryTerms) return false;
+    if (row.residualExamples.length !== Math.min(row.residualSpanCount, 3)) return false;
+    if (
+      row.missingGlossaryTerms.length !==
+      Math.min(row.matchedGlossaryTerms - row.adheredGlossaryTerms, 5)
+    )
+      return false;
+    if (
+      row.glossaryAdherencePercent !==
+      (row.matchedGlossaryTerms > 0
+        ? Math.round((row.adheredGlossaryTerms / row.matchedGlossaryTerms) * 100)
+        : null)
+    )
+      return false;
+    return row.evaluated
+      ? row.markerMismatches === Math.abs(row.rawParagraphCount - row.translatedParagraphCount)
+      : row.markerMismatches === 0 &&
+          row.matchedGlossaryTerms === 0 &&
+          row.adheredGlossaryTerms === 0 &&
+          row.residualScriptLetters === 0 &&
+          row.residualSpanCount === 0 &&
+          row.translatedParagraphCount === 0 &&
+          row.findings.length === 0;
+  }, "Inconsistent stored evaluation metrics");
+
 const evalSummaryFields = {
   chapterCount: z.number().int().nonnegative(),
   residualScriptLetters: z.number().int().nonnegative(),
@@ -257,6 +328,23 @@ export const evalSummarySchema = z
     "Inconsistent stored evaluation totals",
   );
 
+export const evalSummaryV2Schema = z
+  .strictObject({
+    ...evalSummaryFields,
+    version: z.literal(2),
+    languagePair: z.string().min(1),
+    contextFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    evaluatedChapterCount: z.number().int().nonnegative(),
+    skippedChapterCount: z.number().int().nonnegative(),
+    attentionChapterCount: z.number().int().nonnegative(),
+  })
+  .refine(
+    (summary) =>
+      summary.evaluatedChapterCount + summary.skippedChapterCount === summary.chapterCount &&
+      summary.attentionChapterCount <= summary.evaluatedChapterCount &&
+      summary.adheredGlossaryTerms <= summary.matchedGlossaryTerms,
+    "Inconsistent stored evaluation totals",
+  );
 export type StartTranslationEvalInput = z.input<typeof startTranslationEvalSchema>;
 export type StartTranslationEvalData = z.infer<typeof startTranslationEvalSchema>;
 export type ListTranslationEvalReportsInput = z.infer<typeof listTranslationEvalReportsSchema>;
@@ -264,11 +352,13 @@ export type GetTranslationEvalReportInput = z.infer<typeof getTranslationEvalRep
 export type EvalReportFilter = z.infer<typeof evalReportFilterSchema>;
 export type EvalPageSize = z.infer<typeof evalPageSizeSchema>;
 export type EvalReviewSearch = z.infer<typeof evalReviewSearchSchema>;
+export type EvalFinding = z.infer<typeof evalFindingSchema>;
 export type EvalStoredResult = z.infer<typeof evalStoredResultSchema>;
+export type EvalStoredResultV2 = z.infer<typeof evalStoredResultV2Schema>;
 export type LegacyEvalStoredResult = z.infer<typeof legacyEvalStoredResultSchema>;
 export type EvalSummary = z.infer<typeof evalSummarySchema>;
+export type EvalSummaryV2 = z.infer<typeof evalSummaryV2Schema>;
 export type LegacyEvalSummary = z.infer<typeof legacyEvalSummarySchema>;
-
 export const evalSnapshotStateSchema = z.enum(["current", "changed", "deleted", "unknown"]);
 
 export const evalReviewRowSchema = z.object({
@@ -288,6 +378,7 @@ export const evalReviewRowSchema = z.object({
   missingGlossaryTerms: z.array(evalMissingGlossaryTermSchema).nullable(),
   residualSpanCount: z.number().int().nonnegative().nullable(),
   residualExamples: z.array(residualExampleSchema).nullable(),
+  findings: z.array(evalFindingSchema).nullable(),
   snapshotState: evalSnapshotStateSchema,
 });
 

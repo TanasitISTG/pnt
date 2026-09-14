@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Suspense } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   historyQueryOptions,
+  JOB_ACTIVITY_QUERY_KEY,
   JOB_HISTORY_QUERY_KEY,
   JOB_STATS_QUERY_KEY,
 } from "@/lib/job-dashboard/query";
 import { JobHistoryTable } from "@/components/jobs/job-history-table";
 import type {
+  JobActivity,
   JobHistoryEpubRow,
   JobHistoryPage,
   JobHistoryScrapeRow,
@@ -29,6 +31,12 @@ const defaultSearch: JobHistorySearch = {
   page: 1,
   pageSize: 25,
 };
+const getMobileCard = (title: string) =>
+  within(
+    within(screen.getByRole("region", { name: "Mobile job history" }))
+      .getAllByRole("article")
+      .find((card) => card.textContent?.includes(title))!,
+  );
 
 const routerState = vi.hoisted(() => ({
   search: {
@@ -46,6 +54,7 @@ const routerState = vi.hoisted(() => ({
 const serverFunctions = vi.hoisted(() => ({
   getJobHistory: vi.fn(),
   getJobStats: vi.fn(),
+  getJobActivity: vi.fn(),
 }));
 
 const mutationFunctions = vi.hoisted(() => ({
@@ -59,8 +68,9 @@ const scrapeFunctions = vi.hoisted(() => ({
 }));
 
 const detailMocks = vi.hoisted(() => ({
-  JobLogsDialog: ({ open }: { open: boolean }) => (open ? "Translation details" : null),
-  ImportJobDetailsDialog: ({ open }: { open: boolean }) => (open ? "Import details" : null),
+  JobLogsDialog: ({ open }: { open: boolean }) => (open ? <div>Translation details</div> : null),
+  ImportJobDetailsDialog: ({ open }: { open: boolean }) =>
+    open ? <div>Import details</div> : null,
 }));
 vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({
@@ -100,6 +110,9 @@ const translationRow: JobHistoryTranslationRow = {
   chapterTitle: "The Long Night",
   totalChunks: 4,
   doneChunks: 2,
+  provider: "openai",
+  model: "gpt-5.6-luna",
+  isLegacyProviderFallback: false,
   progress: { completed: 2, total: 4, percent: 50, preparing: false },
   canCancel: false,
   canRetry: true,
@@ -122,6 +135,7 @@ const scrapeRow: JobHistoryScrapeRow = {
   added: 3,
   skipped: 1,
   failed: 0,
+  completedWithFailures: false,
   progress: { completed: 4, total: 8, percent: 50, preparing: false },
   canCancel: true,
   canRetry: false,
@@ -177,9 +191,12 @@ function deferred<T>() {
 function renderJobsPage(page: JobHistoryPage = history, search: JobHistorySearch = defaultSearch) {
   routerState.search = search;
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY, refetchOnMount: false },
+    },
   });
   queryClient.setQueryData(historyQueryOptions(search).queryKey, page);
+  queryClient.setQueryData(JOB_ACTIVITY_QUERY_KEY, []);
   queryClient.setQueryData(JOB_STATS_QUERY_KEY, stats);
 
   render(
@@ -191,6 +208,11 @@ function renderJobsPage(page: JobHistoryPage = history, search: JobHistorySearch
   );
   return queryClient;
 }
+beforeEach(() => {
+  serverFunctions.getJobHistory.mockResolvedValue(history);
+  serverFunctions.getJobStats.mockResolvedValue(stats);
+  serverFunctions.getJobActivity.mockResolvedValue([]);
+});
 
 afterEach(() => {
   cleanup();
@@ -203,21 +225,109 @@ describe("JobsPage dashboard", () => {
   it("consolidates health metrics and renders mixed history in one table", () => {
     renderJobsPage();
 
-    expect(screen.getByText("Active jobs")).toBeTruthy();
-    expect(screen.getByText("Failed jobs")).toBeTruthy();
+    expect(screen.getByText("Needs attention")).toBeTruthy();
     expect(screen.getByText("Avg chunk latency")).toBeTruthy();
     expect(screen.getByText("Tokens")).toBeTruthy();
     expect(screen.getAllByText("Translation 1 · Import 1")).toHaveLength(2);
     expect(screen.getByText("Prompt 1,200 · Completion 800")).toBeTruthy();
-    expect(screen.getByText("Translation Novel")).toBeTruthy();
-    expect(screen.getByText("Scrape Novel")).toBeTruthy();
+    const desktopHistory = within(screen.getByRole("table"));
+    expect(desktopHistory.getByText("Translation Novel")).toBeTruthy();
+    expect(desktopHistory.getByText("Scrape Novel")).toBeTruthy();
     expect(screen.getByText("1–4 of 4 jobs")).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Filter by type" }).textContent).toContain(
       "All types",
     );
+
     expect(screen.getByRole("combobox", { name: "Filter by status" }).textContent).toContain(
       "All statuses",
     );
+  });
+  it("keeps every applicable job action reachable in compact mobile rows", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderJobsPage();
+    const mobileHistory = within(screen.getByRole("region", { name: "Mobile job history" }));
+    const translationCard = within(
+      mobileHistory
+        .getAllByRole("article")
+        .find((card) => card.textContent?.includes("Translation Novel"))!,
+    );
+    const scrapeCard = within(
+      mobileHistory
+        .getAllByRole("article")
+        .find((card) => card.textContent?.includes("Scrape Novel"))!,
+    );
+    const epubCard = within(
+      mobileHistory
+        .getAllByRole("article")
+        .find((card) => card.textContent?.includes("EPUB Novel"))!,
+    );
+
+    for (const button of mobileHistory.getAllByRole("button", {
+      name: /^(Copy job ID|Details|Novel|Chapter|Cancel job|Retry job)$/,
+    })) {
+      expect(button.className).toContain("min-h-11");
+    }
+    for (const card of [translationCard, scrapeCard, epubCard]) {
+      expect(card.getByRole("button", { name: "Copy job ID" })).toBeTruthy();
+      expect(card.getByRole("button", { name: "Details" })).toBeTruthy();
+      expect(card.getByRole("button", { name: "Novel" })).toBeTruthy();
+    }
+    expect(translationCard.getByRole("button", { name: "Chapter" })).toBeTruthy();
+    expect(scrapeCard.getByRole("button", { name: "Cancel job" })).toBeTruthy();
+    expect(epubCard.queryByRole("button", { name: "Chapter" })).toBeNull();
+    expect(epubCard.queryByRole("button", { name: "Cancel job" })).toBeNull();
+    expect(epubCard.queryByRole("button", { name: "Retry job" })).toBeNull();
+
+    fireEvent.click(getMobileCard("EPUB Novel").getByRole("button", { name: "Details" }));
+    await waitFor(() => expect(screen.getByText("Import details")).toBeTruthy());
+
+    fireEvent.click(getMobileCard("Translation Novel").getByRole("button", { name: "Details" }));
+    expect(screen.getByText("Translation details")).toBeTruthy();
+
+    fireEvent.click(
+      getMobileCard("Translation Novel").getByRole("button", { name: "Copy job ID" }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("translation-1"));
+
+    fireEvent.click(getMobileCard("Translation Novel").getByRole("button", { name: "Novel" }));
+    expect(routerState.navigate).toHaveBeenCalledWith({
+      to: "/novels/$novelId",
+      params: { novelId: "novel-translation" },
+    });
+    fireEvent.click(getMobileCard("Translation Novel").getByRole("button", { name: "Chapter" }));
+    expect(routerState.navigate).toHaveBeenCalledWith({
+      to: "/novels/$novelId/chapters/$chapterId",
+      params: { novelId: "novel-translation", chapterId: "chapter-1" },
+    });
+
+    fireEvent.click(getMobileCard("Translation Novel").getByRole("button", { name: "Retry job" }));
+    expect(screen.getByRole("heading", { name: "Retry this job?" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(getMobileCard("Scrape Novel").getByRole("button", { name: "Cancel job" }));
+    expect(screen.getByRole("heading", { name: "Cancel this job?" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  });
+  it("shows snapshotted provider and model on desktop and mobile history", () => {
+    renderJobsPage({ ...history, rows: [translationRow], rowCount: 1 });
+
+    expect(screen.getAllByText("Runtime · openai · gpt-5.6-luna")).toHaveLength(2);
+  });
+
+  it("labels legacy translation jobs as a current-settings fallback", () => {
+    const legacyRow: JobHistoryTranslationRow = {
+      ...translationRow,
+      id: "legacy-translation",
+      provider: null,
+      model: null,
+      isLegacyProviderFallback: true,
+    };
+    renderJobsPage({ ...history, rows: [legacyRow], rowCount: 1 });
+
+    expect(
+      screen.getAllByText("Runtime · Current provider settings · legacy fallback"),
+    ).toHaveLength(2);
   });
 
   it("shows a loading banner while a new server page is fetching", () => {
@@ -247,7 +357,7 @@ describe("JobsPage dashboard", () => {
     );
 
     expect(screen.getByText("Loading job page…")).toBeTruthy();
-    expect(screen.getByText("Translation Novel")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("Translation Novel")).toBeTruthy();
   });
 
   it("keeps stale rows visible with retry when a page request fails", () => {
@@ -278,37 +388,36 @@ describe("JobsPage dashboard", () => {
     );
 
     expect(screen.getByText("Unable to update job history")).toBeTruthy();
-    expect(screen.getByText("Translation Novel")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(within(screen.getByRole("table")).getByText("Translation Novel")).toBeTruthy();
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Job history" })).getByRole("button", {
+        name: "Retry",
+      }),
+    );
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it("keeps Refresh enabled during automatic history polling", async () => {
+  it("keeps retained history from polling while live activity is separate", async () => {
     vi.useFakeTimers();
-    const refresh = deferred<JobHistoryPage>();
-    serverFunctions.getJobHistory.mockReturnValueOnce(refresh.promise);
     renderJobsPage();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
 
-    expect(serverFunctions.getJobHistory).toHaveBeenCalledOnce();
+    expect(serverFunctions.getJobHistory).not.toHaveBeenCalled();
     expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(
       false,
     );
-
-    refresh.resolve(history);
-    await act(async () => {
-      await Promise.resolve();
-    });
   });
 
-  it("waits for both requests during manual Refresh", async () => {
+  it("waits for history, stats, and activity during manual Refresh", async () => {
     const historyRefresh = deferred<JobHistoryPage>();
     const statsRefresh = deferred<JobStats>();
+    const activityRefresh = deferred<JobActivity[]>();
     serverFunctions.getJobHistory.mockReturnValueOnce(historyRefresh.promise);
     serverFunctions.getJobStats.mockReturnValueOnce(statsRefresh.promise);
+    serverFunctions.getJobActivity.mockReturnValueOnce(activityRefresh.promise);
     renderJobsPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
@@ -316,12 +425,14 @@ describe("JobsPage dashboard", () => {
     await waitFor(() => {
       expect(serverFunctions.getJobHistory).toHaveBeenCalledOnce();
       expect(serverFunctions.getJobStats).toHaveBeenCalledOnce();
+      expect(serverFunctions.getJobActivity).toHaveBeenCalledOnce();
     });
     expect(
       (screen.getByRole("button", { name: "Refreshing…" }) as HTMLButtonElement).disabled,
     ).toBe(true);
 
     statsRefresh.resolve(stats);
+    historyRefresh.resolve(history);
     await act(async () => {
       await Promise.resolve();
     });
@@ -329,7 +440,7 @@ describe("JobsPage dashboard", () => {
       (screen.getByRole("button", { name: "Refreshing…" }) as HTMLButtonElement).disabled,
     ).toBe(true);
 
-    historyRefresh.resolve(history);
+    activityRefresh.resolve([]);
     await waitFor(() => {
       expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(
         false,
@@ -439,12 +550,12 @@ describe("JobsPage dashboard", () => {
   it("distinguishes global and filtered empty history", () => {
     const empty: JobHistoryPage = { rows: [], rowCount: 0, page: 1, pageSize: 25 };
     renderJobsPage(empty);
-    expect(screen.getByText("No jobs yet")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("No jobs yet")).toBeTruthy();
 
     cleanup();
     const filteredSearch = { ...defaultSearch, q: "missing" };
     renderJobsPage(empty, filteredSearch);
-    expect(screen.getByText("No jobs match these filters")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("No jobs match these filters")).toBeTruthy();
   });
 
   it("renders a retry state when history loading fails", async () => {
@@ -457,8 +568,10 @@ describe("JobsPage dashboard", () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByText("Unable to load job history")).toBeTruthy());
+    const historyError = screen.getByText("Unable to load job history").parentElement;
+    expect(historyError).toBeTruthy();
+    fireEvent.click(within(historyError!).getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(serverFunctions.getJobHistory).toHaveBeenCalledTimes(2));
   });
 });

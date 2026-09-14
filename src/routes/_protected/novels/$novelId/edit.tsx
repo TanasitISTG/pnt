@@ -50,6 +50,7 @@ function EditNovelPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["novels"] }),
         queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
+        queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] }),
       ]);
       toast.success("Novel updated successfully");
@@ -65,6 +66,7 @@ function EditNovelPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["novels"] });
       queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       toast.success("Publish state updated");
     },
     onError: (error) => {

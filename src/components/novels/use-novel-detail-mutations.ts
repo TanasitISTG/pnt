@@ -40,6 +40,7 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     mutationFn: (publishedAt: Date | null) => setNovelPublished({ data: { novelId, publishedAt } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novels"] });
       toast.success("Novel publish state updated");
     },
@@ -52,6 +53,8 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     mutationFn: (vars: { chapterId: string }) => deleteChapter({ data: vars }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novels"] });
       toast.success("Chapter deleted successfully");
       setDeleteChapterId(null);
@@ -69,6 +72,7 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     mutationFn: (vars: ChapterPublishInput) => setChapterPublished({ data: vars }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       toast.success("Publish state updated");
     },
     onError: (error) => {
@@ -95,12 +99,23 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
 
   const { mutate: publishAllChapters, isPending: publishingAll } = useMutation({
     mutationFn: () => setAllChaptersPublished({ data: { novelId, publishedAt: new Date() } }),
-    onSuccess: ({ count }) => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
-      toast.success(`Published ${count} chapter${count === 1 ? "" : "s"}`);
+      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
+      if ("unpublished" in result) {
+        toast.success(
+          `Unpublished ${result.unpublished} chapter${result.unpublished === 1 ? "" : "s"}`,
+        );
+      } else {
+        toast.success(
+          result.skipped > 0
+            ? `Published ${result.published} chapter${result.published === 1 ? "" : "s"}; skipped ${result.skipped} not-ready`
+            : `Published ${result.published} chapter${result.published === 1 ? "" : "s"}`,
+        );
+      }
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to publish all chapters");
+      toast.error(error.message || "Failed to update chapter publish state");
     },
   });
 
@@ -108,6 +123,7 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     mutationFn: () => translateMissingTitles({ data: { novelId } }),
     onSuccess: ({ translated }) => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       toast.success(
         translated > 0 ? `Translated ${translated} chapter title(s)` : "No titles translated",
       );
@@ -121,9 +137,11 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     mutationFn: () => deleteAllNovelTranslations({ data: { novelId } }),
     onSuccess: ({ chaptersCleared }) => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novels"] });
       queryClient.invalidateQueries({ queryKey: ["residualScripts", novelId] });
+      queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
       onTranslationsDeleted();
       toast.success(
         chaptersCleared > 0
@@ -140,6 +158,7 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     onSuccess: async (_result, chapterIds) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
+        queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
         ...chapterIds.map((chapterId) =>
           queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] }),

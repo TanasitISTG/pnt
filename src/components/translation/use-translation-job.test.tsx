@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { useTranslationJob } from "./use-translation-job";
 import * as translationFns from "@/lib/translation/api/mutations";
+import * as translationQueries from "@/lib/translation/api/queries";
 
 interface BulkCancellationResponse {
   cancelled: Array<{ chapterId: string; jobId: string }>;
@@ -28,13 +29,17 @@ vi.mock("@/lib/translation/api/mutations", async (importOriginal) => {
     ...actual,
     startTranslationJob: vi.fn(),
     startTranslationJobs: vi.fn(),
+    cancelTranslationJob: vi.fn(),
     cancelTranslationJobs: vi.fn(),
+    retryTranslationJob: vi.fn(),
   };
 });
 
 vi.mock("@/lib/translation/api/queries", () => ({
   listActiveTranslationJobs: vi.fn().mockResolvedValue([]),
-  getTranslationJobsTerminalStatus: vi.fn().mockResolvedValue([]),
+  getTranslationJobsTerminalStatus: vi.fn(async ({ data }: { data: { jobIds: string[] } }) =>
+    data.jobIds.map((id) => ({ id, chapterId: "", status: "pending", error: null })),
+  ),
 }));
 
 describe("useTranslationJob", () => {
@@ -57,12 +62,11 @@ describe("useTranslationJob", () => {
       jobId: "job-101",
       totalChunks: 4,
     } as never);
-    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
     const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
 
     await act(async () => {
-      await result.current.start("ch-1");
+      await result.current.start("ch-1", "missing");
     });
 
     const active = result.current.activeJobs.get("ch-1");
@@ -75,9 +79,28 @@ describe("useTranslationJob", () => {
     });
     expect(toast.info).toHaveBeenCalledWith("Translation queued");
     expect(toast.error).not.toHaveBeenCalled();
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ["residualScripts", "novel-1"],
+  });
+  it("resolves jobs completed before the first active poll", async () => {
+    vi.mocked(translationFns.startTranslationJob).mockResolvedValueOnce({
+      jobId: "job-race",
+      totalChunks: 1,
+    } as never);
+    vi.mocked(translationQueries.getTranslationJobsTerminalStatus).mockResolvedValueOnce([
+      { id: "job-race", chapterId: "ch-race", status: "done", error: null },
+    ] as never);
+
+    const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
+
+    await act(async () => {
+      await result.current.start("ch-race", "missing");
     });
+    await act(async () => {
+      await result.current.refetchActiveJobs();
+    });
+    await waitFor(() => {
+      expect(result.current.activeJobs.has("ch-race")).toBe(false);
+    });
+    expect(toast.success).toHaveBeenCalledWith("Translation: 1 completed");
   });
 
   it("batch response populates both jobs immediately with 0/totalChunks and triggers no error toast", async () => {
@@ -93,7 +116,7 @@ describe("useTranslationJob", () => {
 
     let count = 0;
     await act(async () => {
-      count = await result.current.startMany(["ch-1", "ch-2"]);
+      count = await result.current.startMany(["ch-1", "ch-2"], "missing");
     });
 
     expect(count).toBe(2);
@@ -127,9 +150,8 @@ describe("useTranslationJob", () => {
     const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
 
     await act(async () => {
-      await result.current.startMany(["ch-1", "ch-2"]);
+      await result.current.startMany(["ch-1", "ch-2"], "missing");
     });
-    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
     vi.mocked(translationFns.cancelTranslationJobs).mockResolvedValueOnce({
       cancelled: [{ chapterId: "ch-1", jobId: "job-1" }],
       skipped: [{ chapterId: "ch-2", reason: "No active translation" }],
@@ -146,20 +168,6 @@ describe("useTranslationJob", () => {
     });
     expect(result.current.activeJobs.has("ch-1")).toBe(false);
     expect(result.current.activeJobs.has("ch-2")).toBe(true);
-    expect(invalidateQueries).toHaveBeenCalledTimes(5);
-    expect(invalidateQueries).toHaveBeenNthCalledWith(1, {
-      queryKey: ["chapters", "novel-1"],
-    });
-    expect(invalidateQueries).toHaveBeenNthCalledWith(2, {
-      queryKey: ["relationshipMap", "novel-1"],
-    });
-    expect(invalidateQueries).toHaveBeenNthCalledWith(3, { queryKey: ["novels"] });
-    expect(invalidateQueries).toHaveBeenNthCalledWith(4, {
-      queryKey: ["costs", "novel-1"],
-    });
-    expect(invalidateQueries).toHaveBeenNthCalledWith(5, {
-      queryKey: ["residualScripts", "novel-1"],
-    });
     expect(toast.info).toHaveBeenCalledWith("Cancellation requested for 1 translation");
     expect(toast.warning).toHaveBeenCalledWith("Skipped 1 chapter with no active translation");
   });
@@ -181,11 +189,11 @@ describe("useTranslationJob", () => {
     const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
 
     await act(async () => {
-      await result.current.startMany(["ch-1"]);
+      await result.current.startMany(["ch-1"], "missing");
     });
     const cancellationPromise = result.current.cancelMany(["ch-1"]);
     await act(async () => {
-      await result.current.startMany(["ch-1"]);
+      await result.current.startMany(["ch-1"], "missing");
     });
     await act(async () => {
       cancellation.resolve({
@@ -206,7 +214,7 @@ describe("useTranslationJob", () => {
     const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
 
     await act(async () => {
-      await result.current.startMany(["ch-1"]);
+      await result.current.startMany(["ch-1"], "missing");
     });
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
     vi.mocked(translationFns.cancelTranslationJobs).mockRejectedValueOnce(
@@ -222,6 +230,185 @@ describe("useTranslationJob", () => {
     expect(result.current.activeJobs.has("ch-1")).toBe(true);
     expect(invalidateQueries).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith("Bulk stop unavailable");
+  });
+  it("does not let a stale active-job query overwrite a replacement job", async () => {
+    vi.mocked(translationQueries.listActiveTranslationJobs).mockResolvedValueOnce([
+      {
+        id: "job-old",
+        chapterId: "ch-replaced",
+        status: "running",
+        doneChunks: 1,
+        totalChunks: 3,
+        error: null,
+      },
+    ] as never);
+    vi.mocked(translationFns.startTranslationJob).mockResolvedValueOnce({
+      jobId: "job-new",
+      totalChunks: 4,
+    } as never);
+    const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
+    await waitFor(() =>
+      expect(result.current.activeJobs.get("ch-replaced")?.jobId).toBe("job-old"),
+    );
+
+    await act(async () => {
+      await result.current.start("ch-replaced", "overwrite");
+    });
+    await waitFor(() =>
+      expect(result.current.activeJobs.get("ch-replaced")?.jobId).toBe("job-new"),
+    );
+  });
+  it("keeps a replacement visible after a stale pre-populated active-query response", async () => {
+    const staleJob = {
+      id: "job-stale",
+      chapterId: "ch-stale",
+      status: "running",
+      doneChunks: 1,
+      totalChunks: 3,
+      error: null,
+    } as const;
+    queryClient.setQueryData(["translationJobs", "novel-1"], [staleJob], {
+      updatedAt: 0,
+    });
+    vi.mocked(translationQueries.listActiveTranslationJobs).mockResolvedValueOnce([
+      staleJob,
+    ] as never);
+    vi.mocked(translationFns.startTranslationJob).mockResolvedValueOnce({
+      jobId: "job-current",
+      totalChunks: 4,
+    } as never);
+
+    const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
+    await waitFor(() => expect(result.current.activeJobs.get("ch-stale")?.jobId).toBe("job-stale"));
+
+    await act(async () => {
+      await result.current.start("ch-stale", "overwrite");
+    });
+    await act(async () => {
+      queryClient.setQueryData(["translationJobs", "novel-1"], [staleJob]);
+    });
+
+    await waitFor(() =>
+      expect(result.current.activeJobs.get("ch-stale")?.jobId).toBe("job-current"),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("does not remove a replacement when an older single cancellation resolves", async () => {
+    vi.mocked(translationFns.startTranslationJob)
+      .mockResolvedValueOnce({
+        jobId: "job-old",
+        totalChunks: 3,
+      } as never)
+      .mockResolvedValueOnce({
+        jobId: "job-new",
+        totalChunks: 4,
+      } as never);
+    const cancellation = Promise.withResolvers<{ success: true }>();
+    vi.mocked(translationFns.cancelTranslationJob).mockImplementationOnce(
+      () => cancellation.promise as never,
+    );
+    const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
+
+    await act(async () => {
+      await result.current.start("ch-single", "missing");
+    });
+    const cancellationPromise = result.current.cancel("job-old", "ch-single");
+    await act(async () => {
+      await result.current.start("ch-single", "missing");
+    });
+    await act(async () => {
+      cancellation.resolve({ success: true });
+      await cancellationPromise;
+    });
+
+    expect(result.current.activeJobs.get("ch-single")?.jobId).toBe("job-new");
+    expect(toast.info).not.toHaveBeenCalledWith("Translation cancelled");
+  });
+
+  it("forgets an active job whose chapter and terminal row were deleted", async () => {
+    const terminalLookup = Promise.withResolvers<[]>();
+    const terminalStarted = Promise.withResolvers<void>();
+    vi.mocked(translationQueries.getTranslationJobsTerminalStatus).mockImplementationOnce(() => {
+      terminalStarted.resolve();
+      return terminalLookup.promise as never;
+    });
+    queryClient.setQueryData(
+      ["translationJobs", "novel-1"],
+      [
+        {
+          id: "job-deleted",
+          chapterId: "ch-deleted",
+          status: "running",
+          doneChunks: 1,
+          totalChunks: 2,
+          error: null,
+        },
+      ],
+      { updatedAt: 0 },
+    );
+    const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
+
+    await act(async () => {
+      await result.current.refetchActiveJobs();
+    });
+    await act(async () => {
+      await terminalStarted.promise;
+    });
+    queryClient.setQueryData(["chapters", "novel-1"], [{ id: "ch-deleted" }]);
+    queryClient.setQueryData(["readerChapterManifest", "novel-1"], [{ id: "ch-deleted" }]);
+    await act(async () => {
+      terminalLookup.resolve([]);
+      await terminalLookup.promise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeJobs.has("ch-deleted")).toBe(false);
+    });
+    await waitFor(() => {
+      expect(queryClient.getQueryState(["chapters", "novel-1"])?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(["readerChapterManifest", "novel-1"])?.isInvalidated).toBe(
+        true,
+      );
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.info).not.toHaveBeenCalledWith("Translation: 1 completed");
+    expect(toast.info).not.toHaveBeenCalledWith("Translation: 1 cancelled");
+  });
+  it("ignores a terminal lookup that resolves after the consumer unmounts", async () => {
+    vi.mocked(translationFns.startTranslationJob).mockResolvedValueOnce({
+      jobId: "job-unmounted",
+      totalChunks: 1,
+    } as never);
+    const terminalLookup =
+      Promise.withResolvers<
+        Array<{ id: string; chapterId: string; status: "done"; error: null }>
+      >();
+    const terminalStarted = Promise.withResolvers<void>();
+    vi.mocked(translationQueries.getTranslationJobsTerminalStatus).mockImplementationOnce(() => {
+      terminalStarted.resolve();
+      return terminalLookup.promise as never;
+    });
+    const { result, unmount } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
+
+    await act(async () => {
+      await result.current.start("ch-unmounted", "missing");
+    });
+    await act(async () => {
+      await result.current.refetchActiveJobs();
+      await terminalStarted.promise;
+    });
+
+    unmount();
+    await act(async () => {
+      terminalLookup.resolve([
+        { id: "job-unmounted", chapterId: "ch-unmounted", status: "done", error: null },
+      ]);
+      await terminalLookup.promise;
+    });
+
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
 

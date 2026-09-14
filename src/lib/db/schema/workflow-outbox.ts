@@ -1,7 +1,7 @@
 import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
-export const translationOutbox = pgTable(
-  "translation_outbox",
+export const workflowOutbox = pgTable(
+  "workflow_outbox",
   {
     id: text("id").primaryKey(),
     eventName: text("event_name").notNull(),
@@ -14,5 +14,5 @@ export const translationOutbox = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [index("translation_outbox_pending_idx").on(table.status, table.availableAt)],
+  (table) => [index("workflow_outbox_pending_idx").on(table.status, table.availableAt)],
 );

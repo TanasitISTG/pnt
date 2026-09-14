@@ -17,6 +17,8 @@ let setRelationshipEntryEnabledForUser: typeof RelationshipService.setRelationsh
 let upsertCharacterProfileForUser: typeof RelationshipService.upsertCharacterProfileForUser;
 let getRelationshipMapForUser: typeof RelationshipService.getRelationshipMapForUser;
 let getRelationshipWorkspaceForUser: typeof RelationshipService.getRelationshipWorkspaceForUser;
+let findOwnedTranslationJob: typeof import("../api/job-query.service").findOwnedTranslationJob;
+let findOwnedTranslationJobProgress: typeof import("../api/job-query.service").findOwnedTranslationJobProgress;
 const skipEagerDispatch = async () => {};
 
 async function seedChapter(
@@ -124,6 +126,8 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
     ({ completeChunk, completeJob, applyRelationshipAnalysis } = await import("./job-store"));
     ({ enqueueTranslationJob } = await import("../api/mutations"));
+    ({ findOwnedTranslationJob, findOwnedTranslationJobProgress } =
+      await import("../api/job-query.service"));
     ({
       setRelationshipEntryEnabledForUser,
       upsertCharacterProfileForUser,
@@ -161,8 +165,20 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     try {
       const provider = { model: "integration-model" } as never;
       const results = await Promise.all([
-        enqueueTranslationJob(fixture.userId, fixture.chapterId, provider, skipEagerDispatch),
-        enqueueTranslationJob(fixture.userId, fixture.chapterId, provider, skipEagerDispatch),
+        enqueueTranslationJob(
+          fixture.userId,
+          fixture.chapterId,
+          provider,
+          "missing",
+          skipEagerDispatch,
+        ),
+        enqueueTranslationJob(
+          fixture.userId,
+          fixture.chapterId,
+          provider,
+          "missing",
+          skipEagerDispatch,
+        ),
       ]);
 
       const jobs = await sql<{ id: string; status: string; generation: number }[]>`
@@ -173,15 +189,18 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
         SELECT "active_translation_job_id" AS "activeJobId", "translation_generation" AS "generation"
         FROM "chapters" WHERE "id" = ${fixture.chapterId}
       `;
-      const [cancelEvent] = await sql<{ payload: { jobId: string; generation: number } }[]>`
-        SELECT "payload_json"::jsonb AS "payload"
-        FROM "translation_outbox"
-        WHERE "event_name" = 'translation/job.cancelled'
-      `;
 
       expect(results).toHaveLength(2);
       const pendingJob = jobs.find((job) => job.status === "pending");
       const cancelledJob = jobs.find((job) => job.status === "cancelled");
+      const [cancelEvent] = await sql<{ payload: { jobId: string; generation: number } }[]>`
+        SELECT "payload_json"::jsonb AS "payload"
+        FROM "workflow_outbox"
+        WHERE "event_name" = 'translation/job.cancelled'
+          AND "payload_json"::jsonb->>'jobId' = ${cancelledJob?.id ?? ""}
+        ORDER BY "created_at" DESC
+        LIMIT 1
+      `;
       expect(pendingJob).toBeDefined();
       expect(cancelledJob).toBeDefined();
       expect(chapter.activeJobId).toBe(pendingJob?.id);
@@ -190,6 +209,63 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
         jobId: cancelledJob?.id,
         generation: cancelledJob?.generation,
       });
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("skips existing translations unless overwrite mode is explicit", async () => {
+    const fixture = await seedChapter();
+    try {
+      await sql`
+        UPDATE "chapters"
+        SET "translated_content" = 'Existing translation', "status" = 'translated'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      const provider = { model: "integration-model" } as never;
+
+      await expect(
+        enqueueTranslationJob(
+          fixture.userId,
+          fixture.chapterId,
+          provider,
+          "missing",
+          skipEagerDispatch,
+        ),
+      ).rejects.toThrow("already has a translation");
+
+      const [unchanged] = await sql<
+        {
+          translatedContent: string | null;
+          activeJobId: string | null;
+        }[]
+      >`
+        SELECT "translated_content" AS "translatedContent",
+               "active_translation_job_id" AS "activeJobId"
+        FROM "chapters"
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      expect(unchanged).toEqual({
+        translatedContent: "Existing translation",
+        activeJobId: null,
+      });
+      expect(
+        await sql`SELECT "id" FROM "translation_jobs" WHERE "chapter_id" = ${fixture.chapterId}`,
+      ).toHaveLength(0);
+
+      const queued = await enqueueTranslationJob(
+        fixture.userId,
+        fixture.chapterId,
+        provider,
+        "overwrite",
+        skipEagerDispatch,
+      );
+      const [job] = await sql<{ overwriteExisting: boolean; status: string }[]>`
+        SELECT "overwrite_existing" AS "overwriteExisting", "status"
+        FROM "translation_jobs"
+        WHERE "id" = ${queued.jobId}
+      `;
+      expect(job).toEqual({ overwriteExisting: true, status: "pending" });
     } finally {
       await deleteFixture(fixture.userId);
     }
@@ -730,6 +806,56 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
       const result = await applyRelationshipAnalysis(jobId, 1, 0, relationshipAnalysisFixture());
       expect(result.map?.relationships[0]?.selfPronoun).toBe("ผม");
       expect(result.map?.relationships[0]?.locked).toBe(true);
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+  it("prefers an older retried job when it is the chapter active pointer", async () => {
+    const fixture = await seedChapter();
+    const retriedJobId = `job-${randomUUID()}`;
+    const newerHistoricalJobId = `job-${randomUUID()}`;
+    try {
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation",
+          "total_chunks", "done_chunks", "created_at", "updated_at"
+        ) VALUES
+          (
+            ${retriedJobId}, ${fixture.chapterId}, 'pending', 1, 2,
+            2, 1, now() - interval '2 days', now()
+          ),
+          (
+            ${newerHistoricalJobId}, ${fixture.chapterId}, 'done', 1, 1,
+            1, 1, now() - interval '1 day', now() - interval '1 day'
+          )
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET
+          "active_translation_job_id" = ${retriedJobId},
+          "translation_generation" = 2,
+          "status" = 'queued'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+
+      const activeDetails = await findOwnedTranslationJob(fixture.userId, {
+        chapterId: fixture.chapterId,
+      });
+      const activeProgress = await findOwnedTranslationJobProgress(fixture.userId, {
+        chapterId: fixture.chapterId,
+      });
+      expect(activeDetails?.job.id).toBe(retriedJobId);
+      expect(activeProgress?.id).toBe(retriedJobId);
+
+      await sql`
+        UPDATE "chapters"
+        SET "active_translation_job_id" = NULL, "status" = 'translated'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      const latestHistory = await findOwnedTranslationJob(fixture.userId, {
+        chapterId: fixture.chapterId,
+      });
+      expect(latestHistory?.job.id).toBe(newerHistoricalJobId);
     } finally {
       await deleteFixture(fixture.userId);
     }

@@ -13,6 +13,9 @@ import {
   DataTableSkeletonRows,
 } from "@/components/ui/data-table-parts";
 import { QueryErrorState } from "@/components/query-error-state";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -22,11 +25,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { JobHistoryFilters, type JobHistoryFilterColumn } from "./job-history-filters";
-import type { JobHistoryPage, JobHistorySearch } from "@/lib/job-dashboard/contracts";
+import type {
+  JobHistoryPage,
+  JobHistoryRow,
+  JobHistorySearch,
+  JobHistoryTranslationRow,
+} from "@/lib/job-dashboard/contracts";
+import { DateCell } from "@/components/jobs/date-cell";
+import { StatusBadge } from "@/components/jobs/status-badge";
 import {
   createJobHistoryColumns,
   jobHistoryTableFeatures,
   type JobHistoryColumnActions,
+  translationRuntime,
+  typeLabels,
 } from "./job-history-columns";
 
 export type JobHistorySearchChange = (
@@ -240,6 +252,141 @@ function JobHistoryPagination({
   );
 }
 
+function mobileJobSecondaryLine(job: JobHistoryRow): string {
+  if (job.type === "translation") return `Chapter ${job.chapterNumber} · ${job.chapterTitle}`;
+  if (job.type === "scrape") return `Chapters ${job.fromNumber}–${job.toNumber}`;
+  return job.sourceFileName ? `EPUB · ${job.sourceFileName}` : "EPUB import";
+}
+
+function JobHistoryMobileRows({
+  rows,
+  actions,
+  pendingJobId,
+}: {
+  rows: JobHistoryRow[];
+  actions: Omit<JobHistoryColumnActions, "pendingJobId">;
+  pendingJobId: string | null;
+}) {
+  return (
+    <div className="divide-y divide-border md:hidden" aria-label="Mobile job history" role="region">
+      {rows.map((job) => {
+        const pending = pendingJobId === job.id;
+        return (
+          <article key={job.id} className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <button
+                  type="button"
+                  className="block max-w-full truncate text-left font-medium text-foreground underline-offset-4 hover:underline"
+                  onClick={() => actions.onOpenNovel(job.novelId)}
+                  title={job.novelTitle}
+                >
+                  {job.novelTitle}
+                </button>
+                <p className="mt-1 truncate text-caption text-muted-foreground">
+                  {mobileJobSecondaryLine(job)}
+                </p>
+                {job.type === "translation" ? (
+                  <p
+                    className="mt-0.5 truncate text-caption text-muted-foreground"
+                    title={`Runtime · ${translationRuntime(job)}`}
+                  >
+                    Runtime · {translationRuntime(job)}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+                <Badge variant="outline">{typeLabels[job.type]}</Badge>
+                <StatusBadge status={job.status} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-3 text-caption text-muted-foreground">
+                <span>Progress</span>
+                <span className="tabular-nums">
+                  {job.progress.preparing
+                    ? "Preparing…"
+                    : `${job.progress.completed.toLocaleString()} / ${job.progress.total.toLocaleString()}`}
+                </span>
+              </div>
+              <Progress
+                value={job.progress.percent}
+                aria-label={`${job.progress.percent}% complete`}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-muted-foreground">
+              <span>
+                Updated <DateCell value={job.updatedAt} />
+              </span>
+              {job.error ? (
+                <span className="max-w-full truncate text-destructive" title={job.error}>
+                  {job.error}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => actions.onCopyJobId(job)}
+              >
+                Copy job ID
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => actions.onViewDetails(job)}
+              >
+                Details
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => actions.onOpenNovel(job.novelId)}
+              >
+                Novel
+              </Button>
+              {job.type === "translation" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => actions.onOpenChapter(job as JobHistoryTranslationRow)}
+                >
+                  Chapter
+                </Button>
+              ) : null}
+              {job.canCancel ? (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="min-h-11"
+                  disabled={pending}
+                  onClick={() => actions.onCancel(job)}
+                >
+                  {pending ? "Working…" : "Cancel job"}
+                </Button>
+              ) : job.canRetry ? (
+                <Button
+                  size="sm"
+                  className="min-h-11"
+                  disabled={pending}
+                  onClick={() => actions.onRetry(job)}
+                >
+                  {pending ? "Working…" : "Retry job"}
+                </Button>
+              ) : null}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 export function JobHistoryTable({
   query,
   search,
@@ -355,8 +502,39 @@ export function JobHistoryTable({
         error={error}
         onRetry={onRetry}
       />
+      {isPending && !history ? (
+        <div className="p-6 text-center text-sm text-muted-foreground md:hidden" aria-live="polite">
+          Loading jobs…
+        </div>
+      ) : noRows ? (
+        <div className="space-y-2 p-6 text-center md:hidden">
+          <p className="text-sm font-medium text-foreground">
+            {filtered ? "No jobs match these filters" : "No jobs yet"}
+          </p>
+          <p className="text-caption text-muted-foreground">
+            {filtered
+              ? "Try a different search or clear the filters."
+              : "Translation and import runs will appear here."}
+          </p>
+          {filtered ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onSearchChange(CLEAR_JOB_FILTERS, true)}
+            >
+              Clear filters
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <JobHistoryMobileRows rows={data} actions={actions} pendingJobId={pendingJobId} />
+      )}
 
-      <div className="overflow-x-auto">
+      <div
+        className="hidden overflow-x-auto md:block"
+        aria-label="Desktop job history"
+        role="region"
+      >
         <Table className="min-w-[1080px] text-caption">
           <TableHeader className="bg-muted/20">
             {table.getHeaderGroups().map((headerGroup) => (

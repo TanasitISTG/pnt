@@ -11,6 +11,7 @@ import { ChapterStatusBadge } from "@/components/chapters/chapter-status-badge";
 import type { TitleEditState } from "@/components/chapters/use-chapter-title-edit";
 import { PublishMenu } from "@/components/publish-menu";
 import { cn, formatCost, formatTokens } from "@/lib/utils";
+import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 import type { ActiveJobState, NovelCostData } from "@/lib/translation/types/api";
 import type { ChapterRow } from "./types";
 
@@ -34,7 +35,7 @@ export interface ChapterTableRowProps {
   onPublishChapter: (vars: { chapterId: string; publishedAt: Date | null }) => void;
   onCancelTranslate: (jobId: string, chapterId: string) => void;
   onRetryTranslate: (jobId: string, chapterId: string) => void;
-  onStartTranslate: (chapterId: string) => void;
+  onStartTranslate: (chapterId: string, mode: TranslationStartMode) => void;
   onRequestRetranslate: (chapterId: string) => void;
   onViewLogs: (chapterId: string) => void;
   onSaveTitle?: () => void;
@@ -220,10 +221,17 @@ function ChapterCostSummary({
   mobile?: boolean;
 }) {
   if (!chapterCost) return null;
+  const sourceLabel =
+    chapterCost.source === "current-settings-estimate"
+      ? " · estimate"
+      : chapterCost.source === "unpriced"
+        ? " · unpriced"
+        : "";
   return (
     <div className={cn("font-mono text-muted-foreground", !mobile && "text-caption")}>
       {formatTokens(chapterCost.promptTokens + chapterCost.completionTokens)} tok
       {chapterCost.cost != null ? ` · ${formatCost(chapterCost.cost)}` : null}
+      {sourceLabel}
     </div>
   );
 }
@@ -314,9 +322,15 @@ function TranslationActionButton({
         variant="ghost"
         size="icon"
         className="size-8 text-destructive hover:text-destructive"
-        onClick={() =>
-          activeJob ? onRetryTranslate(activeJob.jobId, chapter.id) : onStartTranslate(chapter.id)
-        }
+        onClick={() => {
+          if (activeJob) {
+            onRetryTranslate(activeJob.jobId, chapter.id);
+          } else if (chapter.hasTranslation) {
+            onRequestRetranslate(chapter.id);
+          } else {
+            onStartTranslate(chapter.id, "missing");
+          }
+        }}
         aria-label="Retry translation"
         title="Retry translation"
       >
@@ -325,17 +339,29 @@ function TranslationActionButton({
     );
   }
 
-  const label = chapter.status === "translated" ? "Re-translate chapter" : "Translate chapter";
+  if (chapter.hasTranslation) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 text-primary hover:text-primary"
+        onClick={() => onRequestRetranslate(chapter.id)}
+        aria-label="Re-translate chapter"
+        title="Re-translate chapter"
+      >
+        <RotateCw className="size-4" />
+      </Button>
+    );
+  }
+
   return (
     <Button
       variant="ghost"
       size="icon"
       className="size-8 text-primary hover:text-primary"
-      onClick={() =>
-        chapter.editedAt ? onRequestRetranslate(chapter.id) : onStartTranslate(chapter.id)
-      }
-      aria-label={label}
-      title={label}
+      onClick={() => onStartTranslate(chapter.id, "missing")}
+      aria-label="Translate chapter"
+      title="Translate chapter"
     >
       <Play className="size-4" />
     </Button>

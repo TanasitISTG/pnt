@@ -95,8 +95,7 @@ describe("suggestAndReviewTerms", () => {
   });
   it("auto-approves literally evidenced Thai story-specific domain terms", async () => {
     const sourceText = "强化师的强化器分为，黑银紫金红一共五个颜色。";
-    const translatedText =
-      "อุปกรณ์เสริมพลังของนักเสริมพลังแบ่งออกเป็นห้าสี ได้แก่ ดำ เงิน ม่วง ทอง และแดง";
+    const translatedText = "อุปกรณ์เสริมพลังของนักเสริมพลังแบ่งออกเป็นห้าสี ได้แก่ ดำ เงิน ม่วง ทอง และแดง";
     const domainExtractionResponse = JSON.stringify({
       terms: [
         { source: "强化师", target: "นักเสริมพลัง", category: "other" },

@@ -23,12 +23,21 @@ export interface ImportJobState {
   error: string | null;
 }
 
+type ScrapeImportRequest = {
+  baseUrl: string;
+  from: number;
+  to: number;
+  provider: ScrapeProvider;
+};
+
 export function useImportJob(
   novelId: string,
   invalidateChapters: () => void,
   kind: "scrape" | "epub" = "scrape",
 ) {
   const [importJob, setImportJob] = useState<ImportJobState | null>(null);
+  const [importStatusError, setImportStatusError] = useState<Error | null>(null);
+  const [lastScrapeRequest, setLastScrapeRequest] = useState<ScrapeImportRequest | null>(null);
   const importActive = importJob?.status === "pending" || importJob?.status === "running";
 
   // Re-attach to a running import after refresh
@@ -36,9 +45,18 @@ export function useImportJob(
     let cancelled = false;
     getActiveImportJob({ data: { novelId, kind } })
       .then((job) => {
-        if (!cancelled && job) setImportJob(job);
+        if (!cancelled) {
+          setImportStatusError(null);
+          if (job) setImportJob(job);
+        }
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setImportStatusError(
+            error instanceof Error ? error : new Error("Unable to load import status"),
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -55,6 +73,7 @@ export function useImportJob(
           setImportJob(null);
           return;
         }
+        setImportStatusError(null);
         setImportJob(res);
         if (res.status === "done") {
           invalidateChapters();
@@ -68,8 +87,10 @@ export function useImportJob(
           invalidateChapters();
           toast.info("Import cancelled");
         }
-      } catch {
-        // Transient read failure — next poll retries.
+      } catch (error: unknown) {
+        setImportStatusError(
+          error instanceof Error ? error : new Error("Unable to refresh import status"),
+        );
       }
     }, 2000);
     return () => clearInterval(interval);
@@ -99,6 +120,8 @@ export function useImportJob(
         failed: 0,
         error: null,
       });
+      setLastScrapeRequest({ baseUrl, from, to, provider });
+      setImportStatusError(null);
       toast.info(`Import of chapters ${from}–${to} queued`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to start import");
@@ -130,7 +153,41 @@ export function useImportJob(
       failed: 0,
       error: null,
     });
+    setImportStatusError(null);
+  };
+  const retryImportStatus = async () => {
+    if (!importJob) return;
+    try {
+      const res = await getImportJobStatus({ data: { jobId: importJob.id } });
+      setImportStatusError(null);
+      setImportJob(res);
+      if (!res) invalidateChapters();
+    } catch (error: unknown) {
+      setImportStatusError(
+        error instanceof Error ? error : new Error("Unable to refresh import status"),
+      );
+    }
   };
 
-  return { importJob, importActive, startImport, cancelImport, attachJob };
+  const retryImport = async () => {
+    if (kind !== "scrape" || !lastScrapeRequest) return;
+    await startImport(
+      lastScrapeRequest.baseUrl,
+      lastScrapeRequest.from,
+      lastScrapeRequest.to,
+      lastScrapeRequest.provider,
+    );
+  };
+
+  return {
+    importJob,
+    importActive,
+    startImport,
+    cancelImport,
+    attachJob,
+    importStatusError,
+    retryImportStatus,
+    canRetryImport: kind === "scrape" && lastScrapeRequest !== null,
+    retryImport,
+  };
 }

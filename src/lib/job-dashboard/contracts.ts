@@ -72,6 +72,9 @@ export type JobHistoryTranslationRow = JobHistoryRowBase & {
   chapterTitle: string;
   totalChunks: number;
   doneChunks: number;
+  provider: string | null;
+  model: string | null;
+  isLegacyProviderFallback: boolean;
 };
 
 export type JobHistoryScrapeRow = JobHistoryRowBase & {
@@ -84,6 +87,7 @@ export type JobHistoryScrapeRow = JobHistoryRowBase & {
   added: number;
   skipped: number;
   failed: number;
+  completedWithFailures: boolean;
 };
 
 export type JobHistoryEpubRow = JobHistoryRowBase & {
@@ -114,6 +118,21 @@ export type JobStats = {
   failedTranslationJobs: number;
   activeImportJobs: number;
   failedImportJobs: number;
+};
+
+export type JobActivity = {
+  id: string;
+  type: JobHistoryType;
+  status: JobHistoryStatus;
+  novelId: string;
+  error: string | null;
+  updatedAt: JobHistoryDate;
+  progress: JobHistoryProgress;
+  doneChunks?: number;
+  totalChunks?: number;
+  added?: number;
+  skipped?: number;
+  failed?: number;
 };
 
 type ChunkStatsRow = {

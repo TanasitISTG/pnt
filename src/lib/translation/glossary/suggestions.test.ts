@@ -32,12 +32,8 @@ describe("suggest-terms-prompt", () => {
       expect(reviewPrompt).toContain(
         "common-vocabulary exclusions above apply only to ordinary descriptive use",
       );
-      expect(extractionPrompt).toContain(
-        "explicit definition, classification, or enumeration",
-      );
-      expect(reviewPrompt).toContain(
-        "explicit definition, classification, or enumeration",
-      );
+      expect(extractionPrompt).toContain("explicit definition, classification, or enumeration");
+      expect(reviewPrompt).toContain("explicit definition, classification, or enumeration");
       expect(extractionPrompt).toContain("enhancer profession");
       expect(extractionPrompt).toContain("enhancement-device class");
       expect(reviewPrompt).toContain("enhancement-device class");

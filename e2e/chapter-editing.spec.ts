@@ -36,11 +36,14 @@ async function addChapter(page: Page, number: string, title: string, content: st
   await page.getByLabel("Raw Content *").fill(content);
   await page.getByRole("button", { name: "Add Chapter", exact: true }).click();
   await expect(page.getByText("Chapter added successfully", { exact: true }).last()).toBeVisible();
+  await expect(page.getByLabel("Title *")).toHaveValue("");
+  await expect(page.getByLabel("Raw Content *")).toHaveValue("");
 }
 
 test("admin reorders and edits every chapter field", async ({ page }) => {
   await signIn(page);
   await page.getByRole("button", { name: "New Novel" }).click();
+  await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(novelTitle);
   await page.getByRole("button", { name: "Create Novel" }).click();
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
@@ -195,6 +198,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
 
   await signIn(page);
   await page.getByRole("button", { name: "New Novel" }).click();
+  await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(reviewNovelTitle);
   await page.getByRole("button", { name: "Create Novel" }).click();
   await expect(page.getByRole("heading", { name: reviewNovelTitle })).toBeVisible();

@@ -120,6 +120,26 @@ describe("EPUB worker steps", () => {
         },
       ]);
     });
+    it("terminalizes an EPUB with no importable chapters and cleans up", async () => {
+      vi.mocked(epubJobStore.loadEpubImportJob).mockResolvedValueOnce(dummyJob as never);
+      vi.mocked(epubJobStore.loadOrderedUploadChunks).mockResolvedValueOnce([
+        { chunkIndex: 0, data: Buffer.from([1]) },
+      ]);
+      vi.mocked(epubParser.parseEpubArchive).mockReturnValueOnce({
+        metadata: { title: "Novel", author: null, language: null, description: null },
+        chapters: [],
+      });
+      vi.mocked(importJobStore.getMaxChapterNumber).mockResolvedValueOnce(0);
+      vi.mocked(epubJobStore.stageImportJobItems).mockResolvedValueOnce(0);
+
+      const res = await prepareEpubImportJob("job-1");
+
+      expect(res).toEqual({ skip: true });
+      expect(epubJobStore.markEpubImportJobError).toHaveBeenCalledWith(
+        "job-1",
+        "EPUB contains no importable chapters.",
+      );
+    });
 
     it("rejects chapter numbers with more than two decimal places", async () => {
       vi.mocked(epubJobStore.loadEpubImportJob).mockResolvedValueOnce(dummyJob as never);

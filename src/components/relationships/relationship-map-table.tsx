@@ -243,6 +243,7 @@ function EntryActions({
           <Button
             variant="ghost"
             size="icon-sm"
+            className="min-h-11 min-w-11"
             aria-label={`Actions for ${label}`}
             disabled={pending}
           />
@@ -678,6 +679,61 @@ function useCharacterProfileColumns(actions: RelationshipTableActions) {
   );
 }
 
+function CharacterMobileRows({
+  rows,
+  actions,
+}: {
+  rows: CharacterProfile[];
+  actions: RelationshipTableActions;
+}) {
+  return (
+    <div
+      className="divide-y divide-border md:hidden"
+      aria-label="Mobile character profiles"
+      role="region"
+    >
+      {rows.map((character) => (
+        <article key={character.id} className="space-y-3 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="break-words font-medium text-foreground">{character.sourceName}</p>
+              <p className="mt-0.5 break-words text-sm text-muted-foreground">
+                {character.targetName || "No target name"}
+              </p>
+            </div>
+            <EntryActions
+              label={`character ${character.sourceName}`}
+              entryType="character"
+              enabled={character.enabled}
+              locked={character.locked}
+              pending={actions.pending}
+              onEdit={() => actions.onEditCharacter(character)}
+              onToggle={() => actions.onToggle("character", character.id, !character.enabled)}
+              onAuto={() => actions.onAuto("character", character.id)}
+              onDelete={() => actions.onDelete("character", character.id, character.sourceName)}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ManagementBadge locked={character.locked} />
+            <StateBadge active={character.enabled} />
+            <span className="text-caption text-muted-foreground">{character.gender}</span>
+          </div>
+          {character.aliases.length > 0 ? (
+            <p className="break-words text-caption text-muted-foreground">
+              Aliases: {character.aliases.join(", ")}
+            </p>
+          ) : null}
+          {character.role || character.notes ? (
+            <p className="break-words text-caption text-muted-foreground">
+              {[character.role, character.notes].filter(Boolean).join(" · ")}
+            </p>
+          ) : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
 export function CharacterProfilesTable({
   page,
   search,
@@ -755,7 +811,19 @@ export function CharacterProfilesTable({
         searchLabel="Search characters"
         description="Profiles and name mappings used by translation."
       />
-      <div className="overflow-x-auto">
+      {rowCount === 0 ? (
+        <div className="p-4 md:hidden" aria-label="Mobile character profiles" role="region">
+          <CharacterEmptyState filtered={filteredSearch(search)} onClear={clear} onAdd={onAdd} />
+        </div>
+      ) : (
+        <CharacterMobileRows rows={pageRows} actions={actions} />
+      )}
+
+      <div
+        className="hidden overflow-x-auto md:block"
+        aria-label="Desktop character profiles"
+        role="region"
+      >
         <Table className="min-w-[1000px] text-caption">
           <TableHeader className="bg-muted/20">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -967,6 +1035,86 @@ function useDirectedRelationshipColumns(
     [actions, characterLabel, isActive],
   );
 }
+function RelationshipMobileRows({
+  rows,
+  characterLabel,
+  isActive,
+  actions,
+}: {
+  rows: CharacterRelationship[];
+  characterLabel: (id: string) => string;
+  isActive: (relationship: CharacterRelationship) => boolean;
+  actions: RelationshipTableActions;
+}) {
+  return (
+    <div
+      className="divide-y divide-border md:hidden"
+      aria-label="Mobile directed relationships"
+      role="region"
+    >
+      {rows.map((relationship) => {
+        const label = `${characterLabel(relationship.speakerId)} to ${characterLabel(relationship.listenerId)}`;
+        return (
+          <article key={relationship.id} className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="break-words font-medium text-foreground">
+                  {characterLabel(relationship.speakerId)}
+                </p>
+                <p className="mt-0.5 break-words text-sm text-muted-foreground">
+                  → {characterLabel(relationship.listenerId)}
+                </p>
+              </div>
+              <EntryActions
+                label={`relationship ${label}`}
+                entryType="relationship"
+                enabled={relationship.enabled}
+                locked={relationship.locked}
+                pending={actions.pending}
+                onEdit={() => actions.onEditRelationship(relationship)}
+                onToggle={() =>
+                  actions.onToggle("relationship", relationship.id, !relationship.enabled)
+                }
+                onAuto={() => actions.onAuto("relationship", relationship.id)}
+                onDelete={() => actions.onDelete("relationship", relationship.id, label)}
+              />
+            </div>
+            <p className="break-words text-foreground">{relationship.relationship}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <StateBadge
+                active={isActive(relationship)}
+                inactiveLabel={relationship.enabled ? "Inactive — character disabled" : "Disabled"}
+              />
+              <ManagementBadge locked={relationship.locked} />
+              <span className="text-caption text-muted-foreground">
+                {relationship.familiarity} · {relationship.speakerStatus}
+              </span>
+            </div>
+            {relationship.register ||
+            relationship.selfPronoun ||
+            relationship.addresseeTerm ||
+            relationship.sentenceParticles ? (
+              <p className="break-words text-caption text-muted-foreground">
+                {[
+                  relationship.register,
+                  relationship.selfPronoun,
+                  relationship.addresseeTerm,
+                  relationship.sentenceParticles,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            ) : null}
+            {relationship.notes ? (
+              <p className="break-words text-caption text-muted-foreground">{relationship.notes}</p>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 export function DirectedRelationshipsTable({
   characters,
   page,
@@ -1060,7 +1208,29 @@ export function DirectedRelationshipsTable({
         searchLabel="Search relationships"
         description="Directed speaker-to-listener facts and speech choices for translation."
       />
-      <div className="overflow-x-auto">
+      {rowCount === 0 ? (
+        <div className="p-4 md:hidden" aria-label="Mobile directed relationships" role="region">
+          <RelationshipEmptyState
+            filtered={filteredSearch(search)}
+            canAdd={characters.length >= 2}
+            onClear={clear}
+            onAdd={onAdd}
+          />
+        </div>
+      ) : (
+        <RelationshipMobileRows
+          rows={pageRows}
+          characterLabel={characterLabel}
+          isActive={isActive}
+          actions={actions}
+        />
+      )}
+
+      <div
+        className="hidden overflow-x-auto md:block"
+        aria-label="Desktop directed relationships"
+        role="region"
+      >
         <Table className="min-w-[1250px] text-caption">
           <TableHeader className="bg-muted/20">
             {table.getHeaderGroups().map((headerGroup) => (

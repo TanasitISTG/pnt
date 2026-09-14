@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, inArray, count } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
@@ -19,6 +19,7 @@ import {
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import {
   deleteAllGlossaryTermsForUser,
+  getGlossaryStatsForUser,
   listGlossaryTermsForUser,
   rejectAllPendingGlossaryTermsForUser,
   updateGlossaryTermAtomic,
@@ -382,23 +383,6 @@ export const getGlossaryStats = createServerFn({ method: "GET" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-
-      const [row] = await db
-        .select({
-          total: count(glossaryTerms.id),
-          approved: sql<number>`count(case when ${glossaryTerms.status} = 'approved' then 1 end)::int`,
-          pending: sql<number>`count(case when ${glossaryTerms.status} = 'pending' then 1 end)::int`,
-          rejected: sql<number>`count(case when ${glossaryTerms.status} = 'rejected' then 1 end)::int`,
-        })
-        .from(glossaryTerms)
-        .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
-        .where(and(eq(glossaryTerms.novelId, data.novelId), eq(novels.userId, session.user.id)));
-
-      return {
-        total: row?.total ?? 0,
-        approved: row?.approved ?? 0,
-        pending: row?.pending ?? 0,
-        rejected: row?.rejected ?? 0,
-      };
+      return getGlossaryStatsForUser(session.user.id, data.novelId);
     }),
   );

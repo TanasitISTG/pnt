@@ -26,6 +26,7 @@ export function useChapterTitleEdit(novelId: string) {
     onSuccess: async (_result, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
+        queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["chapter", variables.chapterId] }),
       ]);
       toast.success("Translated title updated");

@@ -21,6 +21,7 @@ const CHAPTER: ChapterRow = {
   number: "1",
   title: "Chapter One",
   translatedTitle: "บทที่หนึ่ง",
+  hasTranslation: true,
   status: "translated",
   rawCharCount: 1200,
 
@@ -110,6 +111,17 @@ describe("ChapterTable browsing behavior", () => {
       />,
     );
     expect(screen.getByLabelText("Translated title for chapter 1")).toBeTruthy();
+  });
+  it("routes translated chapters through explicit retranslation confirmation", () => {
+    const onStartTranslate = vi.fn();
+    const onRequestRetranslate = vi.fn();
+
+    render(<ChapterTable {...createProps({ onStartTranslate, onRequestRetranslate })} />);
+
+    screen.getByRole("button", { name: "Re-translate chapter" }).click();
+
+    expect(onRequestRetranslate).toHaveBeenCalledWith(CHAPTER.id);
+    expect(onStartTranslate).not.toHaveBeenCalled();
   });
   it("shows foreign-script residue for admin rows", () => {
     render(

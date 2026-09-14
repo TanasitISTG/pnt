@@ -18,8 +18,8 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/translation/workflow/job-store", () => ({ loadApprovedTermsForContext: vi.fn() }));
 vi.mock("@/lib/translation/providers/provider-client", () => ({ createProviderClient: vi.fn() }));
 vi.mock("@/lib/translation/workflow/title", () => ({ translateChapterTitle: vi.fn() }));
-vi.mock("@/lib/translation/workflow/outbox", () => ({
-  dispatchTranslationOutboxEventBestEffort: vi.fn(),
+vi.mock("@/lib/inngest/outbox", () => ({
+  dispatchWorkflowOutboxEventBestEffort: vi.fn(),
 }));
 
 const relationshipMap = relationshipMapSchema.parse({

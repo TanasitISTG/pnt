@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import { createProviderClient } from "../providers/provider-client";
+import { loadProviderRuntimeForJob } from "../providers/provider-client";
 import type { AIProviderClient } from "../types/provider";
 import { splitAtParagraphBoundary } from "../text/chunker";
 import {
@@ -17,7 +17,7 @@ import {
   countParagraphMarkers,
   normalizeTranslationOutput,
 } from "../text/paragraphs";
-import { createLog } from "./log-entry";
+import { createLog, parseLogEntries, serializeLogEntries } from "./log-entry";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
 import type { ChunkRelationshipAnalysis } from "@/lib/relationships/analyzer";
 import { log } from "@/lib/log";
@@ -362,9 +362,9 @@ export async function translateChunk(
   if (!isNextChunk(job, i)) throw new Error(`Chunk ${i} is out of sequence for job ${jobId}`);
   if (!currentChunk) throw new Error(`Chunk ${i} missing in job ${jobId}`);
 
-  const providerConfig = await createProviderClient(novel.userId);
+  const providerConfig = await loadProviderRuntimeForJob(novel.userId, job);
 
-  const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
+  const logs: LogEntry[] = parseLogEntries(job.logsJson);
 
   if (dialogueAnalysis?.warning) {
     logs.push(createLog("warn", dialogueAnalysis.warning));
@@ -497,7 +497,7 @@ export async function translateChunk(
     // Record which chunk failed for the UI, then rethrow — Inngest owns retries.
     const error = err instanceof Error ? err.message : "API Error";
     logs.push(createLog("warn", `Chunk ${i + 1}/${job.totalChunks} failed: ${error}`));
-    const saved = await saveChunkFailure(job.id, generation, i, error, JSON.stringify(logs));
+    const saved = await saveChunkFailure(job.id, generation, i, error, serializeLogEntries(logs));
     if (!saved) return;
     throw err;
   }
@@ -519,7 +519,7 @@ export async function translateChunk(
     promptTokens,
     completionTokens,
     latencyMs: elapsedMs,
-    logsJson: JSON.stringify(logs),
+    logsJson: serializeLogEntries(logs),
   });
 }
 
@@ -532,12 +532,12 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
   if (job.status !== "running" || !canRunJob(job, chapter, generation)) return;
 
   const [providerConfig, chunkRows, approvedTerms] = await Promise.all([
-    createProviderClient(novel.userId),
+    loadProviderRuntimeForJob(novel.userId, job),
     loadJobChunks(jobId),
     loadApprovedTermsForContext(novel.id),
   ]);
 
-  const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
+  const logs: LogEntry[] = parseLogEntries(job.logsJson);
   if (job.doneChunks < chunkRows.length || chunkRows.length !== job.totalChunks) {
     throw new Error(
       `Job ${jobId} finalize called with ${job.doneChunks}/${job.totalChunks} chunks`,
@@ -599,7 +599,7 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
     chapterSummary: summaryRes.freshSummary,
     storySummary: summaryRes.updatedStorySummary,
     glossaryRows: glossaryRes.rowsToInsert,
-    logsJson: JSON.stringify(logs),
+    logsJson: serializeLogEntries(logs),
     usageJson: JSON.stringify({ totalPromptTokens, totalCompletionTokens }),
   });
 }
@@ -611,8 +611,8 @@ export async function failJob(jobId: string, generation: number, message: string
   if (!row) return;
   const { job } = row;
 
-  const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
+  const logs: LogEntry[] = parseLogEntries(job.logsJson);
   logs.push(createLog("error", `Job failed: ${message}`));
 
-  await failActiveJob(job.id, generation, message, JSON.stringify(logs));
+  await failActiveJob(job.id, generation, message, serializeLogEntries(logs));
 }

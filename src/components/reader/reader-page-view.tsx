@@ -1,4 +1,6 @@
 import type { ActiveJobState } from "@/lib/translation/types/api";
+import type { ReaderTranslationStatus } from "./reader-content-types";
+import { QueryErrorState } from "@/components/query-error-state";
 import type { ReaderSettings } from "@/lib/reader/types";
 import { ReaderContent } from "./chapter-content";
 import { ChapterEditor, type ChapterDraft } from "./chapter-editor";
@@ -44,6 +46,9 @@ export interface ReaderPageViewProps {
   isAdmin: boolean;
   editing: boolean;
   jobRunning: boolean;
+  translationStatus: ReaderTranslationStatus;
+  translationStatusError: unknown;
+  retryTranslationStatus: () => Promise<unknown>;
   activeJob: ActiveJobState | undefined;
   panel: "chapters" | "settings" | null;
   onPanelChange: (panel: "chapters" | "settings" | null) => void;
@@ -96,6 +101,9 @@ export function ReaderPageView({
   isAdmin,
   editing,
   jobRunning,
+  translationStatus,
+  translationStatusError,
+  retryTranslationStatus,
   activeJob,
   panel,
   onPanelChange,
@@ -154,6 +162,14 @@ export function ReaderPageView({
         onTranslateRequest={onTranslateRequest}
         onShortcutsRequest={onShortcutsRequest}
       />
+      {isAdmin && translationStatusError ? (
+        <QueryErrorState
+          title="Unable to refresh translation status"
+          error={translationStatusError}
+          onRetry={() => void retryTranslationStatus()}
+          className="my-0 min-h-0"
+        />
+      ) : null}
 
       <ChapterTitleRow
         number={chapter.number}
@@ -185,6 +201,11 @@ export function ReaderPageView({
             readerFontClass={readerFontClass}
             sourceLang={novel.sourceLang}
             targetLang={novel.targetLang}
+            isAdmin={isAdmin}
+            translationStatus={translationStatus}
+            jobRunning={jobRunning}
+            onTranslateRequest={onTranslateRequest}
+            onEditRequest={onEditRequest}
           />
         </div>
       )}

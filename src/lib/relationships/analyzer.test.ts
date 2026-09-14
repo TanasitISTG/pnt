@@ -12,7 +12,9 @@ vi.mock("@/lib/translation/workflow/job-store", () => ({
   loadJobChunk: vi.fn(),
   loadPrevChapterForContext: vi.fn(),
 }));
-vi.mock("@/lib/translation/providers/provider-client", () => ({ createProviderClient: vi.fn() }));
+vi.mock("@/lib/translation/providers/provider-client", () => ({
+  loadProviderRuntimeForJob: vi.fn(),
+}));
 
 const updatedAt = "2026-01-01T00:00:00.000Z";
 
@@ -358,7 +360,7 @@ describe("chunk relationship provider setup", () => {
       activePairs: [],
     });
     vi.mocked(jobStore.loadJobChunk).mockResolvedValue(runnableChunkRow as never);
-    vi.mocked(providerClientModule.createProviderClient)
+    vi.mocked(providerClientModule.loadProviderRuntimeForJob)
       .mockRejectedValueOnce(new Error("provider unavailable"))
       .mockRejectedValueOnce(new Error("provider unavailable"))
       .mockRejectedValueOnce(new Error("provider unavailable"))
@@ -366,8 +368,11 @@ describe("chunk relationship provider setup", () => {
 
     const result = await analyzeChunkRelationships("job-1", 0, 3);
 
-    expect(providerClientModule.createProviderClient).toHaveBeenCalledTimes(4);
-    expect(providerClientModule.createProviderClient).toHaveBeenCalledWith("user-1");
+    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledTimes(4);
+    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledWith(
+      "user-1",
+      expect.anything(),
+    );
     expect(result.warning).toBeNull();
     expect(result.promptTokens).toBe(3);
     expect(result.completionTokens).toBe(2);
@@ -385,11 +390,14 @@ describe("chunk relationship provider setup", () => {
         ...runnableChunkRow,
         novel: { ...runnableChunkRow.novel, sourceLang, targetLang },
       } as never);
-      vi.mocked(providerClientModule.createProviderClient).mockResolvedValue(providerConfig);
+      vi.mocked(providerClientModule.loadProviderRuntimeForJob).mockResolvedValue(providerConfig);
 
       const result = await analyzeChunkRelationships("job-1", 0, 3);
 
-      expect(providerClientModule.createProviderClient).toHaveBeenCalledWith("user-1");
+      expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledWith(
+        "user-1",
+        expect.anything(),
+      );
       expect(result.warning).toBeNull();
       expect(result.promptTokens).toBe(3);
       expect(result.completionTokens).toBe(2);
@@ -405,7 +413,7 @@ describe("chunk relationship provider setup", () => {
 
     const result = await analyzeChunkRelationships("job-1", 0, 3);
 
-    expect(providerClientModule.createProviderClient).not.toHaveBeenCalled();
+    expect(providerClientModule.loadProviderRuntimeForJob).not.toHaveBeenCalled();
     expect(result).toEqual({
       context: null,
       warning: null,
@@ -427,13 +435,13 @@ describe("chunk relationship provider setup", () => {
       },
       chunk: { sourceText: "甲和乙一起走。" },
     } as never);
-    vi.mocked(providerClientModule.createProviderClient).mockRejectedValue(
+    vi.mocked(providerClientModule.loadProviderRuntimeForJob).mockRejectedValue(
       new Error("provider unavailable"),
     );
 
     const result = await analyzeChunkRelationships("job-1", 0, 3);
 
-    expect(providerClientModule.createProviderClient).toHaveBeenCalledTimes(4);
+    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledTimes(4);
     expect(result.context?.activePairs).toEqual([
       { speakerId: "a", listenerId: "b", relationshipId: "pair" },
     ]);

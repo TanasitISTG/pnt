@@ -173,11 +173,8 @@ export function EpubImportSection({ novelId, invalidateChapters }: EpubImportSec
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { importJob, importActive, cancelImport, attachJob } = useImportJob(
-    novelId,
-    invalidateChapters,
-    "epub",
-  );
+  const { importJob, importActive, cancelImport, attachJob, importStatusError, retryImportStatus } =
+    useImportJob(novelId, invalidateChapters, "epub");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -259,7 +256,6 @@ export function EpubImportSection({ novelId, invalidateChapters }: EpubImportSec
 
       attachJob(jobId, file.name);
       toast.info("EPUB uploaded and import queued (runs server-side)");
-      setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
       if (uploadId) {
@@ -304,6 +300,34 @@ export function EpubImportSection({ novelId, invalidateChapters }: EpubImportSec
       />
       <EpubUploadProgress progress={uploadProgress} />
       <EpubImportStatus importJob={importJob} importActive={importActive} />
+      {importStatusError ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-caption text-destructive"
+          role="alert"
+        >
+          <span>{importStatusError.message}</span>
+          <Button type="button" size="sm" variant="outline" onClick={retryImportStatus}>
+            Retry status
+          </Button>
+        </div>
+      ) : null}
+      {selectedFile &&
+      importJob &&
+      (importJob.status === "error" || importJob.status === "cancelled") ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border bg-background/50 p-2 text-caption">
+          <span className="text-muted-foreground">
+            Retry the upload to create a fresh EPUB import job. Existing chapters remain saved.
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void handleUploadAndImport()}
+          >
+            Retry EPUB import
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

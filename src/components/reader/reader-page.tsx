@@ -1,4 +1,4 @@
-import { notFound } from "@tanstack/react-router";
+import { notFound, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 
@@ -7,8 +7,8 @@ import { QueryErrorState } from "@/components/query-error-state";
 import { useReaderScroll } from "@/components/reader/use-reader-scroll";
 import {
   chapterQueryOptions,
-  chaptersQueryOptions,
-  novelQueryOptions,
+  readerChapterManifestQueryOptions,
+  readerNovelQueryOptions,
 } from "@/components/reader/reader-queries";
 import { ReaderPageSurface } from "./reader-page-surface";
 
@@ -20,15 +20,17 @@ export interface ReaderPageProps {
 
 export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
   const chapterQuery = useQuery(chapterQueryOptions(chapterId));
-  const chaptersQuery = useQuery(chaptersQueryOptions(novelId));
-  const novelQuery = useQuery(novelQueryOptions(novelId));
+  const chaptersQuery = useQuery(readerChapterManifestQueryOptions(novelId));
+  const novelQuery = useQuery(readerNovelQueryOptions(novelId));
   const { settings, update, ready: settingsReady } = useReaderSettings();
   const { theme, resolvedTheme, setTheme } = useTheme();
+  const { hash } = useLocation();
+  const targetAnchor = hash ? (hash.startsWith("#") ? hash.slice(1) : hash) : null;
   const chapter = chapterQuery.data;
   const chapters = chaptersQuery.data ?? [];
   const novel = novelQuery.data;
 
-  useReaderScroll(novelId, chapterId, chapter, settingsReady);
+  useReaderScroll(novelId, chapterId, chapter, settingsReady, targetAnchor);
 
   if (chapterQuery.isError || chaptersQuery.isError || novelQuery.isError) {
     return (

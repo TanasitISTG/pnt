@@ -23,8 +23,15 @@ export function ReaderProse({
 
   return (
     <div className="mx-auto flex max-w-prose flex-col gap-5" style={{ fontSize: fontSizePx }}>
-      {entries.map(({ key, paragraph }) =>
-        renderParagraph(paragraph, key, readerFontClass, dimmed, lang),
+      {entries.map(({ key, paragraph }, index) =>
+        renderParagraph(
+          paragraph,
+          key,
+          readerFontClass,
+          dimmed,
+          lang,
+          `reader-paragraph-${index + 1}`,
+        ),
       )}
     </div>
   );
@@ -50,20 +57,27 @@ export function ReaderComparison({
   targetName,
 }: ReaderComparisonProps) {
   const entries = createReaderParagraphPairEntries(aligned);
-
   return (
     <div className="flex flex-col gap-5" style={{ fontSize: fontSizePx }}>
-      {entries.map(({ key, pair }) => (
+      {entries.map(({ key, pair }, index) => (
         <div
           key={key}
-          className="grid gap-4 border-b border-border pb-5 last:border-b-0 md:grid-cols-2 md:gap-8 md:pb-0"
+          id={`reader-pair-${index + 1}`}
+          className="scroll-mt-20 grid gap-4 border-b border-border pb-5 last:border-b-0 md:grid-cols-2 md:gap-8 md:pb-0"
         >
           <div className="min-w-0">
             <p className="mb-2 text-caption font-medium text-muted-foreground">
               {sourceName ?? sourceLang}
             </p>
             {pair.raw
-              ? renderParagraph(pair.raw, `${key}-raw`, readerFontClass, true, sourceLang)
+              ? renderParagraph(
+                  pair.raw,
+                  `${key}-raw`,
+                  readerFontClass,
+                  true,
+                  sourceLang,
+                  `reader-paragraph-${index + 1}-raw`,
+                )
               : null}
           </div>
           <div className="min-w-0">
@@ -75,6 +89,7 @@ export function ReaderComparison({
                   readerFontClass,
                   false,
                   targetLang,
+                  `reader-paragraph-${index + 1}-translated`,
                 )
               : null}
           </div>

@@ -237,7 +237,7 @@ export const changePassword = createServerFn({ method: "POST" })
           body: {
             currentPassword: data.currentPassword,
             newPassword: data.newPassword,
-            revokeOtherSessions: false,
+            revokeOtherSessions: true,
           },
         });
         return { success: true };

@@ -25,7 +25,7 @@ vi.mock("./job-store", () => ({
   }),
 }));
 
-vi.mock("../providers/provider-client", () => ({ createProviderClient: vi.fn() }));
+vi.mock("../providers/provider-client", () => ({ loadProviderRuntimeForJob: vi.fn() }));
 vi.mock("./finalize-summary", () => ({ generateSummaryArtifacts: vi.fn() }));
 vi.mock("./finalize-glossary", () => ({ suggestAndReviewTerms: vi.fn() }));
 
@@ -81,7 +81,7 @@ describe("translation worker guarded state transitions", () => {
     vi.mocked(jobStore.saveChunkFailure).mockResolvedValue(true);
     vi.mocked(jobStore.completeJob).mockResolvedValue(true);
     vi.mocked(jobStore.failActiveJob).mockResolvedValue(true);
-    vi.mocked(providerClientModule.createProviderClient).mockResolvedValue(provider as never);
+    vi.mocked(providerClientModule.loadProviderRuntimeForJob).mockResolvedValue(provider as never);
     vi.mocked(finalizeSummaryModule.generateSummaryArtifacts).mockResolvedValue({
       translatedTitle: "Translated Title",
       freshSummary: "Chapter summary",

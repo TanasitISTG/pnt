@@ -18,16 +18,21 @@ export function splitParagraphs(text: string): string[] {
 
 import type { AlignedParagraph } from "../types/text";
 
-// Align by index; when counts mismatch the shorter side leaves gaps at the tail.
-export function alignParagraphs(rawText: string, translatedText: string): AlignedParagraph[] {
-  const raw = splitParagraphs(rawText);
-  const translated = splitParagraphs(translatedText);
+export function alignParagraphArrays(
+  raw: readonly string[],
+  translated: readonly string[],
+): AlignedParagraph[] {
   const len = Math.max(raw.length, translated.length);
   const out: AlignedParagraph[] = [];
   for (let i = 0; i < len; i++) {
     out.push({ raw: raw[i], translated: translated[i] });
   }
   return out;
+}
+
+// Align by index; when counts mismatch the shorter side leaves gaps at the tail.
+export function alignParagraphs(rawText: string, translatedText: string): AlignedParagraph[] {
+  return alignParagraphArrays(splitParagraphs(rawText), splitParagraphs(translatedText));
 }
 
 export const PARAGRAPH_MARKER = "||¶||";

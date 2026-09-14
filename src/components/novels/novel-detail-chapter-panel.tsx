@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Search, X } from "lucide-react";
 
+import { QueryErrorState } from "@/components/query-error-state";
 import type { ChapterTableProps } from "@/components/chapters/chapter-table";
 import { ChaptersTableSection } from "@/components/chapters/chapters-table-section";
 import { ChaptersToolbar } from "@/components/chapters/chapters-toolbar";
@@ -16,12 +17,16 @@ export interface NovelDetailChapterPanelDetail {
   isChaptersPending: boolean;
   lastReadChapter: ChapterRow | null;
   selectedIds: Set<string>;
-  selectedTranslatableIds: string[];
+  selectedMissingIds: string[];
+  selectedTranslatedIds: string[];
   selectedActiveIds: string[];
   selectableIds: string[];
   batchStarting: boolean;
+  activeJobsError: unknown;
+  refetchActiveJobs: () => Promise<unknown>;
   batchStopping: boolean;
   handleBatchTranslate: () => void;
+  onRequestBatchRetranslate: () => void;
   setSelectedIds: Dispatch<SetStateAction<Set<string>>>;
   setStopSelectedOpen: (open: boolean) => void;
   batchRangeFrom: string;
@@ -29,7 +34,8 @@ export interface NovelDetailChapterPanelDetail {
   setBatchRangeFrom: (value: string) => void;
   setBatchRangeTo: (value: string) => void;
   selectByRange: () => void;
-  unpublishedCount: number;
+  readyUnpublishedCount: number;
+  unreadyCount: number;
   publishAllChapters: () => void;
   publishingAll: boolean;
   missingTitleCount: number;
@@ -135,12 +141,16 @@ export function NovelDetailChapterPanel({
     isChaptersPending,
     lastReadChapter,
     selectedIds,
-    selectedTranslatableIds,
+    selectedMissingIds,
+    selectedTranslatedIds,
     selectedActiveIds,
     selectableIds,
     batchStarting,
     batchStopping,
     handleBatchTranslate,
+    onRequestBatchRetranslate,
+    activeJobsError,
+    refetchActiveJobs,
     setSelectedIds,
     setStopSelectedOpen,
     batchRangeFrom,
@@ -148,7 +158,8 @@ export function NovelDetailChapterPanel({
     setBatchRangeFrom,
     setBatchRangeTo,
     selectByRange,
-    unpublishedCount,
+    readyUnpublishedCount,
+    unreadyCount,
     publishAllChapters,
     publishingAll,
     missingTitleCount,
@@ -176,6 +187,14 @@ export function NovelDetailChapterPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {activeJobsError ? (
+        <QueryErrorState
+          title="Unable to refresh translation status"
+          error={activeJobsError}
+          onRetry={() => void refetchActiveJobs()}
+          className="my-0 min-h-0"
+        />
+      ) : null}
       <ChapterSearchToolbar
         key={chapterQuery}
         query={chapterQuery}
@@ -190,11 +209,13 @@ export function NovelDetailChapterPanel({
           selectedCount={selectedIds.size}
           hiddenSelectedCount={hiddenSelectedCount}
           selectableCount={selectableIds.length}
-          selectedTranslatableCount={selectedTranslatableIds.length}
+          selectedMissingCount={selectedMissingIds.length}
+          selectedTranslatedCount={selectedTranslatedIds.length}
           selectedActiveCount={selectedActiveIds.length}
           batchStarting={batchStarting}
           batchStopping={batchStopping}
           onBatchTranslate={handleBatchTranslate}
+          onRequestBatchRetranslate={onRequestBatchRetranslate}
           onRequestBatchStop={() => setStopSelectedOpen(true)}
           onClearSelection={() => setSelectedIds(new Set())}
           batchRangeFrom={batchRangeFrom}
@@ -202,7 +223,8 @@ export function NovelDetailChapterPanel({
           onBatchRangeFromChange={setBatchRangeFrom}
           onBatchRangeToChange={setBatchRangeTo}
           onSelectRange={selectByRange}
-          unpublishedCount={unpublishedCount}
+          readyUnpublishedCount={readyUnpublishedCount}
+          unreadyCount={unreadyCount}
           onPublishAll={() => publishAllChapters()}
           publishingAll={publishingAll}
           missingTitleCount={missingTitleCount}

@@ -9,6 +9,7 @@ const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
 let listGlossaryTermsForUser: typeof import("./service").listGlossaryTermsForUser;
+let updateGlossaryTermAtomic: typeof import("./service").updateGlossaryTermAtomic;
 
 const defaultSearch: Omit<GlossaryListInput, "novelId"> = {
   q: "",
@@ -33,7 +34,7 @@ integrationDescribe("glossary pagination PostgreSQL contracts", () => {
     process.env.INNGEST_DEV ||= "1";
 
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
-    ({ listGlossaryTermsForUser } = await import("./service"));
+    ({ listGlossaryTermsForUser, updateGlossaryTermAtomic } = await import("./service"));
   });
 
   afterAll(async () => {
@@ -240,6 +241,100 @@ integrationDescribe("glossary pagination PostgreSQL contracts", () => {
       await sql`DELETE FROM "glossary_terms" WHERE "novel_id" = ${novelId} OR "novel_id" = ${otherNovelId}`;
       await sql`DELETE FROM "novels" WHERE "id" = ${novelId} OR "id" = ${otherNovelId}`;
       await sql`DELETE FROM "user" WHERE "id" = ${ownerUserId} OR "id" = ${otherUserId}`;
+    }
+  }, 30_000);
+
+  it("propagates target changes while cancelling affected translations atomically", async () => {
+    const ownerUserId = `user-${randomUUID()}`;
+    const novelId = `novel-${randomUUID()}`;
+    const termId = `term-${randomUUID()}`;
+    const chapterId = `chapter-${randomUUID()}`;
+    const jobId = `job-${randomUUID()}`;
+
+    await sql.begin(async (transaction) => {
+      await transaction`
+        INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
+        VALUES (${ownerUserId}, 'Glossary Propagation Owner', ${`${ownerUserId}@example.test`}, true, now(), now())
+      `;
+      await transaction`
+        INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang", "story_summary")
+        VALUES (${novelId}, ${ownerUserId}, 'Propagation Fixture', 'zh', 'th', 'stale story summary')
+      `;
+      await transaction`
+        INSERT INTO "glossary_terms" ("id", "novel_id", "source", "target", "category", "status")
+        VALUES (${termId}, ${novelId}, '术语', 'Old Name', 'character'::glossary_term_category, 'approved'::glossary_term_status)
+      `;
+      await transaction`
+        INSERT INTO "chapters"
+          ("id", "novel_id", "number", "title", "raw_content", "translated_content", "status",
+           "summary", "raw_char_count", "active_translation_job_id")
+        VALUES
+          (${chapterId}, ${novelId}, 1, 'Chapter 1', 'raw', 'Old Name appears here', 'translating',
+           'stale chapter summary', 3, ${jobId})
+      `;
+      await transaction`
+        INSERT INTO "translation_jobs"
+          ("id", "chapter_id", "status", "source_revision", "generation", "total_chunks", "logs_json")
+        VALUES (${jobId}, ${chapterId}, 'running'::translation_job_status, 1, 4, 1, '{malformed')
+      `;
+    });
+
+    const dispatched: string[] = [];
+    try {
+      await updateGlossaryTermAtomic(
+        ownerUserId,
+        { termId, target: "New Name", applyToChapters: true },
+        async (outboxId) => {
+          dispatched.push(outboxId);
+        },
+      );
+
+      const [chapter] = await sql`
+        SELECT "translated_content", "status", "summary", "active_translation_job_id"
+        FROM "chapters"
+        WHERE "id" = ${chapterId}
+      `;
+      const [novel] = await sql`
+        SELECT "story_summary"
+        FROM "novels"
+        WHERE "id" = ${novelId}
+      `;
+      const [term] = await sql`
+        SELECT "target"
+        FROM "glossary_terms"
+        WHERE "id" = ${termId}
+      `;
+      const [job] = await sql`
+        SELECT "status", "logs_json"
+        FROM "translation_jobs"
+        WHERE "id" = ${jobId}
+      `;
+      const outbox = await sql`
+        SELECT "id", "event_name", "payload_json"
+        FROM "workflow_outbox"
+        WHERE "event_name" = 'translation/job.cancelled'
+          AND "payload_json" LIKE ${`%${jobId}%`}
+      `;
+
+      expect(chapter).toMatchObject({
+        translated_content: "New Name appears here",
+        status: "translated",
+        summary: null,
+        active_translation_job_id: null,
+      });
+      expect(novel?.story_summary).toBeNull();
+      expect(term?.target).toBe("New Name");
+      expect(job?.status).toBe("cancelled");
+      expect(job?.logs_json).toContain(
+        "Translation cancelled because glossary terms were propagated.",
+      );
+      expect(outbox).toHaveLength(1);
+      expect(JSON.parse(outbox[0]!.payload_json)).toEqual({ jobId, generation: 4 });
+      expect(dispatched).toEqual([outbox[0]!.id]);
+    } finally {
+      await sql`DELETE FROM "workflow_outbox" WHERE "payload_json" LIKE ${`%${jobId}%`}`;
+      await sql`DELETE FROM "novels" WHERE "id" = ${novelId}`;
+      await sql`DELETE FROM "user" WHERE "id" = ${ownerUserId}`;
     }
   }, 30_000);
 });

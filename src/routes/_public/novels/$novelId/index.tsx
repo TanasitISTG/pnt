@@ -3,7 +3,12 @@ import { useCallback } from "react";
 
 import { NovelDetailController } from "@/components/novels/novel-detail-controller";
 import { NovelPending } from "@/components/novels/novel-detail-pending";
-import { chaptersQueryOptions, novelQueryOptions } from "@/components/novels/use-novel-detail-page";
+import {
+  chaptersQueryOptions,
+  hydrateAdminNovelDetailCore,
+  novelQueryOptions,
+} from "@/components/novels/use-novel-detail-page";
+import { getAdminNovelDetailCore } from "@/lib/content/novel.functions";
 import {
   novelDetailSearchSchema,
   type NovelDetailSearch,
@@ -14,17 +19,19 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
   loaderDeps: () => ({}),
   shouldReload: false,
   loader: async ({ params, context }) => {
-    const novelPromise = context.queryClient.ensureQueryData(novelQueryOptions(params.novelId));
     if (context.user) {
-      const novel = await novelPromise;
-      if (!novel) throw notFound();
-      return { novel };
+      const core = await getAdminNovelDetailCore({ data: { novelId: params.novelId } });
+      if (!core) throw notFound();
+      hydrateAdminNovelDetailCore(context.queryClient, core);
+      return { novel: core.novel };
     }
 
-    const [novel] = await Promise.all([
+    const novelPromise = context.queryClient.ensureQueryData(novelQueryOptions(params.novelId));
+    await Promise.all([
       novelPromise,
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
     ]);
+    const novel = await novelPromise;
     if (!novel) throw notFound();
     return { novel };
   },

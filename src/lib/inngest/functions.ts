@@ -19,7 +19,7 @@ import {
   cleanupExpiredEpubUploads,
 } from "@/lib/epub/worker";
 import { log } from "@/lib/log";
-import { dispatchPendingTranslationOutbox } from "@/lib/translation/workflow/outbox";
+import { dispatchPendingWorkflowOutbox } from "./outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
 import { TRANSLATION_RETRY_COUNT } from "@/lib/translation/workflow/retry";
 import {
@@ -74,14 +74,14 @@ export const translateChapterFn = inngest.createFunction(
   },
 );
 
-export const dispatchTranslationOutboxFn = inngest.createFunction(
+export const dispatchWorkflowOutboxFn = inngest.createFunction(
   {
-    id: "dispatch-translation-outbox",
+    id: "dispatch-workflow-outbox",
     triggers: { cron: "*/1 * * * *" },
     retries: 0,
     concurrency: { limit: 1 },
   },
-  async ({ step }) => step.run("dispatch-pending", () => dispatchPendingTranslationOutbox()),
+  async ({ step }) => step.run("dispatch-pending", () => dispatchPendingWorkflowOutbox()),
 );
 
 // One run per bulk chapter import. Each chapter is a memoized step (own HTTP
@@ -92,6 +92,7 @@ export const importChaptersFn = inngest.createFunction(
     id: "import-chapters",
     triggers: { event: "scrape/import.requested" },
     retries: 3,
+    concurrency: { limit: 1, key: "event.data.jobId" },
     idempotency: "event.data.runKey",
     cancelOn: [{ event: "scrape/import.cancelled", match: "data.jobId" }],
     onFailure: async ({ event, error }) => {
@@ -203,8 +204,8 @@ export const translationEvalFn = inngest.createFunction(
 );
 
 export const functions = [
+  dispatchWorkflowOutboxFn,
   translateChapterFn,
-  dispatchTranslationOutboxFn,
   importChaptersFn,
   importEpubChaptersFn,
   cleanupExpiredEpubUploadsFn,

@@ -177,4 +177,29 @@ describe("useReaderScroll", () => {
     expect(window.scrollTo).not.toHaveBeenCalled();
     act(() => hook.unmount());
   });
+
+  it("focuses a requested correction anchor before saved progress", () => {
+    localStorage.setItem(
+      "pnt-reader-progress",
+      JSON.stringify({
+        novel: { lastChapterId: "chapter", readChapterIds: [], scrollFraction: 0.75 },
+      }),
+    );
+    const target = document.createElement("p");
+    target.id = "reader-pair-3";
+    target.scrollIntoView = vi.fn();
+    document.body.append(target);
+
+    renderHook(() =>
+      useReaderScroll("novel", "chapter", { id: "chapter" }, true, "reader-paragraph-3"),
+    );
+    act(() => vi.runAllTimers());
+
+    expect(target.scrollIntoView).toHaveBeenCalledWith({
+      block: "start",
+      behavior: "instant",
+    });
+    expect(window.scrollTo).not.toHaveBeenCalled();
+    target.remove();
+  });
 });

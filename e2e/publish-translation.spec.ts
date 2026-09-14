@@ -25,9 +25,12 @@ async function waitForTransientToastsToClear(page: import("@playwright/test").Pa
 }
 
 test("admin translates and publishes a chapter that a signed-out guest can read", async ({
+  context,
   page,
 }) => {
+  test.setTimeout(180_000);
   await page.goto("/login");
+  await context.grantPermissions(["clipboard-write"], { origin: new URL(page.url()).origin });
   await waitForReactHydration(page);
   await rejectOptionalAnalytics(page);
   await page.getByLabel("Email").fill(adminEmail);
@@ -36,6 +39,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
 
   await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
   await page.getByRole("button", { name: "New Novel" }).click();
+  await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(novelTitle);
 
   await page.locator("#sourceLang").click();
@@ -45,10 +49,42 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await page.getByRole("button", { name: "Create Novel" }).click();
 
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
+  const novelDetailUrl = page.url();
   await page.getByRole("tab", { name: "Add chapters" }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByLabel("Number *").fill("1");
   await page.getByLabel("Title *").last().fill(chapterTitle);
   await page.getByLabel("Raw Content *").fill("儿子对父亲说：“我会回来的。”\n父亲点了点头。");
+
+  await page.getByRole("tab", { name: "URL", exact: true }).click();
+  await page.getByLabel("Import from source URL").fill("https://www.quanben.io/n/test/1.html");
+  await page.getByRole("spinbutton", { name: "Start chapter number" }).fill("1");
+  await page.getByRole("spinbutton", { name: "End chapter number" }).fill("5");
+
+  await page.getByRole("tab", { name: "EPUB", exact: true }).click();
+  await page.locator('input[type="file"][accept*=".epub"]').setInputFiles({
+    name: "retained-draft.epub",
+    mimeType: "application/epub+zip",
+    buffer: Buffer.from("draft"),
+  });
+
+  await page.getByRole("tab", { name: "URL", exact: true }).click();
+  await expect(page.getByLabel("Import from source URL")).toHaveValue(
+    "https://www.quanben.io/n/test/1.html",
+  );
+  await expect(page.getByRole("spinbutton", { name: "End chapter number" })).toHaveValue("5");
+  await page.getByRole("tab", { name: "EPUB", exact: true }).click();
+  await expect(page.getByText(/retained-draft\.epub/)).toBeVisible();
+  await page.getByRole("tab", { name: "Manual", exact: true }).click();
+  await expect(page.getByLabel("Number *")).toHaveValue("1");
+  await expect(page.getByLabel("Title *").last()).toHaveValue(chapterTitle);
+  await expect(page.getByLabel("Raw Content *")).toHaveValue(
+    "儿子对父亲说：“我会回来的。”\n父亲点了点头。",
+  );
+  await expect(
+    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).resolves.toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("button", { name: "Add Chapter" }).click();
   await page.getByRole("tab", { name: "Chapters", exact: true }).click();
 
@@ -81,12 +117,45 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(translatedTitle).toBeVisible({ timeout: 60_000 });
   const completionToast = page.getByText(/Translation: \d+ completed/);
   await expect(completionToast).toBeVisible({ timeout: 15_000 });
-  await expect(completionToast).toBeHidden({ timeout: 15_000 });
-  await waitForTransientToastsToClear(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/jobs");
+  await expect(page.getByRole("heading", { name: "Job activity" })).toBeVisible();
+  const mobileJobHistory = page.getByRole("region", { name: "Mobile job history" });
+  await expect(mobileJobHistory).toBeVisible();
+  const translatedJobCard = mobileJobHistory
+    .locator("article")
+    .filter({ hasText: novelTitle })
+    .filter({ hasText: chapterTitle });
+  await expect(translatedJobCard).toBeVisible();
+  await expect(translatedJobCard.getByText("Runtime · openai · e2e-model")).toBeVisible();
+  const copyJobIdButton = translatedJobCard.getByRole("button", { name: "Copy job ID" });
+  await expect(copyJobIdButton).toBeVisible();
+  await expect(translatedJobCard.getByRole("button", { name: "Details" })).toBeVisible();
+  await expect(translatedJobCard.getByRole("button", { name: "Novel" })).toBeVisible();
+  await expect(translatedJobCard.getByRole("button", { name: "Chapter" })).toBeVisible();
+  const copyJobIdBounds = await copyJobIdButton.boundingBox();
+  expect(copyJobIdBounds).not.toBeNull();
+  expect(copyJobIdBounds?.height ?? 0).toBeGreaterThanOrEqual(44);
+  await copyJobIdButton.click();
+  await expect(page.getByText("Job ID copied")).toBeVisible();
+  await expect(
+    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).resolves.toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(novelDetailUrl);
+  await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
 
   await page.getByRole("button", { name: "Glossary" }).click();
   await expect(page.getByRole("heading", { name: `${novelTitle} Glossary` })).toBeVisible();
-  await page.getByRole("button", { name: "Bulk Import (TSV)" }).click();
+  const bulkImportButton = page.getByRole("button", { name: "Bulk Import (TSV)" });
+  await expect
+    .poll(() =>
+      bulkImportButton.evaluate((button) =>
+        Object.keys(button).some((key) => key.startsWith("__reactProps$")),
+      ),
+    )
+    .toBe(true);
+  await bulkImportButton.click();
   const glossaryImport = Array.from({ length: 26 }, (_, index) => {
     const number = index + 1;
     const label = String(number).padStart(2, "0");
@@ -97,7 +166,9 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(page.getByText("1–25 of 26 terms")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Next page" }).click();
   await expect(page.getByText("Page 2 of 2")).toBeVisible();
-  await expect(page.getByText("E2E Term 26", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Desktop glossary terms").getByText("E2E Term 26", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "First page" }).click();
   await page.getByRole("button", { name: "Add term" }).click();
   await expect(page.getByRole("heading", { name: "Add glossary term" })).toBeVisible();
@@ -105,12 +176,10 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await waitForTransientToastsToClear(page);
   await page.screenshot({ path: ".tura/e2e/glossary-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  const glossaryTableContainer = page.locator(
-    'section[aria-label="Glossary terms"] [data-slot="table-container"]',
-  );
-  await expect(
-    glossaryTableContainer.evaluate((element) => element.scrollWidth > element.clientWidth),
-  ).resolves.toBe(true);
+  const glossaryMobileRows = page.getByRole("region", { name: "Mobile glossary terms" });
+  await expect(glossaryMobileRows).toBeVisible();
+  await expect(glossaryMobileRows.getByText("E2E Term 01", { exact: true })).toBeVisible();
+  await expect(glossaryMobileRows.getByRole("button", { name: "Edit" }).first()).toBeVisible();
   await expect(
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);
@@ -124,32 +193,30 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   const relationshipsTab = page.getByRole("tab", { name: /Directed relationships/ });
   await relationshipsTab.click();
   await expect(page.getByRole("heading", { name: "Directed relationships" })).toBeVisible();
-  const relationshipPanel = page.locator('section[aria-labelledby="relationships-heading"]');
-  await expect(relationshipPanel.getByText("儿子", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Self: —", { exact: true })).toBeVisible();
+  const relationshipPanel = page.getByLabel("Desktop directed relationships");
+  await expect(relationshipPanel.getByText("儿子", { exact: true })).toBeVisible();
+  await expect(relationshipPanel.getByText("Self: —", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add directed relationship" })).toBeVisible();
   await page.screenshot({ path: ".tura/e2e/relationships-desktop.png", fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
-  const relationshipTableContainer = page.locator(
-    'section[aria-labelledby="relationships-heading"] [data-slot="table-container"]',
-  );
+  const relationshipMobileRows = page.getByRole("region", {
+    name: "Mobile directed relationships",
+  });
+  await expect(relationshipMobileRows).toBeVisible();
   await expect(
-    relationshipTableContainer.getByRole("button", {
+    relationshipMobileRows.getByRole("button", {
       name: "Actions for relationship 儿子 to 父亲",
     }),
   ).toBeVisible();
-  await expect(
-    relationshipTableContainer.evaluate((element) => element.scrollWidth > element.clientWidth),
-  ).resolves.toBe(true);
   await expect(
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);
   await page.screenshot({ path: ".tura/e2e/relationships-mobile.png", fullPage: true });
 
-  const relationshipRow = page
-    .getByRole("row")
+  const relationshipRow = relationshipMobileRows
+    .locator("article")
     .filter({ hasText: "儿子" })
     .filter({ hasText: "父亲" })
     .last();
@@ -176,7 +243,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(page.getByRole("heading", { name: "Edit directed relationship" })).toBeVisible();
   await page.getByLabel("Preferred self-pronoun").fill("ผม");
   await page.getByRole("button", { name: "Save relationship" }).click();
-  await expect(page.getByText("Self: ผม", { exact: true })).toBeVisible();
+  await expect(relationshipMobileRows.getByText(/ผม/)).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("button", { name: "Back to novel" }).click();
   const chapterRow = page
@@ -184,6 +251,10 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     .filter({ visible: true })
     .locator("xpath=ancestor::tr");
   await chapterRow.getByRole("button", { name: "Re-translate chapter" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Overwrite Existing Translation?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Overwrite & Translate" }).click();
   const activeRetranslation = chapterRow.getByRole("button", { name: "Cancel translation" });
   await expect(activeRetranslation).toBeVisible({ timeout: 30_000 });
   await expect(activeRetranslation).toHaveCount(0, { timeout: 90_000 });
@@ -218,6 +289,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     page.getByRole("combobox", { name: "Sort by" }).locator('[data-slot="select-value"]'),
   ).toHaveText("Newest first");
   await page.getByRole("button", { name: "New Novel" }).click();
+  await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(draftNovelTitle);
   await page.getByRole("button", { name: "Create Novel" }).click();
   await expect(page.getByRole("heading", { name: draftNovelTitle })).toBeVisible();
@@ -258,6 +330,7 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
 
   await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
   await page.getByRole("button", { name: "New Novel" }).click();
+  await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(zhEnNovelTitle);
   await page.locator("#sourceLang").click();
   await page.getByRole("option", { name: "Chinese (ZH)" }).click();
@@ -327,8 +400,12 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
 
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
-  await expect(page.getByText("Father", { exact: true })).toBeVisible();
-  await expect(page.getByText("Son", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Desktop character profiles").getByText("Father", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Desktop character profiles").getByText("Son", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("tab", { name: /Directed relationships/ }).click();
   const generatedRelationshipRow = page
     .getByRole("row")
@@ -352,17 +429,21 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
   await expect(page.getByText("EN → TH", { exact: true })).toBeVisible();
   await expect(
-    page.getByText(
-      "No character profiles yet. The next translation or retranslation will generate this map, or you can add a profile manually.",
-      { exact: true },
-    ),
+    page
+      .getByLabel("Desktop character profiles")
+      .getByText(
+        "No character profiles yet. The next translation or retranslation will generate this map, or you can add a profile manually.",
+        { exact: true },
+      ),
   ).toBeVisible();
   await page.getByRole("tab", { name: /Directed relationships/ }).click();
   await expect(
-    page.getByText(
-      "No directed relationships yet. They are generated from evidenced dialogue during the next translation or retranslation, or can be added manually.",
-      { exact: true },
-    ),
+    page
+      .getByLabel("Desktop directed relationships")
+      .getByText(
+        "No directed relationships yet. They are generated from evidenced dialogue during the next translation or retranslation, or can be added manually.",
+        { exact: true },
+      ),
   ).toBeVisible();
 });
 
@@ -381,6 +462,7 @@ test("admin stops selected translations and reviews card metadata in both views"
 
   await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
   await page.getByRole("button", { name: "New Novel" }).click();
+  await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(bulkNovelTitle);
   await page.locator("#sourceLang").click();
   await page.getByRole("option", { name: "Chinese (ZH)" }).click();

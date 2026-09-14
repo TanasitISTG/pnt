@@ -1,5 +1,5 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
-import { eq, and, inArray, sql, asc, gte } from "drizzle-orm";
+import { eq, and, inArray, sql, asc, gte, desc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -7,29 +7,33 @@ import {
   chapters,
   translationJobs,
   translationJobChunks,
-  translationOutbox,
+  workflowOutbox,
+  providerSettings,
 } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
-import { createProviderClient } from "@/lib/translation/providers/provider-client";
+import { loadProviderRuntime } from "@/lib/translation/providers/provider-client";
 import { chunkText } from "@/lib/translation/text/chunker";
 import {
   startTranslationJobSchema,
   startTranslationJobsSchema,
+  previewTranslationBatchSchema,
   cancelTranslationJobSchema,
   cancelTranslationJobsSchema,
   retryTranslationJobSchema,
 } from "./schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
-import { createLog } from "../workflow/log-entry";
+import { appendLogEntry, createLog, serializeLogEntries } from "../workflow/log-entry";
 import type { AIProviderClient } from "../types/provider";
-import { translationRunIdentity } from "../workflow/job-state";
+import type { TranslationBatchPreview } from "../types/api";
+import { calculateTokenCost } from "../cost";
 import { enqueueTranslationBatchInOrder } from "./batch";
-
+import type { TranslationStartMode } from "./schemas";
+import { cancelActiveTranslationJobsInTransaction } from "../workflow/cancel";
 const dispatchOutboxBestEffort = createServerOnlyFn(async (outboxId: string) => {
-  const { dispatchTranslationOutboxEventBestEffort } = await import("../workflow/outbox");
-  await dispatchTranslationOutboxEventBestEffort(outboxId);
+  const { dispatchWorkflowOutboxEventBestEffort } = await import("@/lib/inngest/outbox");
+  await dispatchWorkflowOutboxEventBestEffort(outboxId);
 });
 async function cancelTranslationRunsForUser(
   userId: string,
@@ -96,58 +100,36 @@ async function cancelTranslationRunsForUser(
     candidates.sort((left, right) => getOrder(left) - getOrder(right));
 
     const matchedJobIds = candidates.map(({ job }) => job.id);
+    const now = new Date();
+    const cancellation = await cancelActiveTranslationJobsInTransaction(
+      tx,
+      candidates.map(({ job }) => ({
+        jobId: job.id,
+        generation: job.generation,
+        logsJson: job.logsJson,
+      })),
+      now,
+    );
+    const cancelledJobIds = new Set(cancellation.cancelledJobs.map((job) => job.jobId));
     const cancelled: Array<{ chapterId: string; jobId: string }> = [];
-    const cancellationOutboxRows: Array<{
-      id: string;
-      eventName: "translation/job.cancelled";
-      payloadJson: string;
-    }> = [];
 
     for (const { job, chapter } of candidates) {
-      if (
-        !["pending", "running"].includes(job.status) ||
-        chapter.activeTranslationJobId !== job.id
-      ) {
-        continue;
-      }
-
-      const logs: LogEntry[] = JSON.parse(job.logsJson || "[]");
-      logs.push(createLog("warn", "Job cancelled by user."));
-      await tx
-        .update(translationJobs)
-        .set({ status: "cancelled", logsJson: JSON.stringify(logs), updatedAt: new Date() })
-        .where(
-          and(
-            eq(translationJobs.id, job.id),
-            sql`${translationJobs.status} IN ('pending', 'running')`,
-          ),
-        );
+      if (!cancelledJobIds.has(job.id)) continue;
       await tx
         .update(chapters)
         .set({
           activeTranslationJobId: null,
-          status: chapter.translatedContent ? "translated" : "raw",
-          updatedAt: new Date(),
+          status: chapter.translatedContent?.trim() ? "translated" : "raw",
+          updatedAt: now,
         })
         .where(and(eq(chapters.id, chapter.id), eq(chapters.activeTranslationJobId, job.id)));
-
-      const outboxId = nanoid();
-      cancellationOutboxRows.push({
-        id: outboxId,
-        eventName: "translation/job.cancelled",
-        payloadJson: JSON.stringify(translationRunIdentity(job)),
-      });
       cancelled.push({ chapterId: chapter.id, jobId: job.id });
-    }
-
-    if (cancellationOutboxRows.length > 0) {
-      await tx.insert(translationOutbox).values(cancellationOutboxRows);
     }
 
     return {
       matchedJobIds,
       cancelled,
-      outboxIds: cancellationOutboxRows.map(({ id }) => id),
+      outboxIds: cancellation.outboxIds,
     };
   });
 }
@@ -156,6 +138,7 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
   userId: string,
   chapterId: string,
   providerConfig: AIProviderClient,
+  mode: TranslationStartMode,
   dispatch: (outboxId: string) => Promise<void> = dispatchOutboxBestEffort,
 ) {
   const queued = await db.transaction(async (tx) => {
@@ -170,19 +153,38 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
     if (!row) throw new SafeServerError("Chapter not found or unauthorized");
 
     const { chapter, novel } = row;
+    const hasTranslation = Boolean(chapter.translatedContent?.trim());
+    if (mode === "missing" && hasTranslation) {
+      throw new SafeServerError(
+        "Chapter already has a translation; choose re-translate to overwrite it",
+      );
+    }
     const chunkInfos = chunkText(chapter.rawContent, novel.chunkSize || 2000);
     if (chunkInfos.length === 0) throw new SafeServerError("Chapter content is empty");
 
-    const cancelledJobs = await tx
-      .update(translationJobs)
-      .set({ status: "cancelled", updatedAt: new Date() })
+    const activeJobs = await tx
+      .select({
+        id: translationJobs.id,
+        generation: translationJobs.generation,
+        logsJson: translationJobs.logsJson,
+      })
+      .from(translationJobs)
       .where(
         and(
           eq(translationJobs.chapterId, chapter.id),
           sql`${translationJobs.status} IN ('pending', 'running')`,
         ),
       )
-      .returning({ id: translationJobs.id, generation: translationJobs.generation });
+      .for("update");
+    const cancellation = await cancelActiveTranslationJobsInTransaction(
+      tx,
+      activeJobs.map((job) => ({
+        jobId: job.id,
+        generation: job.generation,
+        logsJson: job.logsJson,
+        message: "Translation cancelled because a newer translation was started.",
+      })),
+    );
 
     const initialChunks: ChunkProgress[] = chunkInfos.map((chunk) => ({
       index: chunk.index,
@@ -211,7 +213,14 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
       generation,
       totalChunks: chunkInfos.length,
       doneChunks: 0,
-      logsJson: JSON.stringify(logs),
+      logsJson: serializeLogEntries(logs),
+      overwriteExisting: mode === "overwrite",
+      provider: providerConfig.provider,
+      model: providerConfig.model,
+      fastModel: providerConfig.fastModel ?? null,
+      sourceCharCount: chapter.rawCharCount,
+      inputPricePer1M: providerConfig.inputPricePer1M ?? null,
+      outputPricePer1M: providerConfig.outputPricePer1M ?? null,
     });
     await tx.insert(translationJobChunks).values(
       initialChunks.map((chunk) => ({
@@ -230,27 +239,186 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
         updatedAt: new Date(),
       })
       .where(eq(chapters.id, chapter.id));
-    await tx.insert(translationOutbox).values({
+    await tx.insert(workflowOutbox).values({
       id: outboxId,
       eventName: "translation/job.requested",
       payloadJson: JSON.stringify({ jobId, novelId: novel.id, generation, runKey }),
     });
-    if (cancelledJobs.length > 0) {
-      await tx.insert(translationOutbox).values(
-        cancelledJobs.map((cancelled) => ({
-          id: nanoid(),
-          eventName: "translation/job.cancelled",
-          payloadJson: JSON.stringify(translationRunIdentity(cancelled)),
-        })),
-      );
-    }
 
-    return { jobId, outboxId, totalChunks: chunkInfos.length };
+    return {
+      jobId,
+      outboxIds: [outboxId, ...cancellation.outboxIds],
+      totalChunks: chunkInfos.length,
+    };
   });
 
-  await dispatch(queued.outboxId);
+  await Promise.all(queued.outboxIds.map(dispatch));
   return { jobId: queued.jobId, totalChunks: queued.totalChunks };
 });
+
+type PreviewUsage = {
+  promptTokens: number;
+  completionTokens: number;
+};
+
+function parsePreviewUsage(value: string | null): PreviewUsage | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    const promptTokens = record.totalPromptTokens;
+    const completionTokens = record.totalCompletionTokens;
+    if (
+      typeof promptTokens !== "number" ||
+      !Number.isFinite(promptTokens) ||
+      promptTokens < 0 ||
+      typeof completionTokens !== "number" ||
+      !Number.isFinite(completionTokens) ||
+      completionTokens < 0
+    ) {
+      return null;
+    }
+    return { promptTokens, completionTokens };
+  } catch {
+    return null;
+  }
+}
+
+export const previewTranslationBatch = createServerFn({ method: "POST" })
+  .validator(previewTranslationBatchSchema)
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+      const [chapterRows, settingsRows, sampleRows] = await Promise.all([
+        db
+          .select({
+            id: chapters.id,
+            rawCharCount: chapters.rawCharCount,
+            status: chapters.status,
+            translatedContent: chapters.translatedContent,
+            activeTranslationJobId: chapters.activeTranslationJobId,
+            editedAt: chapters.editedAt,
+          })
+          .from(chapters)
+          .innerJoin(novels, eq(chapters.novelId, novels.id))
+          .where(
+            and(
+              eq(chapters.novelId, data.novelId),
+              eq(novels.userId, session.user.id),
+              inArray(chapters.id, data.chapterIds),
+            ),
+          ),
+        db
+          .select({
+            inputPricePer1M: providerSettings.inputPricePer1M,
+            outputPricePer1M: providerSettings.outputPricePer1M,
+          })
+          .from(providerSettings)
+          .where(eq(providerSettings.userId, session.user.id))
+          .limit(1),
+        db
+          .select({
+            sourceCharCount: translationJobs.sourceCharCount,
+            usageJson: translationJobs.usageJson,
+          })
+          .from(translationJobs)
+          .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+          .innerJoin(novels, eq(chapters.novelId, novels.id))
+          .where(
+            and(
+              eq(chapters.novelId, data.novelId),
+              eq(novels.userId, session.user.id),
+              eq(translationJobs.status, "done"),
+            ),
+          )
+          .orderBy(desc(translationJobs.updatedAt))
+          .limit(20),
+      ]);
+
+      const chaptersById = new Map(chapterRows.map((chapter) => [chapter.id, chapter]));
+      const eligibleIds: string[] = [];
+      const skipped: TranslationBatchPreview["skipped"] = [];
+      let rawCharacterTotal = 0;
+      let existingTranslationCount = 0;
+      let manualEditCount = 0;
+      let activeCount = 0;
+
+      for (const chapterId of data.chapterIds) {
+        const chapter = chaptersById.get(chapterId);
+        if (!chapter) {
+          skipped.push({ id: chapterId, reason: "not-found" });
+          continue;
+        }
+        const hasTranslation = Boolean(chapter.translatedContent?.trim());
+        const isActive =
+          Boolean(chapter.activeTranslationJobId) ||
+          chapter.status === "queued" ||
+          chapter.status === "translating";
+        if (hasTranslation) existingTranslationCount++;
+        if (chapter.editedAt) manualEditCount++;
+        if (isActive) activeCount++;
+
+        if (isActive) {
+          skipped.push({ id: chapterId, reason: "active" });
+        } else if (data.mode === "missing" && hasTranslation) {
+          skipped.push({ id: chapterId, reason: "already-translated" });
+        } else if (chapter.rawCharCount <= 0) {
+          skipped.push({ id: chapterId, reason: "empty" });
+        } else {
+          eligibleIds.push(chapterId);
+          rawCharacterTotal += chapter.rawCharCount;
+        }
+      }
+
+      const sampleTotals = sampleRows.reduce(
+        (totals, row) => {
+          const usage = parsePreviewUsage(row.usageJson);
+          const sourceCharCount = row.sourceCharCount ?? 0;
+          if (!usage || sourceCharCount <= 0) return totals;
+          return {
+            promptTokens: totals.promptTokens + usage.promptTokens,
+            completionTokens: totals.completionTokens + usage.completionTokens,
+            sourceCharCount: totals.sourceCharCount + sourceCharCount,
+            sampleSize: totals.sampleSize + 1,
+          };
+        },
+        { promptTokens: 0, completionTokens: 0, sourceCharCount: 0, sampleSize: 0 },
+      );
+      const settings = settingsRows[0];
+      const estimate =
+        rawCharacterTotal > 0 && sampleTotals.sampleSize >= 3
+          ? {
+              sampleSize: sampleTotals.sampleSize,
+              promptTokens: Math.ceil(
+                (rawCharacterTotal * sampleTotals.promptTokens) / sampleTotals.sourceCharCount,
+              ),
+              completionTokens: Math.ceil(
+                (rawCharacterTotal * sampleTotals.completionTokens) / sampleTotals.sourceCharCount,
+              ),
+              cost: null as number | null,
+            }
+          : null;
+      if (estimate) {
+        estimate.cost = calculateTokenCost(
+          estimate.promptTokens,
+          estimate.completionTokens,
+          settings?.inputPricePer1M,
+          settings?.outputPricePer1M,
+        );
+      }
+
+      return {
+        eligibleIds,
+        skipped,
+        rawCharacterTotal,
+        existingTranslationCount,
+        manualEditCount,
+        activeCount,
+        estimate,
+      } satisfies TranslationBatchPreview;
+    }),
+  );
 
 export const startTranslationJob = createServerFn({ method: "POST" })
   .validator(startTranslationJobSchema)
@@ -258,8 +426,8 @@ export const startTranslationJob = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      const providerConfig = await createProviderClient(session.user.id);
-      return enqueueTranslationJob(session.user.id, data.chapterId, providerConfig);
+      const { client: providerConfig } = await loadProviderRuntime(session.user.id);
+      return enqueueTranslationJob(session.user.id, data.chapterId, providerConfig, data.mode);
     }),
   );
 
@@ -268,8 +436,8 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-      const [providerConfig, targetChapters] = await Promise.all([
-        createProviderClient(session.user.id),
+      const [{ client: providerConfig }, targetChapters] = await Promise.all([
+        loadProviderRuntime(session.user.id),
         db
           .select({ id: chapters.id, number: chapters.number })
           .from(chapters)
@@ -292,7 +460,7 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
       );
 
       const result = await enqueueTranslationBatchInOrder(targetChapters, (chapterId) =>
-        enqueueTranslationJob(session.user.id, chapterId, providerConfig),
+        enqueueTranslationJob(session.user.id, chapterId, providerConfig, data.mode),
       );
 
       return { queued: result.queued, skipped: [...missing, ...result.skipped] };
@@ -347,7 +515,7 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-      await createProviderClient(session.user.id);
+      await loadProviderRuntime(session.user.id);
 
       const retried = await db.transaction(async (tx) => {
         const [row] = await tx
@@ -366,10 +534,19 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
         if (row.job.sourceRevision !== row.chapter.sourceRevision) {
           throw new SafeServerError("Chapter source changed; start a new translation instead");
         }
+        if (!row.job.overwriteExisting && row.chapter.translatedContent?.trim()) {
+          throw new SafeServerError(
+            "Chapter already has a translation; choose re-translate to overwrite it",
+          );
+        }
 
-        const cancelledJobs = await tx
-          .update(translationJobs)
-          .set({ status: "cancelled", updatedAt: new Date() })
+        const activeJobs = await tx
+          .select({
+            id: translationJobs.id,
+            generation: translationJobs.generation,
+            logsJson: translationJobs.logsJson,
+          })
+          .from(translationJobs)
           .where(
             and(
               eq(translationJobs.chapterId, row.chapter.id),
@@ -377,11 +554,22 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
               sql`${translationJobs.status} IN ('pending', 'running')`,
             ),
           )
-          .returning({ id: translationJobs.id, generation: translationJobs.generation });
+          .for("update");
+        const cancellation = await cancelActiveTranslationJobsInTransaction(
+          tx,
+          activeJobs.map((job) => ({
+            jobId: job.id,
+            generation: job.generation,
+            logsJson: job.logsJson,
+            message: "Translation cancelled because a retry was started.",
+          })),
+        );
 
         const generation = row.chapter.translationGeneration + 1;
-        const logs: LogEntry[] = JSON.parse(row.job.logsJson || "[]");
-        logs.push(createLog("info", "Job retry initiated. Resuming from last completed chunk..."));
+        const logsJson = appendLogEntry(
+          row.job.logsJson,
+          createLog("info", "Job retry initiated. Resuming from last completed chunk..."),
+        );
         await tx
           .update(translationJobChunks)
           .set({ error: null })
@@ -396,9 +584,8 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
           .set({
             status: "pending",
             generation,
-            sourceRevision: row.chapter.sourceRevision,
+            logsJson,
             error: null,
-            logsJson: JSON.stringify(logs),
             updatedAt: new Date(),
           })
           .where(
@@ -421,7 +608,7 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
           .where(eq(chapters.id, row.chapter.id));
 
         const outboxId = nanoid();
-        await tx.insert(translationOutbox).values({
+        await tx.insert(workflowOutbox).values({
           id: outboxId,
           eventName: "translation/job.requested",
           payloadJson: JSON.stringify({
@@ -431,19 +618,13 @@ export const retryTranslationJob = createServerFn({ method: "POST" })
             runKey: nanoid(),
           }),
         });
-        if (cancelledJobs.length > 0) {
-          await tx.insert(translationOutbox).values(
-            cancelledJobs.map((cancelled) => ({
-              id: nanoid(),
-              eventName: "translation/job.cancelled",
-              payloadJson: JSON.stringify(translationRunIdentity(cancelled)),
-            })),
-          );
-        }
-        return { jobId: row.job.id, outboxId };
+        return {
+          jobId: row.job.id,
+          outboxIds: [outboxId, ...cancellation.outboxIds],
+        };
       });
 
-      await dispatchOutboxBestEffort(retried.outboxId);
+      await Promise.all(retried.outboxIds.map(dispatchOutboxBestEffort));
       return { success: true, jobId: retried.jobId };
     }),
   );

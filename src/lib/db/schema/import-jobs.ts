@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -7,6 +7,7 @@ import {
   integer,
   numeric,
   index,
+  uniqueIndex,
   unique,
   primaryKey,
 } from "drizzle-orm/pg-core";
@@ -60,6 +61,9 @@ export const importJobs = pgTable(
   (table) => [
     index("import_jobs_novel_id_idx").on(table.novelId),
     index("import_jobs_recent_idx").on(table.updatedAt.desc(), table.novelId, table.id),
+    uniqueIndex("import_jobs_one_active_per_novel_idx")
+      .on(table.novelId)
+      .where(sql`${table.status} IN ('pending', 'running')`),
   ],
 );
 

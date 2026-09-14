@@ -7,7 +7,120 @@ config();
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import postgres from "postgres";
+import postgres, { type Sql } from "postgres";
+
+type LegacyActiveImportJob = {
+  id: string;
+  kind: string | null;
+  epubUploadId: string | null;
+};
+
+// Migration 0030 adds a partial unique index, so clean up legacy duplicates first.
+// This is data reconciliation only; the migration runner must not fabricate outbox events.
+async function reconcileLegacyActiveImportJobs(client: Sql): Promise<void> {
+  const [{ exists, hasEpubColumns }] = await client<{ exists: boolean; hasEpubColumns: boolean }[]>`
+    SELECT
+      to_regclass('public.import_jobs') IS NOT NULL AS "exists",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'import_jobs'
+          AND column_name = 'kind'
+      ) AND EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'import_jobs'
+          AND column_name = 'epub_upload_id'
+      ) AS "hasEpubColumns"
+  `;
+  if (!exists) return;
+
+  if (!hasEpubColumns) {
+    await client`
+      WITH ranked AS (
+        SELECT
+          "id",
+          row_number() OVER (
+            PARTITION BY "novel_id"
+            ORDER BY "created_at" DESC, "id" DESC
+          ) AS "row_number"
+        FROM "import_jobs"
+        WHERE "status" IN ('pending', 'running')
+      )
+      UPDATE "import_jobs" AS jobs
+      SET "status" = 'cancelled', "updated_at" = CURRENT_TIMESTAMP
+      FROM ranked
+      WHERE jobs."id" = ranked."id"
+        AND ranked."row_number" > 1
+    `;
+    return;
+  }
+
+  const [{ hasItems, hasUploadChunks, hasUploads }] = await client<
+    { hasItems: boolean; hasUploadChunks: boolean; hasUploads: boolean }[]
+  >`
+    SELECT
+      to_regclass('public.import_job_items') IS NOT NULL AS "hasItems",
+      to_regclass('public.epub_upload_chunks') IS NOT NULL AS "hasUploadChunks",
+      to_regclass('public.epub_uploads') IS NOT NULL AS "hasUploads"
+  `;
+
+  await client.begin(async (transaction) => {
+    const losingJobs = await transaction<LegacyActiveImportJob[]>`
+      WITH ranked AS (
+        SELECT
+          "id",
+          row_number() OVER (
+            PARTITION BY "novel_id"
+            ORDER BY "created_at" DESC, "id" DESC
+          ) AS "row_number"
+        FROM "import_jobs"
+        WHERE "status" IN ('pending', 'running')
+      )
+      SELECT
+        jobs."id",
+        jobs."kind"::text AS "kind",
+        jobs."epub_upload_id" AS "epubUploadId"
+      FROM "import_jobs" AS jobs
+      INNER JOIN ranked ON ranked."id" = jobs."id"
+      WHERE ranked."row_number" > 1
+      FOR UPDATE OF jobs
+    `;
+    if (losingJobs.length === 0) return;
+
+    const losingJobIds = losingJobs.map(({ id }) => id);
+    const losingUploadIds = losingJobs.flatMap(({ kind, epubUploadId }) =>
+      kind === "epub" && epubUploadId ? [epubUploadId] : [],
+    );
+
+    await transaction`
+      UPDATE "import_jobs"
+      SET "status" = 'cancelled', "updated_at" = CURRENT_TIMESTAMP
+      WHERE "id" = ANY(${losingJobIds})
+        AND "status" IN ('pending', 'running')
+    `;
+    if (hasItems) {
+      await transaction`
+        DELETE FROM "import_job_items"
+        WHERE "job_id" = ANY(${losingJobIds})
+      `;
+    }
+    if (losingUploadIds.length > 0 && hasUploadChunks) {
+      await transaction`
+        DELETE FROM "epub_upload_chunks"
+        WHERE "upload_id" = ANY(${losingUploadIds})
+      `;
+    }
+    if (losingUploadIds.length > 0 && hasUploads) {
+      await transaction`
+        DELETE FROM "epub_uploads"
+        WHERE "id" = ANY(${losingUploadIds})
+      `;
+    }
+  });
+}
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -33,6 +146,8 @@ async function run() {
       )
     `;
 
+    console.log("Reconciling legacy active import jobs...");
+    await reconcileLegacyActiveImportJobs(client);
     console.log("Applying database migrations...");
     const db = drizzle(client);
     await migrate(db, { migrationsFolder: "./drizzle" });

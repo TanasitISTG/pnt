@@ -300,12 +300,33 @@ function NovelProgress({ chapters, chaptersPending, costData }: NovelProgressPro
   const translatedChapterCount = chaptersPending
     ? 0
     : chapters.filter((chapter) => chapter.status === "translated").length;
+  const readyUnpublishedCount = chaptersPending
+    ? 0
+    : chapters.filter(
+        (chapter) =>
+          chapter.status === "translated" &&
+          chapter.hasTranslation &&
+          (!chapter.publishedAt || new Date(chapter.publishedAt) > new Date()),
+      ).length;
+  const unreadyCount = chaptersPending
+    ? 0
+    : chapters.filter((chapter) => chapter.status !== "translated" || !chapter.hasTranslation)
+        .length;
   const progressPercent =
     chaptersPending || chapters.length === 0
       ? 0
       : Math.round((translatedChapterCount / chapters.length) * 100);
   const hasUsage =
-    costData && (costData.totals.promptTokens > 0 || costData.totals.completionTokens > 0);
+    costData &&
+    (costData.totals.promptTokens > 0 ||
+      costData.totals.completionTokens > 0 ||
+      costData.totals.unpricedChapterCount > 0);
+  const costQualifier =
+    costData && costData.totals.unpricedChapterCount > 0
+      ? `${costData.totals.unpricedChapterCount} unpriced`
+      : costData && costData.totals.estimatedChapterCount > 0
+        ? `${costData.totals.estimatedChapterCount} estimated`
+        : null;
 
   return (
     <div className="flex max-w-md flex-col gap-1.5 pt-2">
@@ -318,13 +339,20 @@ function NovelProgress({ chapters, chaptersPending, costData }: NovelProgressPro
         </span>
       </div>
       <Progress value={chaptersPending ? null : progressPercent} className="h-2" />
+      {!chaptersPending ? (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
+          <span>{readyUnpublishedCount} ready to publish</span>
+          <span>{unreadyCount} not ready</span>
+        </div>
+      ) : null}
       {hasUsage && costData ? (
-        <div className="flex justify-between font-mono text-caption text-muted-foreground">
+        <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 font-mono text-caption text-muted-foreground">
           <span>Translation usage</span>
           <span>
             {formatTokens(costData.totals.promptTokens)} in /{" "}
             {formatTokens(costData.totals.completionTokens)} out
             {costData.totals.cost != null ? ` · ${formatCost(costData.totals.cost)}` : null}
+            {costQualifier ? ` · ${costQualifier}` : null}
           </span>
         </div>
       ) : null}

@@ -29,6 +29,8 @@ export interface AIProviderClient {
   fastModel?: string | null;
   temperature: number;
   baseUrl: string;
+  inputPricePer1M?: number | null;
+  outputPricePer1M?: number | null;
   generateChatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult>;
 }
 

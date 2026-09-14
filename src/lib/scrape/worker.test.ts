@@ -8,9 +8,7 @@ import * as scrapeServer from "./server";
 vi.mock("@/lib/import/job-store", () => ({
   loadImportJob: vi.fn(),
   markImportJobRunning: vi.fn(),
-  bumpImportJob: vi.fn(),
-  findChapterByNumber: vi.fn(),
-  insertRawChapter: vi.fn(),
+  commitScrapeImportChapter: vi.fn(),
   markImportJobDone: vi.fn(),
   markImportJobError: vi.fn(),
 }));
@@ -64,6 +62,10 @@ describe("scrape worker steps", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    vi.mocked(jobStore.commitScrapeImportChapter).mockResolvedValue({
+      stop: false,
+      created: false,
+    });
   });
 
   afterEach(() => {
@@ -142,15 +144,13 @@ describe("scrape worker steps", () => {
       "https://www.quanben.io/n/abc/5.html",
       "auto",
     );
-    expect(jobStore.bumpImportJob).toHaveBeenCalledWith(
-      "job-1",
-      6,
-      expect.objectContaining({ failed: 1, error: "boom" }),
-    );
-    expect(jobStore.insertRawChapter).not.toHaveBeenCalled();
+    expect(jobStore.commitScrapeImportChapter).toHaveBeenCalledWith("job-1", 5, {
+      kind: "failed",
+      error: "boom",
+    });
   });
 
-  it("7. importOneChapter skips chapters that already exist", async () => {
+  it("7. importOneChapter treats an existing chapter as a safe skip", async () => {
     vi.mocked(jobStore.loadImportJob).mockResolvedValue(quanbenJob as never);
     vi.mocked(scrapeServer.fetchAndParse).mockResolvedValue({
       number: 5,
@@ -158,20 +158,19 @@ describe("scrape worker steps", () => {
       content: "Some content",
       nextUrl: null,
     });
-    vi.mocked(jobStore.findChapterByNumber).mockResolvedValue({ id: "chapter-1" } as never);
 
     const res = await runChapter(5);
 
     expect(res).toEqual({ stop: false, created: false });
-    expect(jobStore.bumpImportJob).toHaveBeenCalledWith(
-      "job-1",
-      6,
-      expect.objectContaining({ skipped: 1 }),
-    );
-    expect(jobStore.insertRawChapter).not.toHaveBeenCalled();
+    expect(jobStore.commitScrapeImportChapter).toHaveBeenCalledWith("job-1", 5, {
+      kind: "added",
+      number: "5",
+      title: "Chapter 5",
+      content: "Some content",
+    });
   });
 
-  it("8. importOneChapter inserts scraped chapters and advances the cursor", async () => {
+  it("8. importOneChapter commits scraped chapters and advances the cursor", async () => {
     vi.mocked(jobStore.loadImportJob).mockResolvedValue(quanbenJob as never);
     vi.mocked(scrapeServer.fetchAndParse).mockResolvedValue({
       number: 5,
@@ -179,22 +178,20 @@ describe("scrape worker steps", () => {
       content: "Some content",
       nextUrl: null,
     });
-    vi.mocked(jobStore.findChapterByNumber).mockResolvedValue(null as never);
+    vi.mocked(jobStore.commitScrapeImportChapter).mockResolvedValue({
+      stop: false,
+      created: true,
+    });
 
     const res = await runChapter(5);
 
     expect(res).toEqual({ stop: false, created: true });
-    expect(jobStore.insertRawChapter).toHaveBeenCalledWith({
-      novelId: "novel-1",
+    expect(jobStore.commitScrapeImportChapter).toHaveBeenCalledWith("job-1", 5, {
+      kind: "added",
       number: "5",
       title: "Chapter 5",
       content: "Some content",
     });
-    expect(jobStore.bumpImportJob).toHaveBeenCalledWith(
-      "job-1",
-      6,
-      expect.objectContaining({ added: 1 }),
-    );
   });
 
   it("9. importOneChapter fails fast when a twkan chapter URL is missing from the TOC", async () => {
@@ -204,10 +201,9 @@ describe("scrape worker steps", () => {
 
     expect(res).toEqual({ stop: false, created: false });
     expect(scrapeServer.fetchAndParse).not.toHaveBeenCalled();
-    expect(jobStore.bumpImportJob).toHaveBeenCalledWith(
-      "job-1",
-      8,
-      expect.objectContaining({ failed: 1, error: "Chapter 7 URL missing in TOC" }),
-    );
+    expect(jobStore.commitScrapeImportChapter).toHaveBeenCalledWith("job-1", 7, {
+      kind: "failed",
+      error: "Chapter 7 URL missing in TOC",
+    });
   });
 });

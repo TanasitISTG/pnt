@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createCompletion, createResponse } = vi.hoisted(() => ({
+const { createCompletion, createResponse, createGeminiContent } = vi.hoisted(() => ({
   createCompletion: vi.fn(),
   createResponse: vi.fn(),
+  createGeminiContent: vi.fn(),
 }));
 
 vi.mock("openai", () => ({
@@ -14,16 +13,20 @@ vi.mock("openai", () => ({
   },
 }));
 
-import { OpenAIProviderClient } from "./provider-client";
+vi.mock("@google/genai", () => ({
+  GoogleGenAI: class {
+    models = { generateContent: createGeminiContent };
+  },
+}));
+vi.mock("@/lib/db", () => ({ db: {} }));
+vi.mock("@/lib/settings/crypto", () => ({ decrypt: vi.fn() }));
 
-const source = readFileSync(
-  fileURLToPath(new URL("./provider-client.ts", import.meta.url)),
-  "utf8",
-);
+import { GeminiProviderClient, OpenAIProviderClient } from "./provider-client";
 
 beforeEach(() => {
   createCompletion.mockReset();
   createResponse.mockReset();
+  createGeminiContent.mockReset();
   createCompletion.mockResolvedValue({
     choices: [{ message: { content: "translated" } }],
     usage: { prompt_tokens: 12, completion_tokens: 34 },
@@ -32,35 +35,61 @@ beforeEach(() => {
     output_text: "translated",
     usage: { input_tokens: 12, output_tokens: 34 },
   });
+  createGeminiContent.mockResolvedValue({
+    text: "translated",
+    usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 34 },
+  });
 });
 
 describe("provider-client module", () => {
-  it("exports OpenAIProviderClient and GeminiProviderClient classes", () => {
-    expect(source).toContain("export class OpenAIProviderClient");
-    expect(source).toContain("export class GeminiProviderClient");
-  });
+  it("handles Gemini system instructions and response format", async () => {
+    const client = new GeminiProviderClient({
+      apiKey: "test-key",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      model: "gemini-2.5-flash",
+      temperature: 0.4,
+    });
 
-  it("supports provider type selection in createProviderClient", () => {
-    expect(source).toContain('provider === "gemini"');
-    expect(source).toContain("new GeminiProviderClient");
-    expect(source).toContain("new OpenAIProviderClient");
-  });
+    const result = await client.generateChatCompletion({
+      messages: [
+        { role: "system", content: "Translate into Thai." },
+        { role: "user", content: "Translate this." },
+      ],
+      maxTokens: 128,
+      responseFormat: { type: "json_object" },
+    });
 
-  it("handles Gemini system instructions and response format", () => {
-    expect(source).toContain("systemInstruction:");
-    expect(source).toContain(
-      'responseMimeType:\n          options.responseFormat?.type === "json_object" ? "application/json" : undefined',
+    expect(createGeminiContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: "Translate this." }] }],
+        config: expect.objectContaining({
+          systemInstruction: "Translate into Thai.",
+          maxOutputTokens: 128,
+          responseMimeType: "application/json",
+        }),
+      }),
     );
+    expect(result).toEqual({
+      content: "translated",
+      usage: { promptTokens: 12, completionTokens: 34 },
+    });
   });
 
-  it("extracts token counts from Gemini usageMetadata", () => {
-    expect(source).toContain("response.usageMetadata?.promptTokenCount");
-    expect(source).toContain("response.usageMetadata?.candidatesTokenCount");
-  });
+  it("preserves fast model and pricing snapshot fields on clients", () => {
+    const client = new OpenAIProviderClient({
+      apiKey: "test-key",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o",
+      fastModel: "gpt-4o-mini",
+      temperature: 0.4,
+      inputPricePer1M: 2.5,
+      outputPricePer1M: 10,
+    });
 
-  it("passes fastModel configuration to provider clients", () => {
-    expect(source).toContain("fastModel?: string | null");
-    expect(source).toContain("fastModel: settings.fastModel");
+    expect(client.fastModel).toBe("gpt-4o-mini");
+    expect(client.inputPricePer1M).toBe(2.5);
+    expect(client.outputPricePer1M).toBe(10);
   });
 
   it("bounds OpenCode Go DeepSeek Flash reasoning for translation", async () => {

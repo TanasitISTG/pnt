@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   alignParagraphs,
+  alignParagraphArrays,
   splitParagraphs,
   injectParagraphMarkers,
   restoreParagraphMarkers,
@@ -42,6 +43,12 @@ describe("alignParagraphs", () => {
       { raw: "a", translated: "A" },
       { raw: "b", translated: undefined },
       { raw: "c", translated: undefined },
+    ]);
+  });
+  it("aligns already split paragraphs without re-parsing their source text", () => {
+    expect(alignParagraphArrays(["a", "b"], ["A"])).toEqual([
+      { raw: "a", translated: "A" },
+      { raw: "b", translated: undefined },
     ]);
   });
 });

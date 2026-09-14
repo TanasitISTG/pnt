@@ -1,4 +1,5 @@
 import { useHydrated } from "@/lib/use-hydrated";
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -10,44 +11,99 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getTranslationJobStatus } from "@/lib/translation/api/queries";
-import { formatLocalDateTime, formatLocalTime, parseDateTime } from "@/lib/date-time";
+import { getTranslationJobDetails, getTranslationJobProgress } from "@/lib/translation/api/queries";
+import { QueryErrorState } from "@/components/query-error-state";
 import type { LogEntry } from "@/lib/translation/types/workflow";
-import type { SlimChunkProgress } from "@/lib/translation/types/api";
+import type {
+  SlimChunkProgress,
+  TranslationJobDetails,
+  TranslationJobProgress,
+} from "@/lib/translation/types/api";
 import { ChapterStatusBadge } from "@/components/chapters/chapter-status-badge";
 import type { ChapterStatus } from "@/components/chapters/types";
-import { Loader2, Terminal, Cpu, Zap, XCircle } from "lucide-react";
-function useJobLogsQuery(
+import { formatLocalDateTime, formatLocalTime, parseDateTime } from "@/lib/date-time";
+import { Cpu, Loader2, Terminal, XCircle, Zap } from "lucide-react";
+
+function isRunningStatus(status: string | undefined): boolean {
+  return status === "running" || status === "pending";
+}
+
+function useJobLogsQueries(
   jobId: string | null | undefined,
   chapterId: string | null | undefined,
   open: boolean,
 ) {
-  return useQuery({
-    queryKey: ["jobLogs", jobId || chapterId],
-    queryFn: () =>
-      jobId
-        ? getTranslationJobStatus({ data: { jobId } })
-        : chapterId
-          ? getTranslationJobStatus({ data: { chapterId } })
-          : null,
-    enabled: open && (!!jobId || !!chapterId),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status === "running" || status === "pending" ? 1500 : false;
-    },
+  const lookup = jobId ? { jobId } : chapterId ? { chapterId } : {};
+  const queryKey = jobId || chapterId;
+  const progressQuery = useQuery({
+    queryKey: ["translationJobProgress", queryKey],
+    queryFn: () => getTranslationJobProgress({ data: lookup }),
+    enabled: open && !!queryKey,
+    staleTime: 500,
+    refetchInterval: (query) => (isRunningStatus(query.state.data?.status) ? 1_500 : false),
+    refetchIntervalInBackground: false,
   });
+  const detailsQuery = useQuery({
+    queryKey: ["translationJobDetails", queryKey],
+    queryFn: () => getTranslationJobDetails({ data: lookup }),
+    enabled: open && !!queryKey,
+    staleTime: 10_000,
+    refetchInterval: (query) => (isRunningStatus(query.state.data?.status) ? 10_000 : false),
+    refetchIntervalInBackground: false,
+  });
+  const previousStatusRef = useRef<string | undefined>(undefined);
+  const refetchDetails = detailsQuery.refetch;
+
+  useEffect(() => {
+    const status = progressQuery.data?.status;
+    const previousStatus = previousStatusRef.current;
+    previousStatusRef.current = status;
+    if (status && previousStatus && isRunningStatus(previousStatus) && !isRunningStatus(status)) {
+      void refetchDetails();
+    }
+  }, [progressQuery.data?.status, refetchDetails]);
+
+  return { progressQuery, detailsQuery };
+}
+
+type JobUsage = {
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+};
+
+function parseJobUsage(value: string | null | undefined): JobUsage | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    const totalPromptTokens = record.totalPromptTokens;
+    const totalCompletionTokens = record.totalCompletionTokens;
+    if (
+      typeof totalPromptTokens !== "number" ||
+      !Number.isFinite(totalPromptTokens) ||
+      typeof totalCompletionTokens !== "number" ||
+      !Number.isFinite(totalCompletionTokens)
+    ) {
+      return null;
+    }
+    return { totalPromptTokens, totalCompletionTokens };
+  } catch {
+    return null;
+  }
 }
 
 interface JobLogsDialogHeaderProps {
-  jobData: Awaited<ReturnType<typeof getTranslationJobStatus>> | null | undefined;
+  jobData: TranslationJobDetails | null | undefined;
+  status: TranslationJobProgress["status"] | undefined;
 }
 
-function JobLogsDialogHeader({ jobData }: JobLogsDialogHeaderProps) {
-  const running = jobData?.status === "running" || jobData?.status === "pending";
+function JobLogsDialogHeader({ jobData, status }: JobLogsDialogHeaderProps) {
+  const running = isRunningStatus(status);
   return (
     <DialogHeader className="flex shrink-0 flex-col items-start gap-3 border-b border-border pb-4 pr-8 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="size-9 shrink-0 rounded-lg border border-primary/20 bg-primary/10 flex items-center justify-center">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10">
           <Terminal className="size-5 text-primary" />
         </div>
         <div className="min-w-0">
@@ -61,9 +117,9 @@ function JobLogsDialogHeader({ jobData }: JobLogsDialogHeaderProps) {
           ) : null}
         </div>
       </div>
-      {jobData ? (
+      {status ? (
         <div className="flex shrink-0 items-center gap-2">
-          <ChapterStatusBadge status={jobData.status as ChapterStatus} />
+          <ChapterStatusBadge status={status as ChapterStatus} />
           {running ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
         </div>
       ) : null}
@@ -192,7 +248,9 @@ function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
 }
 
 interface JobMetricsBarProps {
+  provider: string | null;
   model: string;
+  isLegacyProviderFallback: boolean;
   doneChunks: number;
   totalChunks: number;
   promptTokens: number;
@@ -200,7 +258,9 @@ interface JobMetricsBarProps {
 }
 
 function JobMetricsBar({
+  provider,
   model,
+  isLegacyProviderFallback,
   doneChunks,
   totalChunks,
   promptTokens,
@@ -212,8 +272,12 @@ function JobMetricsBar({
         <span className="text-caption text-muted-foreground font-medium flex items-center gap-1.5 whitespace-nowrap">
           <Cpu className="size-4 text-muted-foreground" /> Model
         </span>
-        <span className="text-body-lg font-semibold text-foreground truncate" title={model}>
+        <span className="truncate text-body-lg font-semibold text-foreground" title={model}>
           {model}
+        </span>
+        <span className="truncate text-caption text-muted-foreground" title={provider ?? undefined}>
+          {provider ?? "Current provider settings"}
+          {isLegacyProviderFallback ? " · legacy fallback" : ""}
         </span>
       </div>
       <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col gap-1 min-w-0">
@@ -245,55 +309,91 @@ function JobMetricsBar({
 }
 
 export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsDialogProps) {
-  const { data: jobData, isLoading } = useJobLogsQuery(jobId, chapterId, open);
+  const { progressQuery, detailsQuery } = useJobLogsQueries(jobId, chapterId, open);
   const mounted = useHydrated();
+  const progress = progressQuery.data;
+  const jobData = detailsQuery.data;
+  const status = progress?.status ?? jobData?.status;
+  const queryError = progressQuery.isError ? progressQuery.error : detailsQuery.error;
 
   if (!open || (!jobId && !chapterId)) return null;
 
-  // Rows written before LogEntry.id existed get a positional fallback id.
-  const logs: LogEntry[] = (jobData?.logs || []).map((l, i) =>
-    l.id ? l : { ...l, id: `legacy-${i}` },
+  const logs: LogEntry[] = (jobData?.logs || []).map((log, index) =>
+    log.id ? log : { ...log, id: `legacy-${index}` },
   );
   const chunks: SlimChunkProgress[] = jobData?.chunks || [];
-  const usage = jobData?.usageJson ? JSON.parse(jobData.usageJson) : null;
-
-  // Calculate live token counts from completed chunks if aggregate usage not finalized yet
+  const usage = parseJobUsage(jobData?.usageJson);
   const livePromptTokens =
-    usage?.totalPromptTokens ?? chunks.reduce((acc, c) => acc + (c.promptTokens || 0), 0);
+    usage?.totalPromptTokens ?? chunks.reduce((sum, chunk) => sum + (chunk.promptTokens || 0), 0);
   const liveCompletionTokens =
-    usage?.totalCompletionTokens ?? chunks.reduce((acc, c) => acc + (c.completionTokens || 0), 0);
+    usage?.totalCompletionTokens ??
+    chunks.reduce((sum, chunk) => sum + (chunk.completionTokens || 0), 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col gap-4 overflow-hidden p-4 sm:h-[85vh] sm:max-h-[90vh] sm:w-[92vw] sm:max-w-4xl sm:gap-5 sm:p-6 lg:max-w-5xl">
-        <JobLogsDialogHeader jobData={jobData} />
+        <JobLogsDialogHeader jobData={jobData} status={status} />
 
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground flex-1">
-            <Loader2 className="size-8 animate-spin mb-3 text-primary" />
-            <p className="text-body">Loading job details & logs...</p>
+        {queryError && !jobData ? (
+          <QueryErrorState
+            title="Unable to load job details"
+            error={queryError}
+            onRetry={() => void Promise.all([progressQuery.refetch(), detailsQuery.refetch()])}
+            className="my-8"
+          />
+        ) : progressQuery.isPending && !progress && !jobData ? (
+          <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
+            <Loader2 className="mb-3 size-8 animate-spin text-primary" />
+            <p className="text-body">Loading job progress…</p>
           </div>
-        ) : !jobData ? (
-          <div className="text-center py-16 text-muted-foreground flex-1">
+        ) : detailsQuery.isPending && !jobData ? (
+          <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
+            <Loader2 className="mb-3 size-8 animate-spin text-primary" />
+            <p className="text-body">Loading job details and logs…</p>
+          </div>
+        ) : detailsQuery.data === null ? (
+          <div className="flex-1 py-16 text-center text-muted-foreground">
             Job details not found.
           </div>
-        ) : (
+        ) : jobData ? (
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6 sm:pr-2">
+            {detailsQuery.isError ? (
+              <QueryErrorState
+                title="Unable to refresh job details"
+                error={detailsQuery.error}
+                onRetry={() => void detailsQuery.refetch()}
+                className="my-0 min-h-0 shrink-0 rounded-xl border border-destructive/20 p-3"
+              />
+            ) : null}
+            {progressQuery.isError ? (
+              <QueryErrorState
+                title="Unable to refresh job progress"
+                error={progressQuery.error}
+                onRetry={() => void progressQuery.refetch()}
+                className="my-0 min-h-0 shrink-0 rounded-xl border border-destructive/20 p-3"
+              />
+            ) : null}
             <JobMetricsBar
+              provider={jobData.provider}
               model={jobData.model}
-              doneChunks={jobData.doneChunks}
-              totalChunks={jobData.totalChunks}
+              isLegacyProviderFallback={jobData.isLegacyProviderFallback}
+              doneChunks={progress?.doneChunks ?? jobData.doneChunks}
+              totalChunks={progress?.totalChunks ?? jobData.totalChunks}
               promptTokens={livePromptTokens}
               completionTokens={liveCompletionTokens}
             />
             {jobData.error ? (
-              <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 text-destructive text-body font-medium flex items-start gap-3 shrink-0">
-                <XCircle className="size-5 shrink-0 mt-0.5" />
+              <div className="flex shrink-0 items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-body font-medium text-destructive">
+                <XCircle className="mt-0.5 size-5 shrink-0" />
                 <span className="break-all">{jobData.error}</span>
               </div>
             ) : null}
             <LogConsole logs={logs} mounted={mounted} />
             <ChunkMetricsTable chunks={chunks} />
+          </div>
+        ) : (
+          <div className="flex-1 py-16 text-center text-muted-foreground">
+            Job details are still loading.
           </div>
         )}
       </DialogContent>

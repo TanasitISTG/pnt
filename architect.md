@@ -28,11 +28,18 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 8. Translation jobs for one novel execute one at a time. This preserves chapter-order context and prevents concurrent rolling-summary writers. Different novels may execute concurrently.
 9. Multi-record glossary propagation is atomic.
 10. Session replay and DOM autocapture are disabled; optional telemetry is limited to page views and exception events after consent.
-
-11. Relationship analysis is enabled for the canonical EN→TH, ZH→EN, and ZH→TH pairs and is non-fatal. The memoized `context-N` step runs immediately before `chunk-N`; provider or JSON validation failure logs a warning and falls back to matching enabled stored context.
-12. Automatic relationship-map writes use the same locked job/chapter/novel transaction and generation, source-revision, `doneChunks`, and active-job ownership checks as chunk writes.
+11. A novel has at most one active scrape or EPUB import job. Starting a new import cancels the previous active row in the same transaction; the partial unique index is the database backstop.
+12. Relationship analysis is enabled for the canonical EN→TH, ZH→EN, and ZH→TH pairs and is non-fatal. The memoized `context-N` step runs immediately before `chunk-N`; provider or JSON validation failure logs a warning and falls back to matching enabled stored context.
 13. Locked admin character and directed-relationship entries are never changed or re-enabled by automatic analysis. Unlocked entries may receive only source-evidenced, non-empty automatic semantic values; exact speech fields are scrubbed; caps discard new suggestions rather than evicting existing facts.
 14. Relationship-map edits do not increment chapter source revision or cancel a translation job. They apply to subsequent not-yet-started `context-N`/translation steps and future retranslations while preserving per-novel concurrency and finalization invariants.
+
+15. Translation starts carry explicit `missing` or `overwrite` intent. Missing-mode enqueue skips nonblank retained translations; overwrite-mode jobs persist that intent and all retries revalidate the chapter under lock.
+16. Guest novel and chapter reads apply live publication time, translated status, and nonblank translated-content filters. Ownership-checked admin reads remain independent of publication state; a live novel may have no guest-visible chapters.
+17. New translation jobs persist provider/model/fast-model, source character count, and available input/output prices. Historical totals use stored prices; legacy rows are explicitly current-settings estimates or unpriced.
+18. Job history and stats are retained reads, not activity sources. Active progress comes from the lean owned activity query; terminal transitions invalidate retained history/stats once.
+19. Evaluation version 2 findings are bounded, immutable snapshot evidence with stable classifications, one-based paragraph locations when known, capped excerpts, and reader-anchor links. Corrections require a new report.
+20. Reader manifests contain only navigation metadata. Full chapter bodies are loaded through the full chapter query, and reader anchors take precedence over saved scroll restoration.
+21. Chapter deletion observes and locks the pointed translation job before locking the chapter, then revalidates the pointer. Active work is terminalized with an exact-generation cancellation outbox event before the chapter and cascaded job rows are deleted.
 
 ## State transitions
 
@@ -51,13 +58,16 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 ## Persistence changes
 
 - `chapters.source_revision integer not null default 1`
+
 - `chapters.translation_generation integer not null default 0`
 - `chapters.active_translation_job_id text null`
 - `translation_jobs.source_revision integer not null default 1`
 - `translation_jobs.generation integer not null default 1`
 - `translation_job_chunks` rows keyed by `(job_id, chunk_index)` containing ordered source text, translation progress, token counts, latency, errors, and completion time.
 - Partial unique index on active translation jobs by chapter.
-- `translation_outbox` table containing stable payloads and dispatch status.
+- `workflow_outbox` table containing stable payloads and dispatch status for all workflow events.
+- Translation jobs with null provider/pricing snapshot fields are legacy rows. They remain readable through current provider credentials, but any derived spend is labeled an estimate rather than historical actual.
+- `getReaderNovel` and `getReaderChapterManifest` are the reader metadata boundaries; they must not grow full chapter bodies or admin-only fields.
 
 Migration 0022 idempotently expands legacy `translation_jobs.chunks_json` arrays into chunk rows. The legacy column remains readable but dormant during the expand/contract rollback window; all current writes target `translation_job_chunks`.
 
@@ -77,7 +87,7 @@ Unlocked exact speech fields are scrubbed and never reach the translator as auth
 - A quality report and its `translation/eval.requested` outbox event commit together. The report ID is the stable `runKey`. Attempts remain retryable; Inngest `onFailure` terminalizes active reports only after retries are exhausted.
 - Completed/error reports are immutable. Conditional completion cannot overwrite a terminal snapshot. Rechecking creates a new report and never edits chapter, glossary, or translation-job state.
 - Nonempty retained translations are evaluated regardless of chapter job status. Untranslated/whitespace-only content is skipped, not counted as clean or failed quality checks.
-- Version-1 snapshots retain chapter timestamps and a fingerprint of the language pair and approved source/target mappings. Detail reads compare these with current data; publication-only timestamp changes conservatively mark findings changed. Deleted chapters have no navigation action, including in legacy reports.
+- Version-1 snapshots retain chapter timestamps and a fingerprint of the language pair and approved source/target mappings. Version-2 snapshots additionally retain at most 20 typed findings, one-based paragraph locations when known, capped source/translation excerpts, and glossary terms. Detail reads compare these with current data; publication-only timestamp changes conservatively mark findings changed. Deleted chapters have no navigation action, including in legacy reports.
 - Stored JSON is validated before rendering. Malformed or inconsistent evidence is unavailable, not a clean result. Legacy reports preserve recorded metrics with unknown freshness and classification; new checks provide the missing metadata.
 - Owner-only summaries omit raw JSON; detail responses return 10/25/50 rows. Review URLs preserve report/filter/page across reader edits and browser Back. Guest pages never request review data.
 
@@ -88,7 +98,10 @@ Unlocked exact speech fields are scrubbed and never reach the translator as auth
 - `relationships/map.ts` and `relationships/schemas.ts`: bounded versioned documents, fail-closed parsing, directional merge rules, and prompt projections.
 - `relationships/analyzer.ts`: non-fatal canonical-pair source-window analysis and fallback context.
 - `relationships/functions.ts` and `relationships/service.ts`: authenticated ownership-checked relationship-map mutations.
-- `translation/workflow/outbox.ts`: durable event delivery; due rows compare against PostgreSQL `CURRENT_TIMESTAMP` so database visibility and eligibility use one clock.
+- `import/commands.ts` is the transaction boundary for owned import replacement/cancellation; `import/job-store.ts` owns cursor advancement and replay-safe per-chapter outcomes.
+- `job-dashboard/service.ts` owns the lean active-activity projection and retained history/stats remain separate read models.
+- `translation/evaluation/eval.schemas.ts`, `eval.service.ts`, and `eval-worker.ts` own bounded versioned snapshots; review UI links findings to reader anchors without mutating reports.
+- `inngest/outbox.ts`: workflow-wide durable event delivery; due rows compare against PostgreSQL `CURRENT_TIMESTAMP` so database visibility and eligibility use one clock.
 - `export/stream.ts` and `/api/exports/$`: authenticated cursor-backed TXT/EPUB response streaming with numeric chapter ordering and `HEAD` support.
 - `scrape.ts` and `scrape/parsers.ts`: client-safe source metadata and pure HTML parsing; `scrape/network-policy.server.ts` exclusively owns DNS resolution and private-address rejection.
 - Route-facing server functions authenticate and delegate state transitions; they do not implement worker validity rules.

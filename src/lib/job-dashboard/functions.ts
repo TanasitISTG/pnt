@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { ensureSession } from "@/lib/auth/functions";
 import { jobHistorySearchSchema } from "@/lib/job-dashboard/contracts";
-import { loadJobHistory, loadJobStats } from "@/lib/job-dashboard/service";
+import { loadJobActivity, loadJobHistory, loadJobStats } from "@/lib/job-dashboard/service";
 import { withSafeHandler } from "@/lib/server-fn-error";
 import { createServerTiming } from "@/lib/server-timing";
 
@@ -44,6 +44,18 @@ export const getJobStats = createServerFn({ method: "GET" }).handler(async () =>
     return await withSafeHandler(async () => {
       const session = await timing.measure("auth", () => ensureSession());
       return loadJobStats(session.user.id, timing);
+    });
+  } finally {
+    timing.flush();
+  }
+});
+
+export const getJobActivity = createServerFn({ method: "GET" }).handler(async () => {
+  const timing = createServerTiming();
+  try {
+    return await withSafeHandler(async () => {
+      const session = await timing.measure("auth", () => ensureSession());
+      return loadJobActivity(session.user.id, timing);
     });
   } finally {
     timing.flush();

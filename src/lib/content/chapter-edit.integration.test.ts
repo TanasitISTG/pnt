@@ -5,6 +5,7 @@ import type {
   reorderChaptersForUser as ReorderChaptersForUser,
   updateChapterForUser as UpdateChapterForUser,
 } from "./chapter-edit.service";
+import type { deleteChapterForUser as DeleteChapterForUser } from "./chapter-delete.service";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
@@ -12,6 +13,7 @@ const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 let sql: Sql;
 let updateChapterForUser: typeof UpdateChapterForUser;
 let reorderChaptersForUser: typeof ReorderChaptersForUser;
+let deleteChapterForUser: typeof DeleteChapterForUser;
 const skipEagerDispatch = async () => {};
 
 type ChapterFixture = {
@@ -120,7 +122,7 @@ async function readChapters(novelId: string): Promise<ChapterSnapshot[]> {
 
 async function deleteFixture(fixture: ChapterFixture) {
   await sql`
-    DELETE FROM "translation_outbox"
+    DELETE FROM "workflow_outbox"
     WHERE "payload_json"::jsonb ->> 'jobId' = ${fixture.runningJobId}
   `;
   await sql`DELETE FROM "user" WHERE "id" IN (${fixture.ownerUserId}, ${fixture.otherUserId})`;
@@ -137,6 +139,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
     // Load server-only database code after the test database override is set.
     ({ updateChapterForUser, reorderChaptersForUser } = await import("./chapter-edit.service"));
+    ({ deleteChapterForUser } = await import("./chapter-delete.service"));
   });
 
   afterAll(async () => {
@@ -355,7 +358,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
         Array<{ status: string; payload: { jobId: string; generation: number } }>
       >`
         SELECT "status", "payload_json"::jsonb AS "payload"
-        FROM "translation_outbox"
+        FROM "workflow_outbox"
         WHERE "id" = ${dispatched[0]}
       `;
       expect(job.status).toBe("cancelled");
@@ -467,6 +470,145 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
       expect(await readChapters(activeFixture.novelId)).toEqual(before);
     } finally {
       await deleteFixture(activeFixture);
+    }
+  }, 30_000);
+  it("cancels the exact active generation before deleting a chapter", async () => {
+    const fixture = await seedChapterFixture(true);
+    const dispatchedOutboxIds: string[] = [];
+    try {
+      await expect(
+        deleteChapterForUser(fixture.otherUserId, fixture.chapterIds[0], async () => {}),
+      ).rejects.toThrow("Chapter not found or unauthorized");
+
+      await expect(
+        deleteChapterForUser(fixture.ownerUserId, fixture.chapterIds[0], async (outboxId) => {
+          dispatchedOutboxIds.push(outboxId);
+        }),
+      ).resolves.toEqual({ success: true });
+
+      const [chapterRows, jobRows, outboxRows] = await Promise.all([
+        sql`SELECT "id" FROM "chapters" WHERE "id" = ${fixture.chapterIds[0]}`,
+        sql`SELECT "id" FROM "translation_jobs" WHERE "id" = ${fixture.runningJobId}`,
+        sql<
+          Array<{ id: string; eventName: string; payload: { jobId: string; generation: number } }>
+        >`
+          SELECT
+            "id",
+            "event_name" AS "eventName",
+            "payload_json"::jsonb AS "payload"
+          FROM "workflow_outbox"
+          WHERE "payload_json"::jsonb ->> 'jobId' = ${fixture.runningJobId}
+        `,
+      ]);
+
+      expect(chapterRows).toHaveLength(0);
+      expect(jobRows).toHaveLength(0);
+      expect(outboxRows).toHaveLength(1);
+      expect(outboxRows[0]).toMatchObject({
+        eventName: "translation/job.cancelled",
+        payload: { jobId: fixture.runningJobId, generation: 2 },
+      });
+      expect(dispatchedOutboxIds).toEqual([outboxRows[0].id]);
+    } finally {
+      await deleteFixture(fixture);
+    }
+  });
+  it("keeps a committed cancellation intent when eager dispatch fails", async () => {
+    const fixture = await seedChapterFixture(true);
+    try {
+      await expect(
+        deleteChapterForUser(fixture.ownerUserId, fixture.chapterIds[0], async () => {
+          throw new Error("Inngest unavailable");
+        }),
+      ).resolves.toEqual({ success: true });
+
+      const [chapterRows, jobRows, outboxRows] = await Promise.all([
+        sql`SELECT "id" FROM "chapters" WHERE "id" = ${fixture.chapterIds[0]}`,
+        sql`SELECT "id" FROM "translation_jobs" WHERE "id" = ${fixture.runningJobId}`,
+        sql<
+          Array<{
+            status: string;
+            attempts: number;
+            lastError: string | null;
+            payload: { jobId: string; generation: number };
+          }>
+        >`
+          SELECT
+            "status",
+            "attempts",
+            "last_error" AS "lastError",
+            "payload_json"::jsonb AS "payload"
+          FROM "workflow_outbox"
+          WHERE "payload_json"::jsonb ->> 'jobId' = ${fixture.runningJobId}
+        `,
+      ]);
+
+      expect(chapterRows).toHaveLength(0);
+      expect(jobRows).toHaveLength(0);
+      expect(outboxRows).toEqual([
+        {
+          status: "pending",
+          attempts: 0,
+          lastError: null,
+          payload: { jobId: fixture.runningJobId, generation: 2 },
+        },
+      ]);
+    } finally {
+      await deleteFixture(fixture);
+    }
+  });
+
+  it("serializes deletion with a concurrent active-job pointer change", async () => {
+    const fixture = await seedChapterFixture(true);
+    const dispatchedOutboxIds: string[] = [];
+    try {
+      const [deletion] = await Promise.allSettled([
+        deleteChapterForUser(fixture.ownerUserId, fixture.chapterIds[0], async (outboxId) => {
+          dispatchedOutboxIds.push(outboxId);
+        }),
+        updateChapterForUser(
+          fixture.ownerUserId,
+          {
+            chapterId: fixture.chapterIds[0],
+            rawContent: "Changed while deleting",
+            sourceChangePolicy: "clear",
+          },
+          async (outboxId) => {
+            dispatchedOutboxIds.push(outboxId);
+          },
+        ),
+      ]);
+
+      const [chapterRows, activeJobRows, outboxRows] = await Promise.all([
+        sql`SELECT "id", "active_translation_job_id" AS "activeJobId" FROM "chapters" WHERE "id" = ${fixture.chapterIds[0]}`,
+        sql`
+          SELECT "id", "status", "generation"
+          FROM "translation_jobs"
+          WHERE "id" = ${fixture.runningJobId}
+            AND "status" IN ('pending', 'running')
+        `,
+        sql<Array<{ status: string; payload: { jobId: string; generation: number } }>>`
+          SELECT "status", "payload_json"::jsonb AS "payload"
+          FROM "workflow_outbox"
+          WHERE "payload_json"::jsonb ->> 'jobId' = ${fixture.runningJobId}
+        `,
+      ]);
+
+      expect(outboxRows).toHaveLength(1);
+      expect(outboxRows[0]).toMatchObject({
+        status: "pending",
+        payload: { jobId: fixture.runningJobId, generation: 2 },
+      });
+      expect(activeJobRows).toHaveLength(0);
+      expect(dispatchedOutboxIds).toHaveLength(1);
+
+      expect(deletion).toMatchObject({
+        status: "fulfilled",
+        value: { success: true },
+      });
+      expect(chapterRows).toHaveLength(0);
+    } finally {
+      await deleteFixture(fixture);
     }
   }, 30_000);
 });

@@ -1,6 +1,7 @@
+import { Link } from "@tanstack/react-router";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
-import type { EvalReviewRow } from "@/lib/translation/evaluation/eval.schemas";
+import type { EvalFinding, EvalReviewRow } from "@/lib/translation/evaluation/eval.schemas";
 
 function warningLabels(row: EvalReviewRow): string[] {
   const warnings: string[] = [];
@@ -20,6 +21,71 @@ function warningLabels(row: EvalReviewRow): string[] {
     );
   }
   return warnings;
+}
+
+function findingTitle(finding: EvalFinding): string {
+  if (finding.type === "residual-script") return "Residual source script";
+  if (finding.type === "glossary-miss") return "Missing approved glossary term";
+  return "Paragraph alignment mismatch";
+}
+
+function FindingList({ novelId, row }: { novelId: string; row: EvalReviewRow }) {
+  if (!row.findings || row.findings.length === 0) return null;
+
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3 text-sm">
+      <p className="font-medium text-foreground">Correction points</p>
+      <ol className="mt-2 flex flex-col gap-3">
+        {row.findings.map((finding, index) => {
+          const anchor =
+            finding.paragraphIndex !== null ? `reader-paragraph-${finding.paragraphIndex}` : null;
+          return (
+            <li key={`${finding.type}-${finding.paragraphIndex ?? "chapter"}-${index}`}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="font-medium text-foreground">
+                  {findingTitle(finding)}
+                  {finding.paragraphIndex !== null
+                    ? ` · paragraph ${finding.paragraphIndex}`
+                    : " · chapter-level"}
+                </p>
+                {anchor ? (
+                  <Link
+                    to="/novels/$novelId/chapters/$chapterId"
+                    params={{ novelId, chapterId: row.chapterId }}
+                    hash={anchor}
+                    className="inline-flex min-h-11 shrink-0 items-center rounded-md px-2 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    Open paragraph
+                  </Link>
+                ) : null}
+              </div>
+              {finding.sourceTerm && finding.targetTerm ? (
+                <p className="mt-1 text-muted-foreground">
+                  {finding.sourceTerm} → {finding.targetTerm}
+                </p>
+              ) : null}
+              {finding.sourceExcerpt || finding.translationExcerpt ? (
+                <dl className="mt-2 grid gap-2 text-muted-foreground sm:grid-cols-2">
+                  {finding.sourceExcerpt ? (
+                    <div className="min-w-0">
+                      <dt className="font-medium text-foreground">Source</dt>
+                      <dd className="break-words">{finding.sourceExcerpt}</dd>
+                    </div>
+                  ) : null}
+                  {finding.translationExcerpt ? (
+                    <div className="min-w-0">
+                      <dt className="font-medium text-foreground">Translation</dt>
+                      <dd className="break-words">{finding.translationExcerpt}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
 }
 
 function ReviewFindingStatus({
@@ -122,7 +188,7 @@ function ReviewEvidenceDetails({
   );
 }
 
-export function ReviewRowDetails({ row }: { row: EvalReviewRow }) {
+export function ReviewRowDetails({ novelId, row }: { novelId: string; row: EvalReviewRow }) {
   const warnings = warningLabels(row);
   const missingTerms =
     row.missingGlossaryTerms?.map((term) => `${term.source} → ${term.target}`) ?? [];
@@ -134,12 +200,15 @@ export function ReviewRowDetails({ row }: { row: EvalReviewRow }) {
     <>
       <ReviewFindingStatus untranslated={untranslated} warnings={warnings} />
       <ReviewMetricSummary row={row} untranslated={untranslated} />
-      <ReviewEvidenceDetails
-        missingTerms={missingTerms}
-        omittedMissingCount={Math.max(0, missingCount - missingTerms.length)}
-        residualExamples={residualExamples}
-        omittedResidualCount={Math.max(0, (row.residualSpanCount ?? 0) - residualExamples.length)}
-      />
+      <FindingList novelId={novelId} row={row} />
+      {row.findings === null ? (
+        <ReviewEvidenceDetails
+          missingTerms={missingTerms}
+          omittedMissingCount={Math.max(0, missingCount - missingTerms.length)}
+          residualExamples={residualExamples}
+          omittedResidualCount={Math.max(0, (row.residualSpanCount ?? 0) - residualExamples.length)}
+        />
+      ) : null}
     </>
   );
 }

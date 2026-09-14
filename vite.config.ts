@@ -15,6 +15,7 @@ const isVitest = !!process.env.VITEST;
 const config = defineConfig({
   build: { target: "es2022" },
   resolve: { tsconfigPaths: true },
+  test: { setupFiles: ["./src/test/setup.ts"] },
   plugins: [
     devtools(),
     !isVitest &&
