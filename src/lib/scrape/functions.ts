@@ -169,3 +169,37 @@ export const getActiveImportJob = createServerFn({ method: "GET" })
       return row ?? null;
     }),
   );
+
+/**
+ * Return the newest import row without filtering by status. EPUB recovery uses
+ * this deliberately broad query so a newer completed job prevents an older
+ * failed or cancelled job from being resurrected after refresh.
+ */
+export const getLatestImportJob = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      novelId: z.string().min(1),
+      kind: z.enum(["scrape", "epub"]).default("scrape"),
+    }),
+  )
+  .handler(async ({ data }) =>
+    withSafeHandler(async () => {
+      const session = await ensureSession();
+
+      const [row] = await db
+        .select(importJobStatusSelect)
+        .from(importJobs)
+        .innerJoin(novels, eq(importJobs.novelId, novels.id))
+        .where(
+          and(
+            eq(importJobs.novelId, data.novelId),
+            eq(novels.userId, session.user.id),
+            eq(importJobs.kind, data.kind),
+          ),
+        )
+        .orderBy(desc(importJobs.createdAt), desc(importJobs.id))
+        .limit(1);
+
+      return row ?? null;
+    }),
+  );

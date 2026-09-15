@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { toast } from "sonner";
 
+import { ChapterImportStatus } from "@/components/chapters/chapter-import-status";
+import type { ImportJobController } from "@/components/chapters/use-import-job";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,222 +12,334 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { scrapeChapter, importChapter } from "@/lib/scrape/functions";
+import { importChapter, scrapeChapter } from "@/lib/scrape/functions";
 import { SCRAPE_PROVIDERS, SUPPORTED_SITES_LABEL } from "@/lib/scrape";
 import type { ScrapeProvider } from "@/lib/scrape/types";
-import { useImportJob } from "@/components/chapters/use-import-job";
+import { toast } from "sonner";
 
 interface ScrapeImportSectionProps {
   novelId: string;
   invalidateChapters: () => void;
-  onChapterFetched: (chapter: { number: string; title: string; content: string }) => void;
+  importController: ImportJobController;
+  bulkStartDisabled: boolean;
+  onChapterFetched: (chapter: {
+    number: string;
+    title: string;
+    content: string;
+    sourceUrl: string;
+  }) => void;
+  otherImportActive: boolean;
 }
+
+const INVALID_RANGE_MESSAGE =
+  "Enter a valid range: first chapter must be at least 1, last chapter cannot be earlier, and the range can contain at most 500 chapters.";
 
 export function ScrapeImportSection({
   novelId,
   invalidateChapters,
+  importController,
+  bulkStartDisabled,
   onChapterFetched,
+  otherImportActive,
 }: ScrapeImportSectionProps) {
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scrapeProvider, setScrapeProvider] = useState<ScrapeProvider>("auto");
   const [scrapeBusy, setScrapeBusy] = useState<"fetch" | "add" | null>(null);
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [rangeError, setRangeError] = useState<string | null>(null);
 
-  const {
-    importJob,
-    importActive,
-    startImport,
-    cancelImport,
-    retryImport,
-    importStatusError,
-    canRetryImport,
-    retryImportStatus,
-  } = useImportJob(novelId, invalidateChapters);
+  const selectedProvider =
+    SCRAPE_PROVIDERS.find((provider) => provider.id === scrapeProvider) ?? SCRAPE_PROVIDERS[0];
 
   const handleRangeImport = async () => {
+    if (
+      bulkStartDisabled ||
+      importController.importActive ||
+      importController.startPending ||
+      otherImportActive
+    ) {
+      return;
+    }
+
+    setActionError(null);
     const from = Number(rangeFrom);
     const to = Number(rangeTo);
     if (
-      !Number.isInteger(from) ||
-      !Number.isInteger(to) ||
+      !Number.isSafeInteger(from) ||
+      !Number.isSafeInteger(to) ||
       from < 1 ||
       from > to ||
-      to - from > 500
+      to - from + 1 > 500
     ) {
-      toast.error("Enter a valid range (from ≥ 1, from ≤ to, max 500 chapters)");
+      setRangeError(INVALID_RANGE_MESSAGE);
       return;
     }
-    await startImport(scrapeUrl, from, to, scrapeProvider);
+    setRangeError(null);
+    await importController.startImport(scrapeUrl, from, to, scrapeProvider);
   };
 
   const handleScrapeFetch = async () => {
+    setActionError(null);
     setScrapeBusy("fetch");
+    const sourceUrl = scrapeUrl;
     try {
-      const r = await scrapeChapter({ data: { url: scrapeUrl, provider: scrapeProvider } });
-      onChapterFetched({ number: String(r.number), title: r.title, content: r.content });
-      if (r.nextUrl) setScrapeUrl(r.nextUrl);
-      toast.success(`Fetched chapter ${r.number}: ${r.title}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Fetch failed");
+      const result = await scrapeChapter({ data: { url: sourceUrl, provider: scrapeProvider } });
+      onChapterFetched({
+        number: String(result.number),
+        title: result.title,
+        content: result.content,
+        sourceUrl,
+      });
+      if (result.nextUrl) setScrapeUrl(result.nextUrl);
+      toast.success(`Fetched chapter ${result.number}: ${result.title}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Fetch failed";
+      setActionError(message);
     } finally {
       setScrapeBusy(null);
     }
   };
 
   const handleScrapeAdd = async () => {
+    setActionError(null);
     setScrapeBusy("add");
     try {
-      const r = await importChapter({
+      const result = await importChapter({
         data: { novelId, url: scrapeUrl, provider: scrapeProvider },
       });
-      if (r.created) {
+      if (result.created) {
         invalidateChapters();
-        toast.success(`Added chapter ${r.number}: ${r.title}`);
+        toast.success(`Added chapter ${result.number}: ${result.title}`);
       } else {
-        toast.info(`Chapter ${r.number} already exists — skipped`);
+        toast.info(`Chapter ${result.number} already exists — skipped`);
       }
-      if (r.nextUrl) setScrapeUrl(r.nextUrl);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Import failed");
+      if (result.nextUrl) setScrapeUrl(result.nextUrl);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Import failed";
+      setActionError(message);
     } finally {
       setScrapeBusy(null);
     }
   };
 
+  const setUrl = (value: string) => {
+    setScrapeUrl(value);
+    setActionError(null);
+  };
+
+  const setProvider = (value: string | null) => {
+    if (!value) return;
+    setScrapeProvider(value as ScrapeProvider);
+    setActionError(null);
+  };
+
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-border bg-muted p-4 mb-6">
-      <Label htmlFor="scrapeUrl">Import from source URL</Label>
-      <div className="flex flex-col sm:flex-row gap-2 w-full">
-        <Input
-          id="scrapeUrl"
-          placeholder="https://www.quanben.io/n/.../30.html"
-          value={scrapeUrl}
-          onChange={(e) => setScrapeUrl(e.target.value)}
-          className="w-full min-w-0 flex-1"
-        />
-        <div className="grid grid-cols-2 sm:flex sm:shrink-0 gap-2">
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h3 className="text-xl font-semibold tracking-tight text-foreground">Import from URL</h3>
+        <p className="text-sm text-muted-foreground">
+          Use a supported chapter URL to review one chapter or queue a range.
+        </p>
+      </header>
+
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="scrapeUrl">Chapter source URL</Label>
+          <Input
+            id="scrapeUrl"
+            name="sourceUrl"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            placeholder="https://www.quanben.io/n/.../30.html"
+            value={scrapeUrl}
+            onChange={(event) => setUrl(event.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="scrapeProviderSelect">Fetch method</Label>
+            <Select value={scrapeProvider} onValueChange={setProvider}>
+              <SelectTrigger id="scrapeProviderSelect" className="w-full">
+                <SelectValue>{selectedProvider?.label ?? "Automatic"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {SCRAPE_PROVIDERS.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    {provider.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">{selectedProvider?.description}</p>
+            <p className="text-sm text-muted-foreground">
+              Supported sites: {SUPPORTED_SITES_LABEL}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <section
+        className="flex flex-col gap-4 border-t border-border pt-5"
+        aria-labelledby="single-chapter-heading"
+      >
+        <div className="flex flex-col gap-1">
+          <h4 id="single-chapter-heading" className="text-base font-semibold text-foreground">
+            Single chapter
+          </h4>
+          <p className="text-sm text-muted-foreground">
+            Preview the source before adding it, or add it directly.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <Button
             type="button"
-            variant="outline"
-            className="w-full sm:w-auto"
             onClick={handleScrapeFetch}
             disabled={!scrapeUrl || scrapeBusy !== null}
           >
-            {scrapeBusy === "fetch" ? "Fetching..." : "Fetch"}
+            {scrapeBusy === "fetch" ? "Fetching chapter…" : "Preview chapter"}
           </Button>
           <Button
             type="button"
             variant="outline"
-            className="w-full sm:w-auto"
             onClick={handleScrapeAdd}
             disabled={!scrapeUrl || scrapeBusy !== null}
           >
-            {scrapeBusy === "add" ? "Adding..." : "Fetch & Add"}
+            {scrapeBusy === "add" ? "Adding chapter…" : "Add without preview"}
           </Button>
         </div>
-      </div>
-      <div className="flex flex-col sm:flex-row sm:items-center flex-wrap gap-2.5 pt-1">
-        <div className="flex items-center gap-2 shrink-0">
-          <Label
-            htmlFor="scrapeProviderSelect"
-            className="text-caption text-muted-foreground shrink-0"
+        {actionError ? (
+          <div
+            className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+            role="alert"
           >
-            Provider
-          </Label>
-          <Select
-            value={scrapeProvider}
-            onValueChange={(val) => setScrapeProvider(val as ScrapeProvider)}
-          >
-            <SelectTrigger id="scrapeProviderSelect" className="h-9 w-36">
-              <SelectValue>
-                {SCRAPE_PROVIDERS.find((p) => p.id === scrapeProvider)?.label ?? "Automatic"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {SCRAPE_PROVIDERS.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {actionError}
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        className="flex flex-col gap-4 border-t border-border pt-5"
+        aria-labelledby="chapter-range-heading"
+      >
+        <div className="flex flex-col gap-1">
+          <h4 id="chapter-range-heading" className="text-base font-semibold text-foreground">
+            Chapter range
+          </h4>
+          <p className="text-sm text-muted-foreground">
+            Runs on the server; you can leave this page after it starts.
+          </p>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-caption text-muted-foreground shrink-0">Range</span>
-          <Input
-            type="number"
-            min="1"
-            id="importRangeFrom"
-            aria-label="Start chapter number"
-            className="w-full sm:w-24 min-w-0"
-            placeholder="from"
-            value={rangeFrom}
-            onChange={(e) => setRangeFrom(e.target.value)}
-          />
-          <span className="text-caption text-muted-foreground shrink-0">to</span>
-          <Input
-            type="number"
-            min="1"
-            id="importRangeTo"
-            aria-label="End chapter number"
-            className="w-full sm:w-24 min-w-0"
-            placeholder="to"
-            value={rangeTo}
-            onChange={(e) => setRangeTo(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_auto] sm:items-end">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="importRangeFrom">First chapter</Label>
+            <Input
+              type="number"
+              min="1"
+              id="importRangeFrom"
+              name="rangeFrom"
+              autoComplete="off"
+              placeholder="e.g. 1"
+              value={rangeFrom}
+              onChange={(event) => {
+                setRangeFrom(event.target.value);
+                setRangeError(null);
+              }}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="importRangeTo">Last chapter</Label>
+            <Input
+              type="number"
+              min="1"
+              id="importRangeTo"
+              name="rangeTo"
+              autoComplete="off"
+              placeholder="e.g. 5"
+              value={rangeTo}
+              onChange={(event) => {
+                setRangeTo(event.target.value);
+                setRangeError(null);
+              }}
+            />
+          </div>
           <Button
             type="button"
             variant="outline"
-            className="w-full sm:w-auto"
             onClick={handleRangeImport}
-            disabled={!scrapeUrl || importActive}
+            disabled={
+              !scrapeUrl ||
+              bulkStartDisabled ||
+              importController.importActive ||
+              importController.startPending ||
+              otherImportActive
+            }
           >
-            {importActive ? "Importing..." : "Import Range"}
+            {importController.importActive ? "Importing…" : "Start range import"}
           </Button>
-          {importActive && (
-            <Button type="button" variant="ghost" className="shrink-0" onClick={cancelImport}>
-              Cancel
+        </div>
+
+        {otherImportActive ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            Finish or cancel the EPUB import before starting another bulk import.
+          </p>
+        ) : null}
+        {rangeError ? (
+          <div
+            className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+            role="alert"
+          >
+            {rangeError}
+          </div>
+        ) : null}
+
+        <ChapterImportStatus
+          label="URL range import"
+          job={importController.importJob}
+          active={importController.importActive}
+          statusError={importController.importStatusError}
+          onRetryStatus={importController.retryImportStatus}
+        />
+
+        {importController.importActive ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="self-start"
+            onClick={importController.cancelImport}
+          >
+            Cancel import
+          </Button>
+        ) : null}
+
+        {importController.canRetryImport &&
+        importController.importJob &&
+        (importController.importJob.status === "error" ||
+          importController.importJob.status === "cancelled") ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-background p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-muted-foreground">
+              {importController.importJob.status === "error"
+                ? "This import stopped. Already imported chapters remain saved."
+                : "This import was cancelled. You can resume the same range."}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void importController.retryImport()}
+              disabled={bulkStartDisabled || otherImportActive || importController.startPending}
+            >
+              Retry range import
             </Button>
-          )}
-        </div>
-      </div>
-      {importJob && (
-        <p className="text-caption text-muted-foreground wrap-break-word">
-          {importJob.nextNumber - importJob.fromNumber}/
-          {importJob.toNumber - importJob.fromNumber + 1} — added {importJob.added} · skipped{" "}
-          {importJob.skipped} · failed {importJob.failed}
-          {importActive ? " (runs server-side — safe to close this tab)" : ""}
-        </p>
-      )}
-      {importStatusError ? (
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-caption text-destructive"
-          role="alert"
-        >
-          <span>{importStatusError.message}</span>
-          <Button type="button" size="sm" variant="outline" onClick={retryImportStatus}>
-            Retry status
-          </Button>
-        </div>
-      ) : null}
-      {canRetryImport &&
-      importJob &&
-      (importJob.status === "error" || importJob.status === "cancelled") ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border bg-background/50 p-2 text-caption">
-          <span className="text-muted-foreground">
-            {importJob.status === "error"
-              ? "This import stopped. Already imported chapters remain saved."
-              : "This import was cancelled. You can resume the same range."}
-          </span>
-          <Button type="button" size="sm" variant="outline" onClick={() => void retryImport()}>
-            Retry import
-          </Button>
-        </div>
-      ) : null}
-      <p className="text-caption text-muted-foreground">Supported: {SUPPORTED_SITES_LABEL}</p>
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }

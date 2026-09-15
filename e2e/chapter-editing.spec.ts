@@ -28,16 +28,16 @@ async function signIn(page: Page) {
 
 async function addChapter(page: Page, number: string, title: string, content: string) {
   await page.getByRole("tab", { name: "Add chapters" }).click();
-  const numberInput = page.getByLabel("Number *");
+  const numberInput = page.getByLabel("Chapter number *");
   await expect(numberInput).toBeVisible();
   await numberInput.fill(number);
   await expect(numberInput).toHaveValue(number);
-  await page.getByLabel("Title *").fill(title);
-  await page.getByLabel("Raw Content *").fill(content);
-  await page.getByRole("button", { name: "Add Chapter", exact: true }).click();
+  await page.getByLabel("Chapter title *").fill(title);
+  await page.getByLabel("Source text *").fill(content);
+  await page.getByRole("button", { name: "Add chapter", exact: true }).click();
   await expect(page.getByText("Chapter added successfully", { exact: true }).last()).toBeVisible();
-  await expect(page.getByLabel("Title *")).toHaveValue("");
-  await expect(page.getByLabel("Raw Content *")).toHaveValue("");
+  await expect(page.getByLabel("Chapter title *")).toHaveValue("");
+  await expect(page.getByLabel("Source text *")).toHaveValue("");
 }
 
 test("admin reorders and edits every chapter field", async ({ page }) => {

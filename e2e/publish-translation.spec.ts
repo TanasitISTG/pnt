@@ -52,40 +52,40 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   const novelDetailUrl = page.url();
   await page.getByRole("tab", { name: "Add chapters" }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByLabel("Number *").fill("1");
-  await page.getByLabel("Title *").last().fill(chapterTitle);
-  await page.getByLabel("Raw Content *").fill("儿子对父亲说：“我会回来的。”\n父亲点了点头。");
+  await page.getByLabel("Chapter number *").fill("1");
+  await page.getByLabel("Chapter title *").fill(chapterTitle);
+  await page.getByLabel("Source text *").fill("儿子对父亲说：“我会回来的。”\n父亲点了点头。");
 
-  await page.getByRole("tab", { name: "URL", exact: true }).click();
-  await page.getByLabel("Import from source URL").fill("https://www.quanben.io/n/test/1.html");
-  await page.getByRole("spinbutton", { name: "Start chapter number" }).fill("1");
-  await page.getByRole("spinbutton", { name: "End chapter number" }).fill("5");
+  await page.getByRole("tab", { name: /^From URL/ }).click();
+  await page.getByLabel("Chapter source URL").fill("https://www.quanben.io/n/test/1.html");
+  await page.getByRole("spinbutton", { name: "First chapter" }).fill("1");
+  await page.getByRole("spinbutton", { name: "Last chapter" }).fill("5");
 
-  await page.getByRole("tab", { name: "EPUB", exact: true }).click();
+  await page.getByRole("tab", { name: /^EPUB file/ }).click();
   await page.locator('input[type="file"][accept*=".epub"]').setInputFiles({
     name: "retained-draft.epub",
     mimeType: "application/epub+zip",
     buffer: Buffer.from("draft"),
   });
 
-  await page.getByRole("tab", { name: "URL", exact: true }).click();
-  await expect(page.getByLabel("Import from source URL")).toHaveValue(
+  await page.getByRole("tab", { name: /^From URL/ }).click();
+  await expect(page.getByLabel("Chapter source URL")).toHaveValue(
     "https://www.quanben.io/n/test/1.html",
   );
-  await expect(page.getByRole("spinbutton", { name: "End chapter number" })).toHaveValue("5");
-  await page.getByRole("tab", { name: "EPUB", exact: true }).click();
+  await expect(page.getByRole("spinbutton", { name: "Last chapter" })).toHaveValue("5");
+  await page.getByRole("tab", { name: /^EPUB file/ }).click();
   await expect(page.getByText(/retained-draft\.epub/)).toBeVisible();
-  await page.getByRole("tab", { name: "Manual", exact: true }).click();
-  await expect(page.getByLabel("Number *")).toHaveValue("1");
-  await expect(page.getByLabel("Title *").last()).toHaveValue(chapterTitle);
-  await expect(page.getByLabel("Raw Content *")).toHaveValue(
+  await page.getByRole("tab", { name: /^Paste text/ }).click();
+  await expect(page.getByLabel("Chapter number *")).toHaveValue("1");
+  await expect(page.getByLabel("Chapter title *")).toHaveValue(chapterTitle);
+  await expect(page.getByLabel("Source text *")).toHaveValue(
     "儿子对父亲说：“我会回来的。”\n父亲点了点头。",
   );
   await expect(
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole("button", { name: "Add Chapter" }).click();
+  await page.getByRole("button", { name: "Add chapter" }).click();
   await page.getByRole("tab", { name: "Chapters", exact: true }).click();
 
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
@@ -339,12 +339,12 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   await page.getByRole("button", { name: "Create Novel" }).click();
   await expect(page.getByRole("heading", { name: zhEnNovelTitle })).toBeVisible();
   await page.getByRole("tab", { name: "Add chapters" }).click();
-  await page.getByLabel("Number *").fill("1");
-  await page.getByLabel("Title *").last().fill(zhEnChapterTitle);
+  await page.getByLabel("Chapter number *").fill("1");
+  await page.getByLabel("Chapter title *").fill(zhEnChapterTitle);
   await page
-    .getByLabel("Raw Content *")
+    .getByLabel("Source text *")
     .fill(`儿子对父亲说：“我会回来的。”\n${slowTranslationMarker}`);
-  await page.getByRole("button", { name: "Add Chapter" }).click();
+  await page.getByRole("button", { name: "Add chapter" }).click();
   await page.getByRole("tab", { name: "Chapters", exact: true }).click();
 
   await page.getByRole("button", { name: "Relationships", exact: true }).click();
@@ -473,10 +473,10 @@ test("admin stops selected translations and reviews card metadata in both views"
 
   await page.getByRole("tab", { name: "Add chapters" }).click();
   const addChapter = async (number: number, title: string, content: string) => {
-    await page.getByLabel("Number *").fill(String(number));
-    await page.getByLabel("Title *").fill(title);
-    await page.getByLabel("Raw Content *").fill(content);
-    await page.getByRole("button", { name: "Add Chapter" }).click();
+    await page.getByLabel("Chapter number *").fill(String(number));
+    await page.getByLabel("Chapter title *").fill(title);
+    await page.getByLabel("Source text *").fill(content);
+    await page.getByRole("button", { name: "Add chapter" }).click();
     await expect(
       page.getByText("Chapter added successfully", { exact: true }).first(),
     ).toBeVisible();
