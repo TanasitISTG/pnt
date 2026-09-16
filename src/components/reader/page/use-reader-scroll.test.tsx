@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 import { getReaderProgress } from "@/lib/reader/progress";
@@ -68,6 +68,7 @@ describe("useReaderScroll", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -201,5 +202,69 @@ describe("useReaderScroll", () => {
     });
     expect(window.scrollTo).not.toHaveBeenCalled();
     target.remove();
+  });
+
+  it("does not mark a chapter as read just for opening it", () => {
+    const hook = renderHook(() => useReaderScroll("novel", "chapter", { id: "chapter" }, true));
+    act(() => vi.runAllTimers());
+
+    expect(getReaderProgress("novel")).toMatchObject({
+      lastChapterId: "chapter",
+      readChapterIds: [],
+    });
+    act(() => hook.unmount());
+  });
+
+  it("marks a chapter as read once the reader reaches the end", () => {
+    const hook = renderHook(() => useReaderScroll("novel", "chapter", { id: "chapter" }, true));
+    act(() => vi.runAllTimers());
+    expect(getReaderProgress("novel").readChapterIds).toEqual([]);
+
+    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 900 });
+    window.dispatchEvent(new Event("scroll"));
+    act(() => vi.advanceTimersByTime(300));
+
+    expect(getReaderProgress("novel")).toMatchObject({
+      lastChapterId: "chapter",
+      readChapterIds: ["chapter"],
+    });
+    act(() => hook.unmount());
+  });
+
+  it("marks unscrollable content as read on open", () => {
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 100,
+    });
+
+    renderHook(() => useReaderScroll("novel", "chapter", { id: "chapter" }, true));
+    act(() => vi.runAllTimers());
+
+    expect(getReaderProgress("novel").readChapterIds).toEqual(["chapter"]);
+  });
+
+  it("coalesces rapid scroll events into one layout read per frame", () => {
+    const hook = renderHook(() => useReaderScroll("novel", "chapter", { id: "chapter" }, true));
+    act(() => vi.runAllTimers());
+
+    let reads = 0;
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      get() {
+        reads += 1;
+        return 1000;
+      },
+    });
+    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 450 });
+
+    for (let index = 0; index < 5; index += 1) {
+      window.dispatchEvent(new Event("scroll"));
+    }
+    expect(reads).toBe(1);
+
+    act(() => vi.advanceTimersByTime(1));
+    window.dispatchEvent(new Event("scroll"));
+    expect(reads).toBe(2);
+    act(() => hook.unmount());
   });
 });

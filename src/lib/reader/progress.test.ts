@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { getReaderProgress, markChapterRead, saveScrollPosition } from "./progress";
+import {
+  getReaderProgress,
+  markChapterOpened,
+  markChapterRead,
+  saveScrollPosition,
+} from "./progress";
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -130,5 +135,40 @@ describe("reader-progress", () => {
 
     saveScrollPosition("novel-1", Number.NaN);
     expect(getReaderProgress("novel-1").scrollFraction).toBe(1);
+  });
+
+  it("marks a chapter as opened without adding it to the read set", () => {
+    const updated = markChapterOpened("novel-1", "chap-1");
+
+    expect(updated).toEqual({
+      lastChapterId: "chap-1",
+      readChapterIds: [],
+    });
+
+    expect(getReaderProgress("novel-1")).toEqual({
+      lastChapterId: "chap-1",
+      readChapterIds: [],
+    });
+  });
+
+  it("keeps existing reads when a new chapter is opened", () => {
+    markChapterRead("novel-1", "chap-1");
+    const updated = markChapterOpened("novel-1", "chap-2");
+
+    expect(updated).toEqual({
+      lastChapterId: "chap-2",
+      readChapterIds: ["chap-1"],
+    });
+  });
+
+  it("keeps the scroll fraction only when re-opening the current chapter", () => {
+    markChapterRead("novel-1", "chap-1");
+    saveScrollPosition("novel-1", 0.5);
+
+    const reopened = markChapterOpened("novel-1", "chap-1");
+    expect(reopened.scrollFraction).toBe(0.5);
+
+    const openedOther = markChapterOpened("novel-1", "chap-2");
+    expect(openedOther.scrollFraction).toBeUndefined();
   });
 });

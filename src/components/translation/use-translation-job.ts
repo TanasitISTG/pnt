@@ -195,15 +195,17 @@ export function useTranslationJob(novelId: string, enabled = true) {
     setActiveJobs(new Map());
   }, []);
 
-  const invalidate = useCallback(() => {
+  const invalidateJobProgress = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
+  }, [novelId, queryClient]);
+
+  const invalidateJobOutcome = useCallback(() => {
+    invalidateJobProgress();
     queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
     queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
-    queryClient.invalidateQueries({ queryKey: ["costs", novelId] });
-    queryClient.invalidateQueries({ queryKey: ["residualScripts", novelId] });
-    queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
-  }, [novelId, queryClient]);
+  }, [invalidateJobProgress, novelId, queryClient]);
 
   const hasActiveJobs = Array.from(activeJobs.values()).some(
     (job) => job.status === "pending" || job.status === "running",
@@ -411,7 +413,11 @@ export function useTranslationJob(novelId: string, enabled = true) {
       if (resolvedJobIds.length > 0) {
         writeActiveJobsCache([], resolvedJobIds);
       }
-      invalidate();
+      if (unresolved.length === 0 && acceptedJobs.length === 0) {
+        invalidateJobOutcome();
+      } else {
+        invalidateJobProgress();
+      }
       if (terminalCount === 0) return;
 
       const parts: string[] = [];
@@ -436,7 +442,8 @@ export function useTranslationJob(novelId: string, enabled = true) {
     activeJobsQuery.data,
     activeJobsQuery.dataUpdatedAt,
     enabled,
-    invalidate,
+    invalidateJobOutcome,
+    invalidateJobProgress,
     rememberTerminalJob,
     removeJobIfMatches,
     updateJob,
@@ -467,7 +474,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
         updateJob(chapterId, nextJob);
         toast.info(mode === "overwrite" ? "Re-translation queued" : "Translation queued");
-        invalidate();
+        invalidateJobOutcome();
       } catch (err) {
         if (mountedRef.current && ownsMutation(chapterId, version)) {
           toast.error(err instanceof Error ? err.message : "Failed to start translation");
@@ -476,7 +483,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     },
     [
       beginMutation,
-      invalidate,
+      invalidateJobOutcome,
       ownsMutation,
       reconcileActiveJobsCache,
       rememberActiveJob,
@@ -525,7 +532,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
           );
         }
 
-        if (currentQueuedJobs.length > 0 || currentSkipped.length > 0) invalidate();
+        if (currentQueuedJobs.length > 0 || currentSkipped.length > 0) invalidateJobOutcome();
         return currentQueuedJobs.length;
       } catch (err) {
         if (
@@ -539,7 +546,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     },
     [
       beginMutation,
-      invalidate,
+      invalidateJobOutcome,
       novelId,
       ownsMutation,
       reconcileActiveJobsCache,
@@ -589,7 +596,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
           );
         }
 
-        if (cancelledChapterIds.length > 0 || skippedChapterIds.length > 0) invalidate();
+        if (cancelledChapterIds.length > 0 || skippedChapterIds.length > 0) invalidateJobOutcome();
         return { cancelledChapterIds, skippedChapterIds };
       } catch (err) {
         if (
@@ -603,7 +610,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     },
     [
       beginMutation,
-      invalidate,
+      invalidateJobOutcome,
       novelId,
       ownsMutation,
       reconcileActiveJobsCache,
@@ -629,7 +636,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
         removeJobIfMatches(chapterId, jobId);
         toast.info("Translation cancelled");
-        invalidate();
+        invalidateJobOutcome();
       } catch (err) {
         if (mountedRef.current && ownsMutation(chapterId, version)) {
           toast.error(err instanceof Error ? err.message : "Failed to cancel translation");
@@ -638,7 +645,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     },
     [
       beginMutation,
-      invalidate,
+      invalidateJobOutcome,
       ownsMutation,
       reconcileActiveJobsCache,
       rememberTerminalJob,
@@ -671,7 +678,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
         updateJob(chapterId, retriedJob);
         toast.info("Translation requeued");
-        invalidate();
+        invalidateJobOutcome();
       } catch (err) {
         if (mountedRef.current && ownsMutation(chapterId, version)) {
           toast.error(err instanceof Error ? err.message : "Failed to retry translation");
@@ -681,7 +688,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     [
       activeJobs,
       beginMutation,
-      invalidate,
+      invalidateJobOutcome,
       ownsMutation,
       reconcileActiveJobsCache,
       rememberActiveJob,

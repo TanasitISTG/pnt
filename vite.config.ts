@@ -15,7 +15,12 @@ const isVitest = !!process.env.VITEST;
 const config = defineConfig({
   build: { target: "es2022" },
   resolve: { tsconfigPaths: true },
-  test: { setupFiles: ["./src/test/setup.ts"] },
+  test: {
+    setupFiles: ["./src/test/setup.ts"],
+    // React resolves its production build from an inherited NODE_ENV, which
+    // breaks every render test ("React.act is not a function").
+    env: { NODE_ENV: "test" },
+  },
   plugins: [
     devtools(),
     !isVitest &&

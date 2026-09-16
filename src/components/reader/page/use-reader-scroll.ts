@@ -1,6 +1,13 @@
 import { useEffect, useRef } from "react";
 
-import { getReaderProgress, markChapterRead, saveScrollPosition } from "@/lib/reader/progress";
+import {
+  getReaderProgress,
+  markChapterOpened,
+  markChapterRead,
+  saveScrollPosition,
+} from "@/lib/reader/progress";
+
+const READ_COMPLETE_FRACTION = 0.95;
 
 interface MutableValue<T> {
   current: T;
@@ -45,16 +52,24 @@ export function useReaderScroll(
   const isRestoringRef = useRef(false);
   const restoreFrameRef = useRef<number | null>(null);
   const userTookOverRef = useRef(false);
+  const readMarkedRef = useRef(false);
 
   useEffect(() => {
     ownerRef.current = { novelId, chapterId };
     restoredChapterRef.current = null;
     isRestoringRef.current = false;
     userTookOverRef.current = false;
+    readMarkedRef.current = false;
   }, [chapterId, novelId, targetAnchor]);
 
   useEffect(() => {
-    if (settingsReady && chapter?.id === chapterId) markChapterRead(novelId, chapterId);
+    if (!settingsReady || chapter?.id !== chapterId) return;
+    markChapterOpened(novelId, chapterId);
+    // Content shorter than the viewport never scrolls, so it is fully viewed.
+    if (fractionForCurrentScroll() === null) {
+      markChapterRead(novelId, chapterId);
+      readMarkedRef.current = true;
+    }
   }, [chapter?.id, chapterId, novelId, settingsReady]);
 
   useEffect(() => {
@@ -185,12 +200,21 @@ export function useReaderScroll(
 
   useEffect(() => {
     let timer: number | null = null;
+    let frameGate: number | null = null;
     let capturedFraction: number | null = null;
+
+    const markCompleteIfFinished = (fraction: number | null) => {
+      if (readMarkedRef.current) return;
+      if (fraction === null || fraction < READ_COMPLETE_FRACTION) return;
+      markChapterRead(novelId, chapterId);
+      readMarkedRef.current = true;
+    };
 
     const flushCaptured = () => {
       window.clearTimeout(timer ?? undefined);
       timer = null;
       if (capturedFraction === null) return;
+      markCompleteIfFinished(capturedFraction);
       saveScrollPosition(novelId, capturedFraction);
       capturedFraction = null;
     };
@@ -204,9 +228,14 @@ export function useReaderScroll(
     };
 
     const handleScroll = () => {
+      if (frameGate !== null) return;
+      frameGate = requestAnimationFrame(() => {
+        frameGate = null;
+      });
       captureCurrent();
-      if (capturedFraction === null || timer !== null) return;
-      timer = window.setTimeout(flushCaptured, 300);
+      if (capturedFraction !== null && timer === null) {
+        timer = window.setTimeout(flushCaptured, 300);
+      }
     };
 
     const handlePageLifecycle = () => {
@@ -222,6 +251,7 @@ export function useReaderScroll(
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
+      if (frameGate !== null) cancelAnimationFrame(frameGate);
       flushCaptured();
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("pagehide", handlePageLifecycle);

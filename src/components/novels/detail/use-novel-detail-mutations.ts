@@ -140,7 +140,6 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novels"] });
-      queryClient.invalidateQueries({ queryKey: ["residualScripts", novelId] });
       queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
       onTranslationsDeleted();
       toast.success(
@@ -155,14 +154,12 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
   });
   const { mutateAsync: saveChapterOrder, isPending: reorderingChapters } = useMutation({
     mutationFn: (chapterIds: string[]) => reorderChapters({ data: { novelId, chapterIds } }),
-    onSuccess: async (_result, chapterIds) => {
+    onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
-        ...chapterIds.map((chapterId) =>
-          queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] }),
-        ),
+        queryClient.invalidateQueries({ queryKey: ["chapter"] }),
       ]);
       toast.success("Chapter order saved");
     },

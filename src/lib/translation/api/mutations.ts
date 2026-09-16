@@ -449,7 +449,7 @@ export const startTranslationJobs = createServerFn({ method: "POST" })
               eq(novels.userId, session.user.id),
             ),
           )
-          .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`)),
+          .orderBy(asc(chapters.number)),
       ]);
 
       const targetChapterIds = new Set(targetChapters.map((chapter) => chapter.id));

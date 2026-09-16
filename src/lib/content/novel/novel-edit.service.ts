@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { emptyRelationshipMap, serializeRelationshipMap } from "@/lib/relationships/map";
 import { SafeServerError } from "@/lib/server-fn-error";
+import { isSupportedLanguagePair } from "@/lib/translation/prompts/language";
 import { updateNovelSchema, type UpdateNovelInput } from "@/lib/content/novel/novel.schemas";
 
 export async function updateNovelForUser(
@@ -38,6 +39,10 @@ export async function updateNovelForUser(
     const nextTargetLang = data.targetLang ?? existing.targetLang;
     const languagePairChanged =
       nextSourceLang !== existing.sourceLang || nextTargetLang !== existing.targetLang;
+
+    if (!isSupportedLanguagePair(nextSourceLang, nextTargetLang)) {
+      throw new SafeServerError("Unsupported language pair — use EN→TH, ZH→EN, or ZH→TH");
+    }
 
     if (languagePairChanged) {
       const [activeChapter] = await tx

@@ -12,6 +12,10 @@ export function normalizePair(pair: string): LanguagePair {
   return parseLanguagePair(pair) ?? "en->th";
 }
 
+export function isSupportedLanguagePair(source: string, target: string): boolean {
+  return parseLanguagePair(`${source}->${target}`) !== null;
+}
+
 export const LANG_LABELS: Record<LanguagePair, { source: string; target: string }> = {
   "en->th": { source: "English", target: "Thai" },
   "zh->en": { source: "Chinese", target: "English" },

@@ -55,7 +55,7 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
     })
     .from(chapters)
     .where(eq(chapters.novelId, novelId))
-    .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
+    .orderBy(asc(chapters.number));
 
   return {
     novel: {

@@ -362,11 +362,11 @@ export async function loadPrevChapterForContext(novelId: string, chapterNumber: 
     .where(
       and(
         eq(chapters.novelId, novelId),
-        lt(sql`COALESCE(${chapters.number}::numeric, 0)`, sql`${chapterNumber}::numeric`),
+        lt(chapters.number, chapterNumber),
         eq(chapters.status, "translated"),
       ),
     )
-    .orderBy(desc(sql`COALESCE(${chapters.number}::numeric, 0)`))
+    .orderBy(desc(chapters.number))
     .limit(1);
   return prevChapter ?? null;
 }

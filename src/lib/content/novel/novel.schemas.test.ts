@@ -1,6 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import { editChapterSchema } from "@/lib/content/novel/novel.schemas";
+import { createNovelSchema, editChapterSchema } from "@/lib/content/novel/novel.schemas";
+
+describe("createNovelSchema", () => {
+  it("rejects an unsupported EN→EN language pair", () => {
+    const result = createNovelSchema.safeParse({
+      title: "Novel",
+      sourceLang: "en",
+      targetLang: "en",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]?.path).toEqual(["targetLang"]);
+  });
+
+  it.each([
+    ["en", "th"],
+    ["zh", "en"],
+    ["zh", "th"],
+  ])("accepts the supported %s→%s pair", (sourceLang, targetLang) => {
+    const result = createNovelSchema.safeParse({ title: "Novel", sourceLang, targetLang });
+
+    expect(result.success).toBe(true);
+  });
+});
 
 describe("editChapterSchema", () => {
   it.each([

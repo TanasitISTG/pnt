@@ -16,6 +16,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { coverMimeSchema, createNovelSchema } from "@/lib/content/novel/novel.schemas";
+import { isSupportedLanguagePair } from "@/lib/translation/prompts/language";
 
 type NovelFormData = z.input<typeof createNovelSchema> & {
   removeCover?: boolean;
@@ -81,6 +82,10 @@ const novelFormSchema = z
   .refine((data) => !data.cover || !!data.coverMime, {
     message: "Cover MIME type is required when cover image is provided",
     path: ["cover"],
+  })
+  .refine((data) => isSupportedLanguagePair(data.sourceLang, data.targetLang), {
+    message: "Unsupported language pair — use EN→TH, ZH→EN, or ZH→TH",
+    path: ["targetLang"],
   });
 
 function createInitialNovelForm(defaultValues: NovelFormProps["defaultValues"]): NovelFormValues {
@@ -125,6 +130,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
     (state) => [state.canSubmit, state.isSubmitting] as const,
     (previous, next) => previous[0] === next[0] && previous[1] === next[1],
   );
+  const sourceLang = useStore(form.store, (state) => state.values.sourceLang);
 
   return (
     <form
@@ -294,7 +300,9 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
                   <SelectContent className="min-w-36">
                     <SelectGroup>
                       <SelectItem value="th">Thai (TH)</SelectItem>
-                      <SelectItem value="en">English (EN)</SelectItem>
+                      <SelectItem value="en" disabled={sourceLang === "en"}>
+                        English (EN)
+                      </SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>

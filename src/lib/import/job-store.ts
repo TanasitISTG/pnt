@@ -157,7 +157,7 @@ export async function getMaxChapterNumber(novelId: string): Promise<number> {
     .select({ number: chapters.number })
     .from(chapters)
     .where(eq(chapters.novelId, novelId))
-    .orderBy(desc(sql`COALESCE(${chapters.number}::numeric, 0)`))
+    .orderBy(desc(chapters.number))
     .limit(1);
 
   if (!highest) return 0;

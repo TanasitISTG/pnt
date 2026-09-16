@@ -657,7 +657,9 @@ describe("JobsPage job actions", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: JOB_HISTORY_QUERY_KEY });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: JOB_STATS_QUERY_KEY });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["chapters", "novel-translation"] });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["costs", "novel-translation"] });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["adminNovelDetailMetrics", "novel-translation"],
+    });
   });
 
   it("confirms import cancel and forwards scrape retry inputs", async () => {

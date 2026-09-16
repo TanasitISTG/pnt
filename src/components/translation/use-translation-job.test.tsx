@@ -376,6 +376,47 @@ describe("useTranslationJob", () => {
     expect(toast.info).not.toHaveBeenCalledWith("Translation: 1 completed");
     expect(toast.info).not.toHaveBeenCalledWith("Translation: 1 cancelled");
   });
+  it("invalidates only progress keys while sibling jobs are still running", async () => {
+    const runningJob = {
+      id: "job-running",
+      chapterId: "ch-running",
+      status: "running",
+      doneChunks: 1,
+      totalChunks: 3,
+      error: null,
+    } as const;
+    const finishedJob = {
+      id: "job-finished",
+      chapterId: "ch-finished",
+      status: "running",
+      doneChunks: 2,
+      totalChunks: 2,
+      error: null,
+    } as const;
+    queryClient.setQueryData(["translationJobs", "novel-1"], [runningJob, finishedJob], {
+      updatedAt: 0,
+    });
+    queryClient.setQueryData(["chapters", "novel-1"], [{ id: "ch-finished" }]);
+    queryClient.setQueryData(["readerChapterManifest", "novel-1"], [{ id: "ch-finished" }]);
+    vi.mocked(translationQueries.getTranslationJobsTerminalStatus).mockResolvedValueOnce([
+      { id: "job-finished", chapterId: "ch-finished", status: "done", error: null },
+      { id: "job-running", chapterId: "ch-running", status: "running", error: null },
+    ] as never);
+
+    const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
+
+    await act(async () => {
+      await result.current.refetchActiveJobs();
+    });
+    await waitFor(() => {
+      expect(result.current.activeJobs.has("ch-finished")).toBe(false);
+    });
+
+    expect(queryClient.getQueryState(["chapters", "novel-1"])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(["readerChapterManifest", "novel-1"])?.isInvalidated).toBe(
+      false,
+    );
+  });
   it("ignores a terminal lookup that resolves after the consumer unmounts", async () => {
     vi.mocked(translationFns.startTranslationJob).mockResolvedValueOnce({
       jobId: "job-unmounted",

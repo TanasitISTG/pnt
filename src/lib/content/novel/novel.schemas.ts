@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isSupportedLanguagePair } from "@/lib/translation/prompts/language";
+
 export const sourceLangSchema = z.enum(["en", "zh"]);
 export const targetLangSchema = z.enum(["en", "th"]);
 export const coverMimeSchema = z.enum(["image/jpeg", "image/png", "image/webp"]);
@@ -23,6 +25,10 @@ export const createNovelSchema = z
   .refine((data) => !data.cover || !!data.coverMime, {
     message: "Cover MIME type is required when cover image is provided",
     path: ["coverMime"],
+  })
+  .refine((data) => isSupportedLanguagePair(data.sourceLang, data.targetLang), {
+    message: "Unsupported language pair — use EN→TH, ZH→EN, or ZH→TH",
+    path: ["targetLang"],
   });
 
 export const updateNovelSchema = z

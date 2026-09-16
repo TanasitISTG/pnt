@@ -55,9 +55,10 @@ bun run inngest         # second terminal, http://localhost:8288
 | Format / check                       | `bun run format` / `bun run format:check`             |
 | Typecheck                            | `bun run typecheck`                                   |
 | Unit tests                           | `bun run test`                                        |
-| PostgreSQL integration tests         | `TEST_DATABASE_URL=... bun run test:integration`      |
+| PostgreSQL integration tests         | `bun run test:integration` (uses `TEST_DATABASE_URL`) |
 | Browser workflow                     | `bun run test:e2e`                                    |
 | Generate/apply migrations            | `bun run db:generate` / `bun run db:migrate`          |
+| Create/migrate test database         | `bun run db:migrate:test`                             |
 | Seed admin                           | `bun run seed:user`                                   |
 | Translation evaluation               | `bun run eval:translation <novelId> [chapterNumbers]` |
 | React diagnostics / dependency audit | `bun run doctor` / `bun run audit:release`            |
@@ -98,13 +99,13 @@ The README's compact project tree contains older shorthand for auth/scrape modul
 - Required package manager/runtime: **Bun 1.3.14**, with `bun.lock`; the package is ESM (`"type": "module"`). Do not substitute npm/pnpm commands or floating CLI versions.
 - Application stack: React 19, TanStack Start/Router/Query, Vite, Tailwind v4 CSS-first tokens, shadcn Base UI, Drizzle/PostgreSQL, Better Auth, Inngest, and Nitro/Vercel.
 - Formatting/linting: Oxfmt and Oxlint are canonical; there is no ESLint/Prettier/Biome workflow. `react-doctor` is a separate diagnostics command.
-- Environment: copy `.env.example` to `.env.local`; access server env only through `src/lib/env.ts`. Local Inngest is keyless with `INNGEST_DEV=1`; production requires Inngest Cloud event/signing keys. Never commit `.env*`, provider credentials, or linked Vercel metadata.
+- Environment: copy `.env.example` to `.env.local`; access server env only through `src/lib/env.ts`. `TEST_DATABASE_URL` is test-only — read directly by `*.integration.test.ts`, not by `env.ts` — and must name a disposable database. Local Inngest is keyless with `INNGEST_DEV=1`; production requires Inngest Cloud event/signing keys. Never commit `.env*`, provider credentials, or linked Vercel metadata.
 - Database: use PostgreSQL/CockroachDB-compatible `DATABASE_URL`; run migrations explicitly. Integration/E2E databases must be disposable and isolated.
 - Deployment: Nitro targets Vercel. `vercel.json` uses frozen installation and the postbuild patch for a 300-second server function budget. The app's Inngest endpoint is `/api/inngest`.
 
 ## Testing & QA
 
-- **Unit tests:** Vitest runs colocated `src/**/*.test.ts`/`.test.tsx` files. `bun run test` excludes `**/*.integration.test.ts` and `e2e/**`. Tests should defend observable behavior, boundaries, state transitions, error handling, and compatibility—not implementation details. No coverage threshold/config is defined; preserve meaningful contract coverage.
-- **Integration tests:** `bun run test:integration` runs the explicit translation workflow/outbox/chunk migration, export streaming, and content maintenance suites. Set an isolated `TEST_DATABASE_URL`; never let integration tests fall back to `DATABASE_URL`. The Windows helper `.tura/script/run-postgres-integration.ps1` owns a disposable PostgreSQL service and cleanup.
+- **Unit tests:** Vitest runs colocated `src/**/*.test.ts`/`.test.tsx` files. `bun run test` excludes `**/*.integration.test.ts` and `e2e/**`. Tests should defend observable behavior, boundaries, state transitions, error handling, and compatibility—not implementation details. No coverage threshold/config is defined; preserve meaningful contract coverage. `vite.config.ts` forces `NODE_ENV=test` through Vitest's `test.env`, because an inherited `NODE_ENV=production` makes React resolve its production build and fails every render test with `React.act is not a function`.
+- **Integration tests:** `bun run test:integration` runs the explicit translation workflow/outbox/chunk migration, export streaming, and content maintenance suites. `TEST_DATABASE_URL` comes from `.env.example`/`.env.local` — Bun loads it, so no inline export is needed — and must point at an isolated, disposable database; never let integration tests fall back to `DATABASE_URL`. `bun run db:migrate:test` creates that database when missing and applies migrations against it. Suites skip themselves when `TEST_DATABASE_URL` is unset.
 - **E2E:** `bun run test:e2e` uses `scripts/e2e/run.ts` to guard a disposable database name ending in `_e2e`, apply migrations, seed an admin/provider, start the app, Inngest dev server, and deterministic OpenAI-compatible stub, then run Playwright. It requires an installed Chrome or Edge; no browser download is attempted. The workflow covers login, novel/chapter creation, real queued translation, publication, logout, and guest reading.
 - **CI gate:** `.github/workflows/ci.yml` runs frozen Bun install, migrations, `format:check`, lint, typecheck, unit tests, PostgreSQL integration tests, E2E, build, and the moderate-level dependency audit. Run the relevant command locally before claiming a change is complete; use `bun run doctor` for React-specific diagnostics.

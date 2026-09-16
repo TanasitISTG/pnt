@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 
 import { db, queryClient } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
@@ -40,7 +40,7 @@ async function loadExportManifest(novelId: string, userId: string) {
     })
     .from(chapters)
     .where(and(eq(chapters.novelId, novelId), isNotNull(chapters.translatedContent)))
-    .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
+    .orderBy(asc(chapters.number));
   if (chapterRows.length === 0) return null;
 
   return { novel, chapterTitles: chapterRows.map(chapterTitle) };
@@ -55,7 +55,7 @@ async function* chapterCursor(novelId: string): AsyncGenerator<ExportChapterRow>
       "translated_content" AS "translatedContent"
     FROM "chapters"
     WHERE "novel_id" = ${novelId} AND "translated_content" IS NOT NULL
-    ORDER BY COALESCE("number"::numeric, 0)
+    ORDER BY "number"
   `.cursor(1);
 
   for await (const rows of cursor) {

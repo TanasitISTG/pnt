@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, asc } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
@@ -77,7 +77,7 @@ export const listChapters = createServerFn({ method: "GET" })
             ? eq(chapters.novelId, data.novelId)
             : and(eq(chapters.novelId, data.novelId), chapterVisibleToGuests()),
         )
-        .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
+        .orderBy(asc(chapters.number));
 
       return chapterList;
     });
@@ -104,7 +104,7 @@ export const getReaderChapterManifest = createServerFn({ method: "GET" })
             ? and(eq(chapters.novelId, data.novelId), eq(novels.userId, session.user.id))
             : and(eq(chapters.novelId, data.novelId), novelLive(), chapterVisibleToGuests()),
         )
-        .orderBy(asc(sql`COALESCE(${chapters.number}::numeric, 0)`));
+        .orderBy(asc(chapters.number));
 
       if (rows.length === 0) {
         const [novel] = await db

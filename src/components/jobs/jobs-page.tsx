@@ -123,7 +123,6 @@ export function JobsPage() {
       queryClient.invalidateQueries({ queryKey: ["novels"] }),
       queryClient.invalidateQueries({ queryKey: ["chapters", job.novelId] }),
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", job.novelId] }),
-      queryClient.invalidateQueries({ queryKey: ["costs", job.novelId] }),
       queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", job.novelId] }),
     ]);
   };

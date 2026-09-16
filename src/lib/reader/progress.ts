@@ -55,6 +55,47 @@ export function getReaderProgress(novelId: string): ReaderProgress {
   }
 }
 
+function writeNovelProgress(storage: Storage, novelId: string, progress: ReaderProgress): void {
+  const raw = storage.getItem(STORAGE_KEY);
+  let allData: Record<string, unknown> = {};
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "object" && parsed !== null) {
+        allData = parsed;
+      }
+    } catch {
+      allData = {};
+    }
+  }
+
+  allData[novelId] = progress;
+  storage.setItem(STORAGE_KEY, JSON.stringify(allData));
+}
+
+export function markChapterOpened(novelId: string, chapterId: string): ReaderProgress {
+  const storage = getStorage();
+  if (!storage) {
+    return { lastChapterId: chapterId, readChapterIds: [] };
+  }
+
+  try {
+    const current = getReaderProgress(novelId);
+    const updated: ReaderProgress = {
+      lastChapterId: chapterId,
+      readChapterIds: current.readChapterIds,
+      ...(current.lastChapterId === chapterId && current.scrollFraction !== undefined
+        ? { scrollFraction: current.scrollFraction }
+        : {}),
+    };
+
+    writeNovelProgress(storage, novelId, updated);
+    return updated;
+  } catch {
+    return { lastChapterId: chapterId, readChapterIds: [] };
+  }
+}
+
 export function markChapterRead(novelId: string, chapterId: string): ReaderProgress {
   const storage = getStorage();
   if (!storage) {
@@ -74,21 +115,7 @@ export function markChapterRead(novelId: string, chapterId: string): ReaderProgr
         : {}),
     };
 
-    const raw = storage.getItem(STORAGE_KEY);
-    let allData: Record<string, unknown> = {};
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed === "object" && parsed !== null) {
-          allData = parsed;
-        }
-      } catch {
-        allData = {};
-      }
-    }
-
-    allData[novelId] = updated;
-    storage.setItem(STORAGE_KEY, JSON.stringify(allData));
+    writeNovelProgress(storage, novelId, updated);
     return updated;
   } catch {
     return { lastChapterId: chapterId, readChapterIds: [chapterId] };
@@ -107,21 +134,7 @@ export function saveScrollPosition(novelId: string, fraction: number): void {
       scrollFraction: Math.max(0, Math.min(1, fraction)),
     };
 
-    const raw = storage.getItem(STORAGE_KEY);
-    let allData: Record<string, unknown> = {};
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed === "object" && parsed !== null) {
-          allData = parsed;
-        }
-      } catch {
-        allData = {};
-      }
-    }
-
-    allData[novelId] = updated;
-    storage.setItem(STORAGE_KEY, JSON.stringify(allData));
+    writeNovelProgress(storage, novelId, updated);
   } catch {
     // Ignore storage write errors
   }

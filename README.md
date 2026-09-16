@@ -51,6 +51,9 @@ bun -e "console.log(crypto.getRandomValues(new Uint8Array(32)).toBase64())"  # B
 # Run database migrations
 bun run db:migrate
 
+# Create and migrate the isolated integration-test database (TEST_DATABASE_URL)
+bun run db:migrate:test
+
 # Seed admin user (requires SEED_ADMIN_* in .env.local)
 bun run seed:user
 
@@ -63,20 +66,21 @@ bun run inngest
 
 ### Commands
 
-| Task                  | Command                                          |
-| --------------------- | ------------------------------------------------ |
-| Dev server            | `bun dev`                                        |
-| Inngest dev           | `bun run inngest`                                |
-| Production build      | `bun run build`                                  |
-| Lint / fix            | `bun run lint` / `bun run lint:fix`              |
-| Format / check        | `bun run format` / `bun run format:check`        |
-| Tests                 | `bun run test`                                   |
-| PostgreSQL invariants | `TEST_DATABASE_URL=... bun run test:integration` |
-| Browser workflow      | `bun run test:e2e`                               |
-| Release audit         | `bun run audit:release`                          |
-| DB generate / migrate | `bun run db:generate` / `bun run db:migrate`     |
-| Seed admin user       | `bun run seed:user`                              |
-| Regenerate route tree | `bun run generate-routes`                        |
+| Task                  | Command                                      |
+| --------------------- | -------------------------------------------- |
+| Dev server            | `bun dev`                                    |
+| Inngest dev           | `bun run inngest`                            |
+| Production build      | `bun run build`                              |
+| Lint / fix            | `bun run lint` / `bun run lint:fix`          |
+| Format / check        | `bun run format` / `bun run format:check`    |
+| Tests                 | `bun run test`                               |
+| PostgreSQL invariants | `bun run test:integration`                   |
+| Browser workflow      | `bun run test:e2e`                           |
+| Release audit         | `bun run audit:release`                      |
+| DB generate / migrate | `bun run db:generate` / `bun run db:migrate` |
+| Migrate test database | `bun run db:migrate:test`                    |
+| Seed admin user       | `bun run seed:user`                          |
+| Regenerate route tree | `bun run generate-routes`                    |
 
 ### Deployment migrations
 
@@ -94,6 +98,7 @@ tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `
 | Variable                   | Required | Description                                                    |
 | -------------------------- | -------- | -------------------------------------------------------------- |
 | `DATABASE_URL`             | Yes      | CockroachDB / PostgreSQL TCP connection string                 |
+| `TEST_DATABASE_URL`        | No       | Isolated database for `bun run test:integration`               |
 | `BETTER_AUTH_SECRET`       | Yes      | 32-byte base64 random string                                   |
 | `BETTER_AUTH_URL`          | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`) |
 | `APP_ENCRYPTION_KEY`       | Yes      | 32-byte base64 random string for encrypting API keys at rest   |
@@ -158,12 +163,13 @@ sizing the database connection limit or external pooler.
 
 ## Local verification
 
-`bun run test` runs unit tests only. `bun run test:integration` requires an explicitly isolated
-`TEST_DATABASE_URL`; on Windows, `.tura/script/run-postgres-integration.ps1` owns a disposable
-local PostgreSQL service and runs all integration files. `bun run test:e2e` owns a guarded
-`*_e2e` database, app, Inngest dev server, and deterministic OpenAI-compatible stub, then drives
-login, novel/chapter creation, translation, publication, logout, and guest reading in an installed
-Chrome or Edge browser. Every child process is bounded and torn down on success or failure.
+`bun run test` runs unit tests only. `bun run test:integration` reads the isolated
+`TEST_DATABASE_URL` from `.env.local` — it must never be the application database — and
+`bun run db:migrate:test` creates that database when missing and applies migrations to it. The
+suites skip themselves when the variable is unset. `bun run test:e2e` owns a guarded `*_e2e`
+database, app, Inngest dev server, and deterministic OpenAI-compatible stub, then drives login,
+novel/chapter creation, translation, publication, logout, and guest reading in an installed Chrome
+or Edge browser. Every child process is bounded and torn down on success or failure.
 
 ## Docs
 

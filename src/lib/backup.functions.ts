@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
@@ -13,6 +13,7 @@ import {
 } from "@/lib/relationships/map";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 import { SafeServerError, withSafeHandler } from "@/lib/server-fn-error";
+import { isSupportedLanguagePair } from "@/lib/translation/prompts/language";
 
 const exportBackupSchema = z.object({ novelId: z.string().optional() }).optional();
 const importBackupSchema = z.object({ backup: z.unknown() });
@@ -47,27 +48,32 @@ const backupTermSchema = z.object({
   updatedAt: z.string(),
 });
 
-const backupNovelSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  originalTitle: z.string().nullable(),
-  author: z.string().nullable(),
-  description: z.string().nullable(),
-  coverBase64: z.string().nullable(),
-  coverMime: z.string().nullable(),
-  sourceLang: z.string(),
-  targetLang: z.string(),
-  customPrompt: z.string().nullable(),
-  storySummary: z.string().nullable(),
-  relationshipMap: relationshipMapSchema.optional(),
-  chunkSize: z.number(),
-  contextTailLength: z.number(),
-  publishedAt: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  chapters: z.array(backupChapterSchema),
-  glossaryTerms: z.array(backupTermSchema),
-});
+const backupNovelSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    originalTitle: z.string().nullable(),
+    author: z.string().nullable(),
+    description: z.string().nullable(),
+    coverBase64: z.string().nullable(),
+    coverMime: z.string().nullable(),
+    sourceLang: z.string(),
+    targetLang: z.string(),
+    customPrompt: z.string().nullable(),
+    storySummary: z.string().nullable(),
+    relationshipMap: relationshipMapSchema.optional(),
+    chunkSize: z.number(),
+    contextTailLength: z.number(),
+    publishedAt: z.string().nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    chapters: z.array(backupChapterSchema),
+    glossaryTerms: z.array(backupTermSchema),
+  })
+  .refine((data) => isSupportedLanguagePair(data.sourceLang, data.targetLang), {
+    message: "Backup contains an unsupported language pair",
+    path: ["targetLang"],
+  });
 
 const backupSchema = z.object({
   app: z.literal("pnt"),
@@ -105,7 +111,7 @@ export const exportBackup = createServerFn({ method: "POST" })
             .select()
             .from(chapters)
             .where(inArray(chapters.novelId, novelIds))
-            .orderBy(chapters.novelId, sql`COALESCE(${chapters.number}::numeric, 0)`)
+            .orderBy(chapters.novelId, chapters.number)
         : [];
       const termRows = novelIds.length
         ? await db
