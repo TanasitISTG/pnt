@@ -1,0 +1,2 @@
+CREATE INDEX "epub_uploads_cleanup_idx" ON "epub_uploads" USING btree ("expires_at") WHERE "epub_uploads"."status" = 'uploading';--> statement-breakpoint
+ALTER TABLE "translation_jobs" DROP COLUMN "chunks_json";

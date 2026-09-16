@@ -150,9 +150,9 @@ sizing the database connection limit or external pooler.
 ## Persistence and delivery boundaries
 
 - Translation job metadata lives in `translation_jobs`; ordered chunk source, progress, output,
-  token counts, latency, and errors live in `translation_job_chunks`. Migration 0022 backfills
-  legacy `chunks_json` values idempotently; the old column remains dormant for expand/contract
-  rollback compatibility.
+  token counts, latency, and errors live in `translation_job_chunks`. Migration 0022 backfilled
+  legacy `chunks_json` values idempotently, and migration 0032 dropped the column once the
+  expand/contract window closed.
 - Translation enqueue commits a durable `translation_outbox` row in the same transaction as
   job state. Eager dispatch is best-effort, while the Inngest cron retries pending rows.
 - Novel TXT and EPUB downloads use authenticated `/api/exports/:novelId` responses. Chapters are

@@ -33,8 +33,6 @@ export const translationJobs = pgTable(
     generation: integer("generation").notNull().default(1),
     totalChunks: integer("total_chunks").notNull(),
     doneChunks: integer("done_chunks").notNull().default(0),
-    // Expand/contract compatibility only. New code persists progress in translation_job_chunks.
-    chunksJson: text("chunks_json"),
     error: text("error"),
     usageJson: text("usage_json"),
     logsJson: text("logs_json"),
@@ -75,6 +73,9 @@ export const translationJobChunks = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.jobId, table.index] }),
+    // Covering index for the dashboard aggregate in job-dashboard/service.ts
+    // (AVG latency, SUM tokens joined by job_id). Dropping it forces heap reads
+    // over the chunk source/translation text.
     index("translation_job_chunks_metrics_idx").on(
       table.jobId,
       table.latencyMs,

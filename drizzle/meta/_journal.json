@@ -225,6 +225,13 @@
       "when": 1789553322725,
       "tag": "0031_steep_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789576812332,
+      "tag": "0032_windy_wasp",
+      "breakpoints": true
     }
   ]
 }

@@ -83,7 +83,12 @@ export const epubUploads = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [index("epub_uploads_novel_id_idx").on(table.novelId)],
+  (table) => [
+    index("epub_uploads_novel_id_idx").on(table.novelId),
+    index("epub_uploads_cleanup_idx")
+      .on(table.expiresAt)
+      .where(sql`${table.status} = 'uploading'`),
+  ],
 );
 
 export const epubUploadChunks = pgTable(

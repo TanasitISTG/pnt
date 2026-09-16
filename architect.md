@@ -70,7 +70,7 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 - Translation jobs with null provider/pricing snapshot fields are legacy rows. They remain readable through current provider credentials, but any derived spend is labeled an estimate rather than historical actual.
 - `getReaderNovel` and `getReaderChapterManifest` are the reader metadata boundaries; they must not grow full chapter bodies or admin-only fields.
 
-Migration 0022 idempotently expands legacy `translation_jobs.chunks_json` arrays into chunk rows. The legacy column remains readable but dormant during the expand/contract rollback window; all current writes target `translation_job_chunks`.
+Migration 0022 idempotently expands legacy `translation_jobs.chunks_json` arrays into chunk rows. Migration 0032 closed the expand/contract window by dropping the column; all reads and writes target `translation_job_chunks`.
 
 The active-job column intentionally has no foreign key. Translation jobs already cascade when a chapter is deleted, while avoiding a circular foreign-key lifecycle lets the transaction clear ownership before or while terminalizing a job.
 
@@ -127,4 +127,4 @@ The browser compatibility gate is `bun run test:e2e`. Its supervisor refuses dat
 
 ## Deferred cleanup
 
-After the expand/contract rollback window closes, remove the dormant `translation_jobs.chunks_json` column in a separate contract migration. Scrape responses remain bounded to 5 MB while streaming. Future storage or delivery changes must preserve the invariants and compatibility gates above.
+The `translation_jobs.chunks_json` contract migration (0032) has been applied. `epub_uploads` carries a partial `(expires_at) WHERE status = 'uploading'` index for the hourly expired-upload cleanup, and `translation_job_chunks_metrics_idx` is deliberately kept as the covering index for the dashboard token/latency aggregate. Scrape responses remain bounded to 5 MB while streaming. Future storage or delivery changes must preserve the invariants and compatibility gates above.
