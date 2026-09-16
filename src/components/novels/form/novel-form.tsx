@@ -16,7 +16,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { coverMimeSchema, createNovelSchema } from "@/lib/content/novel/novel.schemas";
-import { isSupportedLanguagePair } from "@/lib/translation/prompts/language";
+import { isSupportedLanguagePair } from "@/lib/language-pair";
 
 type NovelFormData = z.input<typeof createNovelSchema> & {
   removeCover?: boolean;

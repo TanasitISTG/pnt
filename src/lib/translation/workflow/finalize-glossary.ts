@@ -3,8 +3,8 @@ import "@tanstack/react-start/server-only";
 import type { novels, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
 import { createLog } from "./log-entry";
-import { generateJsonCompletion } from "../providers/json-completion";
-import { retryTranslationOperation } from "./retry";
+import { generateJsonCompletion } from "@/lib/providers/json-completion";
+import { retryOperation } from "@/lib/retry";
 import {
   applyGlossarySuggestionPolicy,
   prepareGlossarySuggestionCandidates,
@@ -19,7 +19,7 @@ import {
   parseTermSuggestions,
 } from "../glossary/suggestions";
 import { loadTermSourcesForExclusion } from "./job-store";
-import type { AIProviderClient } from "../types/provider";
+import type { AIProviderClient } from "@/lib/providers/types";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
 import type { GlossaryReviewResult } from "../types/glossary";
 
@@ -82,7 +82,7 @@ export async function suggestAndReviewTerms({
       rawSourceExcerpt,
     });
 
-    const suggestedTerms = await retryTranslationOperation(async () => {
+    const suggestedTerms = await retryOperation(async () => {
       const suggestResult = await generateJsonCompletion(providerConfig, 0.3, [
         { role: "system", content: suggestPrompt },
         { role: "user", content: userMessage },
@@ -116,7 +116,7 @@ export async function suggestAndReviewTerms({
           fullTranslation,
         );
 
-        reviewResults = await retryTranslationOperation(async () => {
+        reviewResults = await retryOperation(async () => {
           const reviewResult = await generateJsonCompletion(providerConfig, 0.1, [
             { role: "system", content: reviewPrompt },
             { role: "user", content: reviewUserMessage },

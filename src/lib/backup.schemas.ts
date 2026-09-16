@@ -3,7 +3,7 @@ import { z } from "zod";
 import { coverMimeSchema } from "@/lib/content/novel/novel.schemas";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { isSupportedLanguagePair } from "@/lib/translation/prompts/language";
+import { isSupportedLanguagePair } from "@/lib/language-pair";
 
 // Chapter numbers live in a numeric(8, 2) column, so at most six integer digits.
 const chapterNumberSchema = z

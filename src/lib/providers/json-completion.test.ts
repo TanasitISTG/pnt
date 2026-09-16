@@ -1,8 +1,8 @@
 import { APIConnectionTimeoutError } from "openai";
 import { describe, expect, it, vi } from "vitest";
 
-import { generateJsonCompletion } from "../providers/json-completion";
-import type { AIProviderClient } from "../types/provider";
+import { generateJsonCompletion } from "./json-completion";
+import type { AIProviderClient } from "./types";
 
 function provider(responses: unknown[]): AIProviderClient {
   return {

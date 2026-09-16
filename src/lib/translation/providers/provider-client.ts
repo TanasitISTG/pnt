@@ -12,7 +12,7 @@ import type {
   ChatCompletionResult,
   ProviderType,
   ReasoningEffort,
-} from "../types/provider";
+} from "@/lib/providers/types";
 import {
   OPEN_CODE_GO_BASE_URL,
   isOpenCodeLunaModel,

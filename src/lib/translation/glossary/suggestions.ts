@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { LANG_LABELS, normalizePair } from "../prompts/language";
+import { LANG_LABELS, normalizePair } from "@/lib/language-pair";
 import type {
   GlossaryReviewAction,
   GlossaryReviewConfidence,

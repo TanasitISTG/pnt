@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { ProviderType } from "@/lib/translation/types/provider";
+import type { ProviderType } from "@/lib/providers/types";
 
 interface ProviderSelectionSectionProps {
   provider: ProviderType;

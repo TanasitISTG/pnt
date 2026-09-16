@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { isSupportedLanguagePair } from "@/lib/translation/prompts/language";
+import { isSupportedLanguagePair } from "@/lib/language-pair";
 
 export const sourceLangSchema = z.enum(["en", "zh"]);
 export const targetLangSchema = z.enum(["en", "th"]);

@@ -11,6 +11,7 @@ import { buildRelationshipPromptContextForText } from "@/lib/relationships/map";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 import * as analyzerModule from "@/lib/relationships/analyzer";
 vi.mock("./job-store", () => ({
+  applyRelationshipAnalysis: vi.fn().mockResolvedValue({ applied: true, map: null, warnings: [] }),
   beginJob: vi.fn(),
   completeChunk: vi.fn(),
   completeJob: vi.fn(),
@@ -648,12 +649,21 @@ describe("translation worker guarded state transitions", () => {
 
     expect(analyzerModule.analyzeChunkRelationshipsForChunk).toHaveBeenCalledWith(
       expect.objectContaining({
-        jobId: "job-1",
-        generation,
+        contextTailLength: 500,
         approvedTerms: terms,
         previousChapter,
         providerConfig: provider,
+        persistAnalysis: expect.any(Function),
       }),
+    );
+    const analyzerInput = vi.mocked(analyzerModule.analyzeChunkRelationshipsForChunk).mock
+      .calls[0]![0];
+    await analyzerInput.persistAnalysis({ characters: [], relationships: [], activePairs: [] });
+    expect(jobStore.applyRelationshipAnalysis).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ characters: [], relationships: [], activePairs: [] }),
     );
     expect(jobStore.loadJobChunk).toHaveBeenCalledTimes(1);
     expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledTimes(1);
@@ -694,6 +704,8 @@ describe("translation worker guarded state transitions", () => {
       expect.objectContaining({
         approvedTerms: terms,
         previousChapter: expect.objectContaining({ summary: "Prev" }),
+        contextTailLength: expect.any(Number),
+        persistAnalysis: expect.any(Function),
       }),
     );
     expect(jobStore.completeChunk).toHaveBeenCalledTimes(1);

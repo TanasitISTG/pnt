@@ -1,17 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import * as jobStore from "@/lib/translation/workflow/job-store";
-import type { AIProviderClient } from "@/lib/translation/types/provider";
+import type { AIProviderClient } from "@/lib/providers/types";
 import {
   analyzeChunkRelationshipsForChunk,
   analyzeRelationshipSourceChunk,
   type ChunkRelationshipAnalysisInput,
 } from "./analyzer";
 import { relationshipMapSchema } from "./schemas";
-
-vi.mock("@/lib/translation/workflow/job-store", () => ({
-  applyRelationshipAnalysis: vi.fn(),
-}));
 
 const updatedAt = "2026-01-01T00:00:00.000Z";
 
@@ -107,7 +102,6 @@ const baseNovel = {
   id: "novel-1",
   sourceLang: "zh",
   targetLang: "th",
-  contextTailLength: 500,
   relationshipMapJson: null as string | null,
   storySummary: null as string | null,
 };
@@ -116,16 +110,16 @@ function analysisInput(
   overrides: Partial<ChunkRelationshipAnalysisInput> = {},
 ): ChunkRelationshipAnalysisInput {
   return {
-    jobId: "job-1",
-    generation: 3,
     novel: baseNovel,
     chapter: { number: "1" },
     chunk: { index: 0, sourceText: "甲走进房间。" },
     previousChunk: null,
     approvedTerms: [],
     previousChapter: null,
+    contextTailLength: 500,
     providerConfig: null,
     providerFailure: null,
+    persistAnalysis: vi.fn(async () => ({ applied: false, map: null, warnings: [] })),
     ...overrides,
   };
 }
@@ -468,7 +462,6 @@ describe("chunk relationship analysis", () => {
         previousChapter: {
           summary: "上一章概要",
           rawTail: "上一章的原文尾巴",
-          translatedTail: "prev translated",
         },
         providerConfig: client,
       }),
@@ -480,7 +473,7 @@ describe("chunk relationship analysis", () => {
     );
   });
 
-  it("persists source-evidenced facts through the guarded job-owned write", async () => {
+  it("hands source-evidenced facts to the persistence port", async () => {
     const storedMap = mapWith([character("a", "甲"), character("b", "乙")]);
     const { client } = recordingProvider({
       characters: [],
@@ -499,27 +492,53 @@ describe("chunk relationship analysis", () => {
       ],
       activePairs: [{ speaker: "甲", listener: "乙", evidence: "甲和乙" }],
     });
-    vi.mocked(jobStore.applyRelationshipAnalysis).mockResolvedValue({
-      applied: true,
-      map: null,
-      warnings: [],
-    } as never);
+    const persistAnalysis = vi.fn(async () => ({ applied: true, map: null, warnings: [] }));
 
     await analyzeChunkRelationshipsForChunk(
       analysisInput({
         novel: { ...baseNovel, relationshipMapJson: JSON.stringify(storedMap) },
         chunk: { index: 2, sourceText: "甲和乙一起走。" },
         providerConfig: client,
+        persistAnalysis,
       }),
     );
 
-    expect(jobStore.applyRelationshipAnalysis).toHaveBeenCalledWith(
-      "job-1",
-      3,
-      2,
+    expect(persistAnalysis).toHaveBeenCalledWith(
       expect.objectContaining({
         activePairs: [expect.objectContaining({ speaker: "甲", listener: "乙" })],
       }),
     );
+  });
+
+  it("uses the persisted map for the scene context when the port applies it", async () => {
+    const storedMap = mapWith([character("a", "甲"), character("b", "乙")]);
+    const { client } = recordingProvider({
+      characters: [],
+      relationships: [],
+      activePairs: [{ speaker: "甲", listener: "乙", evidence: "甲和乙" }],
+    });
+    const persisted = mapWith(
+      [character("a", "甲"), character("b", "乙")],
+      [relationship("pair", "a", "b")],
+    );
+    const persistAnalysis = vi.fn(async () => ({
+      applied: true,
+      map: persisted,
+      warnings: ["Stored map adjusted."],
+    }));
+
+    const result = await analyzeChunkRelationshipsForChunk(
+      analysisInput({
+        novel: { ...baseNovel, relationshipMapJson: JSON.stringify(storedMap) },
+        chunk: { index: 0, sourceText: "甲和乙一起走。" },
+        providerConfig: client,
+        persistAnalysis,
+      }),
+    );
+
+    expect(result.context?.activePairs).toEqual([
+      { speakerId: "a", listenerId: "b", relationshipId: "pair" },
+    ]);
+    expect(result.warning).toBe("Stored map adjusted.");
   });
 });

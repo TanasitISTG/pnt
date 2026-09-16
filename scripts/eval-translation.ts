@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { novels, chapters, glossaryTerms } from "@/lib/db/schema";
 import { chunkText } from "@/lib/translation/text/chunker";
 import { buildSystemPrompt, buildUserMessage } from "@/lib/translation/prompts/translation";
-import { normalizePair, parseLanguagePair } from "@/lib/translation/prompts/language";
+import { normalizePair, parseLanguagePair } from "@/lib/language-pair";
 import { scanResidualScripts } from "@/lib/translation/text/residual";
 import {
   injectParagraphMarkers,

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import * as jobStore from "@/lib/translation/workflow/job-store";
 import * as providerClientModule from "@/lib/translation/providers/provider-client";
 import * as titleModule from "@/lib/translation/workflow/title";
-import type { AIProviderClient } from "@/lib/translation/types/provider";
+import type { AIProviderClient } from "@/lib/providers/types";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 import { translateMissingTitlesForUser } from "./chapter-ops.service";
 

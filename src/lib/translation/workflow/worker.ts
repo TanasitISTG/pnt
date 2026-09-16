@@ -1,14 +1,14 @@
 import "@tanstack/react-start/server-only";
 
 import { loadProviderRuntimeForJob } from "../providers/provider-client";
-import type { AIProviderClient } from "../types/provider";
+import type { AIProviderClient } from "@/lib/providers/types";
 import { splitAtParagraphBoundary } from "../text/chunker";
 import {
   buildResidualRepairPrompt,
   buildSystemPrompt,
   buildUserMessage,
 } from "../prompts/translation";
-import { LANG_LABELS, normalizePair } from "../prompts/language";
+import { LANG_LABELS, normalizePair } from "@/lib/language-pair";
 import { scanResidualScripts, sourceTagsArePreserved, spliceResidualSpans } from "../text/residual";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "../glossary/terms";
 import {
@@ -22,6 +22,7 @@ import type { ChunkProgress, LogEntry } from "../types/workflow";
 import { analyzeChunkRelationshipsForChunk } from "@/lib/relationships/analyzer";
 import { log } from "@/lib/log";
 import {
+  applyRelationshipAnalysis,
   beginJob,
   completeChunk,
   completeJob,
@@ -40,7 +41,7 @@ import {
 } from "./run-context";
 import { generateSummaryArtifacts } from "./finalize-summary";
 import { suggestAndReviewTerms } from "./finalize-glossary";
-import { retryTranslationOperation } from "./retry";
+import { retryOperation } from "@/lib/retry";
 // per job, each chunk a single memoized step (analysis + translation) with its
 // own invocation + retries — so no lease, no cron pinger. DB status rows stay
 // the UI's source of truth.
@@ -73,7 +74,7 @@ async function loadChunkProviderRuntime(
 ): Promise<ChunkProviderRuntime> {
   try {
     return {
-      config: await retryTranslationOperation(() => loadProviderRuntimeForJob(userId, job)),
+      config: await retryOperation(() => loadProviderRuntimeForJob(userId, job)),
       failure: null,
     };
   } catch (error) {
@@ -252,7 +253,7 @@ async function repairResidualScripts(
     : "";
   if (residual.spans.some((span) => span.letterCount > LONG_SPAN_LIMIT)) {
     try {
-      const repaired = await retryTranslationOperation(async () => {
+      const repaired = await retryOperation(async () => {
         const fix = await providerConfig.generateChatCompletion({
           messages: [
             { role: "system", content: systemPrompt },
@@ -306,7 +307,7 @@ async function repairResidualScripts(
     spans.every((span) => span.letterCount <= LONG_SPAN_LIMIT)
   ) {
     try {
-      const repaired = await retryTranslationOperation(async () => {
+      const repaired = await retryOperation(async () => {
         const repair = await providerConfig.generateChatCompletion({
           temperature: 0.2,
           messages: [
@@ -404,16 +405,17 @@ export async function translateChunk(
   const resolvedContext = runContext ?? (await loadTranslationRunContext(novel, chapter));
 
   const relationshipAnalysis = await analyzeChunkRelationshipsForChunk({
-    jobId,
-    generation,
     novel,
     chapter,
     chunk: currentChunk,
     previousChunk,
     approvedTerms: resolvedContext.terms,
     previousChapter: resolvedContext.previousChapter,
+    contextTailLength: resolveContextTailLength(novel.contextTailLength),
     providerConfig: providerRuntime.config,
     providerFailure: providerRuntime.failure,
+    persistAnalysis: (analysis) =>
+      applyRelationshipAnalysis(jobId, generation, currentChunk.index, analysis),
   });
 
   if (!providerRuntime.config) throw new Error(providerRuntime.failure ?? "provider error");

@@ -20,7 +20,7 @@ import {
 import { log } from "@/lib/log";
 import { dispatchPendingWorkflowOutbox } from "./outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
-import { TRANSLATION_RETRY_COUNT } from "@/lib/translation/workflow/retry";
+import { RETRY_COUNT } from "@/lib/retry";
 import {
   failTranslationEvalReport,
   runTranslationEvalReport,
@@ -38,7 +38,7 @@ export const translateChapterFn = inngest.createFunction(
   {
     id: "translate-chapter",
     triggers: { event: "translation/job.requested" },
-    retries: TRANSLATION_RETRY_COUNT,
+    retries: RETRY_COUNT,
     concurrency: { limit: 1, key: "event.data.novelId" },
     // runKey is a fresh nanoid per enqueue — duplicate sends of the same
     // enqueue collapse, while a deliberate retry (new runKey) always runs.

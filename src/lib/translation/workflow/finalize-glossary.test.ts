@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as jobStore from "./job-store";
 import { suggestAndReviewTerms } from "./finalize-glossary";
-import * as jsonCompletion from "../providers/json-completion";
-import type { AIProviderClient } from "../types/provider";
+import * as jsonCompletion from "@/lib/providers/json-completion";
+import type { AIProviderClient } from "@/lib/providers/types";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
 
 vi.mock("./job-store", () => ({
   loadTermSourcesForExclusion: vi.fn(),
 }));
-vi.mock("../providers/json-completion", () => ({
+vi.mock("@/lib/providers/json-completion", () => ({
   generateJsonCompletion: vi.fn(),
 }));
 

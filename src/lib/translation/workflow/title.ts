@@ -1,12 +1,12 @@
 import "@tanstack/react-start/server-only";
 
 import type { GlossaryTermInput } from "../types/glossary";
-import type { ProviderClientConfig } from "../types/provider";
+import type { ProviderClientConfig } from "@/lib/providers/types";
 import { buildRelationshipPromptContextForText } from "@/lib/relationships/map";
 import type { RelationshipMapV1 } from "@/lib/relationships/schemas";
 import { filterGlossaryForChunk, formatGlossaryBlock } from "../glossary/terms";
 import { buildTitlePrompt } from "../prompts/translation";
-import { retryTranslationOperation } from "./retry";
+import { retryOperation } from "@/lib/retry";
 
 export interface TitleTranslationOptions {
   glossaryTerms?: GlossaryTermInput[];
@@ -40,7 +40,7 @@ export async function translateChapterTitle(
   });
 
   try {
-    const translated = await retryTranslationOperation(async () => {
+    const translated = await retryOperation(async () => {
       const completion = await providerConfig.generateChatCompletion({
         temperature: 0.3,
         model: providerConfig.fastModel ?? undefined,

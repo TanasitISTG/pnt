@@ -1,4 +1,4 @@
-import { normalizePair } from "../prompts/language";
+import { normalizePair } from "@/lib/language-pair";
 import type { ResidualScriptSpan } from "../types/text";
 
 const LETTER_RE = /\p{L}/u;

@@ -10,7 +10,7 @@ import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { cancelActiveTranslationJobsInTransaction } from "@/lib/translation/workflow/cancel";
 import { loadApprovedTermsForContext } from "@/lib/translation/workflow/job-store";
 import { createProviderClient } from "@/lib/translation/providers/provider-client";
-import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
+import { retryOperation } from "@/lib/retry";
 import { translateChapterTitle } from "@/lib/translation/workflow/title";
 import { parseRelationshipMap } from "@/lib/relationships/map";
 import { scanResidualScripts } from "@/lib/translation/text/residual";
@@ -144,7 +144,7 @@ export async function translateMissingTitlesForUser(
   }
 
   const [providerConfig, approvedTerms] = await Promise.all([
-    retryTranslationOperation(() => createProviderClient(userId)),
+    retryOperation(() => createProviderClient(userId)),
     loadApprovedTermsForContext(novel.id),
   ]);
   const pair = `${novel.sourceLang}->${novel.targetLang}`;

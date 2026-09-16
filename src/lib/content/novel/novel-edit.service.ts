@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { emptyRelationshipMap, serializeRelationshipMap } from "@/lib/relationships/map";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { isSupportedLanguagePair } from "@/lib/translation/prompts/language";
+import { isSupportedLanguagePair } from "@/lib/language-pair";
 import { updateNovelSchema, type UpdateNovelInput } from "@/lib/content/novel/novel.schemas";
 
 export async function updateNovelForUser(

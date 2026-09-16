@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { retryTranslationOperation, TRANSLATION_RETRY_COUNT } from "./retry";
+import { retryOperation, RETRY_COUNT } from "./retry";
 
-describe("retryTranslationOperation", () => {
+describe("retryOperation", () => {
   it("uses three retries after the initial attempt", async () => {
-    expect(TRANSLATION_RETRY_COUNT).toBe(3);
+    expect(RETRY_COUNT).toBe(3);
 
     let attempts = 0;
     await expect(
-      retryTranslationOperation(async () => {
+      retryOperation(async () => {
         attempts += 1;
         if (attempts < 4) throw new Error(`failure-${attempts}`);
         return "ok";
@@ -23,7 +23,7 @@ describe("retryTranslationOperation", () => {
     let attempts = 0;
 
     await expect(
-      retryTranslationOperation(async () => {
+      retryOperation(async () => {
         attempts += 1;
         throw attempts === 4 ? finalError : new Error(`failure-${attempts}`);
       }),

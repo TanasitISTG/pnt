@@ -29,7 +29,7 @@ import { NovelCover } from "@/components/novels/novel-cover";
 import { PublishMenu } from "@/components/publish-menu";
 import type { ChapterRow } from "@/components/chapters/types";
 import { cn, formatCost, formatTokens } from "@/lib/utils";
-import { parseLanguagePair } from "@/lib/translation/prompts/language";
+import { parseLanguagePair } from "@/lib/language-pair";
 import type { getNovel } from "@/lib/content/novel/novel.functions";
 import type { getGlossaryStats } from "@/lib/glossary/functions";
 import type { getNovelCosts } from "@/lib/translation/api/queries";

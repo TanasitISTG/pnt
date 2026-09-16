@@ -1,6 +1,6 @@
 import { MAX_RELATIONSHIP_PROMPT_ITEMS, relationshipAnalysisSchema } from "./schemas";
 import type { ApprovedCharacterMapping, RelationshipAnalysis, RelationshipMapV1 } from "./schemas";
-import { LANG_LABELS, type LanguagePair } from "@/lib/translation/prompts/language";
+import { LANG_LABELS, type LanguagePair } from "@/lib/language-pair";
 
 export interface RelationshipAnalysisPromptOptions {
   pair: LanguagePair;

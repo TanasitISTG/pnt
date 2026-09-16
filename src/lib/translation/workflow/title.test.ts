@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ProviderClientConfig } from "../types/provider";
+import type { ProviderClientConfig } from "@/lib/providers/types";
 import { translateChapterTitle } from "./title";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 

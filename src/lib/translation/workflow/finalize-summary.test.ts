@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as titleModule from "./title";
 import { generateSummaryArtifacts } from "./finalize-summary";
-import type { AIProviderClient } from "../types/provider";
+import type { AIProviderClient } from "@/lib/providers/types";
 import type { GlossaryTermInput } from "../types/glossary";
 import type { LogEntry } from "../types/workflow";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";

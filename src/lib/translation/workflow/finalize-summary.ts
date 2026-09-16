@@ -2,8 +2,8 @@ import "@tanstack/react-start/server-only";
 
 import type { novels, chapters } from "@/lib/db/schema";
 import { createLog } from "./log-entry";
-import { retryTranslationOperation } from "./retry";
-import type { AIProviderClient } from "../types/provider";
+import { retryOperation } from "@/lib/retry";
+import type { AIProviderClient } from "@/lib/providers/types";
 import type { GlossaryTermInput } from "../types/glossary";
 import type { LogEntry } from "../types/workflow";
 import { translateChapterTitle } from "./title";
@@ -68,7 +68,7 @@ export async function generateSummaryArtifacts({
   let updatedStorySummary: string | undefined;
   try {
     const summarySystemPrompt = buildSummaryPrompt(`${novel.sourceLang}->${novel.targetLang}`);
-    const summaryContent = await retryTranslationOperation(async () => {
+    const summaryContent = await retryOperation(async () => {
       const summaryCompletion = await providerConfig.generateChatCompletion({
         model: providerConfig.fastModel ?? undefined,
         messages: [
@@ -95,7 +95,7 @@ export async function generateSummaryArtifacts({
 
     // Update rolling story summary on novel (non-fatal)
     try {
-      updatedStorySummary = await retryTranslationOperation(async () => {
+      updatedStorySummary = await retryOperation(async () => {
         const storySummaryCompletion = await providerConfig.generateChatCompletion({
           model: providerConfig.fastModel ?? undefined,
           messages: [

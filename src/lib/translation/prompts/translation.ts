@@ -1,6 +1,6 @@
 import type { RelationshipPromptContext } from "@/lib/relationships/map";
 import { formatRelationshipContext } from "./relationship-context";
-import { LANG_LABELS, normalizePair, type LanguagePair } from "./language";
+import { LANG_LABELS, normalizePair, type LanguagePair } from "@/lib/language-pair";
 
 export interface ContextOptions {
   previousSummary?: string | null;

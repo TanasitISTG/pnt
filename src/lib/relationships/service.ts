@@ -5,7 +5,7 @@ import { nanoid } from "@/lib/utils";
 import { db } from "@/lib/db";
 import { novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { parseLanguagePair } from "@/lib/translation/prompts/language";
+import { parseLanguagePair } from "@/lib/language-pair";
 import {
   deleteRelationshipEntrySchema,
   relationshipMapSchema,

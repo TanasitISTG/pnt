@@ -1,13 +1,8 @@
 import "@tanstack/react-start/server-only";
 
-import { generateJsonCompletion } from "@/lib/translation/providers/json-completion";
-import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
-import { parseLanguagePair, type LanguagePair } from "@/lib/translation/prompts/language";
-import { applyRelationshipAnalysis } from "@/lib/translation/workflow/job-store";
-import {
-  resolveContextTailLength,
-  type PreviousChapterContext,
-} from "@/lib/translation/workflow/run-context";
+import { generateJsonCompletion } from "@/lib/providers/json-completion";
+import { retryOperation } from "@/lib/retry";
+import { parseLanguagePair, type LanguagePair } from "@/lib/language-pair";
 import type { RelationshipPromptContext, RelationshipActivePairInput } from "./map";
 import {
   buildRelationshipPromptContext,
@@ -22,7 +17,7 @@ import {
   parseRelationshipAnalysis,
 } from "./analysis-prompt";
 import { MAX_RELATIONSHIP_PROMPT_ITEMS, normalizeIdentity } from "./schemas";
-import type { AIProviderClient } from "@/lib/translation/types/provider";
+import type { AIProviderClient } from "@/lib/providers/types";
 import type {
   ApprovedCharacterMapping,
   RelationshipAnalysis,
@@ -44,23 +39,42 @@ export interface ChunkRelationshipAnalysis {
 }
 
 export interface ChunkRelationshipAnalysisInput {
-  jobId: string;
-  generation: number;
   novel: {
     id: string;
     sourceLang: string;
     targetLang: string;
     relationshipMapJson: string | null;
     storySummary: string | null;
-    contextTailLength: number | null;
   };
   chapter: { number: string };
   chunk: { index: number; sourceText: string };
   previousChunk: { sourceText: string } | null;
   approvedTerms: readonly { source: string; target: string; category: string }[];
-  previousChapter: PreviousChapterContext | null;
+  previousChapter: RelationshipPromptChapterContext | null;
+  contextTailLength: number;
   providerConfig: AIProviderClient | null;
   providerFailure: string | null;
+  persistAnalysis: PersistRelationshipAnalysis;
+}
+
+/**
+ * Persistence port: the translation workflow owns job locking, so the caller
+ * decides how (and whether) an analysis may be written. Injected here so this
+ * module never reaches into translation's server layer.
+ */
+export interface PersistedRelationshipAnalysis {
+  applied: boolean;
+  map: RelationshipMapV1 | null;
+  warnings: string[];
+}
+
+export type PersistRelationshipAnalysis = (
+  analysis: RelationshipAnalysis,
+) => Promise<PersistedRelationshipAnalysis>;
+
+export interface RelationshipPromptChapterContext {
+  summary: string | null;
+  rawTail: string | null;
 }
 
 /**
@@ -83,7 +97,7 @@ export async function analyzeChunkRelationshipsForChunk(
   }
   const storedMap = parseRelationshipMap(novel.relationshipMapJson);
   const baseMap = storedMap ?? emptyRelationshipMap();
-  const tailLength = resolveContextTailLength(novel.contextTailLength);
+  const tailLength = input.contextTailLength;
   const sourceTail =
     chunk.index > 0
       ? previousChunk?.sourceText.slice(-tailLength) || null
@@ -119,12 +133,7 @@ export async function analyzeChunkRelationshipsForChunk(
   let context = sourceAnalysis.context;
   const warnings = [invalidMapWarning, sourceAnalysis.warning];
   if (sourceAnalysis.analysis && storedMap) {
-    const applied = await applyRelationshipAnalysis(
-      input.jobId,
-      input.generation,
-      chunk.index,
-      sourceAnalysis.analysis,
-    );
+    const applied = await input.persistAnalysis(sourceAnalysis.analysis);
     context =
       buildSceneContext(
         applied.map ?? sourceAnalysis.map,
@@ -177,7 +186,7 @@ export async function analyzeRelationshipSourceChunk(
       previousSourceTail: options.previousSourceTail,
       currentChunk: options.currentChunk,
     });
-    const analysis = await retryTranslationOperation(async () => {
+    const analysis = await retryOperation(async () => {
       const completion = await generateJsonCompletion(options.providerConfig, 0.1, [
         { role: "system", content: prompt },
         { role: "user", content: userMessage },

@@ -25,7 +25,7 @@ import {
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
 import { appendLogEntry, createLog, serializeLogEntries } from "../workflow/log-entry";
-import type { AIProviderClient } from "../types/provider";
+import type { AIProviderClient } from "@/lib/providers/types";
 import type { TranslationBatchPreview } from "../types/api";
 import { calculateTokenCost } from "../cost";
 import { enqueueTranslationBatchInOrder } from "./batch";

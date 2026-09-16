@@ -11,7 +11,7 @@ import {
   OpenAIProviderClient,
   GeminiProviderClient,
 } from "@/lib/translation/providers/provider-client";
-import type { ProviderType, ReasoningEffort } from "@/lib/translation/types/provider";
+import type { ProviderType, ReasoningEffort } from "@/lib/providers/types";
 import {
   saveProviderSettingsSchema,
   testProviderConnectionSchema,

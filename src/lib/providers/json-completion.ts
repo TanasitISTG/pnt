@@ -1,4 +1,4 @@
-import type { AIProviderClient, ChatCompletionResult, ChatMessage } from "../types/provider";
+import type { AIProviderClient, ChatCompletionResult, ChatMessage } from "./types";
 
 export interface JsonCompletionResult {
   content: string;

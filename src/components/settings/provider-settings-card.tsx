@@ -34,7 +34,7 @@ import {
   type TestProviderConnectionInput,
 } from "@/lib/settings/schemas";
 import { isOpenCodeLunaModel } from "@/lib/translation/providers/provider-compatibility";
-import type { ProviderType, ReasoningEffort } from "@/lib/translation/types/provider";
+import type { ProviderType, ReasoningEffort } from "@/lib/providers/types";
 
 const REASONING_EFFORT_OPTIONS: Array<{
   value: ReasoningEffort | "default";

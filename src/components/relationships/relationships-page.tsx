@@ -28,7 +28,7 @@ import {
   relationshipNovelQueryOptions,
   type RelationshipMapSearch,
 } from "@/lib/relationships/query";
-import { LANG_LABELS, parseLanguagePair } from "@/lib/translation/prompts/language";
+import { LANG_LABELS, parseLanguagePair } from "@/lib/language-pair";
 
 const relationshipsRoute = getRouteApi("/_protected/novels/$novelId/relationships");
 
