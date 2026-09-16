@@ -1,74 +1,30 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronsUpDown,
-  Columns3,
-  Network,
-  MoreHorizontal,
-  Search,
-  Users,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  columnVisibilityFeature,
-  createColumnHelper,
-  rowPaginationFeature,
-  rowSortingFeature,
-  tableFeatures,
-  useTable,
-  type Column,
-  type ColumnVisibilityState,
-  type PaginationState,
-  type SortingState,
-  type Updater,
-} from "@tanstack/react-table";
+import { Network, Users } from "lucide-react";
+import { useCallback, useMemo } from "react";
+import { createColumnHelper } from "@tanstack/react-table";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTableCells,
+  DataTableDesktopRegion,
+  DataTableHeaderGroups,
+  DataTableMobileRegion,
+  DataTablePagination,
+  DataTableRowActions,
+  DataTableSection,
+  DataTableSortableHeader,
+  DataTableToolbar,
+  type DataTablePaginationTable,
+  type DataTableToolbarFilter,
+} from "@/components/ui/data-table-parts";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import { useDataTable, type DataTableFeatures } from "@/components/ui/use-data-table";
 import type { RelationshipMapSearch } from "@/lib/relationships/query";
 import type { RelationshipTablePage } from "./relationship-table-data";
 import type { CharacterProfile, CharacterRelationship } from "@/lib/relationships/schemas";
 
-const relationshipTableFeatures = tableFeatures({
-  rowPaginationFeature,
-  rowSortingFeature,
-  columnVisibilityFeature,
-});
-
-type RelationshipTableFeatures = typeof relationshipTableFeatures;
-const characterColumnHelper = createColumnHelper<RelationshipTableFeatures, CharacterProfile>();
-const relationshipColumnHelper = createColumnHelper<
-  RelationshipTableFeatures,
-  CharacterRelationship
->();
+const characterColumnHelper = createColumnHelper<DataTableFeatures, CharacterProfile>();
+const relationshipColumnHelper = createColumnHelper<DataTableFeatures, CharacterRelationship>();
 
 export type RelationshipSearchChange = (
   changes: Partial<RelationshipMapSearch>,
@@ -102,7 +58,6 @@ interface DirectedRelationshipsTableProps {
 }
 
 const pageSizeOptions = [10, 25, 50] as const;
-const pageSizeItems: Record<string, string> = { "10": "10", "25": "25", "50": "50" };
 const stateItems: Record<string, string> = {
   all: "All states",
   active: "Active",
@@ -133,68 +88,62 @@ const relationshipColumnLabels: Record<string, string> = {
   state: "State",
   actions: "Actions",
 };
-
-function resolveUpdater<T>(updater: Updater<T>, current: T): T {
-  if (typeof updater === "function") return (updater as (old: T) => T)(current);
-  return updater;
-}
-
-function formatRange(first: number, last: number, total: number, noun: string) {
-  return total === 0
-    ? `0 ${noun}`
-    : `${first.toLocaleString()}–${last.toLocaleString()} of ${total.toLocaleString()} ${noun}`;
-}
+const sortableSearchColumns: Record<string, RelationshipMapSearch["sort"]> = {
+  name: "name",
+  state: "state",
+  management: "management",
+};
 
 function filteredSearch(search: RelationshipMapSearch) {
   return search.q !== "" || search.state !== "all" || search.management !== "all";
 }
 
-function CharacterSortableHeader<TValue>({
-  column,
-  label,
-}: {
-  column: Column<RelationshipTableFeatures, CharacterProfile, TValue>;
-  label: string;
-}) {
-  return <SortableHeaderContent column={column} label={label} />;
-}
-
-function RelationshipSortableHeader<TValue>({
-  column,
-  label,
-}: {
-  column: Column<RelationshipTableFeatures, CharacterRelationship, TValue>;
-  label: string;
-}) {
-  return <SortableHeaderContent column={column} label={label} />;
-}
-
-function SortableHeaderContent<TValue, TData extends Record<string, unknown>>({
-  column,
-  label,
-}: {
-  column: Column<RelationshipTableFeatures, TData, TValue>;
-  label: string;
-}) {
-  const sorted = column.getIsSorted();
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 h-8 px-2 font-semibold text-muted-foreground hover:text-foreground"
-      onClick={() => column.toggleSorting(sorted === "asc")}
-      aria-label={`Sort by ${label}`}
-    >
-      {label}
-      {sorted === "asc" ? (
-        <ChevronsUpDown className="size-3.5" aria-hidden="true" />
-      ) : sorted === "desc" ? (
-        <ChevronsUpDown className="size-3.5 rotate-180" aria-hidden="true" />
-      ) : (
-        <ChevronsUpDown className="size-3.5 opacity-60" aria-hidden="true" />
-      )}
-    </Button>
+function clearFilters(onSearchChange: RelationshipSearchChange) {
+  onSearchChange(
+    { q: "", state: "all", management: "all", sort: "name", dir: "asc", page: 1 },
+    true,
   );
+}
+
+function buildFilters(
+  search: RelationshipMapSearch,
+  onSearchChange: RelationshipSearchChange,
+): DataTableToolbarFilter[] {
+  return [
+    {
+      ariaLabel: "Filter by effective state",
+      value: search.state,
+      items: stateItems,
+      onChange: (value) =>
+        onSearchChange({ state: value as RelationshipMapSearch["state"], page: 1 }, true),
+    },
+    {
+      ariaLabel: "Filter by management",
+      value: search.management,
+      items: managementItems,
+      onChange: (value) =>
+        onSearchChange({ management: value as RelationshipMapSearch["management"], page: 1 }, true),
+    },
+  ];
+}
+
+function paginationTableFor(
+  currentPage: number,
+  pageCount: number,
+  onSearchChange: RelationshipSearchChange,
+): DataTablePaginationTable {
+  const lastPage = Math.max(1, pageCount);
+  const goTo = (page: number) => onSearchChange({ page }, false);
+  return {
+    firstPage: () => goTo(1),
+    previousPage: () => goTo(Math.max(1, currentPage - 1)),
+    nextPage: () => goTo(Math.min(lastPage, currentPage + 1)),
+    lastPage: () => goTo(lastPage),
+    getCanPreviousPage: () => currentPage > 1,
+    getCanNextPage: () => currentPage < lastPage,
+    getCanLastPage: () => currentPage < lastPage,
+    getPageCount: () => lastPage,
+  };
 }
 
 function ManagementBadge({ locked }: { locked: boolean }) {
@@ -237,278 +186,19 @@ function EntryActions({
   onDelete: () => void;
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="min-h-11 min-w-11"
-            aria-label={`Actions for ${label}`}
-            disabled={pending}
-          />
-        }
-      >
-        <MoreHorizontal className="size-4" aria-hidden="true" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            {entryType === "character" ? "Character actions" : "Relationship actions"}
-          </DropdownMenuLabel>
-          <DropdownMenuItem disabled={pending} onClick={onEdit}>
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={pending} onClick={onToggle}>
-            {enabled ? "Disable" : "Restore"}
-          </DropdownMenuItem>
-          {locked && (
-            <DropdownMenuItem disabled={pending} onClick={onAuto}>
-              Use automatic updates
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" disabled={pending} onClick={onDelete}>
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function TableToolbar({
-  search,
-  onSearchChange,
-  table,
-  columnLabels,
-  searchLabel,
-  description,
-}: {
-  search: RelationshipMapSearch;
-  onSearchChange: RelationshipSearchChange;
-  table: {
-    getAllLeafColumns: () => Array<{
-      id: string;
-      getCanHide: () => boolean;
-      getIsVisible: () => boolean;
-      toggleVisibility: (visible: boolean) => void;
-    }>;
-  };
-  columnLabels: Record<string, string>;
-  searchLabel: string;
-  description: string;
-}) {
-  const [queryInput, setQueryInput] = useState(search.q);
-  useEffect(() => setQueryInput(search.q), [search.q]);
-  useEffect(() => {
-    if (queryInput === search.q) return;
-    const timeoutId = window.setTimeout(
-      () => onSearchChange({ q: queryInput, page: 1 }, true),
-      300,
-    );
-    return () => window.clearTimeout(timeoutId);
-  }, [onSearchChange, queryInput, search.q]);
-
-  const clear = () =>
-    onSearchChange(
-      { q: "", state: "all", management: "all", sort: "name", dir: "asc", page: 1 },
-      true,
-    );
-
-  return (
-    <div className="border-b border-border p-3 sm:p-4">
-      <div className="grid gap-3 lg:grid-cols-[minmax(300px,1fr)_20rem_auto] lg:items-center">
-        <div className="relative min-w-0">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            value={queryInput}
-            onChange={(event) => setQueryInput(event.target.value)}
-            placeholder={searchLabel}
-            aria-label={searchLabel}
-            className="h-10 pl-9"
-          />
-        </div>
-        <div className="grid min-w-0 grid-cols-2 gap-2">
-          <Select
-            value={search.state}
-            items={stateItems}
-            onValueChange={(value) => {
-              if (value && value !== search.state) {
-                onSearchChange({ state: value as RelationshipMapSearch["state"], page: 1 }, true);
-              }
-            }}
-          >
-            <SelectTrigger aria-label="Filter by effective state" className="h-10 min-w-0 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All states</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={search.management}
-            items={managementItems}
-            onValueChange={(value) => {
-              if (value && value !== search.management) {
-                onSearchChange(
-                  { management: value as RelationshipMapSearch["management"], page: 1 },
-                  true,
-                );
-              }
-            }}
-          >
-            <SelectTrigger aria-label="Filter by management" className="h-10 min-w-0 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All management</SelectItem>
-              <SelectItem value="manual">Manual</SelectItem>
-              <SelectItem value="auto">Auto-managed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:ml-auto">
-          {filteredSearch(search) && (
-            <Button variant="ghost" size="sm" className="h-10" onClick={clear}>
-              Clear filters
-            </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="outline" size="sm" className="h-10">
-                  <Columns3 className="size-4" aria-hidden="true" />
-                  Columns
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Show columns</DropdownMenuLabel>
-                {table.getAllLeafColumns().map((column) =>
-                  column.getCanHide() ? (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(checked) => column.toggleVisibility(!!checked)}
-                    >
-                      {columnLabels[column.id] ?? column.id}
-                    </DropdownMenuCheckboxItem>
-                  ) : null,
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      <div className="mt-3 flex min-h-5 items-center justify-between gap-3 text-caption text-muted-foreground">
-        <p>{description}</p>
-      </div>
-    </div>
-  );
-}
-
-function PaginationFooter({
-  noun,
-  rowCount,
-  currentPage,
-  pageSize,
-  pageCount,
-  paginationBusy,
-  onSearchChange,
-}: {
-  noun: string;
-  rowCount: number;
-  currentPage: number;
-  pageSize: RelationshipMapSearch["pageSize"];
-  pageCount: number;
-  paginationBusy: boolean;
-  onSearchChange: RelationshipSearchChange;
-}) {
-  const firstRow = rowCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const lastRow = rowCount === 0 ? 0 : Math.min(rowCount, firstRow + pageSize - 1);
-  const lastPage = Math.max(1, pageCount);
-  const goTo = (page: number) => onSearchChange({ page }, false);
-  return (
-    <div className="flex flex-col gap-3 border-t border-border px-3 py-3 text-caption text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
-      <div className="tabular-nums">{formatRange(firstRow, lastRow, rowCount, noun)}</div>
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <div className="flex items-center gap-2">
-          <span>Rows</span>
-          <Select
-            value={String(pageSize)}
-            items={pageSizeItems}
-            onValueChange={(value) => {
-              const nextPageSize = Number(value);
-              if (pageSizeOptions.includes(nextPageSize as (typeof pageSizeOptions)[number])) {
-                onSearchChange(
-                  { pageSize: nextPageSize as RelationshipMapSearch["pageSize"], page: 1 },
-                  true,
-                );
-              }
-            }}
-          >
-            <SelectTrigger aria-label="Rows per page" className="h-9 w-[76px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {pageSizeOptions.map((option) => (
-                <SelectItem key={option} value={String(option)}>
-                  {option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => goTo(1)}
-            disabled={currentPage <= 1 || paginationBusy}
-            aria-label="First page"
-          >
-            <ChevronsLeft className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => goTo(Math.max(1, currentPage - 1))}
-            disabled={currentPage <= 1 || paginationBusy}
-            aria-label="Previous page"
-          >
-            <ChevronLeft className="size-4" aria-hidden="true" />
-          </Button>
-          <span className="min-w-16 px-1 text-center tabular-nums text-foreground">
-            Page {currentPage} of {lastPage}
-          </span>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => goTo(Math.min(lastPage, currentPage + 1))}
-            disabled={currentPage >= lastPage || paginationBusy}
-            aria-label="Next page"
-          >
-            <ChevronRight className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => goTo(lastPage)}
-            disabled={currentPage >= lastPage || paginationBusy}
-            aria-label="Last page"
-          >
-            <ChevronsRight className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-    </div>
+    <DataTableRowActions
+      triggerLabel={`Actions for ${label}`}
+      menuLabel={entryType === "character" ? "Character actions" : "Relationship actions"}
+      pending={pending}
+      triggerClassName="min-h-11 min-w-11"
+      contentClassName="w-56"
+      items={[
+        { label: "Edit", onSelect: onEdit },
+        { label: enabled ? "Disable" : "Restore", onSelect: onToggle },
+        ...(locked ? [{ label: "Use automatic updates", onSelect: onAuto }] : []),
+        { label: "Delete", variant: "destructive" as const, onSelect: onDelete },
+      ]}
+    />
   );
 }
 
@@ -588,7 +278,7 @@ function useCharacterProfileColumns(actions: RelationshipTableActions) {
       characterColumnHelper.columns([
         characterColumnHelper.accessor((character) => character.sourceName, {
           id: "name",
-          header: ({ column }) => <CharacterSortableHeader column={column} label="Name" />,
+          header: ({ column }) => <DataTableSortableHeader column={column} label="Name" />,
           cell: ({ row }) => (
             <div className="min-w-[180px] max-w-[260px]" title={row.original.sourceName}>
               <p className="truncate font-medium text-foreground">{row.original.sourceName}</p>
@@ -645,12 +335,12 @@ function useCharacterProfileColumns(actions: RelationshipTableActions) {
         }),
         characterColumnHelper.accessor((character) => (character.locked ? "manual" : "auto"), {
           id: "management",
-          header: ({ column }) => <CharacterSortableHeader column={column} label="Management" />,
+          header: ({ column }) => <DataTableSortableHeader column={column} label="Management" />,
           cell: ({ row }) => <ManagementBadge locked={row.original.locked} />,
         }),
         characterColumnHelper.accessor((character) => (character.enabled ? "active" : "inactive"), {
           id: "state",
-          header: ({ column }) => <CharacterSortableHeader column={column} label="State" />,
+          header: ({ column }) => <DataTableSortableHeader column={column} label="State" />,
           cell: ({ row }) => <StateBadge active={row.original.enabled} />,
         }),
         characterColumnHelper.display({
@@ -687,11 +377,7 @@ function CharacterMobileRows({
   actions: RelationshipTableActions;
 }) {
   return (
-    <div
-      className="divide-y divide-border md:hidden"
-      aria-label="Mobile character profiles"
-      role="region"
-    >
+    <>
       {rows.map((character) => (
         <article key={character.id} className="space-y-3 p-4">
           <div className="flex items-start justify-between gap-3">
@@ -730,7 +416,7 @@ function CharacterMobileRows({
           ) : null}
         </article>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -741,142 +427,98 @@ export function CharacterProfilesTable({
   actions,
   onAdd,
 }: CharacterProfilesTableProps) {
-  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({ notes: false });
   const { rows: pageRows, rowCount, pageCount, currentPage } = page;
-
-  const pagination = useMemo<PaginationState>(
-    () => ({ pageIndex: currentPage - 1, pageSize: search.pageSize }),
-    [currentPage, search.pageSize],
-  );
-  const sorting = useMemo<SortingState>(
-    () => [{ id: search.sort, desc: search.dir === "desc" }],
-    [search.dir, search.sort],
-  );
   const columns = useCharacterProfileColumns(actions);
-  const table = useTable({
-    features: relationshipTableFeatures,
+  const clear = () => clearFilters(onSearchChange);
+
+  const { table } = useDataTable({
     columns,
     data: pageRows,
-    manualPagination: true,
-    manualSorting: true,
     rowCount,
-    enableMultiSort: false,
-    state: { pagination, sorting, columnVisibility },
-    onPaginationChange: (updater) => {
-      const next = resolveUpdater(updater, pagination);
-      if (next.pageSize !== search.pageSize) {
-        onSearchChange(
-          { pageSize: next.pageSize as RelationshipMapSearch["pageSize"], page: 1 },
-          true,
-        );
-        return;
-      }
-      const nextPage = next.pageIndex + 1;
-      if (nextPage !== search.page) onSearchChange({ page: nextPage }, false);
-    },
-    onSortingChange: (updater) => {
-      const next = resolveUpdater(updater, sorting);
-      const selected = next[0];
-      if (!selected || !["name", "state", "management"].includes(selected.id)) return;
-      onSearchChange(
-        {
-          sort: selected.id as RelationshipMapSearch["sort"],
-          dir: selected.desc ? "desc" : "asc",
-          page: 1,
-        },
-        true,
-      );
-    },
-    onColumnVisibilityChange: setColumnVisibility,
+    page: currentPage,
+    pageSize: search.pageSize,
+    sort: search.sort,
+    dir: search.dir,
+    sortableColumns: sortableSearchColumns,
+    initialColumnVisibility: { notes: false },
+    onPageSizeChange: (pageSize) =>
+      onSearchChange({ pageSize: pageSize as RelationshipMapSearch["pageSize"], page: 1 }, true),
+    onPageChange: (nextPage) => onSearchChange({ page: nextPage }, false),
+    onSortChange: (sort, dir) => onSearchChange({ sort, dir, page: 1 }, true),
   });
-  const clear = () =>
-    onSearchChange(
-      { q: "", state: "all", management: "all", sort: "name", dir: "asc", page: 1 },
-      true,
-    );
-  const paginationBusy = actions.pending;
+
   const visibleColumnCount = table.getVisibleLeafColumns().length;
+  const filtered = filteredSearch(search);
+  const firstRow = rowCount === 0 ? 0 : (currentPage - 1) * search.pageSize + 1;
+  const lastRow = rowCount === 0 ? 0 : Math.min(rowCount, firstRow + search.pageSize - 1);
 
   return (
-    <section
-      className="overflow-hidden rounded-xl border border-border bg-card"
-      aria-label="Character profiles"
-      aria-busy={actions.pending}
-    >
-      <TableToolbar
-        search={search}
-        onSearchChange={onSearchChange}
-        table={table}
-        columnLabels={characterColumnLabels}
+    <DataTableSection ariaLabel="Character profiles" busy={actions.pending}>
+      <DataTableToolbar
+        searchValue={search.q}
         searchLabel="Search characters"
+        searchPlaceholder="Search characters"
+        onSearchChange={(q) => onSearchChange({ q, page: 1 }, true)}
+        filters={buildFilters(search, onSearchChange)}
+        columns={{ table, labels: characterColumnLabels, menuClassName: "w-52" }}
+        clearLabel="Clear filters"
+        filtered={filtered}
+        onClearFilters={clear}
         description="Profiles and name mappings used by translation."
       />
       {rowCount === 0 ? (
         <div className="p-4 md:hidden" aria-label="Mobile character profiles" role="region">
-          <CharacterEmptyState filtered={filteredSearch(search)} onClear={clear} onAdd={onAdd} />
+          <CharacterEmptyState filtered={filtered} onClear={clear} onAdd={onAdd} />
         </div>
       ) : (
-        <CharacterMobileRows rows={pageRows} actions={actions} />
+        <DataTableMobileRegion ariaLabel="Mobile character profiles">
+          <CharacterMobileRows rows={pageRows} actions={actions} />
+        </DataTableMobileRegion>
       )}
 
-      <div
-        className="hidden overflow-x-auto md:block"
-        aria-label="Desktop character profiles"
-        role="region"
-      >
+      <DataTableDesktopRegion ariaLabel="Desktop character profiles">
         <Table className="min-w-[1000px] text-caption">
           <TableHeader className="bg-muted/20">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className={`h-11 px-3 ${header.column.id === "actions" ? "sticky right-0 z-10 border-l border-border bg-muted/20" : ""}`}
-                  >
-                    {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
+            <DataTableHeaderGroups
+              groups={table.getHeaderGroups()}
+              renderHeader={(header) => <table.FlexRender header={header} />}
+            />
           </TableHeader>
           <TableBody>
             {rowCount === 0 ? (
               <TableRow>
                 <TableCell colSpan={visibleColumnCount} className="p-4">
-                  <CharacterEmptyState
-                    filtered={filteredSearch(search)}
-                    onClear={clear}
-                    onAdd={onAdd}
-                  />
+                  <CharacterEmptyState filtered={filtered} onClear={clear} onAdd={onAdd} />
                 </TableCell>
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id} className="h-[4.25rem]">
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={`px-3 py-2 ${cell.column.id === "actions" ? "sticky right-0 z-10 border-l border-border bg-card" : ""}`}
-                    >
-                      <table.FlexRender cell={cell} />
-                    </TableCell>
-                  ))}
+                  <DataTableCells
+                    cells={row.getVisibleCells()}
+                    renderCell={(cell) => <table.FlexRender cell={cell} />}
+                  />
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
-      </div>
-      <PaginationFooter
-        noun="characters"
+      </DataTableDesktopRegion>
+      <DataTablePagination
+        table={paginationTableFor(currentPage, pageCount, onSearchChange)}
+        firstRow={firstRow}
+        lastRow={lastRow}
         rowCount={rowCount}
         currentPage={currentPage}
+        busy={actions.pending}
         pageSize={search.pageSize}
-        pageCount={pageCount}
-        paginationBusy={paginationBusy}
-        onSearchChange={onSearchChange}
+        pageSizeOptions={pageSizeOptions}
+        noun="characters"
+        onPageSizeChange={(pageSize) =>
+          onSearchChange({ pageSize: pageSize as RelationshipMapSearch["pageSize"], page: 1 }, true)
+        }
       />
-    </section>
+    </DataTableSection>
   );
 }
 
@@ -894,7 +536,7 @@ function useDirectedRelationshipColumns(
           {
             id: "name",
             header: ({ column }) => (
-              <RelationshipSortableHeader column={column} label="Speaker → listener" />
+              <DataTableSortableHeader column={column} label="Speaker → listener" />
             ),
             cell: ({ row }) => (
               <div className="min-w-[210px] max-w-[280px]">
@@ -988,9 +630,7 @@ function useDirectedRelationshipColumns(
           (relationship) => (relationship.locked ? "manual" : "auto"),
           {
             id: "management",
-            header: ({ column }) => (
-              <RelationshipSortableHeader column={column} label="Management" />
-            ),
+            header: ({ column }) => <DataTableSortableHeader column={column} label="Management" />,
             cell: ({ row }) => <ManagementBadge locked={row.original.locked} />,
           },
         ),
@@ -998,7 +638,7 @@ function useDirectedRelationshipColumns(
           (relationship) => (isActive(relationship) ? "active" : "inactive"),
           {
             id: "state",
-            header: ({ column }) => <RelationshipSortableHeader column={column} label="State" />,
+            header: ({ column }) => <DataTableSortableHeader column={column} label="State" />,
             cell: ({ row }) => (
               <StateBadge
                 active={isActive(row.original)}
@@ -1035,6 +675,7 @@ function useDirectedRelationshipColumns(
     [actions, characterLabel, isActive],
   );
 }
+
 function RelationshipMobileRows({
   rows,
   characterLabel,
@@ -1047,11 +688,7 @@ function RelationshipMobileRows({
   actions: RelationshipTableActions;
 }) {
   return (
-    <div
-      className="divide-y divide-border md:hidden"
-      aria-label="Mobile directed relationships"
-      role="region"
-    >
+    <>
       {rows.map((relationship) => {
         const label = `${characterLabel(relationship.speakerId)} to ${characterLabel(relationship.listenerId)}`;
         return (
@@ -1111,7 +748,7 @@ function RelationshipMobileRows({
           </article>
         );
       })}
-    </div>
+    </>
   );
 }
 
@@ -1123,7 +760,6 @@ export function DirectedRelationshipsTable({
   actions,
   onAdd,
 }: DirectedRelationshipsTableProps) {
-  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({ notes: false });
   const charactersById = useMemo(
     () => new Map(characters.map((character) => [character.id, character])),
     [characters],
@@ -1140,123 +776,80 @@ export function DirectedRelationshipsTable({
     [charactersById],
   );
   const { rows: pageRows, rowCount, pageCount, currentPage } = page;
-
-  const pagination = useMemo<PaginationState>(
-    () => ({ pageIndex: currentPage - 1, pageSize: search.pageSize }),
-    [currentPage, search.pageSize],
-  );
-  const sorting = useMemo<SortingState>(
-    () => [{ id: search.sort, desc: search.dir === "desc" }],
-    [search.dir, search.sort],
-  );
   const columns = useDirectedRelationshipColumns(actions, characterLabel, isActive);
-  const table = useTable({
-    features: relationshipTableFeatures,
+  const clear = () => clearFilters(onSearchChange);
+
+  const { table } = useDataTable({
     columns,
     data: pageRows,
-    manualPagination: true,
-    manualSorting: true,
     rowCount,
-    enableMultiSort: false,
-    state: { pagination, sorting, columnVisibility },
-    onPaginationChange: (updater) => {
-      const next = resolveUpdater(updater, pagination);
-      if (next.pageSize !== search.pageSize) {
-        onSearchChange(
-          { pageSize: next.pageSize as RelationshipMapSearch["pageSize"], page: 1 },
-          true,
-        );
-        return;
-      }
-      const nextPage = next.pageIndex + 1;
-      if (nextPage !== search.page) onSearchChange({ page: nextPage }, false);
-    },
-    onSortingChange: (updater) => {
-      const next = resolveUpdater(updater, sorting);
-      const selected = next[0];
-      if (!selected || !["name", "state", "management"].includes(selected.id)) return;
-      onSearchChange(
-        {
-          sort: selected.id as RelationshipMapSearch["sort"],
-          dir: selected.desc ? "desc" : "asc",
-          page: 1,
-        },
-        true,
-      );
-    },
-    onColumnVisibilityChange: setColumnVisibility,
+    page: currentPage,
+    pageSize: search.pageSize,
+    sort: search.sort,
+    dir: search.dir,
+    sortableColumns: sortableSearchColumns,
+    initialColumnVisibility: { notes: false },
+    onPageSizeChange: (pageSize) =>
+      onSearchChange({ pageSize: pageSize as RelationshipMapSearch["pageSize"], page: 1 }, true),
+    onPageChange: (nextPage) => onSearchChange({ page: nextPage }, false),
+    onSortChange: (sort, dir) => onSearchChange({ sort, dir, page: 1 }, true),
   });
-  const clear = () =>
-    onSearchChange(
-      { q: "", state: "all", management: "all", sort: "name", dir: "asc", page: 1 },
-      true,
-    );
-  const paginationBusy = actions.pending;
+
   const visibleColumnCount = table.getVisibleLeafColumns().length;
+  const filtered = filteredSearch(search);
+  const canAdd = characters.length >= 2;
+  const firstRow = rowCount === 0 ? 0 : (currentPage - 1) * search.pageSize + 1;
+  const lastRow = rowCount === 0 ? 0 : Math.min(rowCount, firstRow + search.pageSize - 1);
 
   return (
-    <section
-      className="overflow-hidden rounded-xl border border-border bg-card"
-      aria-label="Directed relationships"
-      aria-busy={actions.pending}
-    >
-      <TableToolbar
-        search={search}
-        onSearchChange={onSearchChange}
-        table={table}
-        columnLabels={relationshipColumnLabels}
+    <DataTableSection ariaLabel="Directed relationships" busy={actions.pending}>
+      <DataTableToolbar
+        searchValue={search.q}
         searchLabel="Search relationships"
+        searchPlaceholder="Search relationships"
+        onSearchChange={(q) => onSearchChange({ q, page: 1 }, true)}
+        filters={buildFilters(search, onSearchChange)}
+        columns={{ table, labels: relationshipColumnLabels, menuClassName: "w-52" }}
+        clearLabel="Clear filters"
+        filtered={filtered}
+        onClearFilters={clear}
         description="Directed speaker-to-listener facts and speech choices for translation."
       />
       {rowCount === 0 ? (
         <div className="p-4 md:hidden" aria-label="Mobile directed relationships" role="region">
           <RelationshipEmptyState
-            filtered={filteredSearch(search)}
-            canAdd={characters.length >= 2}
+            filtered={filtered}
+            canAdd={canAdd}
             onClear={clear}
             onAdd={onAdd}
           />
         </div>
       ) : (
-        <RelationshipMobileRows
-          rows={pageRows}
-          characterLabel={characterLabel}
-          isActive={isActive}
-          actions={actions}
-        />
+        <DataTableMobileRegion ariaLabel="Mobile directed relationships">
+          <RelationshipMobileRows
+            rows={pageRows}
+            characterLabel={characterLabel}
+            isActive={isActive}
+            actions={actions}
+          />
+        </DataTableMobileRegion>
       )}
 
-      <div
-        className="hidden overflow-x-auto md:block"
-        aria-label="Desktop directed relationships"
-        role="region"
-      >
+      <DataTableDesktopRegion ariaLabel="Desktop directed relationships">
         <Table className="min-w-[1250px] text-caption">
           <TableHeader className="bg-muted/20">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className={`h-11 px-3 ${
-                      header.column.id === "actions"
-                        ? "sticky right-0 z-10 border-l border-border bg-muted/20"
-                        : ""
-                    }`}
-                  >
-                    {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
+            <DataTableHeaderGroups
+              groups={table.getHeaderGroups()}
+              renderHeader={(header) => <table.FlexRender header={header} />}
+            />
           </TableHeader>
           <TableBody>
             {rowCount === 0 ? (
               <TableRow>
                 <TableCell colSpan={visibleColumnCount} className="p-4">
                   <RelationshipEmptyState
-                    filtered={filteredSearch(search)}
-                    canAdd={characters.length >= 2}
+                    filtered={filtered}
+                    canAdd={canAdd}
                     onClear={clear}
                     onAdd={onAdd}
                   />
@@ -1265,33 +858,30 @@ export function DirectedRelationshipsTable({
             ) : (
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id} className="h-[4.25rem]">
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={`px-3 py-2 ${
-                        cell.column.id === "actions"
-                          ? "sticky right-0 z-10 border-l border-border bg-card"
-                          : ""
-                      }`}
-                    >
-                      <table.FlexRender cell={cell} />
-                    </TableCell>
-                  ))}
+                  <DataTableCells
+                    cells={row.getVisibleCells()}
+                    renderCell={(cell) => <table.FlexRender cell={cell} />}
+                  />
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
-      </div>
-      <PaginationFooter
-        noun="relationships"
+      </DataTableDesktopRegion>
+      <DataTablePagination
+        table={paginationTableFor(currentPage, pageCount, onSearchChange)}
+        firstRow={firstRow}
+        lastRow={lastRow}
         rowCount={rowCount}
         currentPage={currentPage}
+        busy={actions.pending}
         pageSize={search.pageSize}
-        pageCount={pageCount}
-        paginationBusy={paginationBusy}
-        onSearchChange={onSearchChange}
+        pageSizeOptions={pageSizeOptions}
+        noun="relationships"
+        onPageSizeChange={(pageSize) =>
+          onSearchChange({ pageSize: pageSize as RelationshipMapSearch["pageSize"], page: 1 }, true)
+        }
       />
-    </section>
+    </DataTableSection>
   );
 }

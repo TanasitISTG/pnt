@@ -1,30 +1,23 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  useTable,
-  type ColumnVisibilityState,
-  type PaginationState,
-  type SortingState,
-  type Updater,
-} from "@tanstack/react-table";
+import { useEffect, useMemo } from "react";
 
-import {
-  DataTableEmptyState,
-  DataTablePagination,
-  DataTableSkeletonRows,
-} from "@/components/ui/data-table-parts";
 import { QueryErrorState } from "@/components/query-error-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { JobHistoryFilters, type JobHistoryFilterColumn } from "./job-history-filters";
+  DataTableBody,
+  DataTableCells,
+  DataTableDesktopRegion,
+  DataTableHeaderGroups,
+  DataTableMobileEmpty,
+  DataTableMobileLoading,
+  DataTableMobileRegion,
+  DataTablePagination,
+  DataTableSection,
+  DataTableToolbar,
+} from "@/components/ui/data-table-parts";
+import { Progress } from "@/components/ui/progress";
+import { Table, TableHeader, TableRow } from "@/components/ui/table";
+import { useDataTable } from "@/components/ui/use-data-table";
 import type {
   JobHistoryPage,
   JobHistoryRow,
@@ -35,7 +28,6 @@ import { DateCell } from "@/components/jobs/date-cell";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import {
   createJobHistoryColumns,
-  jobHistoryTableFeatures,
   type JobHistoryColumnActions,
   translationRuntime,
   typeLabels,
@@ -83,56 +75,28 @@ const sortableSearchColumns: Record<string, JobHistorySearch["sort"]> = {
   updatedAt: "updatedAt",
 };
 
+const jobTypeItems: Record<string, string> = {
+  all: "All types",
+  translation: "Translations",
+  scrape: "Scrapes",
+  epub: "EPUB",
+};
+
+const jobStatusItems: Record<string, string> = {
+  all: "All statuses",
+  pending: "Pending",
+  running: "Running",
+  done: "Completed",
+  error: "Failed",
+  cancelled: "Cancelled",
+};
+
 const pageSizeOptions = [10, 25, 50] as const;
 
 const EMPTY_JOB_HISTORY_ROWS: JobHistoryPage["rows"] = [];
 
-function resolveUpdater<T>(updater: Updater<T>, current: T): T {
-  if (typeof updater === "function") return (updater as (old: T) => T)(current);
-  return updater;
-}
-
 function hasActiveFilters(search: JobHistorySearch) {
   return search.q !== "" || search.type !== "all" || search.status !== "all";
-}
-
-function formatRange(first: number, last: number, total: number) {
-  return total === 0
-    ? "0 jobs"
-    : `${first.toLocaleString()}–${last.toLocaleString()} of ${total.toLocaleString()} jobs`;
-}
-interface JobHistoryVisibilityColumn {
-  id: string;
-  getCanHide: () => boolean;
-  getIsVisible: () => boolean;
-  toggleVisibility: (visible: boolean) => void;
-}
-
-function buildJobHistoryFilterColumns(
-  columns: JobHistoryVisibilityColumn[],
-): JobHistoryFilterColumn[] {
-  const filterColumns: JobHistoryFilterColumn[] = [];
-  for (const column of columns) {
-    if (!column.getCanHide()) continue;
-    filterColumns.push({
-      id: column.id,
-      label: columnLabels[column.id] ?? column.id,
-      checked: column.getIsVisible(),
-      onCheckedChange: (checked) => column.toggleVisibility(checked),
-    });
-  }
-  return filterColumns;
-}
-
-function getJobHistoryRange(
-  rowCount: number,
-  currentPage: number,
-  pageSize: number,
-  pageRowCount: number,
-) {
-  if (rowCount === 0) return { firstRow: 0, lastRow: 0 };
-  const firstRow = (currentPage - 1) * pageSize + 1;
-  return { firstRow, lastRow: firstRow + pageRowCount - 1 };
 }
 
 const CLEAR_JOB_FILTERS: Partial<JobHistorySearch> = {
@@ -164,94 +128,6 @@ function JobHistoryUpdateError({
   );
 }
 
-interface JobHistoryBodyProps {
-  initialLoading: boolean;
-  noRows: boolean;
-  filtered: boolean;
-  visibleColumnCount: number;
-  rows: ReactNode;
-  onClearFilters: () => void;
-}
-
-function JobHistoryBody({
-  initialLoading,
-  noRows,
-  filtered,
-  visibleColumnCount,
-  rows,
-  onClearFilters,
-}: JobHistoryBodyProps) {
-  if (initialLoading) {
-    return (
-      <TableBody>
-        <DataTableSkeletonRows columnCount={visibleColumnCount} />
-      </TableBody>
-    );
-  }
-  if (!noRows) return <TableBody>{rows}</TableBody>;
-  return (
-    <DataTableEmptyState
-      columnCount={visibleColumnCount}
-      filtered={filtered}
-      emptyTitle="No jobs yet"
-      filteredTitle="No jobs match these filters"
-      emptyDescription="Translation and import runs will appear here as they are created."
-      filteredDescription="Try a different search or clear the filters to see all retained runs."
-      onClearFilters={onClearFilters}
-    />
-  );
-}
-
-interface JobHistoryPaginationTable {
-  firstPage: () => void;
-  previousPage: () => void;
-  nextPage: () => void;
-  lastPage: () => void;
-  getCanPreviousPage: () => boolean;
-  getCanNextPage: () => boolean;
-  getCanLastPage: () => boolean;
-  getPageCount: () => number;
-}
-
-interface JobHistoryPaginationProps {
-  table: JobHistoryPaginationTable;
-  search: JobHistorySearch;
-  firstRow: number;
-  lastRow: number;
-  rowCount: number;
-  currentPage: number;
-  busy: boolean;
-  onSearchChange: JobHistorySearchChange;
-}
-
-function JobHistoryPagination({
-  table,
-  search,
-  firstRow,
-  lastRow,
-  rowCount,
-  currentPage,
-  busy,
-  onSearchChange,
-}: JobHistoryPaginationProps) {
-  return (
-    <DataTablePagination
-      table={table}
-      firstRow={firstRow}
-      lastRow={lastRow}
-      rowCount={rowCount}
-      currentPage={currentPage}
-      busy={busy}
-      pageSize={search.pageSize}
-      pageSizeOptions={pageSizeOptions}
-      formatRange={formatRange}
-      onPageSizeChange={(pageSize) =>
-        onSearchChange({ pageSize: pageSize as JobHistorySearch["pageSize"], page: 1 }, true)
-      }
-    />
-  );
-}
-
 function mobileJobSecondaryLine(job: JobHistoryRow): string {
   if (job.type === "translation") return `Chapter ${job.chapterNumber} · ${job.chapterTitle}`;
   if (job.type === "scrape") return `Chapters ${job.fromNumber}–${job.toNumber}`;
@@ -268,7 +144,7 @@ function JobHistoryMobileRows({
   pendingJobId: string | null;
 }) {
   return (
-    <div className="divide-y divide-border md:hidden" aria-label="Mobile job history" role="region">
+    <>
       {rows.map((job) => {
         const pending = pendingJobId === job.id;
         return (
@@ -383,7 +259,7 @@ function JobHistoryMobileRows({
           </article>
         );
       })}
-    </div>
+    </>
   );
 }
 
@@ -396,82 +272,51 @@ export function JobHistoryTable({
   pendingJobId,
 }: JobHistoryTableProps) {
   const { page: history, isPending, isFetching, isPlaceholderData, isError, error } = query;
-  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({
-    createdAt: false,
-  });
+
   useEffect(() => {
     if (!history || isFetching || isPlaceholderData || history.page === search.page) return;
     onSearchChange({ page: history.page }, true);
   }, [history, isFetching, isPlaceholderData, onSearchChange, search.page]);
 
-  const pagination = useMemo<PaginationState>(
-    () => ({ pageIndex: Math.max(0, search.page - 1), pageSize: search.pageSize }),
-    [search.page, search.pageSize],
-  );
-  const sorting = useMemo<SortingState>(
-    () => [{ id: search.sort, desc: search.dir === "desc" }],
-    [search.dir, search.sort],
-  );
   const columns = useMemo(
     () => createJobHistoryColumns({ ...actions, pendingJobId }),
     [actions, pendingJobId],
   );
   const data = history?.rows ?? EMPTY_JOB_HISTORY_ROWS;
-
-  const table = useTable({
-    features: jobHistoryTableFeatures,
-    columns,
-    data,
-    getRowId: (row) => row.id,
-    manualPagination: true,
-    manualSorting: true,
-    rowCount: history?.rowCount ?? 0,
-    enableMultiSort: false,
-    state: { pagination, sorting, columnVisibility },
-    onPaginationChange: (updater) => {
-      const next = resolveUpdater(updater, pagination);
-      if (next.pageSize !== search.pageSize) {
-        onSearchChange({ pageSize: next.pageSize as JobHistorySearch["pageSize"], page: 1 }, true);
-        return;
-      }
-      const nextPage = next.pageIndex + 1;
-      if (nextPage !== search.page) onSearchChange({ page: nextPage }, false);
-    },
-    onSortingChange: (updater) => {
-      const next = resolveUpdater(updater, sorting);
-      const selected = next[0];
-      const sort = selected ? sortableSearchColumns[selected.id] : undefined;
-      if (!sort) return;
-      onSearchChange({ sort, dir: selected.desc ? "desc" : "asc", page: 1 }, true);
-    },
-    onColumnVisibilityChange: setColumnVisibility,
-  });
-
   const rowCount = history?.rowCount ?? 0;
   const currentPage = history?.page ?? search.page;
-  const { firstRow, lastRow } = getJobHistoryRange(
+  const clearFilters = () => onSearchChange(CLEAR_JOB_FILTERS, true);
+
+  const { table } = useDataTable({
+    columns,
+    data,
     rowCount,
-    currentPage,
-    search.pageSize,
-    data.length,
-  );
+    page: currentPage,
+    pageSize: search.pageSize,
+    sort: search.sort,
+    dir: search.dir,
+    sortableColumns: sortableSearchColumns,
+    getRowId: (row) => row.id,
+    initialColumnVisibility: { createdAt: false },
+    onPageSizeChange: (pageSize) =>
+      onSearchChange({ pageSize: pageSize as JobHistorySearch["pageSize"], page: 1 }, true),
+    onPageChange: (nextPage) => onSearchChange({ page: nextPage }, false),
+    onSortChange: (sort, dir) =>
+      onSearchChange({ sort: sort as JobHistorySearch["sort"], dir, page: 1 }, true),
+  });
+
   const filtered = hasActiveFilters(search);
   const noRows = Boolean(history && !isFetching && data.length === 0);
   const paginationBusy = isPlaceholderData || (isPending && !history);
   const visibleColumnCount = table.getVisibleLeafColumns().length;
-  const filterColumns = buildJobHistoryFilterColumns(table.getAllLeafColumns());
+  const firstRow = rowCount === 0 ? 0 : (currentPage - 1) * search.pageSize + 1;
+  const lastRow = rowCount === 0 ? 0 : firstRow + data.length - 1;
   const renderedRows = table.getRowModel().rows.map((row) => (
     <TableRow key={row.id} className="h-[4.25rem]">
-      {row.getVisibleCells().map((cell) => (
-        <TableCell
-          key={cell.id}
-          className={`px-3 py-2 ${
-            cell.column.id === "actions" ? "sticky right-0 z-10 border-l border-border bg-card" : ""
-          }`}
-        >
-          <table.FlexRender cell={cell} />
-        </TableCell>
-      ))}
+      <DataTableCells
+        cells={row.getVisibleCells()}
+        renderCell={(cell) => <table.FlexRender cell={cell} />}
+      />
     </TableRow>
   ));
 
@@ -486,95 +331,99 @@ export function JobHistoryTable({
     );
   }
   return (
-    <section
-      className="overflow-hidden rounded-xl border border-border bg-card"
-      aria-label="Job history"
-      aria-busy={isFetching}
-    >
-      <JobHistoryFilters
-        search={search}
-        onSearchChange={onSearchChange}
+    <DataTableSection ariaLabel="Job history" busy={isFetching}>
+      <DataTableToolbar
+        searchValue={search.q}
+        searchLabel="Search job history"
+        searchPlaceholder="Search novel, chapter, source, or job ID"
+        onSearchChange={(q) => onSearchChange({ q, page: 1 }, true)}
+        filters={[
+          {
+            triggerId: "job-history-type",
+            ariaLabel: "Filter by type",
+            value: search.type,
+            items: jobTypeItems,
+            onChange: (value) =>
+              onSearchChange({ type: value as JobHistorySearch["type"], page: 1 }, true),
+          },
+          {
+            triggerId: "job-history-status",
+            ariaLabel: "Filter by status",
+            value: search.status,
+            items: jobStatusItems,
+            onChange: (value) =>
+              onSearchChange({ status: value as JobHistorySearch["status"], page: 1 }, true),
+          },
+        ]}
+        columns={{ table, labels: columnLabels }}
+        clearLabel="Clear filters"
+        filtered={filtered}
+        onClearFilters={clearFilters}
+        description="All retained translation and import runs"
         query={{ isFetching, isPlaceholderData }}
-        columns={filterColumns}
+        busyMessage="Loading job page…"
       />
+
       <JobHistoryUpdateError
         visible={isError && Boolean(history)}
         error={error}
         onRetry={onRetry}
       />
-      {isPending && !history ? (
-        <div className="p-6 text-center text-sm text-muted-foreground md:hidden" aria-live="polite">
-          Loading jobs…
-        </div>
-      ) : noRows ? (
-        <div className="space-y-2 p-6 text-center md:hidden">
-          <p className="text-sm font-medium text-foreground">
-            {filtered ? "No jobs match these filters" : "No jobs yet"}
-          </p>
-          <p className="text-caption text-muted-foreground">
-            {filtered
-              ? "Try a different search or clear the filters."
-              : "Translation and import runs will appear here."}
-          </p>
-          {filtered ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onSearchChange(CLEAR_JOB_FILTERS, true)}
-            >
-              Clear filters
-            </Button>
-          ) : null}
-        </div>
-      ) : (
-        <JobHistoryMobileRows rows={data} actions={actions} pendingJobId={pendingJobId} />
-      )}
 
-      <div
-        className="hidden overflow-x-auto md:block"
-        aria-label="Desktop job history"
-        role="region"
-      >
+      <DataTableMobileRegion ariaLabel={noRows || isPending ? undefined : "Mobile job history"}>
+        {isPending && !history ? (
+          <DataTableMobileLoading message="Loading jobs…" />
+        ) : noRows ? (
+          <DataTableMobileEmpty
+            filtered={filtered}
+            emptyTitle="No jobs yet"
+            filteredTitle="No jobs match these filters"
+            emptyDescription="Translation and import runs will appear here."
+            filteredDescription="Try a different search or clear the filters."
+            onClearFilters={clearFilters}
+          />
+        ) : (
+          <JobHistoryMobileRows rows={data} actions={actions} pendingJobId={pendingJobId} />
+        )}
+      </DataTableMobileRegion>
+
+      <DataTableDesktopRegion ariaLabel="Desktop job history">
         <Table className="min-w-[1080px] text-caption">
           <TableHeader className="bg-muted/20">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className={`h-11 px-3 ${
-                      header.column.id === "actions"
-                        ? "sticky right-0 z-10 border-l border-border bg-muted/20"
-                        : ""
-                    }`}
-                  >
-                    {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
+            <DataTableHeaderGroups
+              groups={table.getHeaderGroups()}
+              renderHeader={(header) => <table.FlexRender header={header} />}
+            />
           </TableHeader>
-          <JobHistoryBody
+          <DataTableBody
             initialLoading={isPending && !history}
             noRows={noRows}
             filtered={filtered}
             visibleColumnCount={visibleColumnCount}
             rows={renderedRows}
-            onClearFilters={() => onSearchChange(CLEAR_JOB_FILTERS, true)}
+            emptyTitle="No jobs yet"
+            filteredTitle="No jobs match these filters"
+            emptyDescription="Translation and import runs will appear here as they are created."
+            filteredDescription="Try a different search or clear the filters to see all retained runs."
+            onClearFilters={clearFilters}
           />
         </Table>
-      </div>
+      </DataTableDesktopRegion>
 
-      <JobHistoryPagination
+      <DataTablePagination
         table={table}
-        search={search}
         firstRow={firstRow}
         lastRow={lastRow}
         rowCount={rowCount}
         currentPage={currentPage}
         busy={paginationBusy}
-        onSearchChange={onSearchChange}
+        pageSize={search.pageSize}
+        pageSizeOptions={pageSizeOptions}
+        noun="jobs"
+        onPageSizeChange={(pageSize) =>
+          onSearchChange({ pageSize: pageSize as JobHistorySearch["pageSize"], page: 1 }, true)
+        }
       />
-    </section>
+    </DataTableSection>
   );
 }

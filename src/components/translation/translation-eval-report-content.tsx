@@ -245,7 +245,7 @@ function ReadyReportContent({
             busy={isFetching}
             pageSize={detail.pageSize}
             pageSizeOptions={[10, 25, 50]}
-            formatRange={(first, last, total) => `${first}–${last} of ${total}`}
+            noun="chapters"
             onPageSizeChange={(pageSize) => {
               if (pageSize === 10 || pageSize === 25 || pageSize === 50) {
                 onReviewSearchChange({ reviewPageSize: pageSize, reviewPage: 1 });

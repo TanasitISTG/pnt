@@ -1,54 +1,25 @@
-import { ChevronsUpDown, Columns3, MoreHorizontal, Search } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  columnVisibilityFeature,
-  createColumnHelper,
-  rowPaginationFeature,
-  rowSortingFeature,
-  tableFeatures,
-  useTable,
-  type Column,
-  type ColumnVisibilityState,
-  type PaginationState,
-  type SortingState,
-  type Updater,
-} from "@tanstack/react-table";
+import { useEffect, useMemo } from "react";
+import { createColumnHelper } from "@tanstack/react-table";
 
 import { QueryErrorState } from "@/components/query-error-state";
-import {
-  DataTableEmptyState,
-  DataTablePagination,
-  DataTableSkeletonRows,
-} from "@/components/ui/data-table-parts";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Spinner } from "@/components/ui/spinner";
+  DataTableBody,
+  DataTableCells,
+  DataTableDesktopRegion,
+  DataTableHeaderGroups,
+  DataTableMobileEmpty,
+  DataTableMobileLoading,
+  DataTableMobileRegion,
+  DataTablePagination,
+  DataTableRowActions,
+  DataTableSection,
+  DataTableSortableHeader,
+  DataTableToolbar,
+} from "@/components/ui/data-table-parts";
+import { Table, TableHeader, TableRow } from "@/components/ui/table";
+import { useDataTable, type DataTableFeatures } from "@/components/ui/use-data-table";
 import type {
   GlossaryListPage,
   GlossaryListRow,
@@ -57,14 +28,7 @@ import type {
   TermStatus,
 } from "@/lib/glossary/schemas";
 
-const glossaryTableFeatures = tableFeatures({
-  rowPaginationFeature,
-  rowSortingFeature,
-  columnVisibilityFeature,
-});
-
-type GlossaryTableFeatures = typeof glossaryTableFeatures;
-const columnHelper = createColumnHelper<GlossaryTableFeatures, GlossaryListRow>();
+const columnHelper = createColumnHelper<DataTableFeatures, GlossaryListRow>();
 const EMPTY_GLOSSARY_ROWS: GlossaryListRow[] = [];
 
 export type GlossarySearchChange = (
@@ -129,47 +93,8 @@ const sortableSearchColumns: Record<string, GlossaryListSearch["sort"]> = {
   status: "status",
 };
 
-function resolveUpdater<T>(updater: Updater<T>, current: T): T {
-  if (typeof updater === "function") return (updater as (old: T) => T)(current);
-  return updater;
-}
-
 function hasActiveFilters(search: GlossaryListSearch) {
   return search.q !== "" || search.category !== "all" || search.status !== "approved";
-}
-
-function formatRange(first: number, last: number, total: number) {
-  return total === 0
-    ? "0 terms"
-    : `${first.toLocaleString()}–${last.toLocaleString()} of ${total.toLocaleString()} terms`;
-}
-
-function SortableHeader<TValue>({
-  column,
-  label,
-}: {
-  column: Column<GlossaryTableFeatures, GlossaryListRow, TValue>;
-  label: string;
-}) {
-  const sorted = column.getIsSorted();
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 h-8 px-2 font-semibold text-muted-foreground hover:text-foreground"
-      onClick={() => column.toggleSorting(sorted === "asc")}
-      aria-label={`Sort by ${label}`}
-    >
-      {label}
-      {sorted === "asc" ? (
-        <ChevronsUpDown className="size-3.5" aria-hidden="true" />
-      ) : sorted === "desc" ? (
-        <ChevronsUpDown className="size-3.5 rotate-180" aria-hidden="true" />
-      ) : (
-        <ChevronsUpDown className="size-3.5 opacity-60" aria-hidden="true" />
-      )}
-    </Button>
-  );
 }
 
 function StatusBadge({ status }: { status: TermStatus }) {
@@ -197,7 +122,7 @@ function createGlossaryColumns(actions: GlossaryTableActions) {
     columnHelper.accessor("source", {
       id: "source",
       enableHiding: false,
-      header: ({ column }) => <SortableHeader column={column} label="Source" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Source" />,
       cell: ({ row }) => (
         <div
           className="min-w-[180px] max-w-[280px] truncate font-medium text-foreground"
@@ -210,7 +135,7 @@ function createGlossaryColumns(actions: GlossaryTableActions) {
     columnHelper.accessor("target", {
       id: "target",
       enableHiding: false,
-      header: ({ column }) => <SortableHeader column={column} label="Target" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Target" />,
       cell: ({ row }) => (
         <div
           className="min-w-[180px] max-w-[280px] truncate text-foreground"
@@ -222,12 +147,12 @@ function createGlossaryColumns(actions: GlossaryTableActions) {
     }),
     columnHelper.accessor("category", {
       id: "category",
-      header: ({ column }) => <SortableHeader column={column} label="Category" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Category" />,
       cell: ({ row }) => <CategoryBadge category={row.original.category} />,
     }),
     columnHelper.accessor("status", {
       id: "status",
-      header: ({ column }) => <SortableHeader column={column} label="Status" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Status" />,
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     }),
     columnHelper.accessor("note", {
@@ -249,65 +174,34 @@ function createGlossaryColumns(actions: GlossaryTableActions) {
       cell: ({ row }) => {
         const term = row.original;
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Actions for ${term.source}`}
-                  disabled={actions.pending}
-                />
-              }
-            >
-              <MoreHorizontal className="size-4" aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Term actions</DropdownMenuLabel>
-                <DropdownMenuItem disabled={actions.pending} onClick={() => actions.onEdit(term)}>
-                  Edit
-                </DropdownMenuItem>
-                {term.status === "pending" && (
-                  <>
-                    <DropdownMenuItem
-                      disabled={actions.pending}
-                      onClick={() => actions.onApprove(term.id)}
-                    >
-                      Approve
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={actions.pending}
-                      onClick={() => actions.onReject(term.id)}
-                    >
-                      Reject
-                    </DropdownMenuItem>
-                  </>
-                )}
-                {term.status === "rejected" && (
-                  <DropdownMenuItem
-                    disabled={actions.pending}
-                    onClick={() => actions.onApprove(term.id)}
-                  >
-                    Restore
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  disabled={actions.pending}
-                  onClick={() => actions.onDelete(term.id)}
-                >
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <DataTableRowActions
+            triggerLabel={`Actions for ${term.source}`}
+            menuLabel="Term actions"
+            pending={actions.pending}
+            items={[
+              { label: "Edit", onSelect: () => actions.onEdit(term) },
+              ...(term.status === "pending"
+                ? [
+                    { label: "Approve", onSelect: () => actions.onApprove(term.id) },
+                    { label: "Reject", onSelect: () => actions.onReject(term.id) },
+                  ]
+                : []),
+              ...(term.status === "rejected"
+                ? [{ label: "Restore", onSelect: () => actions.onApprove(term.id) }]
+                : []),
+              {
+                label: "Delete",
+                variant: "destructive" as const,
+                onSelect: () => actions.onDelete(term.id),
+              },
+            ]}
+          />
         );
       },
     }),
   ]);
 }
+
 const CLEAR_GLOSSARY_FILTERS: Partial<GlossaryListSearch> = {
   q: "",
   category: "all",
@@ -337,44 +231,6 @@ function GlossaryUpdateError({
   );
 }
 
-interface GlossaryTableBodyProps {
-  initialLoading: boolean;
-  noRows: boolean;
-  filtered: boolean;
-  visibleColumnCount: number;
-  rows: ReactNode;
-  onClearFilters: () => void;
-}
-
-function GlossaryTableBody({
-  initialLoading,
-  noRows,
-  filtered,
-  visibleColumnCount,
-  rows,
-  onClearFilters,
-}: GlossaryTableBodyProps) {
-  if (initialLoading) {
-    return (
-      <TableBody>
-        <DataTableSkeletonRows columnCount={visibleColumnCount} />
-      </TableBody>
-    );
-  }
-  if (!noRows) return <TableBody>{rows}</TableBody>;
-  return (
-    <DataTableEmptyState
-      columnCount={visibleColumnCount}
-      filtered={filtered}
-      emptyTitle="No glossary terms yet"
-      filteredTitle="No terms match these filters"
-      emptyDescription="Add a term or bulk import TSV mappings to keep translations consistent."
-      filteredDescription="Try a different search or clear the filters to see all terms."
-      onClearFilters={onClearFilters}
-    />
-  );
-}
-
 function GlossaryMobileRows({
   rows,
   actions,
@@ -383,11 +239,7 @@ function GlossaryMobileRows({
   actions: GlossaryTableActions;
 }) {
   return (
-    <div
-      className="divide-y divide-border md:hidden"
-      aria-label="Mobile glossary terms"
-      role="region"
-    >
+    <>
       {rows.map((term) => (
         <article key={term.id} className="space-y-3 p-4">
           <div className="grid min-w-0 gap-2 sm:grid-cols-2">
@@ -459,7 +311,7 @@ function GlossaryMobileRows({
           </div>
         </article>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -471,73 +323,48 @@ export function GlossaryTable({
   actions,
 }: GlossaryTableProps) {
   const { page, isPending, isFetching, isPlaceholderData, isError, error } = query;
-  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({ note: false });
 
   useEffect(() => {
     if (!page || isFetching || isPlaceholderData || page.page === search.page) return;
     onSearchChange({ page: page.page }, true);
   }, [isFetching, isPlaceholderData, onSearchChange, page, search.page]);
 
-  const pagination = useMemo<PaginationState>(
-    () => ({ pageIndex: Math.max(0, search.page - 1), pageSize: search.pageSize }),
-    [search.page, search.pageSize],
-  );
-  const sorting = useMemo<SortingState>(
-    () => [{ id: search.sort, desc: search.dir === "desc" }],
-    [search.dir, search.sort],
-  );
   const columns = useMemo(() => createGlossaryColumns(actions), [actions]);
   const data = page?.rows ?? EMPTY_GLOSSARY_ROWS;
-
-  const table = useTable({
-    features: glossaryTableFeatures,
-    columns,
-    data,
-    manualPagination: true,
-    manualSorting: true,
-    rowCount: page?.rowCount ?? 0,
-    enableMultiSort: false,
-    state: { pagination, sorting, columnVisibility },
-    onPaginationChange: (updater) => {
-      const next = resolveUpdater(updater, pagination);
-      if (next.pageSize !== search.pageSize) {
-        onSearchChange(
-          { pageSize: next.pageSize as GlossaryListSearch["pageSize"], page: 1 },
-          true,
-        );
-        return;
-      }
-      const nextPage = next.pageIndex + 1;
-      if (nextPage !== search.page) onSearchChange({ page: nextPage }, false);
-    },
-    onSortingChange: (updater) => {
-      const next = resolveUpdater(updater, sorting);
-      const selected = next[0];
-      const sort = selected ? sortableSearchColumns[selected.id] : undefined;
-      if (!sort) return;
-      onSearchChange({ sort, dir: selected.desc ? "desc" : "asc", page: 1 }, true);
-    },
-    onColumnVisibilityChange: setColumnVisibility,
-  });
-
   const rowCount = page?.rowCount ?? 0;
   const currentPage = page?.page ?? search.page;
+  const clearFilters = () => onSearchChange(CLEAR_GLOSSARY_FILTERS, true);
+
+  const { table } = useDataTable({
+    columns,
+    data,
+    rowCount,
+    page: currentPage,
+    pageSize: search.pageSize,
+    sort: search.sort,
+    dir: search.dir,
+    sortableColumns: sortableSearchColumns,
+    initialColumnVisibility: { note: false },
+    onPageSizeChange: (pageSize) =>
+      onSearchChange({ pageSize: pageSize as GlossaryListSearch["pageSize"], page: 1 }, true),
+    onPageChange: (nextPage) => onSearchChange({ page: nextPage }, false),
+    onSortChange: (sort, dir) =>
+      onSearchChange({ sort: sort as GlossaryListSearch["sort"], dir, page: 1 }, true),
+  });
+
   const filtered = hasActiveFilters(search);
   const noRows = Boolean(page && !isFetching && data.length === 0);
   const paginationBusy = isPlaceholderData || (isPending && !page);
   const visibleColumnCount = table.getVisibleLeafColumns().length;
+  const firstRow = rowCount === 0 ? 0 : (currentPage - 1) * search.pageSize + 1;
+  const lastRow =
+    rowCount === 0 ? 0 : Math.min(rowCount, firstRow + table.getRowModel().rows.length - 1);
   const renderedRows = table.getRowModel().rows.map((row) => (
     <TableRow key={row.id} className="h-[4.25rem]">
-      {row.getVisibleCells().map((cell) => (
-        <TableCell
-          key={cell.id}
-          className={`px-3 py-2 ${
-            cell.column.id === "actions" ? "sticky right-0 z-10 border-l border-border bg-card" : ""
-          }`}
-        >
-          <table.FlexRender cell={cell} />
-        </TableCell>
-      ))}
+      <DataTableCells
+        cells={row.getVisibleCells()}
+        renderCell={(cell) => <table.FlexRender cell={cell} />}
+      />
     </TableRow>
   ));
 
@@ -553,305 +380,93 @@ export function GlossaryTable({
   }
 
   return (
-    <section
-      className="overflow-hidden rounded-xl border border-border bg-card"
-      aria-label="Glossary terms"
-      aria-busy={isFetching}
-    >
-      <GlossaryTableToolbar
-        search={search}
-        query={query}
-        table={table}
-        onSearchChange={onSearchChange}
+    <DataTableSection ariaLabel="Glossary terms" busy={isFetching}>
+      <DataTableToolbar
+        searchValue={search.q}
+        searchLabel="Search glossary"
+        searchPlaceholder="Search source, target, or note"
+        onSearchChange={(q) => onSearchChange({ q, page: 1 }, true)}
+        filters={[
+          {
+            ariaLabel: "Filter by category",
+            value: search.category,
+            items: categoryItems,
+            onChange: (value) =>
+              onSearchChange({ category: value as GlossaryListSearch["category"], page: 1 }, true),
+          },
+          {
+            ariaLabel: "Filter by status",
+            value: search.status,
+            items: statusItems,
+            onChange: (value) =>
+              onSearchChange({ status: value as GlossaryListSearch["status"], page: 1 }, true),
+          },
+        ]}
+        columns={{ table, labels: columnLabels }}
+        clearLabel="Clear filters"
+        filtered={filtered}
+        onClearFilters={clearFilters}
+        description="Approved glossary mappings used in future translations"
+        query={{ isFetching, isPlaceholderData }}
+        busyMessage="Loading glossary page…"
       />
 
       <GlossaryUpdateError visible={isError && Boolean(page)} error={error} onRetry={onRetry} />
-      {isPending && !page ? (
-        <div className="p-6 text-center text-sm text-muted-foreground md:hidden" aria-live="polite">
-          Loading glossary terms…
-        </div>
-      ) : noRows ? (
-        <div className="space-y-2 p-6 text-center md:hidden">
-          <p className="text-sm font-medium text-foreground">
-            {filtered ? "No terms match these filters" : "No glossary terms yet"}
-          </p>
-          <p className="text-caption text-muted-foreground">
-            {filtered
-              ? "Try a different search or clear the filters."
-              : "Add a term to get started."}
-          </p>
-          {filtered ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onSearchChange(CLEAR_GLOSSARY_FILTERS, true)}
-            >
-              Clear filters
-            </Button>
-          ) : null}
-        </div>
-      ) : (
-        <GlossaryMobileRows rows={data} actions={actions} />
-      )}
 
-      <div
-        className="hidden overflow-x-auto md:block"
-        aria-label="Desktop glossary terms"
-        role="region"
-      >
+      <DataTableMobileRegion ariaLabel={noRows || isPending ? undefined : "Mobile glossary terms"}>
+        {isPending && !page ? (
+          <DataTableMobileLoading message="Loading glossary terms…" />
+        ) : noRows ? (
+          <DataTableMobileEmpty
+            filtered={filtered}
+            emptyTitle="No glossary terms yet"
+            filteredTitle="No terms match these filters"
+            emptyDescription="Add a term to get started."
+            filteredDescription="Try a different search or clear the filters."
+            onClearFilters={clearFilters}
+          />
+        ) : (
+          <GlossaryMobileRows rows={data} actions={actions} />
+        )}
+      </DataTableMobileRegion>
+
+      <DataTableDesktopRegion ariaLabel="Desktop glossary terms">
         <Table className="min-w-[860px] text-caption">
           <TableHeader className="bg-muted/20">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className={`h-11 px-3 ${
-                      header.column.id === "actions"
-                        ? "sticky right-0 z-10 border-l border-border bg-muted/20"
-                        : ""
-                    }`}
-                  >
-                    {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
+            <DataTableHeaderGroups
+              groups={table.getHeaderGroups()}
+              renderHeader={(header) => <table.FlexRender header={header} />}
+            />
           </TableHeader>
-          <GlossaryTableBody
+          <DataTableBody
             initialLoading={isPending && !page}
             noRows={noRows}
             filtered={filtered}
             visibleColumnCount={visibleColumnCount}
             rows={renderedRows}
-            onClearFilters={() => onSearchChange(CLEAR_GLOSSARY_FILTERS, true)}
+            emptyTitle="No glossary terms yet"
+            filteredTitle="No terms match these filters"
+            emptyDescription="Add a term or bulk import TSV mappings to keep translations consistent."
+            filteredDescription="Try a different search or clear the filters to see all terms."
+            onClearFilters={clearFilters}
           />
         </Table>
-      </div>
+      </DataTableDesktopRegion>
 
-      <GlossaryTablePagination
-        search={search}
+      <DataTablePagination
         table={table}
+        firstRow={firstRow}
+        lastRow={lastRow}
         rowCount={rowCount}
         currentPage={currentPage}
-        paginationBusy={paginationBusy}
-        onSearchChange={onSearchChange}
+        busy={paginationBusy}
+        pageSize={search.pageSize}
+        pageSizeOptions={pageSizeOptions}
+        noun="terms"
+        onPageSizeChange={(pageSize) =>
+          onSearchChange({ pageSize: pageSize as GlossaryListSearch["pageSize"], page: 1 }, true)
+        }
       />
-    </section>
-  );
-}
-type GlossaryColumnTable = {
-  getAllLeafColumns: () => Array<{
-    id: string;
-    getCanHide: () => boolean;
-    getIsVisible: () => boolean;
-    toggleVisibility: (visible: boolean) => void;
-  }>;
-};
-
-type GlossaryPaginationTable = GlossaryColumnTable & {
-  getRowModel: () => { rows: Array<unknown> };
-  getPageCount: () => number;
-  getCanPreviousPage: () => boolean;
-  getCanNextPage: () => boolean;
-  getCanLastPage: () => boolean;
-  firstPage: () => void;
-  previousPage: () => void;
-  nextPage: () => void;
-  lastPage: () => void;
-};
-
-function GlossaryTableToolbar({
-  search,
-  query,
-  table,
-  onSearchChange,
-}: {
-  search: GlossaryListSearch;
-  query: GlossaryTableQueryState;
-  table: GlossaryColumnTable;
-  onSearchChange: GlossarySearchChange;
-}) {
-  const [queryInput, setQueryInput] = useState(search.q);
-
-  useEffect(() => setQueryInput(search.q), [search.q]);
-  useEffect(() => {
-    if (queryInput === search.q) return;
-    const timeoutId = window.setTimeout(
-      () => onSearchChange({ q: queryInput, page: 1 }, true),
-      300,
-    );
-    return () => window.clearTimeout(timeoutId);
-  }, [onSearchChange, queryInput, search.q]);
-
-  const isChangingQuery = query.isFetching && query.isPlaceholderData;
-  return (
-    <div className="border-b border-border p-3 sm:p-4">
-      <div className="grid gap-3 lg:grid-cols-[minmax(300px,1fr)_20rem_auto] lg:items-center">
-        <div className="relative min-w-0">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            value={queryInput}
-            onChange={(event) => setQueryInput(event.target.value)}
-            placeholder="Search source, target, or note"
-            aria-label="Search glossary"
-            className="h-10 pl-9"
-          />
-        </div>
-        <div className="grid min-w-0 grid-cols-2 gap-2">
-          <Select
-            value={search.category}
-            items={categoryItems}
-            onValueChange={(value) => {
-              if (value && value !== search.category) {
-                onSearchChange(
-                  { category: value as GlossaryListSearch["category"], page: 1 },
-                  true,
-                );
-              }
-            }}
-          >
-            <SelectTrigger aria-label="Filter by category" className="h-10 min-w-0 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              <SelectItem value="character">Character</SelectItem>
-              <SelectItem value="place">Place</SelectItem>
-              <SelectItem value="skill">Skill</SelectItem>
-              <SelectItem value="item">Item</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={search.status}
-            items={statusItems}
-            onValueChange={(value) => {
-              if (value && value !== search.status) {
-                onSearchChange({ status: value as GlossaryListSearch["status"], page: 1 }, true);
-              }
-            }}
-          >
-            <SelectTrigger aria-label="Filter by status" className="h-10 min-w-0 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-              <SelectItem value="all">All statuses</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:ml-auto">
-          {hasActiveFilters(search) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-10"
-              onClick={() =>
-                onSearchChange(
-                  {
-                    q: "",
-                    category: "all",
-                    status: "approved",
-                    sort: "source",
-                    dir: "asc",
-                    page: 1,
-                  },
-                  true,
-                )
-              }
-            >
-              Clear filters
-            </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="outline" size="sm" className="h-10">
-                  <Columns3 className="size-4" aria-hidden="true" />
-                  Columns
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Show columns</DropdownMenuLabel>
-                {table.getAllLeafColumns().map((column) =>
-                  column.getCanHide() ? (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(checked) => column.toggleVisibility(!!checked)}
-                    >
-                      {columnLabels[column.id] ?? column.id}
-                    </DropdownMenuCheckboxItem>
-                  ) : null,
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      <div className="mt-3 flex min-h-5 items-center justify-between gap-3 text-caption text-muted-foreground">
-        <p>Approved glossary mappings used in future translations</p>
-        {query.isFetching && !isChangingQuery && (
-          <span className="inline-flex items-center gap-1.5" role="status" aria-live="polite">
-            <Spinner className="size-3.5" aria-hidden="true" />
-            Updating…
-          </span>
-        )}
-      </div>
-      {isChangingQuery && (
-        <div
-          className="mt-3 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-caption text-primary"
-          role="status"
-          aria-live="polite"
-        >
-          <Spinner className="size-3.5" aria-hidden="true" />
-          Loading glossary page…
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GlossaryTablePagination({
-  search,
-  table,
-  rowCount,
-  currentPage,
-  paginationBusy,
-  onSearchChange,
-}: {
-  search: GlossaryListSearch;
-  table: GlossaryPaginationTable;
-  rowCount: number;
-  currentPage: number;
-  paginationBusy: boolean;
-  onSearchChange: GlossarySearchChange;
-}) {
-  const firstRow = rowCount === 0 ? 0 : (currentPage - 1) * search.pageSize + 1;
-  const lastRow =
-    rowCount === 0 ? 0 : Math.min(rowCount, firstRow + table.getRowModel().rows.length - 1);
-  return (
-    <DataTablePagination
-      table={table}
-      firstRow={firstRow}
-      lastRow={lastRow}
-      rowCount={rowCount}
-      currentPage={currentPage}
-      busy={paginationBusy}
-      pageSize={search.pageSize}
-      pageSizeOptions={pageSizeOptions}
-      formatRange={formatRange}
-      onPageSizeChange={(pageSize) =>
-        onSearchChange({ pageSize: pageSize as GlossaryListSearch["pageSize"], page: 1 }, true)
-      }
-    />
+    </DataTableSection>
   );
 }

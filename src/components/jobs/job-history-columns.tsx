@@ -1,17 +1,11 @@
-import { ArrowDown, ArrowUp, ChevronsUpDown, MoreHorizontal } from "lucide-react";
-import {
-  createColumnHelper,
-  columnVisibilityFeature,
-  rowPaginationFeature,
-  rowSortingFeature,
-  tableFeatures,
-  type Column,
-} from "@tanstack/react-table";
+import { MoreHorizontal } from "lucide-react";
+import { createColumnHelper } from "@tanstack/react-table";
 
 import { DateCell } from "@/components/jobs/date-cell";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTableSortableHeader } from "@/components/ui/data-table-parts";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,20 +16,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
+import type { DataTableFeatures } from "@/components/ui/use-data-table";
 import type {
   JobHistoryRow,
   JobHistoryTranslationRow,
   JobHistoryType,
 } from "@/lib/job-dashboard/contracts";
 
-export const jobHistoryTableFeatures = tableFeatures({
-  rowPaginationFeature,
-  rowSortingFeature,
-  columnVisibilityFeature,
-});
-
-type JobHistoryTableFeatures = typeof jobHistoryTableFeatures;
-const columnHelper = createColumnHelper<JobHistoryTableFeatures, JobHistoryRow>();
+const columnHelper = createColumnHelper<DataTableFeatures, JobHistoryRow>();
 
 export type JobHistoryColumnActions = {
   onViewDetails: (job: JobHistoryRow) => void;
@@ -52,34 +40,6 @@ const typeLabels: Record<JobHistoryType, string> = {
   scrape: "Scrape",
   epub: "EPUB",
 };
-
-function SortableHeader<TValue>({
-  column,
-  label,
-}: {
-  column: Column<JobHistoryTableFeatures, JobHistoryRow, TValue>;
-  label: string;
-}) {
-  const sorted = column.getIsSorted();
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 h-8 px-2 font-semibold text-muted-foreground hover:text-foreground"
-      onClick={() => column.toggleSorting(sorted === "asc")}
-      aria-label={`Sort by ${label}`}
-    >
-      {label}
-      {sorted === "asc" ? (
-        <ArrowUp className="size-3.5" aria-hidden="true" />
-      ) : sorted === "desc" ? (
-        <ArrowDown className="size-3.5" aria-hidden="true" />
-      ) : (
-        <ChevronsUpDown className="size-3.5 opacity-60" aria-hidden="true" />
-      )}
-    </Button>
-  );
-}
 
 function jobSecondaryLine(job: JobHistoryRow) {
   if (job.type === "translation") {
@@ -116,7 +76,7 @@ export function createJobHistoryColumns(actions: JobHistoryColumnActions) {
   return columnHelper.columns([
     columnHelper.accessor("novelTitle", {
       id: "novelTitle",
-      header: ({ column }) => <SortableHeader column={column} label="Job" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Job" />,
       cell: ({ row }) => {
         const job = row.original;
         return (
@@ -141,7 +101,7 @@ export function createJobHistoryColumns(actions: JobHistoryColumnActions) {
     }),
     columnHelper.accessor("type", {
       id: "type",
-      header: ({ column }) => <SortableHeader column={column} label="Type" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Type" />,
       cell: ({ row }) => {
         const job = row.original;
         return (
@@ -164,7 +124,7 @@ export function createJobHistoryColumns(actions: JobHistoryColumnActions) {
     }),
     columnHelper.accessor("status", {
       id: "status",
-      header: ({ column }) => <SortableHeader column={column} label="Status" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Status" />,
       cell: ({ row }) => (
         <div className="min-w-[100px]">
           <StatusBadge status={row.original.status} />
@@ -195,12 +155,12 @@ export function createJobHistoryColumns(actions: JobHistoryColumnActions) {
     }),
     columnHelper.accessor("createdAt", {
       id: "createdAt",
-      header: ({ column }) => <SortableHeader column={column} label="Started" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Started" />,
       cell: ({ row }) => <DateCell value={row.original.createdAt} />,
     }),
     columnHelper.accessor("updatedAt", {
       id: "updatedAt",
-      header: ({ column }) => <SortableHeader column={column} label="Updated" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label="Updated" />,
       cell: ({ row }) => <DateCell value={row.original.updatedAt} />,
     }),
     columnHelper.display({
