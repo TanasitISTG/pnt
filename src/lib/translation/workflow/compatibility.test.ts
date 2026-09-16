@@ -39,6 +39,12 @@ describe("translation workflow compatibility contract", () => {
     expect(functions).toContain("limit: 1");
   });
 
+  it("runs analysis and translation as one memoized step per chunk", () => {
+    const functions = source("../../inngest/functions.ts");
+    expect(functions).toContain("step.run(`chunk-${i}`");
+    expect(functions).not.toContain("context-${i}");
+  });
+
   it("cancels only the exact job generation", () => {
     const functions = source("../../inngest/functions.ts");
     const translationFunctions = source("../api/mutations.ts");

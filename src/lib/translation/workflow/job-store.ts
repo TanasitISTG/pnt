@@ -351,12 +351,16 @@ export async function loadApprovedTermsForContext(novelId: string) {
     .where(and(eq(glossaryTerms.novelId, novelId), eq(glossaryTerms.status, "approved")));
 }
 
-export async function loadPrevChapterForContext(novelId: string, chapterNumber: string) {
+export async function loadPrevChapterContext(
+  novelId: string,
+  chapterNumber: string,
+  tailLength: number,
+) {
   const [prevChapter] = await db
     .select({
       summary: chapters.summary,
-      rawContent: chapters.rawContent,
-      translatedContent: chapters.translatedContent,
+      rawTail: sql<string | null>`right(${chapters.rawContent}, ${tailLength})`,
+      translatedTail: sql<string | null>`right(${chapters.translatedContent}, ${tailLength})`,
     })
     .from(chapters)
     .where(

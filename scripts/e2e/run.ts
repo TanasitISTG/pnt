@@ -25,6 +25,9 @@ mkdirSync(logDir, { recursive: true });
 
 const environment = {
   ...process.env,
+  // Pinned so a production NODE_ENV on the host cannot select the production env
+  // schema, which requires Inngest Cloud keys this run deliberately leaves empty.
+  NODE_ENV: "development",
   DATABASE_URL: requestedUrl,
   TEST_DATABASE_URL: requestedUrl,
   E2E_DATABASE_URL: requestedUrl,

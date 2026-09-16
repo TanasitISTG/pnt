@@ -1,19 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as jobStore from "@/lib/translation/workflow/job-store";
-import * as providerClientModule from "@/lib/translation/providers/provider-client";
 import type { AIProviderClient } from "@/lib/translation/types/provider";
-import { analyzeChunkRelationships, analyzeRelationshipSourceChunk } from "./analyzer";
+import {
+  analyzeChunkRelationshipsForChunk,
+  analyzeRelationshipSourceChunk,
+  type ChunkRelationshipAnalysisInput,
+} from "./analyzer";
 import { relationshipMapSchema } from "./schemas";
 
 vi.mock("@/lib/translation/workflow/job-store", () => ({
   applyRelationshipAnalysis: vi.fn(),
-  loadApprovedTermsForContext: vi.fn(),
-  loadJobChunk: vi.fn(),
-  loadPrevChapterForContext: vi.fn(),
-}));
-vi.mock("@/lib/translation/providers/provider-client", () => ({
-  loadProviderRuntimeForJob: vi.fn(),
 }));
 
 const updatedAt = "2026-01-01T00:00:00.000Z";
@@ -84,37 +81,54 @@ function provider(response: unknown): AIProviderClient {
   };
 }
 
+function recordingProvider(response: unknown) {
+  const generateChatCompletion = vi.fn(
+    async (_request: { messages: Array<{ role: string; content: string }> }) => ({
+      content: JSON.stringify(response) ?? "",
+      usage: { promptTokens: 3, completionTokens: 2 },
+    }),
+  );
+  const client = {
+    provider: "openai",
+    model: "main-model",
+    fastModel: "fast-model",
+    temperature: 0.7,
+    baseUrl: "http://localhost",
+    generateChatCompletion,
+  } as unknown as AIProviderClient;
+  return { client, generateChatCompletion };
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([]);
-  vi.mocked(jobStore.loadPrevChapterForContext).mockResolvedValue(null as never);
 });
-const runnableChunkRow = {
-  job: {
-    id: "job-1",
-    status: "running",
-    generation: 3,
-    sourceRevision: 7,
-    doneChunks: 0,
-  },
-  chapter: {
-    number: "1",
-    activeTranslationJobId: "job-1",
-    translationGeneration: 3,
-    sourceRevision: 7,
-  },
-  novel: {
-    id: "novel-1",
-    userId: "user-1",
-    sourceLang: "zh",
-    targetLang: "th",
-    contextTailLength: 500,
-    relationshipMapJson: null,
-    storySummary: null,
-  },
-  chunk: { sourceText: "甲走进房间。" },
-  previousChunk: null,
+
+const baseNovel = {
+  id: "novel-1",
+  sourceLang: "zh",
+  targetLang: "th",
+  contextTailLength: 500,
+  relationshipMapJson: null as string | null,
+  storySummary: null as string | null,
 };
+
+function analysisInput(
+  overrides: Partial<ChunkRelationshipAnalysisInput> = {},
+): ChunkRelationshipAnalysisInput {
+  return {
+    jobId: "job-1",
+    generation: 3,
+    novel: baseNovel,
+    chapter: { number: "1" },
+    chunk: { index: 0, sourceText: "甲走进房间。" },
+    previousChunk: null,
+    approvedTerms: [],
+    previousChapter: null,
+    providerConfig: null,
+    providerFailure: null,
+    ...overrides,
+  };
+}
 
 describe("relationship source analyzer", () => {
   it("canonicalizes aliases in returned active pairs", async () => {
@@ -352,31 +366,7 @@ describe("relationship source analyzer", () => {
   });
 });
 
-describe("chunk relationship provider setup", () => {
-  it("uses the provider created on the fourth attempt", async () => {
-    const providerConfig = provider({
-      characters: [],
-      relationships: [],
-      activePairs: [],
-    });
-    vi.mocked(jobStore.loadJobChunk).mockResolvedValue(runnableChunkRow as never);
-    vi.mocked(providerClientModule.loadProviderRuntimeForJob)
-      .mockRejectedValueOnce(new Error("provider unavailable"))
-      .mockRejectedValueOnce(new Error("provider unavailable"))
-      .mockRejectedValueOnce(new Error("provider unavailable"))
-      .mockResolvedValueOnce(providerConfig);
-
-    const result = await analyzeChunkRelationships("job-1", 0, 3);
-
-    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledTimes(4);
-    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledWith(
-      "user-1",
-      expect.anything(),
-    );
-    expect(result.warning).toBeNull();
-    expect(result.promptTokens).toBe(3);
-    expect(result.completionTokens).toBe(2);
-  });
+describe("chunk relationship analysis", () => {
   it.each(["en->th", "zh->en", "zh->th"] as const)(
     "runs automatic analysis for %s",
     async (pair) => {
@@ -386,18 +376,14 @@ describe("chunk relationship provider setup", () => {
         relationships: [],
         activePairs: [],
       });
-      vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
-        ...runnableChunkRow,
-        novel: { ...runnableChunkRow.novel, sourceLang, targetLang },
-      } as never);
-      vi.mocked(providerClientModule.loadProviderRuntimeForJob).mockResolvedValue(providerConfig);
 
-      const result = await analyzeChunkRelationships("job-1", 0, 3);
-
-      expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledWith(
-        "user-1",
-        expect.anything(),
+      const result = await analyzeChunkRelationshipsForChunk(
+        analysisInput({
+          novel: { ...baseNovel, sourceLang: sourceLang!, targetLang: targetLang! },
+          providerConfig,
+        }),
       );
+
       expect(result.warning).toBeNull();
       expect(result.promptTokens).toBe(3);
       expect(result.completionTokens).toBe(2);
@@ -405,15 +391,21 @@ describe("chunk relationship provider setup", () => {
     },
   );
 
-  it("silently skips unsupported pairs before creating a provider", async () => {
-    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
-      ...runnableChunkRow,
-      novel: { ...runnableChunkRow.novel, sourceLang: "en", targetLang: "en" },
-    } as never);
+  it("silently skips unsupported pairs before calling the provider", async () => {
+    const { client, generateChatCompletion } = recordingProvider({
+      characters: [],
+      relationships: [],
+      activePairs: [],
+    });
 
-    const result = await analyzeChunkRelationships("job-1", 0, 3);
+    const result = await analyzeChunkRelationshipsForChunk(
+      analysisInput({
+        novel: { ...baseNovel, sourceLang: "en", targetLang: "en" },
+        providerConfig: client,
+      }),
+    );
 
-    expect(providerClientModule.loadProviderRuntimeForJob).not.toHaveBeenCalled();
+    expect(generateChatCompletion).not.toHaveBeenCalled();
     expect(result).toEqual({
       context: null,
       warning: null,
@@ -422,31 +414,112 @@ describe("chunk relationship provider setup", () => {
     });
   });
 
-  it("returns stored context when provider creation exhausts its retries", async () => {
+  it("returns stored context when the provider is unavailable", async () => {
     const storedMap = mapWith(
       [character("a", "甲"), character("b", "乙")],
       [relationship("pair", "a", "b")],
     );
-    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
-      ...runnableChunkRow,
-      novel: {
-        ...runnableChunkRow.novel,
-        relationshipMapJson: JSON.stringify(storedMap),
-      },
-      chunk: { sourceText: "甲和乙一起走。" },
-    } as never);
-    vi.mocked(providerClientModule.loadProviderRuntimeForJob).mockRejectedValue(
-      new Error("provider unavailable"),
+
+    const result = await analyzeChunkRelationshipsForChunk(
+      analysisInput({
+        novel: { ...baseNovel, relationshipMapJson: JSON.stringify(storedMap) },
+        chunk: { index: 0, sourceText: "甲和乙一起走。" },
+        providerConfig: null,
+        providerFailure: "provider unavailable",
+      }),
     );
 
-    const result = await analyzeChunkRelationships("job-1", 0, 3);
-
-    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledTimes(4);
     expect(result.context?.activePairs).toEqual([
       { speakerId: "a", listenerId: "b", relationshipId: "pair" },
     ]);
     expect(result.warning).toBe("Relationship analysis unavailable: provider unavailable.");
     expect(result.promptTokens).toBe(0);
     expect(result.completionTokens).toBe(0);
+  });
+
+  it("feeds the preceding source tail into the analysis prompt", async () => {
+    const { client, generateChatCompletion } = recordingProvider({
+      characters: [],
+      relationships: [],
+      activePairs: [],
+    });
+
+    await analyzeChunkRelationshipsForChunk(
+      analysisInput({
+        chunk: { index: 1, sourceText: "甲走进房间。" },
+        previousChunk: { sourceText: "前一段的原文" },
+        providerConfig: client,
+      }),
+    );
+
+    const request = generateChatCompletion.mock.calls[0]?.[0];
+    expect(request.messages.some((message) => message.content.includes("前一段的原文"))).toBe(true);
+  });
+
+  it("falls back to the previous chapter raw tail for the first chunk", async () => {
+    const { client, generateChatCompletion } = recordingProvider({
+      characters: [],
+      relationships: [],
+      activePairs: [],
+    });
+
+    await analyzeChunkRelationshipsForChunk(
+      analysisInput({
+        previousChapter: {
+          summary: "上一章概要",
+          rawTail: "上一章的原文尾巴",
+          translatedTail: "prev translated",
+        },
+        providerConfig: client,
+      }),
+    );
+
+    const request = generateChatCompletion.mock.calls[0]?.[0];
+    expect(request.messages.some((message) => message.content.includes("上一章的原文尾巴"))).toBe(
+      true,
+    );
+  });
+
+  it("persists source-evidenced facts through the guarded job-owned write", async () => {
+    const storedMap = mapWith([character("a", "甲"), character("b", "乙")]);
+    const { client } = recordingProvider({
+      characters: [],
+      relationships: [
+        {
+          speaker: "甲",
+          listener: "乙",
+          relationship: "friend",
+          speakerStatus: "peer",
+          familiarity: "close",
+          selfPronoun: null,
+          addresseeTerm: null,
+          sentenceParticles: null,
+          evidence: "甲和乙",
+        },
+      ],
+      activePairs: [{ speaker: "甲", listener: "乙", evidence: "甲和乙" }],
+    });
+    vi.mocked(jobStore.applyRelationshipAnalysis).mockResolvedValue({
+      applied: true,
+      map: null,
+      warnings: [],
+    } as never);
+
+    await analyzeChunkRelationshipsForChunk(
+      analysisInput({
+        novel: { ...baseNovel, relationshipMapJson: JSON.stringify(storedMap) },
+        chunk: { index: 2, sourceText: "甲和乙一起走。" },
+        providerConfig: client,
+      }),
+    );
+
+    expect(jobStore.applyRelationshipAnalysis).toHaveBeenCalledWith(
+      "job-1",
+      3,
+      2,
+      expect.objectContaining({
+        activePairs: [expect.objectContaining({ speaker: "甲", listener: "乙" })],
+      }),
+    );
   });
 });

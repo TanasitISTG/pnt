@@ -5,9 +5,11 @@ import * as finalizeGlossaryModule from "./finalize-glossary";
 import * as finalizeSummaryModule from "./finalize-summary";
 import * as jobStore from "./job-store";
 import * as providerClientModule from "../providers/provider-client";
+import type { TranslationRunContext } from "./run-context";
 
 import { buildRelationshipPromptContextForText } from "@/lib/relationships/map";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
+import * as analyzerModule from "@/lib/relationships/analyzer";
 vi.mock("./job-store", () => ({
   beginJob: vi.fn(),
   completeChunk: vi.fn(),
@@ -18,16 +20,33 @@ vi.mock("./job-store", () => ({
   loadJobChunks: vi.fn(),
   saveChunkFailure: vi.fn(),
   loadApprovedTermsForContext: vi.fn().mockResolvedValue([]),
-  loadPrevChapterForContext: vi.fn().mockResolvedValue(null),
+  loadPrevChapterContext: vi.fn().mockResolvedValue(null),
   loadTermSourcesForExclusion: vi.fn().mockResolvedValue({
     approvedTerms: [],
     existingSources: [],
   }),
 }));
 
+vi.mock("@/lib/relationships/analyzer", () => ({
+  analyzeChunkRelationshipsForChunk: vi.fn().mockResolvedValue({
+    context: null,
+    warning: null,
+    promptTokens: 0,
+    completionTokens: 0,
+  }),
+}));
+
 vi.mock("../providers/provider-client", () => ({ loadProviderRuntimeForJob: vi.fn() }));
 vi.mock("./finalize-summary", () => ({ generateSummaryArtifacts: vi.fn() }));
 vi.mock("./finalize-glossary", () => ({ suggestAndReviewTerms: vi.fn() }));
+
+function runContext(overrides: Partial<TranslationRunContext> = {}): TranslationRunContext {
+  return { terms: [], previousChapter: null, ...overrides };
+}
+
+function emptyAnalysis(overrides: Record<string, unknown> = {}) {
+  return { context: null, warning: null, promptTokens: 0, completionTokens: 0, ...overrides };
+}
 
 describe("translation worker guarded state transitions", () => {
   const generation = 3;
@@ -72,11 +91,14 @@ describe("translation worker guarded state transitions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([]);
-    vi.mocked(jobStore.loadPrevChapterForContext).mockResolvedValue(null as never);
+    vi.mocked(jobStore.loadPrevChapterContext).mockResolvedValue(null as never);
     vi.mocked(jobStore.loadTermSourcesForExclusion).mockResolvedValue({
       approvedTerms: [],
       existingSources: [],
     });
+    vi.mocked(analyzerModule.analyzeChunkRelationshipsForChunk).mockResolvedValue(
+      emptyAnalysis() as never,
+    );
     vi.mocked(jobStore.completeChunk).mockResolvedValue(true);
     vi.mocked(jobStore.saveChunkFailure).mockResolvedValue(true);
     vi.mocked(jobStore.completeJob).mockResolvedValue(true);
@@ -102,13 +124,23 @@ describe("translation worker guarded state transitions", () => {
 
   it("initializes only through the generation-aware transaction", async () => {
     vi.mocked(jobStore.beginJob).mockResolvedValue(row as never);
+    const terms = [{ source: "许野", target: "สวี่เหยี่ย", category: "character", note: null }];
+    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue(terms as never);
+    const previousChapter = {
+      summary: "Previous summary",
+      rawTail: "raw tail",
+      translatedTail: "translated tail",
+    };
+    vi.mocked(jobStore.loadPrevChapterContext).mockResolvedValue(previousChapter as never);
 
     await expect(initJob("job-1", generation)).resolves.toEqual({
       skip: false,
       doneChunks: 0,
       totalChunks: 2,
+      context: { terms, previousChapter },
     });
     expect(jobStore.beginJob).toHaveBeenCalledWith("job-1", generation);
+    expect(jobStore.loadPrevChapterContext).toHaveBeenCalledWith("novel-1", "1", 500);
   });
 
   it("skips when ownership was lost before initialization", async () => {
@@ -117,7 +149,9 @@ describe("translation worker guarded state transitions", () => {
       skip: true,
       doneChunks: 0,
       totalChunks: 0,
+      context: null,
     });
+    expect(jobStore.loadApprovedTermsForContext).not.toHaveBeenCalled();
   });
 
   it("writes translated progress with generation and expected cursor", async () => {
@@ -131,7 +165,7 @@ describe("translation worker guarded state transitions", () => {
       usage: { promptTokens: 10, completionTokens: 20 },
     });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
 
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
       "job-1",
@@ -152,7 +186,7 @@ describe("translation worker guarded state transitions", () => {
       usage: { promptTokens: 10, completionTokens: 20 },
     });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(1);
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
@@ -221,15 +255,18 @@ describe("translation worker guarded state transitions", () => {
       }),
       "许野 林月",
     )!;
-    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([
+    const terms: TranslationRunContext["terms"] = [
       { source: "许野", target: "สวี่เหยี่ย", category: "character", note: null },
-    ] as never);
+    ];
     vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
       ...row,
       novel: { ...mockNovel, customPrompt: "Keep names consistent." },
       chunk: { ...chunks[0], sourceText: "许野 text", textLength: 7 },
       previousChunk: null,
     } as never);
+    vi.mocked(analyzerModule.analyzeChunkRelationshipsForChunk).mockResolvedValue(
+      emptyAnalysis({ context: relationshipContext }) as never,
+    );
     provider.generateChatCompletion
       .mockResolvedValueOnce({
         content: "แปลแล้ว 许野",
@@ -249,12 +286,7 @@ describe("translation worker guarded state transitions", () => {
         usage: { promptTokens: 1, completionTokens: 1 },
       });
 
-    await translateChunk("job-1", 0, generation, {
-      context: relationshipContext,
-      warning: null,
-      promptTokens: 0,
-      completionTokens: 0,
-    });
+    await translateChunk("job-1", 0, generation, runContext({ terms }));
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(5);
     const spanRepairRequest = provider.generateChatCompletion.mock.calls[1]?.[0] as {
@@ -305,7 +337,7 @@ describe("translation worker guarded state transitions", () => {
         usage: { promptTokens: 1, completionTokens: 1 },
       });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(2);
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
@@ -336,7 +368,7 @@ describe("translation worker guarded state transitions", () => {
         usage: { promptTokens: 1, completionTokens: 1 },
       });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(2);
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
@@ -372,7 +404,7 @@ describe("translation worker guarded state transitions", () => {
         usage: { promptTokens: 1, completionTokens: 1 },
       });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(3);
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
@@ -385,9 +417,9 @@ describe("translation worker guarded state transitions", () => {
 
   it("protects approved glossary targets and exact source tags", async () => {
     provider.generateChatCompletion.mockReset();
-    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([
+    const terms: TranslationRunContext["terms"] = [
       { source: "OpenAI", target: "OpenAI", category: "other", note: null },
-    ] as never);
+    ];
     vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
       ...row,
       chunk: { ...chunks[0], sourceText: "<em>OpenAI</em>", textLength: 15 },
@@ -398,7 +430,7 @@ describe("translation worker guarded state transitions", () => {
       usage: { promptTokens: 10, completionTokens: 20 },
     });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext({ terms }));
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(1);
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
@@ -433,7 +465,7 @@ describe("translation worker guarded state transitions", () => {
         usage: { promptTokens: 1, completionTokens: 1 },
       });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(6);
     const longRetryRequest = provider.generateChatCompletion.mock.calls[4]?.[0] as {
@@ -467,7 +499,7 @@ describe("translation worker guarded state transitions", () => {
         usage: { promptTokens: 1, completionTokens: 1 },
       });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(2);
     const repairRequest = provider.generateChatCompletion.mock.calls[1]?.[0] as {
@@ -484,9 +516,9 @@ describe("translation worker guarded state transitions", () => {
 
   it("rejects whole-chunk repairs that change markers, tags, or protected terms", async () => {
     provider.generateChatCompletion.mockReset();
-    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue([
+    const terms: TranslationRunContext["terms"] = [
       { source: "术语", target: "OpenAI", category: "other", note: null },
-    ] as never);
+    ];
     vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
       ...row,
       chunk: {
@@ -514,7 +546,7 @@ describe("translation worker guarded state transitions", () => {
         usage: { promptTokens: 1, completionTokens: 1 },
       });
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext({ terms }));
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(4);
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
@@ -541,7 +573,7 @@ describe("translation worker guarded state transitions", () => {
       })
       .mockRejectedValue(new Error("span repair unavailable"));
 
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
 
     expect(provider.generateChatCompletion).toHaveBeenCalledTimes(5);
     expect(jobStore.completeChunk).toHaveBeenCalledWith(
@@ -558,7 +590,7 @@ describe("translation worker guarded state transitions", () => {
       chunk: chunks[0],
       previousChunk: null,
     } as never);
-    await translateChunk("job-1", 0, generation - 1);
+    await translateChunk("job-1", 0, generation - 1, runContext());
     expect(provider.generateChatCompletion).not.toHaveBeenCalled();
     expect(jobStore.completeChunk).not.toHaveBeenCalled();
   });
@@ -570,7 +602,7 @@ describe("translation worker guarded state transitions", () => {
       chunk: chunks[0],
       previousChunk: null,
     } as never);
-    await translateChunk("job-1", 0, generation);
+    await translateChunk("job-1", 0, generation, runContext());
     expect(provider.generateChatCompletion).not.toHaveBeenCalled();
   });
 
@@ -582,7 +614,9 @@ describe("translation worker guarded state transitions", () => {
     } as never);
     provider.generateChatCompletion.mockRejectedValue(new Error("API Error: 500"));
 
-    await expect(translateChunk("job-1", 0, generation)).rejects.toThrow("API Error: 500");
+    await expect(translateChunk("job-1", 0, generation, runContext())).rejects.toThrow(
+      "API Error: 500",
+    );
     expect(jobStore.saveChunkFailure).toHaveBeenCalledWith(
       "job-1",
       generation,
@@ -590,6 +624,146 @@ describe("translation worker guarded state transitions", () => {
       "API Error: 500",
       expect.stringContaining("API Error: 500"),
     );
+  });
+
+  it("runs relationship analysis inside the chunk step and folds its tokens", async () => {
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    const terms: TranslationRunContext["terms"] = [
+      { source: "许野", target: "สวี่เหยี่ย", category: "character", note: null },
+    ];
+    const previousChapter = { summary: "Prev", rawTail: "raw", translatedTail: "translated" };
+    vi.mocked(analyzerModule.analyzeChunkRelationshipsForChunk).mockResolvedValue(
+      emptyAnalysis({ promptTokens: 7, completionTokens: 11 }) as never,
+    );
+    provider.generateChatCompletion.mockResolvedValueOnce({
+      content: "แปลแล้ว",
+      usage: { promptTokens: 10, completionTokens: 20 },
+    });
+
+    await translateChunk("job-1", 0, generation, runContext({ terms, previousChapter }));
+
+    expect(analyzerModule.analyzeChunkRelationshipsForChunk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-1",
+        generation,
+        approvedTerms: terms,
+        previousChapter,
+        providerConfig: provider,
+      }),
+    );
+    expect(jobStore.loadJobChunk).toHaveBeenCalledTimes(1);
+    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledTimes(1);
+    expect(jobStore.loadApprovedTermsForContext).not.toHaveBeenCalled();
+    expect(jobStore.loadPrevChapterContext).not.toHaveBeenCalled();
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ promptTokens: 17, completionTokens: 31 }),
+    );
+  });
+
+  it("loads the run context when a resumed step has no memoized context", async () => {
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    const terms: TranslationRunContext["terms"] = [
+      { source: "许野", target: "สวี่เหยี่ย", category: "character", note: null },
+    ];
+    vi.mocked(jobStore.loadApprovedTermsForContext).mockResolvedValue(terms as never);
+    vi.mocked(jobStore.loadPrevChapterContext).mockResolvedValue({
+      summary: "Prev",
+      rawTail: "raw",
+      translatedTail: "translated",
+    } as never);
+    provider.generateChatCompletion.mockResolvedValueOnce({
+      content: "แปลแล้ว",
+      usage: { promptTokens: 10, completionTokens: 20 },
+    });
+
+    await translateChunk("job-1", 0, generation);
+
+    expect(jobStore.loadApprovedTermsForContext).toHaveBeenCalledWith("novel-1");
+    expect(analyzerModule.analyzeChunkRelationshipsForChunk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvedTerms: terms,
+        previousChapter: expect.objectContaining({ summary: "Prev" }),
+      }),
+    );
+    expect(jobStore.completeChunk).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps analysis failures non-fatal and logs the warning on the chunk", async () => {
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    vi.mocked(analyzerModule.analyzeChunkRelationshipsForChunk).mockResolvedValue(
+      emptyAnalysis({ warning: "Relationship analysis failed: boom." }) as never,
+    );
+    provider.generateChatCompletion.mockResolvedValueOnce({
+      content: "แปลแล้ว",
+      usage: { promptTokens: 10, completionTokens: 20 },
+    });
+
+    await translateChunk("job-1", 0, generation, runContext());
+
+    const chunkResult = vi.mocked(jobStore.completeChunk).mock.calls[0]?.[3];
+    expect(chunkResult?.logsJson).toContain("Relationship analysis failed: boom.");
+    expect(chunkResult?.translation).toBe("แปลแล้ว");
+  });
+
+  it("uses the provider created on the fourth attempt", async () => {
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    vi.mocked(providerClientModule.loadProviderRuntimeForJob)
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockResolvedValueOnce(provider as never);
+    provider.generateChatCompletion.mockResolvedValueOnce({
+      content: "แปลแล้ว",
+      usage: { promptTokens: 10, completionTokens: 20 },
+    });
+
+    await translateChunk("job-1", 0, generation, runContext());
+
+    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledWith("user-1", mockJob);
+    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledTimes(4);
+    expect(jobStore.completeChunk).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      0,
+      expect.objectContaining({ translation: "แปลแล้ว" }),
+    );
+  });
+
+  it("retries provider setup and fails without recording a chunk error", async () => {
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    vi.mocked(providerClientModule.loadProviderRuntimeForJob).mockRejectedValue(
+      new Error("Provider not configured"),
+    );
+
+    await expect(translateChunk("job-1", 0, generation, runContext())).rejects.toThrow(
+      "Provider not configured",
+    );
+    expect(providerClientModule.loadProviderRuntimeForJob).toHaveBeenCalledTimes(4);
+    expect(provider.generateChatCompletion).not.toHaveBeenCalled();
+    expect(jobStore.saveChunkFailure).not.toHaveBeenCalled();
   });
 
   it("commits all final artifacts through one guarded transaction", async () => {

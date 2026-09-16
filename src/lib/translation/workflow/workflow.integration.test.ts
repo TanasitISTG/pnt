@@ -19,6 +19,7 @@ let getRelationshipMapForUser: typeof RelationshipService.getRelationshipMapForU
 let getRelationshipWorkspaceForUser: typeof RelationshipService.getRelationshipWorkspaceForUser;
 let findOwnedTranslationJob: typeof import("../api/job-query.service").findOwnedTranslationJob;
 let findOwnedTranslationJobProgress: typeof import("../api/job-query.service").findOwnedTranslationJobProgress;
+let loadTranslationRunContext: typeof import("./run-context").loadTranslationRunContext;
 const skipEagerDispatch = async () => {};
 
 async function seedChapter(
@@ -128,6 +129,7 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     ({ enqueueTranslationJob } = await import("../api/mutations"));
     ({ findOwnedTranslationJob, findOwnedTranslationJobProgress } =
       await import("../api/job-query.service"));
+    ({ loadTranslationRunContext } = await import("./run-context"));
     ({
       setRelationshipEntryEnabledForUser,
       upsertCharacterProfileForUser,
@@ -856,6 +858,44 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
         chapterId: fixture.chapterId,
       });
       expect(latestHistory?.job.id).toBe(newerHistoricalJobId);
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("loads approved glossary terms and previous-chapter tails for the run", async () => {
+    const rawContent = `${"甲".repeat(40)}原文尾巴`;
+    const translatedContent = `${"ก".repeat(40)}ปลายทาง`;
+    const fixture = await seedChapter(rawContent);
+    try {
+      await sql`
+        UPDATE "chapters"
+        SET
+          "translated_content" = ${translatedContent},
+          "summary" = 'Previous summary',
+          "status" = 'translated'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      await sql`
+        INSERT INTO "glossary_terms" ("id", "novel_id", "source", "target", "category", "note", "status")
+        VALUES
+          (${`term-${randomUUID()}`}, ${fixture.novelId}, '甲', 'A', 'character', 'note', 'approved'),
+          (${`term-${randomUUID()}`}, ${fixture.novelId}, '乙', 'B', 'other', null, 'pending')
+      `;
+
+      const context = await loadTranslationRunContext(
+        { id: fixture.novelId, contextTailLength: 20 },
+        { number: "2" },
+      );
+
+      expect(context.terms).toEqual([
+        { source: "甲", target: "A", category: "character", note: "note" },
+      ]);
+      expect(context.previousChapter).toEqual({
+        summary: "Previous summary",
+        rawTail: rawContent.slice(-20),
+        translatedTail: translatedContent.slice(-20),
+      });
     } finally {
       await deleteFixture(fixture.userId);
     }

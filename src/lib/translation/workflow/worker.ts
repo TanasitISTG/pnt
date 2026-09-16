@@ -19,7 +19,7 @@ import {
 } from "../text/paragraphs";
 import { createLog, parseLogEntries, serializeLogEntries } from "./log-entry";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
-import type { ChunkRelationshipAnalysis } from "@/lib/relationships/analyzer";
+import { analyzeChunkRelationshipsForChunk } from "@/lib/relationships/analyzer";
 import { log } from "@/lib/log";
 import {
   beginJob,
@@ -30,24 +30,55 @@ import {
   loadJobChunk,
   loadJobChunks,
   loadApprovedTermsForContext,
-  loadPrevChapterForContext,
   saveChunkFailure,
 } from "./job-store";
 import { canRunJob, isCompletedChunk, isNextChunk } from "./job-state";
+import {
+  loadTranslationRunContext,
+  resolveContextTailLength,
+  type TranslationRunContext,
+} from "./run-context";
 import { generateSummaryArtifacts } from "./finalize-summary";
 import { suggestAndReviewTerms } from "./finalize-glossary";
 import { retryTranslationOperation } from "./retry";
-// per job, each chunk a memoized step with its own invocation + retries — so no
-// lease, no cron pinger. DB status rows stay the UI's source of truth.
+// per job, each chunk a single memoized step (analysis + translation) with its
+// own invocation + retries — so no lease, no cron pinger. DB status rows stay
+// the UI's source of truth.
 
 export async function initJob(jobId: string, generation: number) {
   log("info", "step transition", { jobId, step: "init" });
   const row = await beginJob(jobId, generation);
   if (!row) {
-    return { skip: true as const, doneChunks: 0, totalChunks: 0 };
+    return { skip: true as const, doneChunks: 0, totalChunks: 0, context: null };
   }
-  const { job } = row;
-  return { skip: false as const, doneChunks: job.doneChunks, totalChunks: job.totalChunks };
+  const { job, novel, chapter } = row;
+  // Run-stable context is loaded once and memoized for every chunk step.
+  const context = await loadTranslationRunContext(novel, chapter);
+  return {
+    skip: false as const,
+    doneChunks: job.doneChunks,
+    totalChunks: job.totalChunks,
+    context,
+  };
+}
+
+interface ChunkProviderRuntime {
+  config: AIProviderClient | null;
+  failure: string | null;
+}
+
+async function loadChunkProviderRuntime(
+  userId: string,
+  job: Parameters<typeof loadProviderRuntimeForJob>[1],
+): Promise<ChunkProviderRuntime> {
+  try {
+    return {
+      config: await retryTranslationOperation(() => loadProviderRuntimeForJob(userId, job)),
+      failure: null,
+    };
+  } catch (error) {
+    return { config: null, failure: error instanceof Error ? error.message : "provider error" };
+  }
 }
 
 interface TranslatePieceResult {
@@ -350,7 +381,7 @@ export async function translateChunk(
   jobId: string,
   i: number,
   generation: number,
-  dialogueAnalysis?: ChunkRelationshipAnalysis,
+  runContext?: TranslationRunContext,
 ): Promise<void> {
   log("info", "step transition", { jobId, step: "translateChunk", chunk: i });
   const row = await loadJobChunk(jobId, i);
@@ -362,13 +393,37 @@ export async function translateChunk(
   if (!isNextChunk(job, i)) throw new Error(`Chunk ${i} is out of sequence for job ${jobId}`);
   if (!currentChunk) throw new Error(`Chunk ${i} missing in job ${jobId}`);
 
-  const providerConfig = await loadProviderRuntimeForJob(novel.userId, job);
+  // One provider load per chunk, shared by analysis and translation. Kept per
+  // chunk rather than memoized: the decrypted key must not enter run state, and
+  // provider edits still take effect on the next chunk.
+  const providerRuntime = await loadChunkProviderRuntime(novel.userId, job);
+
+  // `init` memoizes this for the whole run. A run that was already in flight
+  // when the memo was introduced replays an init result without it, so fall back
+  // to loading it here instead of failing that run.
+  const resolvedContext = runContext ?? (await loadTranslationRunContext(novel, chapter));
+
+  const relationshipAnalysis = await analyzeChunkRelationshipsForChunk({
+    jobId,
+    generation,
+    novel,
+    chapter,
+    chunk: currentChunk,
+    previousChunk,
+    approvedTerms: resolvedContext.terms,
+    previousChapter: resolvedContext.previousChapter,
+    providerConfig: providerRuntime.config,
+    providerFailure: providerRuntime.failure,
+  });
+
+  if (!providerRuntime.config) throw new Error(providerRuntime.failure ?? "provider error");
+  const providerConfig = providerRuntime.config;
 
   const logs: LogEntry[] = parseLogEntries(job.logsJson);
 
-  if (dialogueAnalysis?.warning) {
-    logs.push(createLog("warn", dialogueAnalysis.warning));
-  } else if (dialogueAnalysis?.context) {
+  if (relationshipAnalysis.warning) {
+    logs.push(createLog("warn", relationshipAnalysis.warning));
+  } else if (relationshipAnalysis.context) {
     logs.push(createLog("success", "Relationship context analyzed for this scene."));
   }
 
@@ -379,23 +434,16 @@ export async function translateChunk(
     ),
   );
 
-  // Approved glossary terms + previous chapter for rolling context —
-  // independent reads, run them concurrently.
-  const [terms, prevChapter] = await Promise.all([
-    loadApprovedTermsForContext(novel.id),
-    loadPrevChapterForContext(novel.id, chapter.number),
-  ]);
-
-  const previousSummary = novel.storySummary || prevChapter?.summary || null;
-  const tailLen = novel.contextTailLength || 500;
+  const previousSummary = novel.storySummary || resolvedContext.previousChapter?.summary || null;
+  const tailLen = resolveContextTailLength(novel.contextTailLength);
   let previousChunkTail: string | null = null;
   if (i > 0 && previousChunk?.translation) {
     previousChunkTail = previousChunk.translation.slice(-tailLen);
-  } else if (i === 0 && prevChapter?.translatedContent) {
-    previousChunkTail = prevChapter.translatedContent.slice(-tailLen);
+  } else if (i === 0 && resolvedContext.previousChapter?.translatedTail) {
+    previousChunkTail = resolvedContext.previousChapter.translatedTail;
   }
 
-  const matchedTerms = filterGlossaryForChunk(terms, currentChunk.sourceText);
+  const matchedTerms = filterGlossaryForChunk(resolvedContext.terms, currentChunk.sourceText);
   const glossaryBlock = formatGlossaryBlock(matchedTerms);
   if (matchedTerms.length > 0) {
     logs.push(
@@ -408,7 +456,7 @@ export async function translateChunk(
 
   const translationContext = {
     previousSummary,
-    relationshipContext: dialogueAnalysis?.context ?? null,
+    relationshipContext: relationshipAnalysis.context ?? null,
   };
   const systemPrompt = buildSystemPrompt(
     `${novel.sourceLang}->${novel.targetLang}`,
@@ -504,8 +552,8 @@ export async function translateChunk(
 
   const elapsedMs = Date.now() - startTime;
   const translation = result.translation;
-  const promptTokens = result.promptTokens + (dialogueAnalysis?.promptTokens ?? 0);
-  const completionTokens = result.completionTokens + (dialogueAnalysis?.completionTokens ?? 0);
+  const promptTokens = result.promptTokens + relationshipAnalysis.promptTokens;
+  const completionTokens = result.completionTokens + relationshipAnalysis.completionTokens;
 
   logs.push(
     createLog(

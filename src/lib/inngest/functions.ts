@@ -2,7 +2,6 @@ import "@tanstack/react-start/server-only";
 
 import { inngest } from "./client";
 import { initJob, translateChunk, finalizeJob, failJob } from "@/lib/translation/workflow/worker";
-import { analyzeChunkRelationships } from "@/lib/relationships/analyzer";
 import {
   initImportJob,
   importOneChapter,
@@ -31,9 +30,10 @@ import {
 type FailedRunEventData = { event?: { data?: { jobId?: string; generation?: number } } };
 type FailedEvalRunEventData = { event?: { data?: { reportId?: string } } };
 
-// One run per translation job. Each chunk is a memoized step = its own HTTP
-// invocation (fresh 5-min Vercel budget) with automatic retries; a crash
-// resumes from the last completed step, so no DB lease is needed.
+// One run per translation job. Each chunk is one memoized step (relationship
+// analysis + translation) = its own HTTP invocation (fresh 5-min Vercel budget)
+// with automatic retries; a crash resumes from the last completed step, so no DB
+// lease is needed. `init` memoizes the run-stable context for every chunk step.
 export const translateChapterFn = inngest.createFunction(
   {
     id: "translate-chapter",
@@ -63,10 +63,7 @@ export const translateChapterFn = inngest.createFunction(
     if (init.skip) return { skipped: true };
 
     for (let i = init.doneChunks; i < init.totalChunks; i++) {
-      const dialogueAnalysis = await step.run(`context-${i}`, () =>
-        analyzeChunkRelationships(jobId, i, generation),
-      );
-      await step.run(`chunk-${i}`, () => translateChunk(jobId, i, generation, dialogueAnalysis));
+      await step.run(`chunk-${i}`, () => translateChunk(jobId, i, generation, init.context));
     }
 
     await step.run("finalize", () => finalizeJob(jobId, generation));

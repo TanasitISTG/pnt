@@ -1,16 +1,13 @@
 import "@tanstack/react-start/server-only";
 
-import { loadProviderRuntimeForJob } from "@/lib/translation/providers/provider-client";
 import { generateJsonCompletion } from "@/lib/translation/providers/json-completion";
 import { retryTranslationOperation } from "@/lib/translation/workflow/retry";
 import { parseLanguagePair, type LanguagePair } from "@/lib/translation/prompts/language";
-import { canRunJob, isNextChunk } from "@/lib/translation/workflow/job-state";
+import { applyRelationshipAnalysis } from "@/lib/translation/workflow/job-store";
 import {
-  applyRelationshipAnalysis,
-  loadApprovedTermsForContext,
-  loadJobChunk,
-  loadPrevChapterForContext,
-} from "@/lib/translation/workflow/job-store";
+  resolveContextTailLength,
+  type PreviousChapterContext,
+} from "@/lib/translation/workflow/run-context";
 import type { RelationshipPromptContext, RelationshipActivePairInput } from "./map";
 import {
   buildRelationshipPromptContext,
@@ -46,56 +43,62 @@ export interface ChunkRelationshipAnalysis {
   completionTokens: number;
 }
 
-export async function analyzeChunkRelationships(
-  jobId: string,
-  chunkIndex: number,
-  generation: number,
+export interface ChunkRelationshipAnalysisInput {
+  jobId: string;
+  generation: number;
+  novel: {
+    id: string;
+    sourceLang: string;
+    targetLang: string;
+    relationshipMapJson: string | null;
+    storySummary: string | null;
+    contextTailLength: number | null;
+  };
+  chapter: { number: string };
+  chunk: { index: number; sourceText: string };
+  previousChunk: { sourceText: string } | null;
+  approvedTerms: readonly { source: string; target: string; category: string }[];
+  previousChapter: PreviousChapterContext | null;
+  providerConfig: AIProviderClient | null;
+  providerFailure: string | null;
+}
+
+/**
+ * Relationship analysis for one chunk of an already-guarded translation run.
+ * Ownership was checked by the caller; the write path re-checks it under lock.
+ */
+export async function analyzeChunkRelationshipsForChunk(
+  input: ChunkRelationshipAnalysisInput,
 ): Promise<ChunkRelationshipAnalysis> {
-  const row = await loadJobChunk(jobId, chunkIndex);
-  if (!row || !row.chunk) return emptyResult("Relationship analysis skipped: chunk not found.");
+  const { novel, chapter, chunk, previousChunk, previousChapter } = input;
 
-  const pair = parseLanguagePair(`${row.novel.sourceLang}->${row.novel.targetLang}`);
+  const pair = parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`);
   if (!pair) return emptyResult(null);
-  if (
-    row.job.status !== "running" ||
-    !canRunJob(row.job, row.chapter, generation) ||
-    !isNextChunk(row.job, chunkIndex)
-  ) {
-    return emptyResult("Relationship analysis skipped: job is no longer runnable.");
-  }
 
-  const [terms, previousChapter] = await Promise.all([
-    loadApprovedTermsForContext(row.novel.id),
-    loadPrevChapterForContext(row.novel.id, row.chapter.number),
-  ]);
   const approvedMappings: ApprovedCharacterMapping[] = [];
-  for (const term of terms) {
+  for (const term of input.approvedTerms) {
     if (term.category === "character") {
       approvedMappings.push({ source: term.source, target: term.target });
     }
   }
-  const storedMap = parseRelationshipMap(row.novel.relationshipMapJson);
+  const storedMap = parseRelationshipMap(novel.relationshipMapJson);
   const baseMap = storedMap ?? emptyRelationshipMap();
+  const tailLength = resolveContextTailLength(novel.contextTailLength);
   const sourceTail =
-    chunkIndex > 0
-      ? row.previousChunk?.sourceText.slice(-(row.novel.contextTailLength || 500)) || null
-      : previousChapter?.rawContent?.slice(-(row.novel.contextTailLength || 500)) || null;
+    chunk.index > 0
+      ? previousChunk?.sourceText.slice(-tailLength) || null
+      : previousChapter?.rawTail || null;
   const invalidMapWarning =
-    row.novel.relationshipMapJson && !storedMap
+    novel.relationshipMapJson && !storedMap
       ? "Stored relationship map is invalid; automatic facts were not written."
       : null;
 
-  let providerConfig: AIProviderClient;
-  try {
-    providerConfig = await retryTranslationOperation(() =>
-      loadProviderRuntimeForJob(row.novel.userId, row.job),
-    );
-  } catch (error) {
+  if (!input.providerConfig) {
     return {
-      context: buildRelationshipPromptContextForText(storedMap, row.chunk.sourceText),
+      context: buildRelationshipPromptContextForText(storedMap, chunk.sourceText),
       warning: joinWarnings(
         invalidMapWarning,
-        `Relationship analysis unavailable: ${error instanceof Error ? error.message : "provider error"}.`,
+        `Relationship analysis unavailable: ${input.providerFailure ?? "provider error"}.`,
       ),
       promptTokens: 0,
       completionTokens: 0,
@@ -104,29 +107,29 @@ export async function analyzeChunkRelationships(
 
   const sourceAnalysis = await analyzeRelationshipSourceChunk({
     pair,
-    providerConfig,
+    providerConfig: input.providerConfig,
     existingMap: baseMap,
     approvedMappings,
-    storySummary: row.novel.storySummary ?? previousChapter?.summary ?? null,
+    storySummary: novel.storySummary ?? previousChapter?.summary ?? null,
     previousSourceTail: sourceTail,
-    currentChunk: row.chunk.sourceText,
-    chapterNumber: row.chapter.number,
+    currentChunk: chunk.sourceText,
+    chapterNumber: chapter.number,
   });
 
   let context = sourceAnalysis.context;
   const warnings = [invalidMapWarning, sourceAnalysis.warning];
   if (sourceAnalysis.analysis && storedMap) {
     const applied = await applyRelationshipAnalysis(
-      jobId,
-      generation,
-      chunkIndex,
+      input.jobId,
+      input.generation,
+      chunk.index,
       sourceAnalysis.analysis,
     );
     context =
       buildSceneContext(
         applied.map ?? sourceAnalysis.map,
         sourceAnalysis.analysis,
-        row.chunk.sourceText,
+        chunk.sourceText,
       ) ?? context;
     warnings.push(...applied.warnings);
   }
