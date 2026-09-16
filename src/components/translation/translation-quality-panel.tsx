@@ -1,18 +1,22 @@
+import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import { TranslationEvalReportDialog } from "@/components/translation/translation-eval-report-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { formatLocalDateTime } from "@/lib/date-time";
 import { translationEvalReportsQueryOptions } from "@/lib/translation/evaluation/eval.query";
 import { startTranslationEval } from "@/lib/translation/evaluation/eval.functions";
 import {
+  evalSelectorSchema,
   startTranslationEvalSchema,
   type EvalReportSummary,
   type EvalReviewSearch,
@@ -39,6 +43,8 @@ function statusVariant(
   if (status === "done") return "outline";
   return "secondary";
 }
+
+const qualityCheckFormSchema = z.object({ chapterSelector: evalSelectorSchema });
 
 function LatestSummary({
   report,
@@ -154,14 +160,12 @@ export function TranslationQualityPanel({
 }: TranslationQualityPanelProps) {
   const queryClient = useQueryClient();
   const selectorInputRef = useRef<HTMLInputElement>(null);
-  const [selector, setSelector] = useState("first3");
-  const [selectorError, setSelectorError] = useState<string | null>(null);
   const mounted = useHydrated();
   const reportsQuery = useQuery(translationEvalReportsQueryOptions(novelId));
   const reports = reportsQuery.data ?? [];
   const latest = reports[0];
 
-  const { mutate: runEval, isPending: queueing } = useMutation({
+  const { mutateAsync: runEval, isPending: queueing } = useMutation({
     mutationFn: (nextSelector: string) =>
       startTranslationEval({ data: { novelId, chapterSelector: nextSelector } }),
     onSuccess: ({ reportId }) => {
@@ -179,28 +183,42 @@ export function TranslationQualityPanel({
     },
   });
 
-  const queueSelector = (nextSelector: string, closeReview = false) => {
-    setSelector(nextSelector);
-    const result = startTranslationEvalSchema.safeParse({
-      novelId,
-      chapterSelector: nextSelector,
+  const closeReview = useCallback(() => {
+    onReviewSearchChange({
+      reviewReport: undefined,
+      reviewFilter: "attention",
+      reviewPage: 1,
+      reviewPageSize: 25,
     });
-    if (!result.success) {
-      setSelectorError(result.error.issues[0]?.message ?? "Enter a valid chapter selection.");
-      if (closeReview) {
-        onReviewSearchChange({
-          reviewReport: undefined,
-          reviewFilter: "attention",
-          reviewPage: 1,
-          reviewPageSize: 25,
-        });
+  }, [onReviewSearchChange]);
+
+  const form = useForm({
+    defaultValues: {
+      chapterSelector: "first3",
+    },
+    onSubmitMeta: { closeReview: false },
+    validators: {
+      onSubmit: qualityCheckFormSchema,
+    },
+    onSubmitInvalid: ({ meta }) => {
+      if (meta.closeReview) {
+        closeReview();
+        return;
       }
-      if (!closeReview) selectorInputRef.current?.focus();
-      return;
-    }
-    setSelectorError(null);
-    runEval(result.data.chapterSelector);
-  };
+      selectorInputRef.current?.focus();
+    },
+    onSubmit: async ({ value }) => {
+      const parsed = startTranslationEvalSchema.parse({
+        novelId,
+        chapterSelector: value.chapterSelector,
+      });
+      try {
+        await runEval(parsed.chapterSelector);
+      } catch {
+        // The mutation owns the error toast.
+      }
+    },
+  });
 
   const viewReport = (report: EvalReportSummary) => {
     onReviewSearchChange({
@@ -223,50 +241,62 @@ export function TranslationQualityPanel({
         </CardHeader>
         <CardContent className="space-y-4">
           <form
-            className="space-y-2"
+            noValidate
             onSubmit={(event) => {
               event.preventDefault();
-              queueSelector(selector);
+              void form.handleSubmit();
             }}
           >
-            <Label htmlFor="translationEvalSelector">Chapters to check</Label>
-            <p id="translationEvalSelectorHelp" className="text-caption text-muted-foreground">
-              Use <code>first3</code>, <code>all</code>, or chapter numbers and ranges such as{" "}
-              <code>1,1.5,5-8</code>.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Input
-                ref={selectorInputRef}
-                id="translationEvalSelector"
-                name="chapterSelector"
-                autoComplete="off"
-                spellCheck={false}
-                value={selector}
-                onChange={(event) => {
-                  setSelector(event.target.value);
-                  if (selectorError) setSelectorError(null);
-                }}
-                aria-describedby={
-                  selectorError
-                    ? "translationEvalSelectorHelp translationEvalSelectorError"
-                    : "translationEvalSelectorHelp"
-                }
-                aria-invalid={selectorError ? true : undefined}
-                className="min-h-11"
-              />
-              <Button type="submit" className="min-h-11" disabled={queueing}>
-                {queueing ? "Queueing…" : "Run check"}
-              </Button>
-            </div>
-            {selectorError ? (
-              <p
-                id="translationEvalSelectorError"
-                className="text-sm font-medium text-destructive"
-                role="alert"
-              >
-                {selectorError}
-              </p>
-            ) : null}
+            <form.Field name="chapterSelector">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                return (
+                  <Field data-invalid={invalid || undefined}>
+                    <FieldLabel htmlFor="translationEvalSelector">Chapters to check</FieldLabel>
+                    <FieldDescription id="translationEvalSelectorHelp">
+                      Use <code>first3</code>, <code>all</code>, or chapter numbers and ranges such
+                      as <code>1,1.5,5-8</code>.
+                    </FieldDescription>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <Input
+                        ref={selectorInputRef}
+                        id="translationEvalSelector"
+                        name={field.name}
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => field.handleChange(event.target.value)}
+                        aria-describedby={
+                          invalid
+                            ? "translationEvalSelectorHelp translationEvalSelectorError"
+                            : "translationEvalSelectorHelp"
+                        }
+                        aria-invalid={invalid || undefined}
+                        className="min-h-11"
+                      />
+                      <form.Subscribe selector={(state) => state.isSubmitting}>
+                        {(isSubmitting) => {
+                          const pending = isSubmitting || queueing;
+                          return (
+                            <Button type="submit" className="min-h-11" disabled={pending}>
+                              {pending ? <Spinner /> : null}
+                              {pending ? "Queueing…" : "Run check"}
+                            </Button>
+                          );
+                        }}
+                      </form.Subscribe>
+                    </div>
+                    {invalid ? (
+                      <FieldError
+                        id="translationEvalSelectorError"
+                        errors={field.state.meta.errors}
+                      />
+                    ) : null}
+                  </Field>
+                );
+              }}
+            </form.Field>
           </form>
 
           {latest ? (
@@ -296,7 +326,10 @@ export function TranslationQualityPanel({
         novelId={novelId}
         reviewSearch={reviewSearch}
         onReviewSearchChange={onReviewSearchChange}
-        onRunAgain={(nextSelector) => queueSelector(nextSelector, true)}
+        onRunAgain={(nextSelector) => {
+          form.setFieldValue("chapterSelector", nextSelector);
+          void form.handleSubmit({ closeReview: true });
+        }}
         queueing={queueing}
       />
     </>

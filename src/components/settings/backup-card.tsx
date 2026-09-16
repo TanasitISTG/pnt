@@ -1,14 +1,39 @@
 import { useRef, useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { exportBackup, importBackup } from "@/lib/backup.functions";
+
+const backupImportSchema = z.object({
+  file: z.custom<File>((file) => typeof File !== "undefined" && file instanceof File, {
+    message: "Choose a JSON backup file",
+  }),
+});
 
 export function BackupCard() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const importForm = useForm({
+    defaultValues: { file: null as File | null },
+    validators: { onSubmit: backupImportSchema },
+    onSubmit: async ({ value }) => {
+      try {
+        const parsed: unknown = JSON.parse(await value.file!.text());
+        const result = await importBackup({ data: { backup: parsed } });
+        toast.success(`Imported ${result.importedNovelCount} novel(s)`);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to import backup");
+      } finally {
+        importForm.reset();
+        if (inputRef.current) inputRef.current.value = "";
+      }
+    },
+  });
+  const importing = useStore(importForm.store, (state) => state.isSubmitting);
 
   const onExport = async () => {
     setExporting(true);
@@ -29,21 +54,6 @@ export function BackupCard() {
     }
   };
 
-  const onImportFile = async (file: File | undefined) => {
-    if (!file) return;
-    setImporting(true);
-    try {
-      const parsed: unknown = JSON.parse(await file.text());
-      const result = await importBackup({ data: { backup: parsed } });
-      toast.success(`Imported ${result.importedNovelCount} novel(s)`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to import backup");
-    } finally {
-      setImporting(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -54,24 +64,41 @@ export function BackupCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 sm:flex-row">
-        <Button type="button" onClick={onExport} disabled={exporting}>
+        <Button type="button" onClick={() => void onExport()} disabled={exporting}>
+          {exporting && <Spinner />}
           {exporting ? "Exporting…" : "Export JSON"}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => inputRef.current?.click()}
-          disabled={importing}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void importForm.handleSubmit();
+          }}
         >
-          {importing ? "Importing…" : "Import JSON"}
-        </Button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(event) => onImportFile(event.target.files?.[0])}
-        />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => inputRef.current?.click()}
+            disabled={importing}
+          >
+            {importing && <Spinner />}
+            {importing ? "Importing…" : "Import JSON"}
+          </Button>
+          <importForm.Field name="file">
+            {(field) => (
+              <input
+                ref={inputRef}
+                name={field.name}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(event) => {
+                  field.handleChange(event.target.files?.[0] ?? null);
+                  void importForm.handleSubmit();
+                }}
+              />
+            )}
+          </importForm.Field>
+        </form>
       </CardContent>
     </Card>
   );

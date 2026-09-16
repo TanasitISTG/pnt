@@ -150,10 +150,6 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     selectByRange,
     batchStarting,
     batchStopping,
-    batchRangeFrom,
-    setBatchRangeFrom,
-    batchRangeTo,
-    setBatchRangeTo,
     handleBatchTranslate,
     handleBatchRetranslate,
     handleBatchStop,
@@ -169,15 +165,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     setBatchRetranslateOpen(false);
   }, [handleBatchRetranslate]);
 
-  const {
-    editState,
-    setEditState,
-    editErrors,
-    savingTitle,
-    handleStartEdit,
-    handleSaveEdit,
-    handleTitleChange,
-  } = useChapterTitleEdit(novelId);
+  const { editState, setEditState, handleStartEdit, handleSaveTitle } =
+    useChapterTitleEdit(novelId);
   const handleCancelEdit = useCallback(() => setEditState(null), [setEditState]);
   const missingTitleCount = useMemo(
     () => chapters.filter((chapter) => !chapter.translatedTitle?.trim()).length,
@@ -254,10 +243,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     onRequestRetranslate: setRetranslateChapterId,
     onViewLogs: setLogChapterId,
     titleEdit: editState,
-    editErrors,
-    savingTitle,
-    onTitleChange: handleTitleChange,
-    onSaveTitle: handleSaveEdit,
+    onSaveTitle: handleSaveTitle,
     onStartEdit: handleStartEdit,
     onCancelEdit: handleCancelEdit,
     onDeleteChapter: setDeleteChapterId,
@@ -271,8 +257,6 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     refetchActiveJobs,
     backfillTitles,
     backfillingTitles,
-    batchRangeFrom,
-    batchRangeTo,
     batchStarting,
     batchStopping,
     cancelTranslate,
@@ -334,8 +318,6 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     selectedMissingIds,
     selectedTranslatedIds,
     selectedIds,
-    setBatchRangeFrom,
-    setBatchRangeTo,
     setDeleteAllTranslationsOpen,
     setDeleteChapterId,
     setDeleteNovelOpen,

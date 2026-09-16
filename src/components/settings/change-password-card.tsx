@@ -1,31 +1,53 @@
-import { useState } from "react";
-import { Loader2, Key } from "lucide-react";
+import { useForm, useStore } from "@tanstack/react-form";
+import { Key } from "lucide-react";
 
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import type { ChangePasswordInput } from "@/lib/settings/schemas";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { changePasswordSchema, type ChangePasswordInput } from "@/lib/settings/schemas";
+
+const emptyPasswordForm: ChangePasswordInput = {
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+};
+
+const passwordFieldIds: Record<keyof ChangePasswordInput, string> = {
+  currentPassword: "currentPassword",
+  newPassword: "newPassword",
+  confirmPassword: "confirmPassword",
+};
 
 export interface ChangePasswordCardProps {
-  pending: boolean;
   onSubmit: (data: ChangePasswordInput) => Promise<boolean>;
 }
 
-export function ChangePasswordCard({ pending, onSubmit }: ChangePasswordCardProps) {
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const changed = await onSubmit({ currentPassword, newPassword, confirmPassword });
-    if (changed) {
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    }
-  };
+export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
+  const form = useForm({
+    defaultValues: emptyPasswordForm,
+    validators: { onSubmit: changePasswordSchema },
+    onSubmitInvalid: ({ formApi, value }) => {
+      const result = changePasswordSchema.safeParse(value);
+      if (result.success) return;
+      const invalidNames = result.error.issues
+        .map((issue) => issue.path[0])
+        .filter(
+          (name): name is keyof ChangePasswordInput =>
+            typeof name === "string" && name in passwordFieldIds,
+        );
+      for (const name of invalidNames) {
+        formApi.setFieldMeta(name, (previous) => ({ ...previous, isTouched: true }));
+      }
+      const firstName = invalidNames[0];
+      if (firstName) document.getElementById(passwordFieldIds[firstName])?.focus();
+    },
+    onSubmit: async ({ value }) => {
+      if (await onSubmit(changePasswordSchema.parse(value))) form.reset();
+    },
+  });
+  const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
 
   return (
     <Card className="rounded-xl border border-border bg-card">
@@ -37,43 +59,78 @@ export function ChangePasswordCard({ pending, onSubmit }: ChangePasswordCardProp
         <CardDescription>Update your admin account password.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="max-w-md space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="currentPassword">Current Password</Label>
-            <Input
-              id="currentPassword"
-              type="password"
-              required
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="newPassword">New Password</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              required
-              minLength={8}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm New Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              required
-              minLength={8}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-          </div>
+        <form
+          noValidate
+          className="max-w-md space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit();
+          }}
+        >
+          <form.Field name="currentPassword">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+              return (
+                <Field data-invalid={invalid || undefined}>
+                  <FieldLabel htmlFor="currentPassword">Current Password</FieldLabel>
+                  <Input
+                    id="currentPassword"
+                    name={field.name}
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              );
+            }}
+          </form.Field>
+          <form.Field name="newPassword">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+              return (
+                <Field data-invalid={invalid || undefined}>
+                  <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
+                  <Input
+                    id="newPassword"
+                    name={field.name}
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              );
+            }}
+          </form.Field>
+          <form.Field name="confirmPassword">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+              return (
+                <Field data-invalid={invalid || undefined}>
+                  <FieldLabel htmlFor="confirmPassword">Confirm New Password</FieldLabel>
+                  <Input
+                    id="confirmPassword"
+                    name={field.name}
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              );
+            }}
+          </form.Field>
           <div className="pt-2">
-            <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="animate-spin" />}
-              {pending ? "Updating…" : "Update Password"}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Spinner />}
+              {isSubmitting ? "Updating…" : "Update Password"}
             </Button>
           </div>
         </form>

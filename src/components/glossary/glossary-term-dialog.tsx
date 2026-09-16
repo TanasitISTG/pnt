@@ -1,5 +1,7 @@
-import { ArrowLeft, Check, Loader2 } from "lucide-react";
-import type { FormEvent, ReactNode } from "react";
+import { useEffect } from "react";
+import { useForm } from "@tanstack/react-form";
+import { ArrowLeft, Check } from "lucide-react";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,17 +13,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import type { TermCategory } from "@/lib/glossary/schemas";
+import {
+  createTermSchema,
+  GLOSSARY_TERM_NOTE_MAX_LENGTH,
+  GLOSSARY_TERM_TEXT_MAX_LENGTH,
+  termCategorySchema,
+  type TermCategory,
+} from "@/lib/glossary/schemas";
 
 export interface GlossaryTermDraft {
   source: string;
@@ -30,10 +40,14 @@ export interface GlossaryTermDraft {
   note: string;
 }
 
-export interface GlossaryEditState extends GlossaryTermDraft {
-  termId: string;
-  originalTarget: string;
-}
+export type GlossaryTermDialogDescriptor =
+  | { mode: "add"; initialValues: GlossaryTermDraft }
+  | {
+      mode: "edit";
+      termId: string;
+      originalTarget: string;
+      initialValues: GlossaryTermDraft;
+    };
 
 export interface TermReplacementPreview {
   chapterCount: number;
@@ -41,15 +55,10 @@ export interface TermReplacementPreview {
 }
 
 interface GlossaryTermDialogProps {
-  mode: "add" | "edit" | null;
+  descriptor: GlossaryTermDialogDescriptor | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  addDraft: GlossaryTermDraft;
-  onAddDraftChange: (draft: GlossaryTermDraft) => void;
-  editState: GlossaryEditState | null;
-  onEditStateChange: (state: GlossaryEditState) => void;
-  errors: Record<string, string>;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: (draft: GlossaryTermDraft) => Promise<void>;
   addingTerm: boolean;
   savingEdit: boolean;
   previewingReplace: boolean;
@@ -57,6 +66,20 @@ interface GlossaryTermDialogProps {
   onBackFromReplacement: () => void;
   onReplaceConfirm: (applyToChapters: boolean) => void;
 }
+
+const emptyDraft: GlossaryTermDraft = {
+  source: "",
+  target: "",
+  category: "character",
+  note: "",
+};
+
+const glossaryTermFormSchema = z.object({
+  source: createTermSchema.shape.source,
+  target: createTermSchema.shape.target,
+  category: termCategorySchema,
+  note: z.string().max(GLOSSARY_TERM_NOTE_MAX_LENGTH),
+});
 
 const categoryItems: Record<string, string> = {
   character: "Character",
@@ -66,34 +89,19 @@ const categoryItems: Record<string, string> = {
   other: "Other",
 };
 
-type UpdateGlossaryDraft = (changes: Partial<GlossaryTermDraft>) => void;
-
-function getSubmitLabel(
-  mode: NonNullable<GlossaryTermDialogProps["mode"]>,
-  addingTerm: boolean,
-  savingEdit: boolean,
-  previewingReplace: boolean,
-) {
-  if (mode === "add") return addingTerm ? "Adding…" : "Add term";
-  if (previewingReplace) return "Checking chapters…";
-  return savingEdit ? "Saving…" : "Save term";
-}
-
-interface GlossaryReplacementStepProps {
-  replacement: TermReplacementPreview;
-  originalTarget: string;
-  savingEdit: boolean;
-  onBack: () => void;
-  onConfirm: (applyToChapters: boolean) => void;
-}
-
 function GlossaryReplacementStep({
   replacement,
   originalTarget,
   savingEdit,
   onBack,
   onConfirm,
-}: GlossaryReplacementStepProps) {
+}: {
+  replacement: TermReplacementPreview;
+  originalTarget: string;
+  savingEdit: boolean;
+  onBack: () => void;
+  onConfirm: (applyToChapters: boolean) => void;
+}) {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
@@ -109,17 +117,20 @@ function GlossaryReplacementStep({
         cannot be undone.
       </p>
       <DialogFooter>
-        <Button variant="outline" onClick={onBack} disabled={savingEdit}>
+        <Button type="button" variant="outline" onClick={onBack} disabled={savingEdit}>
           <ArrowLeft className="size-4" />
           Back
         </Button>
-        <Button variant="outline" onClick={() => onConfirm(false)} disabled={savingEdit}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onConfirm(false)}
+          disabled={savingEdit}
+        >
           Save glossary only
         </Button>
-        <Button onClick={() => onConfirm(true)} disabled={savingEdit}>
-          {savingEdit ? (
-            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
-          ) : null}
+        <Button type="button" onClick={() => onConfirm(true)} disabled={savingEdit}>
+          {savingEdit && <Spinner />}
           {savingEdit ? "Saving…" : "Replace & save"}
         </Button>
       </DialogFooter>
@@ -127,119 +138,10 @@ function GlossaryReplacementStep({
   );
 }
 
-interface GlossaryTermFormProps {
-  mode: NonNullable<GlossaryTermDialogProps["mode"]>;
-  draft: GlossaryTermDraft;
-  errors: Record<string, string>;
-  pending: boolean;
-  addingTerm: boolean;
-  savingEdit: boolean;
-  previewingReplace: boolean;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onCancel: () => void;
-  onUpdateDraft: UpdateGlossaryDraft;
-}
-
-function GlossaryTermForm({
-  mode,
-  draft,
-  errors,
-  pending,
-  addingTerm,
-  savingEdit,
-  previewingReplace,
-  onSubmit,
-  onCancel,
-  onUpdateDraft,
-}: GlossaryTermFormProps) {
-  const submitLabel = getSubmitLabel(mode, addingTerm, savingEdit, previewingReplace);
-  return (
-    <form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
-      <FormField id="glossary-source" label="Source term" error={errors.source}>
-        {({ id, ...fieldProps }) => (
-          <Input
-            {...fieldProps}
-            id={id}
-            value={draft.source}
-            maxLength={500}
-            onChange={(event) => onUpdateDraft({ source: event.target.value })}
-          />
-        )}
-      </FormField>
-      <FormField id="glossary-target" label="Target translation" error={errors.target}>
-        {({ id, ...fieldProps }) => (
-          <Input
-            {...fieldProps}
-            id={id}
-            value={draft.target}
-            maxLength={500}
-            onChange={(event) => onUpdateDraft({ target: event.target.value })}
-          />
-        )}
-      </FormField>
-      <FormField id="glossary-category" label="Category" error={errors.category}>
-        {({ id, ...fieldProps }) => (
-          <Select
-            value={draft.category}
-            items={categoryItems}
-            onValueChange={(value) => value && onUpdateDraft({ category: value as TermCategory })}
-          >
-            <SelectTrigger {...fieldProps} id={id}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="character">Character</SelectItem>
-              <SelectItem value="place">Place</SelectItem>
-              <SelectItem value="skill">Skill</SelectItem>
-              <SelectItem value="item">Item</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-      </FormField>
-      <FormField
-        id="glossary-note"
-        label="Note"
-        hint="Optional context for future editing."
-        error={errors.note}
-      >
-        {({ id, ...fieldProps }) => (
-          <Textarea
-            {...fieldProps}
-            id={id}
-            value={draft.note}
-            maxLength={1000}
-            onChange={(event) => onUpdateDraft({ note: event.target.value })}
-            className="min-h-10"
-          />
-        )}
-      </FormField>
-      <DialogFooter className="sm:col-span-2">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={pending}>
-          {pending ? (
-            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Check className="size-4" />
-          )}
-          {submitLabel}
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-}
-
 export function GlossaryTermDialog({
-  mode,
+  descriptor,
   open,
   onOpenChange,
-  addDraft,
-  onAddDraftChange,
-  editState,
-  onEditStateChange,
-  errors,
   onSubmit,
   addingTerm,
   savingEdit,
@@ -248,22 +150,41 @@ export function GlossaryTermDialog({
   onBackFromReplacement,
   onReplaceConfirm,
 }: GlossaryTermDialogProps) {
-  const pending = addingTerm || savingEdit || previewingReplace;
-  const draft = mode === "edit" ? editState : addDraft;
-  if (!mode || !draft) return null;
+  const form = useForm({
+    defaultValues: emptyDraft,
+    validators: {
+      onSubmit: glossaryTermFormSchema,
+    },
+    onSubmitInvalid: ({ formApi, value }) => {
+      const result = glossaryTermFormSchema.safeParse(value);
+      if (result.success) return;
+      const invalidNames = result.error.issues
+        .map((issue) => issue.path[0])
+        .filter(
+          (name): name is keyof GlossaryTermDraft =>
+            name === "source" || name === "target" || name === "category" || name === "note",
+        );
+      for (const name of invalidNames) {
+        formApi.setFieldMeta(name, (previous) => ({ ...previous, isTouched: true }));
+      }
+    },
+    onSubmit: async ({ value }) => {
+      await onSubmit(glossaryTermFormSchema.parse(value));
+    },
+  });
 
-  const title = mode === "edit" ? "Edit glossary term" : "Add glossary term";
+  useEffect(() => {
+    if (!open || !descriptor) return;
+    form.reset(descriptor.initialValues, { keepDefaultValues: true });
+  }, [descriptor, form, open]);
+
+  if (!descriptor) return null;
+  const pending = addingTerm || savingEdit || previewingReplace || form.state.isSubmitting;
+  const title = descriptor.mode === "edit" ? "Edit glossary term" : "Add glossary term";
   const description =
-    mode === "edit"
+    descriptor.mode === "edit"
       ? "Update the mapping used to keep future translations consistent."
       : "Add a source-to-target mapping for this novel's future translations.";
-  const updateDraft = (changes: Partial<GlossaryTermDraft>) => {
-    if (mode === "edit" && editState) {
-      onEditStateChange({ ...editState, ...changes });
-    } else {
-      onAddDraftChange({ ...addDraft, ...changes });
-    }
-  };
 
   return (
     <Dialog
@@ -295,74 +216,165 @@ export function GlossaryTermDialog({
           <span aria-hidden="true">×</span>
         </DialogClose>
 
-        {replacement && mode === "edit" ? (
+        {replacement && descriptor.mode === "edit" ? (
           <GlossaryReplacementStep
             replacement={replacement}
-            originalTarget={editState?.originalTarget ?? ""}
+            originalTarget={descriptor.originalTarget}
             savingEdit={savingEdit}
             onBack={onBackFromReplacement}
             onConfirm={onReplaceConfirm}
           />
         ) : (
-          <GlossaryTermForm
-            mode={mode}
-            draft={draft}
-            errors={errors}
-            pending={pending}
-            addingTerm={addingTerm}
-            savingEdit={savingEdit}
-            previewingReplace={previewingReplace}
-            onSubmit={onSubmit}
-            onCancel={() => onOpenChange(false)}
-            onUpdateDraft={updateDraft}
-          />
+          <form
+            noValidate
+            className="grid gap-4 sm:grid-cols-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void form.handleSubmit();
+            }}
+          >
+            <form.Field name="source">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                const errorId = invalid ? "glossary-source-error" : undefined;
+                return (
+                  <Field data-invalid={invalid || undefined} className="min-w-0">
+                    <FieldLabel htmlFor="glossary-source">Source term</FieldLabel>
+                    <Input
+                      id="glossary-source"
+                      name={field.name}
+                      value={field.state.value}
+                      maxLength={GLOSSARY_TERM_TEXT_MAX_LENGTH}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      aria-invalid={invalid}
+                      aria-describedby={errorId}
+                    />
+                    {invalid && <FieldError id={errorId} errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            </form.Field>
+
+            <form.Field name="target">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                const errorId = invalid ? "glossary-target-error" : undefined;
+                return (
+                  <Field data-invalid={invalid || undefined} className="min-w-0">
+                    <FieldLabel htmlFor="glossary-target">Target translation</FieldLabel>
+                    <Input
+                      id="glossary-target"
+                      name={field.name}
+                      value={field.state.value}
+                      maxLength={GLOSSARY_TERM_TEXT_MAX_LENGTH}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      aria-invalid={invalid}
+                      aria-describedby={errorId}
+                    />
+                    {invalid && <FieldError id={errorId} errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            </form.Field>
+
+            <form.Field name="category">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                const errorId = "glossary-category-error";
+                return (
+                  <Field data-invalid={invalid || undefined} className="min-w-0">
+                    <FieldLabel htmlFor="glossary-category">Category</FieldLabel>
+                    <Select
+                      name={field.name}
+                      value={field.state.value}
+                      items={categoryItems}
+                      onValueChange={(value) => value && field.handleChange(value as TermCategory)}
+                    >
+                      <SelectTrigger
+                        id="glossary-category"
+                        onBlur={field.handleBlur}
+                        aria-invalid={invalid}
+                        aria-describedby={invalid ? errorId : undefined}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="character">Character</SelectItem>
+                          <SelectItem value="place">Place</SelectItem>
+                          <SelectItem value="skill">Skill</SelectItem>
+                          <SelectItem value="item">Item</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    {invalid && <FieldError id={errorId} errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            </form.Field>
+
+            <form.Field name="note">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                const hintId = "glossary-note-hint";
+                const errorId = invalid ? "glossary-note-error" : undefined;
+                return (
+                  <Field data-invalid={invalid || undefined} className="min-w-0">
+                    <FieldLabel htmlFor="glossary-note">Note</FieldLabel>
+                    <Textarea
+                      id="glossary-note"
+                      name={field.name}
+                      value={field.state.value}
+                      maxLength={GLOSSARY_TERM_NOTE_MAX_LENGTH}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      aria-invalid={invalid}
+                      aria-describedby={[hintId, errorId].filter(Boolean).join(" ")}
+                      className="min-h-10"
+                    />
+                    <FieldDescription id={hintId}>
+                      Optional context for future editing.
+                    </FieldDescription>
+                    {invalid && <FieldError id={errorId} errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            </form.Field>
+
+            <DialogFooter className="sm:col-span-2">
+              <form.Subscribe selector={(state) => state.isSubmitting}>
+                {(isSubmitting) => (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => onOpenChange(false)}
+                      disabled={pending || isSubmitting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={pending || isSubmitting}>
+                      {pending || isSubmitting ? <Spinner /> : <Check className="size-4" />}
+                      {descriptor.mode === "add"
+                        ? pending || isSubmitting
+                          ? "Adding…"
+                          : "Add term"
+                        : previewingReplace
+                          ? "Checking chapters…"
+                          : pending || isSubmitting
+                            ? "Saving…"
+                            : "Save term"}
+                    </Button>
+                  </>
+                )}
+              </form.Subscribe>
+            </DialogFooter>
+          </form>
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-type FieldControlProps = {
-  id: string;
-  "aria-describedby"?: string;
-  "aria-invalid": boolean;
-};
-
-function FormField({
-  id,
-  label,
-  hint,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  error?: string;
-  children: (props: FieldControlProps) => ReactNode;
-}) {
-  const hintId = hint ? `${id}-hint` : undefined;
-  const errorId = error ? `${id}-error` : undefined;
-  const describedBy =
-    [hintId, errorId].filter((value): value is string => Boolean(value)).join(" ") || undefined;
-  return (
-    <div className="min-w-0 space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children({
-        id,
-        "aria-describedby": describedBy,
-        "aria-invalid": Boolean(error),
-      })}
-      {hint && (
-        <p id={hintId} className="text-caption text-muted-foreground">
-          {hint}
-        </p>
-      )}
-      {error && (
-        <p id={errorId} role="alert" className="text-caption text-destructive">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

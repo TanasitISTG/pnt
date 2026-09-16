@@ -114,7 +114,7 @@ describe("ScrapeImportSection", () => {
     expect(toInput.autocomplete).toBe("off");
   });
 
-  it("shows invalid range feedback inline and clears it when the range changes", () => {
+  it("shows invalid range feedback inline and clears it when the range changes", async () => {
     renderScrape();
     fireEvent.change(screen.getByLabelText("Chapter source URL"), {
       target: { value: "https://example.test/chapter-1" },
@@ -127,11 +127,11 @@ describe("ScrapeImportSection", () => {
 
     const message =
       "Enter a valid range: first chapter must be at least 1, last chapter cannot be earlier, and the range can contain at most 500 chapters.";
-    expect(screen.getByText(message)).toBeTruthy();
+    expect(await screen.findByText(message)).toBeTruthy();
     expect(mocks.startImport).not.toHaveBeenCalled();
 
     fireEvent.change(toInput, { target: { value: "6" } });
-    expect(screen.queryByText(message)).toBeNull();
+    await vi.waitFor(() => expect(screen.queryByText(message)).toBeNull());
   });
 
   it("blocks only range start while another bulk import is active", () => {

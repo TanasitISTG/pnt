@@ -46,8 +46,7 @@ export function RelationshipsPage() {
   });
   const {
     actions,
-    characterErrors,
-    characterForm,
+    characterDialog,
     closeCharacterDialog,
     closeDeleteDialog,
     closeRelationshipDialog,
@@ -56,12 +55,9 @@ export function RelationshipsPage() {
     deleting,
     openCharacterAdd,
     openRelationshipAdd,
-    relationshipErrors,
-    relationshipForm,
+    relationshipDialog,
     saveCharacterPending,
     saveRelationshipPending,
-    setCharacterForm,
-    setRelationshipForm,
     submitCharacter,
     submitRelationship,
   } = useRelationshipsPageController(novelId);
@@ -168,20 +164,16 @@ export function RelationshipsPage() {
       />
 
       <CharacterFormDialog
-        form={characterForm}
+        descriptor={characterDialog}
         targetLanguage={languageLabels.target}
-        errors={characterErrors}
         saving={saveCharacterPending}
-        onChange={setCharacterForm}
         onSubmit={submitCharacter}
         onOpenChange={closeCharacterDialog}
       />
       <RelationshipFormDialog
-        form={relationshipForm}
+        descriptor={relationshipDialog}
         characters={map.characters}
-        errors={relationshipErrors}
         saving={saveRelationshipPending}
-        onChange={setRelationshipForm}
         onSubmit={submitRelationship}
         onOpenChange={closeRelationshipDialog}
       />

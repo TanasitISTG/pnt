@@ -15,8 +15,6 @@ export function useChapterSelection(
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchStarting, setBatchStarting] = useState(false);
   const [batchStopping, setBatchStopping] = useState(false);
-  const [batchRangeFrom, setBatchRangeFrom] = useState("");
-  const [batchRangeTo, setBatchRangeTo] = useState("");
 
   const isRowTranslating = useCallback(
     (chapterId: string, status: string) => {
@@ -75,28 +73,25 @@ export function useChapterSelection(
     });
   }, []);
 
-  const selectByRange = useCallback(() => {
-    const from = Number(batchRangeFrom);
-    const to = Number(batchRangeTo);
-    if (!Number.isFinite(from) || !Number.isFinite(to) || from < 1 || from > to) {
-      toast.error("Enter a valid range (from ≥ 1, from ≤ to)");
-      return;
-    }
-    const inRange = chapters.filter((chapter) => {
-      const num = Number(chapter.number);
-      return num >= from && num <= to;
-    });
-    if (inRange.length === 0) {
-      toast.info("No chapters in that range");
-      return;
-    }
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      for (const chapter of inRange) next.add(chapter.id);
-      return next;
-    });
-    toast.info(`Selected ${inRange.length} chapter(s) in range ${from}–${to}`);
-  }, [batchRangeFrom, batchRangeTo, chapters]);
+  const selectByRange = useCallback(
+    (from: number, to: number) => {
+      const inRange = chapters.filter((chapter) => {
+        const number = Number(chapter.number);
+        return number >= from && number <= to;
+      });
+      if (inRange.length === 0) {
+        toast.info("No chapters in that range");
+        return;
+      }
+      setSelectedIds((previous) => {
+        const next = new Set(previous);
+        for (const chapter of inRange) next.add(chapter.id);
+        return next;
+      });
+      toast.info(`Selected ${inRange.length} chapter(s) in range ${from}–${to}`);
+    },
+    [chapters],
+  );
 
   const handleBatchTranslate = useCallback(async () => {
     if (selectedMissingIds.length === 0) return;
@@ -165,10 +160,6 @@ export function useChapterSelection(
     selectByRange,
     batchStarting,
     batchStopping,
-    batchRangeFrom,
-    setBatchRangeFrom,
-    batchRangeTo,
-    setBatchRangeTo,
     handleBatchTranslate,
     handleBatchRetranslate,
     handleBatchStop,

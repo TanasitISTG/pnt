@@ -28,10 +28,7 @@ export interface ChapterTableProps {
   onRequestRetranslate: (chapterId: string) => void;
   onViewLogs: (chapterId: string) => void;
   titleEdit: TitleEditState | null;
-  editErrors: Record<string, string>;
-  onSaveTitle: () => void;
-  savingTitle: boolean;
-  onTitleChange: (value: string) => void;
+  onSaveTitle: (value: string) => Promise<void>;
   onStartEdit: (chapter: ChapterRow) => void;
   onCancelEdit: () => void;
   onDeleteChapter: (chapterId: string) => void;
@@ -57,9 +54,6 @@ export const ChapterTable = memo(function ChapterTable({
   onRequestRetranslate,
   onViewLogs,
   titleEdit,
-  editErrors,
-  savingTitle,
-  onTitleChange,
   onSaveTitle,
   onStartEdit,
   onCancelEdit,
@@ -86,8 +80,6 @@ export const ChapterTable = memo(function ChapterTable({
         selected={selectedIds.has(chapter.id)}
         translationState={isRowTranslating ? "translating" : "idle"}
         titleEdit={titleEditForRow}
-        editError={titleEditForRow ? editErrors.translatedTitle : undefined}
-        savingTitle={titleEditForRow ? savingTitle : false}
         publishingChapter={publishingChapterId === chapter.id}
         onToggleSelect={onToggleSelect}
         onPublishChapter={onPublishChapter}
@@ -97,7 +89,6 @@ export const ChapterTable = memo(function ChapterTable({
         onRequestRetranslate={onRequestRetranslate}
         onViewLogs={onViewLogs}
         onSaveTitle={titleEditForRow ? onSaveTitle : undefined}
-        onTitleChange={onTitleChange}
         onStartEdit={onStartEdit}
         onCancelEdit={onCancelEdit}
         onDeleteChapter={onDeleteChapter}

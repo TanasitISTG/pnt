@@ -1,4 +1,4 @@
-import { Check, GripVertical, Languages, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
+import { Check, GripVertical, Languages, MoreHorizontal, Trash2 } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 
 export interface ChapterActionsControlsProps {
   readyUnpublishedCount: number;
@@ -65,11 +66,7 @@ export function ChapterActionsControls({
           ) : null}
           {missingTitleCount > 0 ? (
             <DropdownMenuItem onClick={onBackfillTitles} disabled={backfillingTitles}>
-              {backfillingTitles ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Languages className="size-4" />
-              )}
+              {backfillingTitles ? <Spinner /> : <Languages className="size-4" />}
               {backfillingTitles
                 ? "Translating titles…"
                 : `Translate titles (${missingTitleCount})`}

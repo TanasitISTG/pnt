@@ -14,7 +14,6 @@ export interface NovelDetailDialogDetail {
   chapters: ChapterRow[];
   reorderOpen: boolean;
   setReorderOpen: (open: boolean) => void;
-  reorderingChapters: boolean;
   handleSaveChapterOrder: (chapterIds: string[]) => Promise<void>;
   deleteNovelOpen: boolean;
   setDeleteNovelOpen: (open: boolean) => void;
@@ -56,7 +55,6 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
     chapters,
     reorderOpen,
     setReorderOpen,
-    reorderingChapters,
     handleSaveChapterOrder,
     deleteNovelOpen,
     setDeleteNovelOpen,
@@ -121,7 +119,6 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
       {reorderOpen ? (
         <ChapterReorderDialog
           chapters={chapters}
-          saving={reorderingChapters}
           onOpenChange={setReorderOpen}
           onSave={handleSaveChapterOrder}
         />

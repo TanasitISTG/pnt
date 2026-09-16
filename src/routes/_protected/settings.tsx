@@ -28,17 +28,43 @@ export const Route = createFileRoute("/_protected/settings")({
   component: SettingsPage,
 });
 
+async function handleTestConnection(
+  data: TestProviderConnectionInput,
+): Promise<ProviderTestResult> {
+  try {
+    const result = await testProviderConnection({ data });
+    if (result.success) {
+      toast.success(`Connection test succeeded (${result.latencyMs}ms)`);
+    } else {
+      toast.error(result.error || "Connection test failed");
+    }
+    return result;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Connection test failed";
+    toast.error(message);
+    return { success: false, error: message };
+  }
+}
+
+async function handleChangePassword(data: ChangePasswordInput): Promise<boolean> {
+  try {
+    await changePassword({ data });
+
+    toast.success("Password updated successfully");
+    return true;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update password";
+    toast.error(message);
+    return false;
+  }
+}
+
 function SettingsPage() {
   const initialSettings = Route.useLoaderData();
 
   const [isConfigured, setIsConfigured] = useState(initialSettings.isConfigured);
-  const [savingProvider, setSavingProvider] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
 
   const handleSaveProvider = async (data: SaveProviderSettingsInput): Promise<boolean> => {
-    setSavingProvider(true);
-
     try {
       await saveProviderSettings({ data });
 
@@ -49,55 +75,6 @@ function SettingsPage() {
       const message = err instanceof Error ? err.message : "Failed to save settings";
       toast.error(message);
       return false;
-    } finally {
-      setSavingProvider(false);
-    }
-  };
-
-  const handleTestConnection = async (
-    data: TestProviderConnectionInput,
-  ): Promise<ProviderTestResult> => {
-    setTestingConnection(true);
-
-    try {
-      const result = await testProviderConnection({ data });
-      if (result.success) {
-        toast.success(`Connection test succeeded (${result.latencyMs}ms)`);
-      } else {
-        toast.error(result.error || "Connection test failed");
-      }
-      return result;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Connection test failed";
-      toast.error(message);
-      return { success: false, error: message };
-    } finally {
-      setTestingConnection(false);
-    }
-  };
-
-  const handleChangePassword = async (data: ChangePasswordInput): Promise<boolean> => {
-    if (data.newPassword !== data.confirmPassword) {
-      toast.error("New passwords do not match");
-      return false;
-    }
-    if (data.newPassword.length < 8) {
-      toast.error("New password must be at least 8 characters");
-      return false;
-    }
-
-    setChangingPassword(true);
-    try {
-      await changePassword({ data });
-
-      toast.success("Password updated successfully");
-      return true;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to update password";
-      toast.error(message);
-      return false;
-    } finally {
-      setChangingPassword(false);
     }
   };
 
@@ -126,8 +103,6 @@ function SettingsPage() {
       {/* Provider Configuration */}
       <ProviderSettingsCard
         initialSettings={initialSettings}
-        saving={savingProvider}
-        testing={testingConnection}
         onSave={handleSaveProvider}
         onTest={handleTestConnection}
       />
@@ -136,7 +111,7 @@ function SettingsPage() {
       <BackupCard />
 
       {/* Account Section */}
-      <ChangePasswordCard pending={changingPassword} onSubmit={handleChangePassword} />
+      <ChangePasswordCard onSubmit={handleChangePassword} />
     </div>
   );
 }

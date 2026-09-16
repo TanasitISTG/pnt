@@ -337,7 +337,7 @@ describe("GlossaryPage list workspace", () => {
     expect(screen.getByRole("heading", { name: "Edit glossary term" })).toBeTruthy();
   });
 
-  it("associates glossary validation errors and hints with their controls", () => {
+  it("associates glossary validation errors and hints with their controls", async () => {
     renderGlossary(createPage([]));
 
     fireEvent.click(screen.getByRole("button", { name: "Add term" }));
@@ -348,7 +348,9 @@ describe("GlossaryPage list workspace", () => {
     const source = screen.getByLabelText("Source term");
     const target = screen.getByLabelText("Target translation");
     const note = screen.getByLabelText("Note");
-    expect(source.getAttribute("aria-describedby")).toBe("glossary-source-error");
+    await waitFor(() =>
+      expect(source.getAttribute("aria-describedby")).toBe("glossary-source-error"),
+    );
     expect(target.getAttribute("aria-describedby")).toBe("glossary-target-error");
     expect(note.getAttribute("aria-describedby")).toBe("glossary-note-hint");
     expect(screen.getByText("Source term is required").getAttribute("role")).toBe("alert");

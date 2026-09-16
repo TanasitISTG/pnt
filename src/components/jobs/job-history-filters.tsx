@@ -1,4 +1,4 @@
-import { Columns3, Loader2, Search } from "lucide-react";
+import { Columns3, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import type { JobHistorySearch } from "@/lib/job-dashboard/contracts";
 import type { JobHistorySearchChange } from "./job-history-table";
 
@@ -189,10 +190,7 @@ export function JobHistoryFilters({
         <p>All retained translation and import runs</p>
         {query.isFetching && !isChangingQuery && (
           <span className="inline-flex items-center gap-1.5" role="status" aria-live="polite">
-            <Loader2
-              className="size-3.5 animate-spin motion-reduce:animate-none"
-              aria-hidden="true"
-            />
+            <Spinner className="size-3.5" aria-hidden="true" />
             Updating…
           </span>
         )}
@@ -203,10 +201,7 @@ export function JobHistoryFilters({
           role="status"
           aria-live="polite"
         >
-          <Loader2
-            className="size-3.5 animate-spin motion-reduce:animate-none"
-            aria-hidden="true"
-          />
+          <Spinner className="size-3.5" aria-hidden="true" />
           Loading job page…
         </div>
       )}

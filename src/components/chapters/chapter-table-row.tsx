@@ -1,11 +1,14 @@
 import { memo } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { Check, Edit, Play, RotateCw, Square, Terminal, Trash2, X } from "lucide-react";
-
+import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ChapterStatusBadge } from "@/components/chapters/chapter-status-badge";
 import type { TitleEditState } from "@/components/chapters/use-chapter-title-edit";
@@ -28,8 +31,7 @@ export interface ChapterTableRowProps {
   selected: boolean;
   translationState: "translating" | "idle";
   titleEdit: TitleEditState | null;
-  editError: string | undefined;
-  savingTitle: boolean;
+
   publishingChapter: boolean;
   onToggleSelect: (id: string, checked: boolean) => void;
   onPublishChapter: (vars: { chapterId: string; publishedAt: Date | null }) => void;
@@ -38,8 +40,7 @@ export interface ChapterTableRowProps {
   onStartTranslate: (chapterId: string, mode: TranslationStartMode) => void;
   onRequestRetranslate: (chapterId: string) => void;
   onViewLogs: (chapterId: string) => void;
-  onSaveTitle?: () => void;
-  onTitleChange: (value: string) => void;
+  onSaveTitle?: (value: string) => Promise<void>;
   onStartEdit: (chapter: ChapterRow) => void;
   onCancelEdit: () => void;
   onDeleteChapter: (chapterId: string) => void;
@@ -70,83 +71,109 @@ function AdminSelectionCell({
 interface ChapterTitleEditorProps {
   chapter: ChapterRow;
   titleEdit: TitleEditState;
-  editError: string | undefined;
-  savingTitle: boolean;
   translationState: ChapterTableRowProps["translationState"];
-  onSaveTitle: (() => void) | undefined;
-  onTitleChange: (value: string) => void;
+  onSaveTitle: ((value: string) => Promise<void>) | undefined;
   onCancelEdit: () => void;
 }
+
+const translatedTitleSchema = z.object({
+  translatedTitle: z.string().max(500, "Translated title must be 500 characters or fewer"),
+});
 
 function ChapterTitleEditor({
   chapter,
   titleEdit,
-  editError,
-  savingTitle,
   translationState,
   onSaveTitle,
-  onTitleChange,
   onCancelEdit,
 }: ChapterTitleEditorProps) {
-  const normalizedTitle = titleEdit.translatedTitle.trim();
-  const titleChanged = normalizedTitle !== titleEdit.initialTranslatedTitle;
-  const titleValid = normalizedTitle.length <= 500;
-  const saveDisabled =
-    !titleChanged || !titleValid || savingTitle || translationState === "translating";
+  const form = useForm({
+    defaultValues: {
+      translatedTitle: titleEdit.initialTranslatedTitle,
+    },
+    validators: {
+      onSubmit: translatedTitleSchema,
+    },
+    onSubmit: async ({ value }) => {
+      const parsed = translatedTitleSchema.parse(value);
+      await onSaveTitle?.(parsed.translatedTitle);
+    },
+  });
+  const [titleValue, canSubmit, isSubmitting] = useStore(
+    form.store,
+    (state) => [state.values.translatedTitle, state.canSubmit, state.isSubmitting] as const,
+    (previous, next) =>
+      previous[0] === next[0] && previous[1] === next[1] && previous[2] === next[2],
+  );
 
   return (
     <form
+      noValidate
       className="flex min-w-56 flex-col gap-1.5"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!saveDisabled) onSaveTitle?.();
+        void form.handleSubmit();
       }}
     >
       <span className="text-caption font-normal text-muted-foreground">
         Source: {chapter.title}
       </span>
-      <div className="flex items-center gap-1.5">
-        <Input
-          value={titleEdit.translatedTitle}
-          onChange={(event) => onTitleChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              onCancelEdit();
-            }
-          }}
-          aria-label={`Translated title for chapter ${Number(chapter.number)}`}
-          aria-invalid={editError ? true : undefined}
-          maxLength={500}
-          autoFocus
-          disabled={savingTitle || translationState === "translating"}
-          className="h-8"
-        />
-        <Button
-          type="submit"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Save translated title"
-          title="Save translated title"
-          disabled={saveDisabled}
-        >
-          <Check className="size-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Cancel translated title edit"
-          title="Cancel translated title edit"
-          onClick={onCancelEdit}
-          disabled={savingTitle}
-        >
-          <X className="size-4 text-muted-foreground" />
-        </Button>
-      </div>
-      {editError ? (
-        <span className="text-caption font-normal text-destructive">{editError}</span>
-      ) : null}
+      <form.Field name="translatedTitle">
+        {(field) => {
+          const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+          return (
+            <Field data-invalid={invalid || undefined} className="gap-1">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      onCancelEdit();
+                    }
+                  }}
+                  aria-label={`Translated title for chapter ${Number(chapter.number)}`}
+                  aria-invalid={invalid}
+                  maxLength={500}
+                  autoFocus
+                  disabled={translationState === "translating"}
+                  className="h-8"
+                />
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Save translated title"
+                  title="Save translated title"
+                  disabled={
+                    titleValue.trim() === titleEdit.initialTranslatedTitle ||
+                    !canSubmit ||
+                    isSubmitting ||
+                    translationState === "translating"
+                  }
+                >
+                  {isSubmitting ? <Spinner /> : <Check className="size-4" />}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Cancel translated title edit"
+                  title="Cancel translated title edit"
+                  onClick={onCancelEdit}
+                  disabled={isSubmitting}
+                >
+                  <X className="size-4 text-muted-foreground" />
+                </Button>
+              </div>
+              {invalid && <FieldError errors={field.state.meta.errors} />}
+            </Field>
+          );
+        }}
+      </form.Field>
     </form>
   );
 }
@@ -242,13 +269,11 @@ function ChapterTitleCell(props: ChapterTableRowProps) {
     <TableCell className="font-medium">
       {titleEdit ? (
         <ChapterTitleEditor
+          key={titleEdit.chapterId}
           chapter={chapter}
           titleEdit={titleEdit}
-          editError={props.editError}
-          savingTitle={props.savingTitle}
           translationState={props.translationState}
           onSaveTitle={props.onSaveTitle}
-          onTitleChange={props.onTitleChange}
           onCancelEdit={props.onCancelEdit}
         />
       ) : (
@@ -467,8 +492,6 @@ export const ChapterTableRow = memo(function ChapterTableRow({
   selected,
   translationState,
   titleEdit,
-  editError,
-  savingTitle,
   publishingChapter,
   onToggleSelect,
   onPublishChapter,
@@ -478,7 +501,6 @@ export const ChapterTableRow = memo(function ChapterTableRow({
   onRequestRetranslate,
   onViewLogs,
   onSaveTitle,
-  onTitleChange,
   onStartEdit,
   onCancelEdit,
   onDeleteChapter,
@@ -496,8 +518,6 @@ export const ChapterTableRow = memo(function ChapterTableRow({
       selected={selected}
       translationState={translationState}
       titleEdit={titleEdit}
-      editError={editError}
-      savingTitle={savingTitle}
       publishingChapter={publishingChapter}
       onToggleSelect={onToggleSelect}
       onPublishChapter={onPublishChapter}
@@ -507,7 +527,6 @@ export const ChapterTableRow = memo(function ChapterTableRow({
       onRequestRetranslate={onRequestRetranslate}
       onViewLogs={onViewLogs}
       onSaveTitle={isTitleEditing ? onSaveTitle : undefined}
-      onTitleChange={onTitleChange}
       onStartEdit={onStartEdit}
       onCancelEdit={onCancelEdit}
       onDeleteChapter={onDeleteChapter}

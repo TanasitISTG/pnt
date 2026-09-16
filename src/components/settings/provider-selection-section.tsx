@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { FieldLegend, FieldSet } from "@/components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ProviderType } from "@/lib/translation/types/provider";
 
 interface ProviderSelectionSectionProps {
@@ -8,6 +9,55 @@ interface ProviderSelectionSectionProps {
   onApplyPreset: (provider: ProviderType, baseUrl: string, model: string) => void;
 }
 
+const PROVIDER_OPTIONS: Array<{
+  value: ProviderType;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "openai",
+    label: "OpenAI-Compatible",
+    description: "OpenRouter, DeepSeek, etc",
+  },
+  {
+    value: "gemini",
+    label: "Google AI Studio",
+    description: "Gemini 2.5 Flash / Pro, 1.5 Flash",
+  },
+];
+
+const PROVIDER_PRESETS: Record<
+  ProviderType,
+  Array<{ label: string; baseUrl: string; model: string }>
+> = {
+  openai: [
+    { label: "OpenAI (gpt-4o)", baseUrl: "https://api.openai.com/v1", model: "gpt-4o" },
+    {
+      label: "OpenRouter (DeepSeek R1)",
+      baseUrl: "https://openrouter.ai/api/v1",
+      model: "deepseek/deepseek-r1",
+    },
+    { label: "DeepSeek Direct", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+  ],
+  gemini: [
+    {
+      label: "Gemini 2.5 Flash",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      model: "gemini-2.5-flash",
+    },
+    {
+      label: "Gemini 2.5 Pro",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      model: "gemini-2.5-pro",
+    },
+    {
+      label: "Gemini 1.5 Flash",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      model: "gemini-1.5-flash",
+    },
+  ],
+};
+
 export function ProviderSelectionSection({
   provider,
   onProviderChange,
@@ -15,124 +65,50 @@ export function ProviderSelectionSection({
 }: ProviderSelectionSectionProps) {
   return (
     <>
-      {/* Provider Selector */}
-      <div className="space-y-2">
-        <Label>Provider Type</Label>
-        <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-          <button
-            type="button"
-            onClick={() => onProviderChange("openai")}
-            className={`flex flex-col items-start rounded-lg border p-3 text-left transition-colors ${
-              provider === "openai"
-                ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
-                : "border-border bg-background text-muted-foreground hover:bg-muted/50"
-            }`}
-          >
-            <span className="font-medium text-foreground">OpenAI-Compatible</span>
-            <span className="text-caption text-muted-foreground">
-              OpenAI, OpenRouter, DeepSeek, Local LLM
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onProviderChange("gemini")}
-            className={`flex flex-col items-start rounded-lg border p-3 text-left transition-colors ${
-              provider === "gemini"
-                ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
-                : "border-border bg-background text-muted-foreground hover:bg-muted/50"
-            }`}
-          >
-            <span className="font-medium text-foreground">Google AI Studio</span>
-            <span className="text-caption text-muted-foreground">
-              Gemini 2.5 Flash / Pro, 1.5 Flash
-            </span>
-          </button>
-        </div>
-      </div>
+      <FieldSet>
+        <FieldLegend variant="label">Provider Type</FieldLegend>
+        <ToggleGroup
+          value={[provider]}
+          spacing={3}
+          className="w-full sm:max-w-md"
+          onValueChange={(groupValue) => {
+            const next = groupValue[0];
+            if (next === "openai" || next === "gemini") onProviderChange(next);
+          }}
+        >
+          {PROVIDER_OPTIONS.map((option) => (
+            <ToggleGroupItem
+              key={option.value}
+              value={option.value}
+              className="h-auto min-w-0 flex-1 basis-0 flex-col items-start gap-0.5 whitespace-normal rounded-lg border border-border bg-background p-3 text-left font-normal text-muted-foreground hover:bg-muted/50 aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:ring-1 aria-pressed:ring-primary"
+            >
+              <span className="w-full font-medium text-foreground">{option.label}</span>
+              <span className="w-full text-caption text-muted-foreground">
+                {option.description}
+              </span>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </FieldSet>
 
-      {/* Presets */}
-      <div className="space-y-2">
-        <Label className="text-caption text-muted-foreground">Quick Presets</Label>
+      <FieldSet>
+        <FieldLegend variant="label" className="text-caption text-muted-foreground">
+          Quick Presets
+        </FieldLegend>
         <div className="flex flex-wrap gap-2">
-          {provider === "gemini" ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  onApplyPreset(
-                    "gemini",
-                    "https://generativelanguage.googleapis.com",
-                    "gemini-2.5-flash",
-                  )
-                }
-              >
-                Gemini 2.5 Flash
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  onApplyPreset(
-                    "gemini",
-                    "https://generativelanguage.googleapis.com",
-                    "gemini-2.5-pro",
-                  )
-                }
-              >
-                Gemini 2.5 Pro
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  onApplyPreset(
-                    "gemini",
-                    "https://generativelanguage.googleapis.com",
-                    "gemini-1.5-flash",
-                  )
-                }
-              >
-                Gemini 1.5 Flash
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onApplyPreset("openai", "https://api.openai.com/v1", "gpt-4o")}
-              >
-                OpenAI (gpt-4o)
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  onApplyPreset("openai", "https://openrouter.ai/api/v1", "deepseek/deepseek-r1")
-                }
-              >
-                OpenRouter (DeepSeek R1)
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  onApplyPreset("openai", "https://api.deepseek.com/v1", "deepseek-chat")
-                }
-              >
-                DeepSeek Direct
-              </Button>
-            </>
-          )}
+          {PROVIDER_PRESETS[provider].map((preset) => (
+            <Button
+              key={preset.label}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onApplyPreset(provider, preset.baseUrl, preset.model)}
+            >
+              {preset.label}
+            </Button>
+          ))}
         </div>
-      </div>
+      </FieldSet>
     </>
   );
 }

@@ -16,6 +16,7 @@ import {
   saveProviderSettingsSchema,
   testProviderConnectionSchema,
   changePasswordSchema,
+  type ProviderSettings,
 } from "@/lib/settings/schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 
@@ -26,7 +27,7 @@ function maskApiKey(key: string): string {
 }
 
 export const getProviderSettings = createServerFn({ method: "GET" }).handler(async () =>
-  withSafeHandler(async () => {
+  withSafeHandler(async (): Promise<ProviderSettings> => {
     const session = await ensureSession();
 
     const [row] = await db

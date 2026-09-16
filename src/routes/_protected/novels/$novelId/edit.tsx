@@ -30,7 +30,7 @@ function EditNovelPage() {
 
   const { data: novel } = useQuery(novelQueryOptions(novelId));
 
-  const { mutateAsync: update, isPending } = useMutation({
+  const { mutateAsync: update } = useMutation({
     mutationFn: (vars: UpdateNovelInput) => updateNovel({ data: vars }),
     onSuccess: async (_result, variables) => {
       if (novel) {
@@ -115,7 +115,6 @@ function EditNovelPage() {
           await update({ ...data, novelId });
         }}
         submitLabel="Save Changes"
-        pending={isPending}
       />
 
       <Card className="max-w-3xl">

@@ -28,28 +28,31 @@ export const listTermsSchema = glossaryListSearchSchema.extend({
   novelId: z.string().min(1),
 });
 
+export const GLOSSARY_TERM_TEXT_MAX_LENGTH = 500;
+export const GLOSSARY_TERM_NOTE_MAX_LENGTH = 1000;
+
 export const createTermSchema = z.object({
   novelId: z.string().min(1),
-  source: z.string().min(1, "Source term is required").max(500),
-  target: z.string().min(1, "Target term is required").max(500),
+  source: z.string().min(1, "Source term is required").max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
+  target: z.string().min(1, "Target term is required").max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
   category: termCategorySchema.default("other"),
-  note: z.string().max(1000).optional().nullable(),
+  note: z.string().max(GLOSSARY_TERM_NOTE_MAX_LENGTH).optional().nullable(),
   status: termStatusSchema.optional().default("approved"),
 });
 
 export const updateTermSchema = z.object({
   termId: z.string().min(1),
-  source: z.string().min(1).max(500).optional(),
-  target: z.string().min(1).max(500).optional(),
+  source: z.string().min(1).max(GLOSSARY_TERM_TEXT_MAX_LENGTH).optional(),
+  target: z.string().min(1).max(GLOSSARY_TERM_TEXT_MAX_LENGTH).optional(),
   category: termCategorySchema.optional(),
-  note: z.string().max(1000).optional().nullable(),
+  note: z.string().max(GLOSSARY_TERM_NOTE_MAX_LENGTH).optional().nullable(),
   status: termStatusSchema.optional(),
   applyToChapters: z.boolean().optional(),
 });
 
 export const previewTermReplacementSchema = z.object({
   novelId: z.string().min(1),
-  oldTarget: z.string().min(1).max(500),
+  oldTarget: z.string().min(1).max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
 });
 
 export const deleteTermSchema = z.object({

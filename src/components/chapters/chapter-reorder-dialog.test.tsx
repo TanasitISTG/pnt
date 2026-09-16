@@ -101,12 +101,7 @@ function ControlledDialog({
   };
 
   return open ? (
-    <ChapterReorderDialog
-      chapters={CHAPTERS}
-      saving={false}
-      onOpenChange={handleOpenChange}
-      onSave={onSave}
-    />
+    <ChapterReorderDialog chapters={CHAPTERS} onOpenChange={handleOpenChange} onSave={onSave} />
   ) : (
     <button type="button" onClick={() => setOpen(true)}>
       Reopen

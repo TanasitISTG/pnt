@@ -16,7 +16,7 @@ function NewNovelPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { mutateAsync: create, isPending } = useMutation({
+  const { mutateAsync: create } = useMutation({
     mutationFn: (vars: CreateNovelInput) => createNovel({ data: vars }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["novels"] });
@@ -49,7 +49,6 @@ function NewNovelPage() {
           await create(data);
         }}
         submitLabel="Create Novel"
-        pending={isPending}
       />
     </div>
   );

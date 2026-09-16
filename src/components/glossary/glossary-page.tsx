@@ -117,7 +117,6 @@ export function GlossaryPage() {
   const statsQuery = useQuery(glossaryStatsQueryOptions(novelId));
   const termsQuery = useQuery(glossaryTermsQueryOptions(novelId, search));
   const {
-    addDraft,
     addingTerm,
     approveAll,
     approvingAll,
@@ -131,9 +130,6 @@ export function GlossaryPage() {
     deletingAllTerms,
     deletingTerm,
     doBulkImport,
-    editState,
-    handleAddSubmit,
-    handleSaveEdit,
     handleTermDialogChange,
     importDialogOpen,
     importing,
@@ -147,15 +143,11 @@ export function GlossaryPage() {
     removeTerm,
     replacement,
     savingEdit,
-    setAddDraft,
     setDeleteAllTermsOpen,
     setDeleteTermId,
-    setEditState,
     setImportDialogOpen,
-    setTsvText,
-    termDialogMode,
-    termErrors,
-    tsvText,
+    submitTerm,
+    termDialog,
   } = useGlossaryPageController(novelId);
 
   const updateSearch = useCallback(
@@ -228,22 +220,10 @@ export function GlossaryPage() {
       />
 
       <GlossaryTermDialog
-        mode={termDialogMode}
-        open={termDialogMode !== null}
+        descriptor={termDialog}
+        open={termDialog !== null}
         onOpenChange={handleTermDialogChange}
-        addDraft={addDraft}
-        onAddDraftChange={setAddDraft}
-        editState={editState}
-        onEditStateChange={setEditState}
-        errors={termErrors}
-        onSubmit={(event) => {
-          if (termDialogMode === "edit") {
-            event.preventDefault();
-            void handleSaveEdit();
-          } else {
-            void handleAddSubmit(event);
-          }
-        }}
+        onSubmit={submitTerm}
         addingTerm={addingTerm}
         savingEdit={savingEdit}
         previewingReplace={previewingReplace}
@@ -263,9 +243,7 @@ export function GlossaryPage() {
         deletingAllTerms={deletingAllTerms}
         importOpen={importDialogOpen}
         onImportOpenChange={setImportDialogOpen}
-        tsvText={tsvText}
-        onTsvTextChange={setTsvText}
-        onImport={() => void doBulkImport(tsvText).catch(() => {})}
+        onImport={doBulkImport}
         importing={importing}
       />
     </div>

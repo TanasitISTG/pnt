@@ -1,4 +1,4 @@
-import { Loader2, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import { TranslationEvalReviewRow } from "@/components/translation/translation-eval-review-row";
@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import type {
   EvalReportDetail,
   EvalReportSummary,
@@ -271,10 +272,7 @@ export function TranslationEvalReportContent(props: TranslationEvalReportContent
   if (props.isPending && !props.detail) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-        <Loader2
-          className="mb-3 size-8 animate-spin text-primary motion-reduce:animate-none"
-          aria-hidden="true"
-        />
+        <Spinner className="mb-3 size-8 text-primary" aria-hidden="true" />
         <p className="text-body">Loading quality check…</p>
       </div>
     );

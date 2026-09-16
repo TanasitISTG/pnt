@@ -3,11 +3,12 @@ import type { ReaderTranslationStatus } from "./reader-content-types";
 import { QueryErrorState } from "@/components/query-error-state";
 import type { ReaderSettings } from "@/lib/reader/types";
 import { ReaderContent } from "./chapter-content";
-import { ChapterEditor, type ChapterDraft } from "./chapter-editor";
+import { ChapterEditor } from "./chapter-editor";
 import { ChapterTitleRow } from "./chapter-title-row";
 import { ReaderDialogs } from "./reader-dialogs";
 import type { ReaderChapterSummary } from "./reader-toolbar";
 import { ReaderToolbar } from "./reader-toolbar";
+import type { ChapterEditorFormApi } from "./use-chapter-editor";
 import { ReaderFooterNav } from "./reader-footer-nav";
 
 export interface ReaderChapterData extends ReaderChapterSummary {
@@ -73,9 +74,7 @@ export interface ReaderPageViewProps {
   onSourcePolicyChange: (open: boolean) => void;
   onClearTranslation: () => void;
   onKeepTranslation: () => void;
-  draft: ChapterDraft | null;
-  editErrors: Record<string, string>;
-  updateDraft: (field: keyof ChapterDraft, value: string) => void;
+  editorForm: ChapterEditorFormApi;
   onSave: () => void;
   onCancel: () => void;
 }
@@ -128,9 +127,7 @@ export function ReaderPageView({
   onSourcePolicyChange,
   onClearTranslation,
   onKeepTranslation,
-  draft,
-  editErrors,
-  updateDraft,
+  editorForm,
   onSave,
   onCancel,
 }: ReaderPageViewProps) {
@@ -178,14 +175,11 @@ export function ReaderPageView({
         editedAt={chapter.editedAt}
       />
 
-      {editing && draft ? (
+      {editing ? (
         <ChapterEditor
-          draft={draft}
-          errors={editErrors}
+          form={editorForm}
           fontSizePx={fontSizePx}
           readerFontClass={readerFontClass}
-          saving={saving}
-          onChange={updateDraft}
           onSave={onSave}
           onCancel={onCancel}
         />

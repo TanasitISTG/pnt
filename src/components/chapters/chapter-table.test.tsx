@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -74,10 +74,7 @@ function createProps(overrides: Partial<ChapterTableProps> = {}): ChapterTablePr
     onRequestRetranslate: vi.fn(),
     onViewLogs: vi.fn(),
     titleEdit: null,
-    editErrors: {},
-    onSaveTitle: vi.fn(),
-    savingTitle: false,
-    onTitleChange: vi.fn(),
+    onSaveTitle: vi.fn().mockResolvedValue(undefined),
     onStartEdit: vi.fn(),
     onCancelEdit: vi.fn(),
     onDeleteChapter: vi.fn(),
@@ -104,7 +101,6 @@ describe("ChapterTable browsing behavior", () => {
         {...createProps({
           titleEdit: {
             chapterId: CHAPTER.id,
-            translatedTitle: CHAPTER.translatedTitle ?? "",
             initialTranslatedTitle: CHAPTER.translatedTitle ?? "",
           },
         })}
@@ -112,6 +108,29 @@ describe("ChapterTable browsing behavior", () => {
     );
     expect(screen.getByLabelText("Translated title for chapter 1")).toBeTruthy();
   });
+  it("enables the inline title save only once the draft differs from the stored title", () => {
+    render(
+      <ChapterTable
+        {...createProps({
+          titleEdit: {
+            chapterId: CHAPTER.id,
+            initialTranslatedTitle: CHAPTER.translatedTitle ?? "",
+          },
+        })}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", {
+      name: "Save translated title",
+    }) as HTMLButtonElement;
+    const input = screen.getByLabelText("Translated title for chapter 1") as HTMLInputElement;
+    expect(saveButton.disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: "บทที่หนึ่งแก้ไข" } });
+
+    expect(saveButton.disabled).toBe(false);
+  });
+
   it("routes translated chapters through explicit retranslation confirmation", () => {
     const onStartTranslate = vi.fn();
     const onRequestRetranslate = vi.fn();

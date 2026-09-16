@@ -1,4 +1,4 @@
-import { ChevronsUpDown, Columns3, Loader2, MoreHorizontal, Search } from "lucide-react";
+import { ChevronsUpDown, Columns3, MoreHorizontal, Search } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   columnVisibilityFeature,
@@ -48,6 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Spinner } from "@/components/ui/spinner";
 import type {
   GlossaryListPage,
   GlossaryListRow,
@@ -800,10 +801,7 @@ function GlossaryTableToolbar({
         <p>Approved glossary mappings used in future translations</p>
         {query.isFetching && !isChangingQuery && (
           <span className="inline-flex items-center gap-1.5" role="status" aria-live="polite">
-            <Loader2
-              className="size-3.5 animate-spin motion-reduce:animate-none"
-              aria-hidden="true"
-            />
+            <Spinner className="size-3.5" aria-hidden="true" />
             Updating…
           </span>
         )}
@@ -814,10 +812,7 @@ function GlossaryTableToolbar({
           role="status"
           aria-live="polite"
         >
-          <Loader2
-            className="size-3.5 animate-spin motion-reduce:animate-none"
-            aria-hidden="true"
-          />
+          <Spinner className="size-3.5" aria-hidden="true" />
           Loading glossary page…
         </div>
       )}

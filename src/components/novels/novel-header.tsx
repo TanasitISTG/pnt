@@ -7,7 +7,6 @@ import {
   Edit,
   FileText,
   FileType,
-  Loader2,
   MoreHorizontal,
   Network,
   Trash2,
@@ -25,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
 import { NovelCover } from "@/components/novels/novel-cover";
 import { PublishMenu } from "@/components/publish-menu";
 import type { ChapterRow } from "@/components/chapters/types";
@@ -152,7 +152,7 @@ function AdminActions({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {exporting ? <Loader2 className="sr-only animate-spin" aria-label="Exporting" /> : null}
+      {exporting ? <Spinner className="sr-only" aria-label="Exporting" /> : null}
     </div>
   );
 }

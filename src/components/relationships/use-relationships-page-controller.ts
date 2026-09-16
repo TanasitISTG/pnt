@@ -1,14 +1,19 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import type { CharacterFormState, RelationshipFormState } from "./relationship-entry-form";
+import type {
+  CharacterDialogDescriptor,
+  RelationshipDialogDescriptor,
+} from "./relationship-entry-dialogs";
 import {
   EMPTY_CHARACTER_FORM,
   EMPTY_RELATIONSHIP_FORM,
-  splitAliases,
-  toFieldErrors,
+  characterEntryFormSchema,
+  relationshipEntryFormSchema,
+  type CharacterFormState,
+  type RelationshipFormState,
 } from "./relationship-entry-form";
 import type { RelationshipTableActions } from "./relationship-map-table";
 import {
@@ -36,10 +41,10 @@ type DeleteTarget = {
 
 export function useRelationshipsPageController(novelId: string) {
   const queryClient = useQueryClient();
-  const [characterForm, setCharacterForm] = useState<CharacterFormState | null>(null);
-  const [relationshipForm, setRelationshipForm] = useState<RelationshipFormState | null>(null);
-  const [characterErrors, setCharacterErrors] = useState<Record<string, string>>({});
-  const [relationshipErrors, setRelationshipErrors] = useState<Record<string, string>>({});
+  const [characterDialog, setCharacterDialog] = useState<CharacterDialogDescriptor | null>(null);
+  const [relationshipDialog, setRelationshipDialog] = useState<RelationshipDialogDescriptor | null>(
+    null,
+  );
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   const invalidateMap = () => {
@@ -52,8 +57,7 @@ export function useRelationshipsPageController(novelId: string) {
     onSuccess: () => {
       invalidateMap();
       toast.success("Character profile saved");
-      setCharacterForm(null);
-      setCharacterErrors({});
+      setCharacterDialog(null);
     },
     onError: (error) => toast.error(error.message || "Failed to save character profile"),
   });
@@ -64,8 +68,7 @@ export function useRelationshipsPageController(novelId: string) {
     onSuccess: () => {
       invalidateMap();
       toast.success("Directed relationship saved");
-      setRelationshipForm(null);
-      setRelationshipErrors({});
+      setRelationshipDialog(null);
     },
     onError: (error) => toast.error(error.message || "Failed to save directed relationship"),
   });
@@ -104,102 +107,68 @@ export function useRelationshipsPageController(novelId: string) {
   });
 
   const openCharacterAdd = () => {
-    setCharacterErrors({});
-    setCharacterForm({ ...EMPTY_CHARACTER_FORM });
+    setCharacterDialog({ initialValues: { ...EMPTY_CHARACTER_FORM } });
   };
   const openRelationshipAdd = () => {
-    setRelationshipErrors({});
-    setRelationshipForm({ ...EMPTY_RELATIONSHIP_FORM });
+    setRelationshipDialog({ initialValues: { ...EMPTY_RELATIONSHIP_FORM } });
   };
   const openCharacterEdit = (character: CharacterProfile) => {
-    setCharacterErrors({});
-    setCharacterForm({
+    setCharacterDialog({
       id: character.id,
-      sourceName: character.sourceName,
-      targetName: character.targetName ?? "",
-      aliases: character.aliases.join(", "),
-      gender: character.gender,
-      role: character.role ?? "",
-      notes: character.notes ?? "",
-      evidence: character.evidence ?? "",
+      initialValues: {
+        sourceName: character.sourceName,
+        targetName: character.targetName ?? "",
+        aliases: character.aliases.join(", "),
+        gender: character.gender,
+        role: character.role ?? "",
+        notes: character.notes ?? "",
+        evidence: character.evidence ?? "",
+      },
     });
   };
   const openRelationshipEdit = (relationship: CharacterRelationship) => {
-    setRelationshipErrors({});
-    setRelationshipForm({
+    setRelationshipDialog({
       id: relationship.id,
-      speakerId: relationship.speakerId,
-      listenerId: relationship.listenerId,
-      relationship: relationship.relationship,
-      speakerStatus: relationship.speakerStatus,
-      familiarity: relationship.familiarity,
-      selfPronoun: relationship.selfPronoun ?? "",
-      addresseeTerm: relationship.addresseeTerm ?? "",
-      sentenceParticles: relationship.sentenceParticles ?? "",
-      register: relationship.register ?? "",
-      notes: relationship.notes ?? "",
-      evidence: relationship.evidence ?? "",
+      initialValues: {
+        speakerId: relationship.speakerId,
+        listenerId: relationship.listenerId,
+        relationship: relationship.relationship,
+        speakerStatus: relationship.speakerStatus,
+        familiarity: relationship.familiarity,
+        selfPronoun: relationship.selfPronoun ?? "",
+        addresseeTerm: relationship.addresseeTerm ?? "",
+        sentenceParticles: relationship.sentenceParticles ?? "",
+        register: relationship.register ?? "",
+        notes: relationship.notes ?? "",
+        evidence: relationship.evidence ?? "",
+      },
     });
   };
   const closeCharacterDialog = (open: boolean) => {
-    if (!open && !saveCharacter.isPending) {
-      setCharacterForm(null);
-      setCharacterErrors({});
-    }
+    if (!open && !saveCharacter.isPending) setCharacterDialog(null);
   };
   const closeRelationshipDialog = (open: boolean) => {
-    if (!open && !saveRelationship.isPending) {
-      setRelationshipForm(null);
-      setRelationshipErrors({});
-    }
+    if (!open && !saveRelationship.isPending) setRelationshipDialog(null);
   };
 
-  const submitCharacter = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!characterForm) return;
-    setCharacterErrors({});
-    const parsed = upsertCharacterProfileSchema.safeParse({
+  const submitCharacter = async (value: CharacterFormState) => {
+    const formValue = characterEntryFormSchema.parse(value);
+    const payload = upsertCharacterProfileSchema.parse({
       novelId,
-      id: characterForm.id,
-      sourceName: characterForm.sourceName,
-      targetName: characterForm.targetName.trim() || null,
-      aliases: splitAliases(characterForm.aliases),
-      gender: characterForm.gender,
-      role: characterForm.role.trim() || null,
-      notes: characterForm.notes.trim() || null,
-      evidence: characterForm.evidence.trim() || null,
+      id: characterDialog?.id,
+      ...formValue,
     });
-    if (!parsed.success) {
-      setCharacterErrors(toFieldErrors(parsed.error));
-      return;
-    }
-    void saveCharacter.mutateAsync(parsed.data).catch(() => {});
+    await saveCharacter.mutateAsync(payload).catch(() => {});
   };
 
-  const submitRelationship = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!relationshipForm) return;
-    setRelationshipErrors({});
-    const parsed = upsertCharacterRelationshipSchema.safeParse({
+  const submitRelationship = async (value: RelationshipFormState) => {
+    const formValue = relationshipEntryFormSchema.parse(value);
+    const payload = upsertCharacterRelationshipSchema.parse({
       novelId,
-      id: relationshipForm.id,
-      speakerId: relationshipForm.speakerId,
-      listenerId: relationshipForm.listenerId,
-      relationship: relationshipForm.relationship,
-      speakerStatus: relationshipForm.speakerStatus,
-      familiarity: relationshipForm.familiarity,
-      selfPronoun: relationshipForm.selfPronoun.trim() || null,
-      addresseeTerm: relationshipForm.addresseeTerm.trim() || null,
-      sentenceParticles: relationshipForm.sentenceParticles.trim() || null,
-      register: relationshipForm.register.trim() || null,
-      notes: relationshipForm.notes.trim() || null,
-      evidence: relationshipForm.evidence.trim() || null,
+      id: relationshipDialog?.id,
+      ...formValue,
     });
-    if (!parsed.success) {
-      setRelationshipErrors(toFieldErrors(parsed.error));
-      return;
-    }
-    void saveRelationship.mutateAsync(parsed.data).catch(() => {});
+    await saveRelationship.mutateAsync(payload).catch(() => {});
   };
 
   const requestDelete = (entryType: DeleteTarget["entryType"], entryId: string, label: string) =>
@@ -233,8 +202,7 @@ export function useRelationshipsPageController(novelId: string) {
 
   return {
     actions,
-    characterErrors,
-    characterForm,
+    characterDialog,
     closeCharacterDialog,
     closeDeleteDialog,
     closeRelationshipDialog,
@@ -243,12 +211,9 @@ export function useRelationshipsPageController(novelId: string) {
     deleting: removeEntry.isPending,
     openCharacterAdd,
     openRelationshipAdd,
-    relationshipErrors,
-    relationshipForm,
+    relationshipDialog,
     saveCharacterPending: saveCharacter.isPending,
     saveRelationshipPending: saveRelationship.isPending,
-    setCharacterForm,
-    setRelationshipForm,
     submitCharacter,
     submitRelationship,
   };

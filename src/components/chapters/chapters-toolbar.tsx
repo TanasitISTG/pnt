@@ -15,11 +15,7 @@ export interface ChaptersToolbarProps {
   onRequestBatchRetranslate: () => void;
   onRequestBatchStop: () => void;
   onClearSelection: () => void;
-  batchRangeFrom: string;
-  batchRangeTo: string;
-  onBatchRangeFromChange: (value: string) => void;
-  onBatchRangeToChange: (value: string) => void;
-  onSelectRange: () => void;
+  onSelectRange: (from: number, to: number) => void;
   readyUnpublishedCount: number;
   unreadyCount: number;
   onPublishAll: () => void;
@@ -48,10 +44,6 @@ export function ChaptersToolbar({
   onRequestBatchRetranslate,
   onRequestBatchStop,
   onClearSelection,
-  batchRangeFrom,
-  batchRangeTo,
-  onBatchRangeFromChange,
-  onBatchRangeToChange,
   onSelectRange,
   readyUnpublishedCount,
   unreadyCount,
@@ -83,10 +75,6 @@ export function ChaptersToolbar({
         onRequestBatchRetranslate={onRequestBatchRetranslate}
         onRequestBatchStop={onRequestBatchStop}
         onClearSelection={onClearSelection}
-        batchRangeFrom={batchRangeFrom}
-        batchRangeTo={batchRangeTo}
-        onBatchRangeFromChange={onBatchRangeFromChange}
-        onBatchRangeToChange={onBatchRangeToChange}
         onSelectRange={onSelectRange}
       />
       <ChapterActionsControls

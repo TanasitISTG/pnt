@@ -303,13 +303,13 @@ describe("AddChapterSection", () => {
     expect(contentInput.autocomplete).toBe("off");
   });
 
-  it("focuses the first invalid field and exposes inline validation semantics", () => {
+  it("focuses the first invalid field and exposes inline validation semantics", async () => {
     renderAddChapter();
     const numberInput = screen.getByRole("spinbutton", { name: "Chapter number *" });
     fireEvent.change(numberInput, { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Add chapter" }));
 
-    expect(document.activeElement).toBe(numberInput);
+    await waitFor(() => expect(document.activeElement).toBe(numberInput));
     expect(numberInput.getAttribute("aria-invalid")).toBe("true");
     expect(numberInput.getAttribute("aria-describedby")).toBe("chap-number-error");
     expect(screen.getByText("Chapter number must be positive")).toBeTruthy();

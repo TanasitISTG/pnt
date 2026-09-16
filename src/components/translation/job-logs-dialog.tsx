@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Spinner } from "@/components/ui/spinner";
 import { getTranslationJobDetails, getTranslationJobProgress } from "@/lib/translation/api/queries";
 import { QueryErrorState } from "@/components/query-error-state";
 import type { LogEntry } from "@/lib/translation/types/workflow";
@@ -22,7 +23,7 @@ import type {
 import { ChapterStatusBadge } from "@/components/chapters/chapter-status-badge";
 import type { ChapterStatus } from "@/components/chapters/types";
 import { formatLocalDateTime, formatLocalTime, parseDateTime } from "@/lib/date-time";
-import { Cpu, Loader2, Terminal, XCircle, Zap } from "lucide-react";
+import { Cpu, Terminal, XCircle, Zap } from "lucide-react";
 
 function isRunningStatus(status: string | undefined): boolean {
   return status === "running" || status === "pending";
@@ -120,7 +121,7 @@ function JobLogsDialogHeader({ jobData, status }: JobLogsDialogHeaderProps) {
       {status ? (
         <div className="flex shrink-0 items-center gap-2">
           <ChapterStatusBadge status={status as ChapterStatus} />
-          {running ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
+          {running ? <Spinner className="size-4 text-muted-foreground" /> : null}
         </div>
       ) : null}
     </DialogHeader>
@@ -343,12 +344,12 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
           />
         ) : progressQuery.isPending && !progress && !jobData ? (
           <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-            <Loader2 className="mb-3 size-8 animate-spin text-primary" />
+            <Spinner className="mb-3 size-8 text-primary" />
             <p className="text-body">Loading job progress…</p>
           </div>
         ) : detailsQuery.isPending && !jobData ? (
           <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-            <Loader2 className="mb-3 size-8 animate-spin text-primary" />
+            <Spinner className="mb-3 size-8 text-primary" />
             <p className="text-body">Loading job details and logs…</p>
           </div>
         ) : detailsQuery.data === null ? (

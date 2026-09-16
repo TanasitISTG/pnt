@@ -53,6 +53,21 @@ export const changePasswordSchema = z
     path: ["confirmPassword"],
   });
 
+export interface ProviderSettings {
+  isConfigured: boolean;
+  provider: "openai" | "gemini";
+  baseUrl: string;
+  model: string;
+  fastModel: string | null;
+  temperature: number;
+  reasoningEffort: ReasoningEffort | null;
+  requestTimeoutSec: number | null;
+  apiKeyMasked: string;
+  hasApiKey: boolean;
+  inputPricePer1M: number | null;
+  outputPricePer1M: number | null;
+}
+
 export type SaveProviderSettingsInput = z.infer<typeof saveProviderSettingsSchema>;
 export type TestProviderConnectionInput = z.infer<typeof testProviderConnectionSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

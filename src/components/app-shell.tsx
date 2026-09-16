@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, LogIn, LogOut, Menu, Moon, Settings, Sun, X, Loader2 } from "lucide-react";
+import { ChevronDown, LogIn, LogOut, Menu, Moon, Settings, Sun, X } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Spinner } from "@/components/ui/spinner";
 import { signOut } from "@/lib/auth/auth-client";
 import type { User as AuthUser } from "@/lib/auth/auth";
 import { useConsent } from "@/lib/consent";
@@ -179,7 +180,7 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
                     onClick={handleSignOut}
                     disabled={signingOut}
                   >
-                    {signingOut ? <Loader2 className="animate-spin" /> : <LogOut />}
+                    {signingOut ? <Spinner /> : <LogOut />}
                     {signingOut ? "Signing out…" : "Sign out"}
                   </Button>
                 </>
@@ -288,7 +289,7 @@ function UserDropdown({
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onSignOut} disabled={signingOut}>
-          {signingOut ? <Loader2 className="animate-spin" /> : <LogOut />}
+          {signingOut ? <Spinner /> : <LogOut />}
           {signingOut ? "Signing out…" : "Sign out"}
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -16,5 +16,6 @@ evals/results/
 .tura/e2e/
 playwright-report/
 test-results/
+.commandcode/
 
 .vercel

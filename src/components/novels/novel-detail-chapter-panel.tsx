@@ -29,11 +29,7 @@ export interface NovelDetailChapterPanelDetail {
   onRequestBatchRetranslate: () => void;
   setSelectedIds: Dispatch<SetStateAction<Set<string>>>;
   setStopSelectedOpen: (open: boolean) => void;
-  batchRangeFrom: string;
-  batchRangeTo: string;
-  setBatchRangeFrom: (value: string) => void;
-  setBatchRangeTo: (value: string) => void;
-  selectByRange: () => void;
+  selectByRange: (from: number, to: number) => void;
   readyUnpublishedCount: number;
   unreadyCount: number;
   publishAllChapters: () => void;
@@ -153,10 +149,6 @@ export function NovelDetailChapterPanel({
     refetchActiveJobs,
     setSelectedIds,
     setStopSelectedOpen,
-    batchRangeFrom,
-    batchRangeTo,
-    setBatchRangeFrom,
-    setBatchRangeTo,
     selectByRange,
     readyUnpublishedCount,
     unreadyCount,
@@ -218,10 +210,6 @@ export function NovelDetailChapterPanel({
           onRequestBatchRetranslate={onRequestBatchRetranslate}
           onRequestBatchStop={() => setStopSelectedOpen(true)}
           onClearSelection={() => setSelectedIds(new Set())}
-          batchRangeFrom={batchRangeFrom}
-          batchRangeTo={batchRangeTo}
-          onBatchRangeFromChange={setBatchRangeFrom}
-          onBatchRangeToChange={setBatchRangeTo}
           onSelectRange={selectByRange}
           readyUnpublishedCount={readyUnpublishedCount}
           unreadyCount={unreadyCount}

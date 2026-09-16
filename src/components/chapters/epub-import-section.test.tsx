@@ -199,4 +199,35 @@ describe("EpubImportSection", () => {
       screen.getByRole("button", { name: "Retry EPUB import" }).getAttribute("disabled"),
     ).not.toBeNull();
   });
+
+  it("re-enables the retry as soon as the replacement file is selected", () => {
+    const importController = {
+      ...defaultController(),
+      importJob: {
+        id: "epub-job-3",
+        kind: "epub" as const,
+        status: "cancelled" as const,
+        sourceFileName: "novel.epub",
+        fromNumber: 1,
+        toNumber: 5,
+        nextNumber: 3,
+        added: 1,
+        skipped: 1,
+        failed: 0,
+        error: null,
+      },
+    };
+    renderEpub(false, importController);
+    const retry = screen.getByRole("button", { name: "Retry EPUB import" });
+    expect(retry.getAttribute("disabled")).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("EPUB file"), {
+      target: { files: [new File(["epub"], "chapter.epub", { type: "application/epub+zip" })] },
+    });
+
+    expect(
+      screen.getByText("This import stopped. Upload the selected EPUB again to retry."),
+    ).toBeTruthy();
+    expect(retry.getAttribute("disabled")).toBeNull();
+  });
 });

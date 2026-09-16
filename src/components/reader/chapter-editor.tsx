@@ -1,26 +1,18 @@
-import type { FormEvent } from "react";
+import { useStore } from "@tanstack/react-form";
 import { Check, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-
-export interface ChapterDraft {
-  title: string;
-  translatedTitle: string;
-  rawContent: string;
-  translatedContent: string;
-}
+import type { ChapterEditorFormApi } from "./use-chapter-editor";
 
 export interface ChapterEditorProps {
-  draft: ChapterDraft;
-  errors: Record<string, string>;
+  form: ChapterEditorFormApi;
   fontSizePx: number;
   readerFontClass?: string;
-  saving: boolean;
-  onChange: (field: keyof ChapterDraft, value: string) => void;
   onSave: () => void;
   onCancel: () => void;
 }
@@ -33,105 +25,137 @@ const fieldIds = {
 } as const;
 
 export function ChapterEditor({
-  draft,
-  errors,
+  form,
   fontSizePx,
   readerFontClass,
-  saving,
-  onChange,
   onSave,
   onCancel,
 }: ChapterEditorProps) {
-  const sourceTitleInvalid = draft.title.trim().length === 0;
-  const sourceContentInvalid = draft.rawContent.trim().length === 0;
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!sourceTitleInvalid && !sourceContentInvalid && !saving) onSave();
-  };
-
+  const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
+  const [title, rawContent] = useStore(
+    form.store,
+    (state) => [state.values.title, state.values.rawContent] as const,
+    (previous, next) => previous[0] === next[0] && previous[1] === next[1],
+  );
   return (
-    <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
+    <form
+      noValidate
+      className="flex flex-col gap-6"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave();
+      }}
+    >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={fieldIds.title}>Source Title</Label>
-          <Input
-            id={fieldIds.title}
-            value={draft.title}
-            onChange={(event) => onChange("title", event.target.value)}
-            aria-invalid={errors.title ? true : undefined}
-            maxLength={500}
-            disabled={saving}
-          />
-          {errors.title && <p className="text-caption text-destructive">{errors.title}</p>}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={fieldIds.translatedTitle}>Translated Title</Label>
-          <Input
-            id={fieldIds.translatedTitle}
-            value={draft.translatedTitle}
-            onChange={(event) => onChange("translatedTitle", event.target.value)}
-            aria-invalid={errors.translatedTitle ? true : undefined}
-            maxLength={500}
-            disabled={saving}
-          />
-          {errors.translatedTitle && (
-            <p className="text-caption text-destructive">{errors.translatedTitle}</p>
-          )}
-        </div>
+        <form.Field name="title">
+          {(field) => {
+            const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+            return (
+              <Field data-invalid={invalid || undefined}>
+                <FieldLabel htmlFor={fieldIds.title}>Source Title</FieldLabel>
+                <Input
+                  id={fieldIds.title}
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={invalid}
+                  maxLength={500}
+                  disabled={isSubmitting}
+                />
+                {invalid && <FieldError errors={field.state.meta.errors} />}
+              </Field>
+            );
+          }}
+        </form.Field>
+        <form.Field name="translatedTitle">
+          {(field) => {
+            const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+            return (
+              <Field data-invalid={invalid || undefined}>
+                <FieldLabel htmlFor={fieldIds.translatedTitle}>Translated Title</FieldLabel>
+                <Input
+                  id={fieldIds.translatedTitle}
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={invalid}
+                  maxLength={500}
+                  disabled={isSubmitting}
+                />
+                {invalid && <FieldError errors={field.state.meta.errors} />}
+              </Field>
+            );
+          }}
+        </form.Field>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <Label htmlFor={fieldIds.rawContent}>Source Content</Label>
-            <span className="text-caption text-muted-foreground">
-              {draft.rawContent.length.toLocaleString()} characters
-            </span>
-          </div>
-          <Textarea
-            id={fieldIds.rawContent}
-            value={draft.rawContent}
-            onChange={(event) => onChange("rawContent", event.target.value)}
-            aria-invalid={errors.rawContent ? true : undefined}
-            className={cn("min-h-64 max-h-[60vh] resize-y overflow-auto", readerFontClass)}
-            style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
-            disabled={saving}
-          />
-          {errors.rawContent && (
-            <p className="text-caption text-destructive">{errors.rawContent}</p>
-          )}
-        </div>
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <Label htmlFor={fieldIds.translatedContent}>Translated Content</Label>
-            <span className="text-caption text-muted-foreground">
-              {draft.translatedContent.length.toLocaleString()} characters
-            </span>
-          </div>
-          <Textarea
-            id={fieldIds.translatedContent}
-            value={draft.translatedContent}
-            onChange={(event) => onChange("translatedContent", event.target.value)}
-            aria-invalid={errors.translatedContent ? true : undefined}
-            className={cn("min-h-64 max-h-[60vh] resize-y overflow-auto", readerFontClass)}
-            style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
-            disabled={saving}
-          />
-          {errors.translatedContent && (
-            <p className="text-caption text-destructive">{errors.translatedContent}</p>
-          )}
-        </div>
+        <form.Field name="rawContent">
+          {(field) => {
+            const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+            return (
+              <Field data-invalid={invalid || undefined} className="min-w-0">
+                <div className="flex items-baseline justify-between gap-3">
+                  <FieldLabel htmlFor={fieldIds.rawContent}>Source Content</FieldLabel>
+                  <span className="text-caption text-muted-foreground">
+                    {field.state.value.length.toLocaleString()} characters
+                  </span>
+                </div>
+                <Textarea
+                  id={fieldIds.rawContent}
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={invalid}
+                  className={cn("min-h-64 max-h-[60vh] resize-y overflow-auto", readerFontClass)}
+                  style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
+                  disabled={isSubmitting}
+                />
+                {invalid && <FieldError errors={field.state.meta.errors} />}
+              </Field>
+            );
+          }}
+        </form.Field>
+        <form.Field name="translatedContent">
+          {(field) => {
+            const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+            return (
+              <Field data-invalid={invalid || undefined} className="min-w-0">
+                <div className="flex items-baseline justify-between gap-3">
+                  <FieldLabel htmlFor={fieldIds.translatedContent}>Translated Content</FieldLabel>
+                  <span className="text-caption text-muted-foreground">
+                    {field.state.value.length.toLocaleString()} characters
+                  </span>
+                </div>
+                <Textarea
+                  id={fieldIds.translatedContent}
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={invalid}
+                  className={cn("min-h-64 max-h-[60vh] resize-y overflow-auto", readerFontClass)}
+                  style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
+                  disabled={isSubmitting}
+                />
+                {invalid && <FieldError errors={field.state.meta.errors} />}
+              </Field>
+            );
+          }}
+        </form.Field>
       </div>
 
       <div className="flex justify-end gap-3 border-t border-border pt-4">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           <X className="size-4" />
           Cancel
         </Button>
-        <Button type="submit" disabled={saving || sourceTitleInvalid || sourceContentInvalid}>
-          <Check className="size-4" />
-          {saving ? "Saving…" : "Save Chapter"}
+        <Button type="submit" disabled={isSubmitting || !title.trim() || !rawContent.trim()}>
+          {isSubmitting ? <Spinner /> : <Check className="size-4" />}
+          {isSubmitting ? "Saving…" : "Save Chapter"}
         </Button>
       </div>
     </form>

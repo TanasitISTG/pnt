@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { DateCell } from "@/components/jobs/date-cell";
@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { getImportJobStatus } from "@/lib/scrape/functions";
 import type { JobHistoryStatus } from "@/lib/job-dashboard/contracts";
 
@@ -71,10 +72,7 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
         <Badge variant="outline">{job.kind === "epub" ? "EPUB" : "Scrape"}</Badge>
         {updating ? (
           <span className="ml-auto inline-flex items-center gap-1.5 text-caption text-muted-foreground">
-            <Loader2
-              className="size-3.5 animate-spin motion-reduce:animate-none"
-              aria-hidden="true"
-            />
+            <Spinner className="size-3.5" aria-hidden="true" />
             Updating…
           </span>
         ) : null}
@@ -135,7 +133,7 @@ function ImportDialogBody({
   if (loading) {
     return (
       <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-muted-foreground">
-        <Loader2 className="size-7 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        <Spinner className="size-7" aria-hidden="true" />
         <p>Loading job details…</p>
       </div>
     );

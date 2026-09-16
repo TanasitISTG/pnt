@@ -1,11 +1,18 @@
-import { useBlocker } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useForm,
+  useStore,
+  type FormAsyncValidateOrFn,
+  type FormValidateOrFn,
+  type ReactFormExtendedApi,
+} from "@tanstack/react-form";
+import { useBlocker } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { updateChapter } from "@/lib/content/chapter.functions";
 import { editChapterSchema, type EditChapterInput } from "@/lib/content/novel.schemas";
-import type { ChapterDraft } from "@/components/reader/chapter-editor";
 
 interface EditableChapter {
   id: string;
@@ -23,7 +30,71 @@ interface UseChapterEditorOptions {
   jobRunning: boolean;
 }
 
-type SourceChangePolicy = "keep" | "clear";
+export interface ChapterEditorFormValues {
+  title: string;
+  translatedTitle: string;
+  rawContent: string;
+  translatedContent: string;
+  sourceChangePolicy: "keep" | "clear" | null;
+}
+
+type ChapterEditorValidator = FormValidateOrFn<ChapterEditorFormValues> | undefined;
+type ChapterEditorAsyncValidator = FormAsyncValidateOrFn<ChapterEditorFormValues> | undefined;
+type ChapterEditorSchema = z.ZodType<ChapterEditorFormValues, ChapterEditorFormValues>;
+export type ChapterEditorFormApi = ReactFormExtendedApi<
+  ChapterEditorFormValues,
+  ChapterEditorValidator,
+  ChapterEditorValidator,
+  ChapterEditorAsyncValidator,
+  ChapterEditorValidator,
+  ChapterEditorAsyncValidator,
+  ChapterEditorSchema,
+  ChapterEditorAsyncValidator,
+  ChapterEditorValidator,
+  ChapterEditorAsyncValidator,
+  ChapterEditorAsyncValidator,
+  unknown
+>;
+
+const emptyChapterEditorValues: ChapterEditorFormValues = {
+  title: "",
+  translatedTitle: "",
+  rawContent: "",
+  translatedContent: "",
+  sourceChangePolicy: null,
+};
+
+function createChapterEditorSchema(
+  chapter: EditableChapter | null | undefined,
+): ChapterEditorSchema {
+  return z
+    .object({
+      title: z
+        .string()
+        .max(500)
+        .refine((value) => value.trim().length > 0, "Source title is required"),
+      translatedTitle: z.string().max(500),
+      rawContent: z
+        .string()
+        .refine((value) => value.trim().length > 0, "Source content is required"),
+      translatedContent: z.string(),
+      sourceChangePolicy: z.enum(["keep", "clear"]).nullable(),
+    })
+    .superRefine((value, context) => {
+      if (
+        value.sourceChangePolicy !== "clear" &&
+        typeof chapter?.translatedContent === "string" &&
+        value.translatedContent.trim().length === 0
+      ) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "Translation cannot be empty. Restore it, or change the source text and choose Clear Translation.",
+          path: ["translatedContent"],
+        });
+      }
+    });
+}
 
 export function useChapterEditor({
   chapterId,
@@ -33,76 +104,124 @@ export function useChapterEditor({
   jobRunning,
 }: UseChapterEditorOptions) {
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<ChapterDraft | null>(null);
-  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [sourcePolicyDialogOpen, setSourcePolicyDialogOpen] = useState(false);
-  const editing = draft !== null;
-
-  const { mutateAsync: saveChapter, isPending: saving } = useMutation({
+  const schema = createChapterEditorSchema(chapter);
+  const { mutateAsync: saveChapter } = useMutation({
     mutationFn: (payload: EditChapterInput) => updateChapter({ data: payload }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] }),
-        queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
-        queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
-        queryClient.invalidateQueries({ queryKey: ["translation-eval-report", novelId] }),
-      ]);
-      setDraft(null);
-      setEditErrors({});
-      setSourcePolicyDialogOpen(false);
-      toast.success("Chapter saved");
+  });
+
+  const form = useForm({
+    defaultValues: emptyChapterEditorValues,
+    validators: {
+      onSubmit: schema,
     },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to save chapter");
+    onSubmitInvalid: ({ formApi, value }) => {
+      const result = schema.safeParse(value);
+      const invalidNames = result.success
+        ? []
+        : result.error.issues
+            .map((issue) => issue.path[0])
+            .filter(
+              (name): name is keyof ChapterEditorFormValues =>
+                name === "title" ||
+                name === "translatedTitle" ||
+                name === "rawContent" ||
+                name === "translatedContent",
+            );
+      for (const name of invalidNames) {
+        formApi.setFieldMeta(name, (previous) => ({ ...previous, isTouched: true }));
+      }
+      const firstInvalid = invalidNames[0];
+      if (firstInvalid && typeof document !== "undefined") {
+        document.querySelector<HTMLElement>(`[name="${firstInvalid}"]`)?.focus();
+      }
+    },
+    onSubmit: async ({ value }) => {
+      if (!editing || !chapter) return;
+      const parsed = schema.parse(value);
+      const sourceChanged =
+        parsed.title !== chapter.title || parsed.rawContent !== chapter.rawContent;
+      if (sourceChanged && parsed.sourceChangePolicy === null) {
+        const hasTranslation = Boolean(
+          chapter.translatedTitle ||
+          chapter.translatedContent ||
+          parsed.translatedTitle.trim() ||
+          parsed.translatedContent.trim(),
+        );
+        if (hasTranslation) {
+          setSourcePolicyDialogOpen(true);
+          return;
+        }
+      }
+
+      const sourceChangePolicy = sourceChanged ? (parsed.sourceChangePolicy ?? "clear") : undefined;
+      const translatedContentChanged =
+        parsed.translatedContent !== (chapter.translatedContent ?? "");
+      const translatedContent =
+        sourceChangePolicy === "clear"
+          ? { translatedContent: null }
+          : translatedContentChanged && parsed.translatedContent.trim().length > 0
+            ? { translatedContent: parsed.translatedContent }
+            : {};
+      const payload = editChapterSchema.parse({
+        chapterId,
+        title: parsed.title,
+        translatedTitle: parsed.translatedTitle.trim() ? parsed.translatedTitle : null,
+        rawContent: parsed.rawContent,
+        ...translatedContent,
+        ...(sourceChangePolicy ? { sourceChangePolicy } : {}),
+      });
+
+      try {
+        await saveChapter(payload);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["chapter", chapterId] }),
+          queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
+          queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
+          queryClient.invalidateQueries({ queryKey: ["translation-eval-report", novelId] }),
+        ]);
+        form.reset(parsed, { keepDefaultValues: true });
+        setEditing(false);
+        setSourcePolicyDialogOpen(false);
+        toast.success("Chapter saved");
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : "Failed to save chapter");
+      }
     },
   });
 
-  const sourceChanged =
-    !!draft &&
-    !!chapter &&
-    (draft.title !== chapter.title || draft.rawContent !== chapter.rawContent);
-  const isDirty =
-    !!draft &&
-    !!chapter &&
-    (sourceChanged ||
-      draft.translatedTitle !== (chapter.translatedTitle ?? "") ||
-      draft.translatedContent !== (chapter.translatedContent ?? ""));
-
+  const formDirty = useStore(form.store, (state) => state.isDirty);
+  const saving = useStore(form.store, (state) => state.isSubmitting);
+  const isDirty = editing && formDirty;
+  const shouldBlock = useCallback(() => isDirty, [isDirty]);
   const blocker = useBlocker({
-    shouldBlockFn: () => isDirty,
+    shouldBlockFn: shouldBlock,
     withResolver: true,
     enableBeforeUnload: isDirty,
   });
 
-  const clearEditErrors = useCallback((field: string) => {
-    setEditErrors((current) => ({ ...current, [field]: "" }));
-  }, []);
-
   const beginEditing = useCallback(() => {
     if (!chapter || !canEdit || jobRunning) return;
-    setDraft({
-      title: chapter.title,
-      translatedTitle: chapter.translatedTitle ?? "",
-      rawContent: chapter.rawContent,
-      translatedContent: chapter.translatedContent ?? "",
-    });
-    setEditErrors({});
-  }, [canEdit, chapter, jobRunning]);
-
-  const updateDraft = useCallback(
-    (field: keyof ChapterDraft, value: string) => {
-      setDraft((current) => (current ? { ...current, [field]: value } : current));
-      clearEditErrors(field);
-    },
-    [clearEditErrors],
-  );
+    form.reset(
+      {
+        title: chapter.title,
+        translatedTitle: chapter.translatedTitle ?? "",
+        rawContent: chapter.rawContent,
+        translatedContent: chapter.translatedContent ?? "",
+        sourceChangePolicy: null,
+      },
+      { keepDefaultValues: true },
+    );
+    setEditing(true);
+  }, [canEdit, chapter, form, jobRunning]);
 
   const closeEditor = useCallback(() => {
-    setDraft(null);
-    setEditErrors({});
+    form.reset(emptyChapterEditorValues, { keepDefaultValues: true });
+    setEditing(false);
     setSourcePolicyDialogOpen(false);
-  }, []);
+  }, [form]);
 
   const requestCancelEditing = useCallback(() => {
     if (!editing) return;
@@ -113,96 +232,31 @@ export function useChapterEditor({
     }
   }, [closeEditor, editing, isDirty]);
 
-  const setSchemaErrors = useCallback((issues: Array<{ path: PropertyKey[]; message: string }>) => {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of issues) {
-      if (issue.path[0] !== undefined) fieldErrors[String(issue.path[0])] = issue.message;
-    }
-    setEditErrors(fieldErrors);
-  }, []);
-
-  const buildPayload = useCallback(
-    (policy?: SourceChangePolicy): EditChapterInput | null => {
-      if (!draft || !chapter) return null;
-
-      if (
-        policy !== "clear" &&
-        chapter.translatedContent !== null &&
-        draft.translatedContent.trim().length === 0
-      ) {
-        setEditErrors({
-          translatedContent: "Translation cannot be empty. Choose Clear Translation to remove it.",
-        });
-        return null;
-      }
-
-      const translatedContentChanged =
-        draft.translatedContent !== (chapter.translatedContent ?? "");
-      const translatedContent =
-        policy === "clear" && sourceChanged
-          ? { translatedContent: null }
-          : translatedContentChanged && draft.translatedContent.trim().length > 0
-            ? { translatedContent: draft.translatedContent }
-            : {};
-      const payload = {
-        chapterId,
-        title: draft.title,
-        translatedTitle: draft.translatedTitle.trim().length ? draft.translatedTitle : null,
-        rawContent: draft.rawContent,
-        ...translatedContent,
-        ...(sourceChanged && policy ? { sourceChangePolicy: policy } : {}),
-      } satisfies EditChapterInput;
-      const result = editChapterSchema.safeParse(payload);
-      if (!result.success) {
-        setSchemaErrors(result.error.issues);
-        return null;
-      }
-      return result.data;
-    },
-    [chapter, chapterId, draft, setSchemaErrors, sourceChanged],
-  );
-
-  const persistDraft = useCallback(
-    async (policy?: SourceChangePolicy) => {
-      const payload = buildPayload(policy);
-      if (!payload) return;
-      await saveChapter(payload).catch(() => {});
-    },
-    [buildPayload, saveChapter],
-  );
-
   const handleSaveRequest = useCallback(() => {
-    if (!draft || !chapter) return;
-    setEditErrors({});
+    if (!editing || saving) return;
+    form.setFieldValue("sourceChangePolicy", null, { dontUpdateMeta: true });
+    void form.handleSubmit();
+  }, [editing, form, saving]);
 
-    const fieldsResult = editChapterSchema.safeParse({
-      chapterId,
-      title: draft.title,
-      translatedTitle: draft.translatedTitle.trim().length ? draft.translatedTitle : null,
-      rawContent: draft.rawContent,
-    });
-    if (!fieldsResult.success) {
-      setSchemaErrors(fieldsResult.error.issues);
-      return;
-    }
+  const submitWithPolicy = useCallback(
+    (policy: "keep" | "clear") => {
+      if (!editing || saving) return;
+      form.setFieldValue("sourceChangePolicy", policy, { dontUpdateMeta: true });
+      void form.handleSubmit();
+    },
+    [editing, form, saving],
+  );
 
-    if (sourceChanged) {
-      const hasTranslation = Boolean(
-        chapter.translatedTitle ||
-        chapter.translatedContent ||
-        draft.translatedTitle.trim() ||
-        draft.translatedContent.trim(),
-      );
-      if (hasTranslation) {
-        setSourcePolicyDialogOpen(true);
-        return;
+  const handleSourcePolicyChange = useCallback(
+    (open: boolean) => {
+      if (!open && saving) return;
+      setSourcePolicyDialogOpen(open);
+      if (!open) {
+        form.setFieldValue("sourceChangePolicy", null, { dontUpdateMeta: true });
       }
-      void persistDraft("clear");
-      return;
-    }
-
-    void persistDraft();
-  }, [chapter, chapterId, draft, persistDraft, setSchemaErrors, sourceChanged]);
+    },
+    [form, saving],
+  );
 
   const handleDiscardDialogChange = useCallback(
     (open: boolean) => {
@@ -231,17 +285,15 @@ export function useChapterEditor({
     closeEditor,
     discardChanges,
     discardDialogOpen,
-    editErrors,
     editing,
+    form,
     handleDiscardDialogChange,
     handleSaveRequest,
+    handleSourcePolicyChange,
     keepEditing,
-    persistDraft,
     requestCancelEditing,
     saving,
-    setSourcePolicyDialogOpen,
     sourcePolicyDialogOpen,
-    draft,
-    updateDraft,
+    submitWithPolicy,
   };
 }
