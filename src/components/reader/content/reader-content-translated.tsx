@@ -1,3 +1,4 @@
+import type { ReaderHighlightsLookup } from "./reader-content-types";
 import {
   ReaderMissingOriginalContent,
   ReaderMissingTranslationContent,
@@ -10,11 +11,14 @@ interface ReaderTranslatedContentProps {
   rawParagraphs: string[];
   translatedParagraphs: string[];
   fontSizePx: number;
+  lineHeight: number;
+  measureRem: number;
   readerFontClass?: string;
   sourceLang: string;
   sourceName?: string;
   targetLang: string;
   targetName: string;
+  highlightsFor?: ReaderHighlightsLookup;
 }
 
 export function ReaderTranslatedContent({
@@ -23,22 +27,28 @@ export function ReaderTranslatedContent({
   rawParagraphs,
   translatedParagraphs,
   fontSizePx,
+  lineHeight,
+  measureRem,
   readerFontClass,
   sourceLang,
   sourceName,
   targetLang,
   targetName,
+  highlightsFor,
 }: ReaderTranslatedContentProps) {
   if (viewMode === "side") {
     return (
       <ReaderComparison
         aligned={aligned}
         fontSizePx={fontSizePx}
+        lineHeight={lineHeight}
+        measureRem={measureRem}
         readerFontClass={readerFontClass}
         sourceLang={sourceLang}
         sourceName={sourceName}
         targetLang={targetLang}
         targetName={targetName}
+        highlightsFor={highlightsFor}
       />
     );
   }
@@ -48,8 +58,11 @@ export function ReaderTranslatedContent({
       <ReaderProse
         paragraphs={translatedParagraphs}
         fontSizePx={fontSizePx}
+        lineHeight={lineHeight}
+        measureRem={measureRem}
         readerFontClass={readerFontClass}
         lang={targetLang}
+        highlightsFor={highlightsFor}
       />
     ) : (
       <ReaderMissingTranslationContent />
@@ -60,8 +73,11 @@ export function ReaderTranslatedContent({
     <ReaderProse
       paragraphs={rawParagraphs}
       fontSizePx={fontSizePx}
+      lineHeight={lineHeight}
+      measureRem={measureRem}
       readerFontClass={readerFontClass}
       lang={sourceLang}
+      highlightsFor={highlightsFor}
     />
   ) : (
     <ReaderMissingOriginalContent />

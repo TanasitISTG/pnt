@@ -61,11 +61,15 @@ function CookiePolicyPage() {
           <ul className="list-disc pl-5 space-y-1 text-body text-muted-foreground">
             <li>
               <strong className="text-foreground">pnt-reader-settings</strong>: Font size, typeface,
-              and layout preferences.
+              line height, text width, view mode, and reader page theme.
             </li>
             <li>
               <strong className="text-foreground">pnt-reader-progress</strong>: Reading position
-              across chapters.
+              across chapters for guests.
+            </li>
+            <li>
+              <strong className="text-foreground">pnt-reader-bookmarks</strong>: Reader bookmarks
+              and notes for guests.
             </li>
             <li>
               <strong className="text-foreground">pnt-consent-v1</strong>: Your cookie consent
@@ -76,6 +80,10 @@ function CookiePolicyPage() {
               setting.
             </li>
           </ul>
+          <p className="text-body text-foreground">
+            When you sign in, your reading position, read chapters, and bookmarks are stored with
+            your account instead of the browser, so they follow you across devices.
+          </p>
         </section>
 
         <p className="text-caption text-muted-foreground pt-4 border-t border-border">

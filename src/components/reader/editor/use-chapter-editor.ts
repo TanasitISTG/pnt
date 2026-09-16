@@ -195,7 +195,13 @@ export function useChapterEditor({
   const formDirty = useStore(form.store, (state) => state.isDirty);
   const saving = useStore(form.store, (state) => state.isSubmitting);
   const isDirty = editing && formDirty;
-  const shouldBlock = useCallback(() => isDirty, [isDirty]);
+  // Same-chapter hash jumps (reader anchors, bookmark "Go to") keep the editor on screen,
+  // so only leaving the chapter route is worth an unsaved-changes prompt.
+  const shouldBlock = useCallback(
+    ({ current, next }: { current: { pathname: string }; next: { pathname: string } }) =>
+      isDirty && next.pathname !== current.pathname,
+    [isDirty],
+  );
   const blocker = useBlocker({
     shouldBlockFn: shouldBlock,
     withResolver: true,

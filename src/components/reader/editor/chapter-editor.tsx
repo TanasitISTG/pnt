@@ -12,6 +12,7 @@ import type { ChapterEditorFormApi } from "./use-chapter-editor";
 export interface ChapterEditorProps {
   form: ChapterEditorFormApi;
   fontSizePx: number;
+  lineHeight: number;
   readerFontClass?: string;
   onSave: () => void;
   onCancel: () => void;
@@ -27,6 +28,7 @@ const fieldIds = {
 export function ChapterEditor({
   form,
   fontSizePx,
+  lineHeight,
   readerFontClass,
   onSave,
   onCancel,
@@ -111,7 +113,7 @@ export function ChapterEditor({
                   onChange={(event) => field.handleChange(event.target.value)}
                   aria-invalid={invalid}
                   className={cn("min-h-64 max-h-[60vh] resize-y overflow-auto", readerFontClass)}
-                  style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
+                  style={{ fontSize: fontSizePx, lineHeight }}
                   disabled={isSubmitting}
                 />
                 {invalid && <FieldError errors={field.state.meta.errors} />}
@@ -138,7 +140,7 @@ export function ChapterEditor({
                   onChange={(event) => field.handleChange(event.target.value)}
                   aria-invalid={invalid}
                   className={cn("min-h-64 max-h-[60vh] resize-y overflow-auto", readerFontClass)}
-                  style={{ fontSize: fontSizePx, lineHeight: 1.75 }}
+                  style={{ fontSize: fontSizePx, lineHeight }}
                   disabled={isSubmitting}
                 />
                 {invalid && <FieldError errors={field.state.meta.errors} />}

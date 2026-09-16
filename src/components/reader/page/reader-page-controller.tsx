@@ -2,12 +2,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ReaderSettings } from "@/lib/reader/types";
+import { READER_LINE_HEIGHT, READER_MEASURE_REM } from "@/lib/reader/settings";
+import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import { useTranslationJob } from "@/components/translation/use-translation-job";
 import { alignParagraphArrays, splitParagraphs } from "@/lib/translation/text/paragraphs";
 import type { ReaderTranslationStatus } from "@/components/reader/content/reader-content-types";
 import { useChapterEditor } from "@/components/reader/editor/use-chapter-editor";
 import { useChapterNav } from "@/components/reader/editor/use-chapter-nav";
 import { useReaderHotkeys } from "./reader-page-hotkeys";
+import { useReaderSearch } from "./use-reader-search";
 import type { ReaderChapterSummary } from "@/components/reader/controls/reader-toolbar";
 import {
   type ReaderChapterData,
@@ -43,6 +46,7 @@ export interface ReaderPageControllerProps {
   resolvedTheme: string | undefined;
   setTheme: (theme: string) => void;
   fontSizePx: number;
+  readerState: ReaderStateApi;
 }
 
 export function useReaderPageController({
@@ -58,11 +62,12 @@ export function useReaderPageController({
   resolvedTheme,
   setTheme,
   fontSizePx,
+  readerState,
 }: ReaderPageControllerProps): ReaderPageViewProps {
   const queryClient = useQueryClient();
   const [retranslateConfirmOpen, setRetranslateConfirmOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [panel, setPanel] = useState<"chapters" | "settings" | null>(null);
+  const [panel, setPanel] = useState<"chapters" | "settings" | "bookmarks" | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const {
     start: startTranslate,
@@ -98,7 +103,16 @@ export function useReaderPageController({
     [rawParagraphs, translatedParagraphs],
   );
   const hasTranslation = translatedParagraphs.length > 0;
-  const overlayOpen =
+  const search = useReaderSearch({
+    viewMode: settings.viewMode,
+    hasTranslation,
+    rawParagraphs,
+    translatedParagraphs,
+    aligned,
+    chapterKey: chapterId,
+    enabled: !editor.editing,
+  });
+  const dialogOpen =
     panel !== null ||
     actionsOpen ||
     shortcutsOpen ||
@@ -106,6 +120,7 @@ export function useReaderPageController({
     editor.sourcePolicyDialogOpen ||
     editor.discardDialogOpen ||
     editor.blocker.status === "blocked";
+  const overlayOpen = dialogOpen || search.open;
 
   useReaderHotkeys({
     viewMode: settings.viewMode,
@@ -116,6 +131,7 @@ export function useReaderPageController({
     chapterLoaded: true,
     jobRunning,
     overlayOpen,
+    dialogOpen,
     prevChapter,
     nextChapter,
     onUpdateViewMode: (next) => update({ viewMode: next }),
@@ -125,6 +141,9 @@ export function useReaderPageController({
     onSave: editor.handleSaveRequest,
     onGoToChapter: goToChapter,
     onSetShortcutsOpen: setShortcutsOpen,
+    onOpenFind: search.openFind,
+    onCloseFind: search.close,
+    findOpen: search.open,
   });
 
   const previousJobStatusRef = useRef<string | null>(null);
@@ -168,6 +187,8 @@ export function useReaderPageController({
     rawParagraphs,
     translatedParagraphs,
     fontSizePx,
+    lineHeight: READER_LINE_HEIGHT[settings.lineHeight],
+    measureRem: READER_MEASURE_REM[settings.measure],
     readerFontClass,
     settings,
     update,
@@ -206,5 +227,7 @@ export function useReaderPageController({
     editorForm: editor.form,
     onSave: editor.handleSaveRequest,
     onCancel: editor.requestCancelEditing,
+    readerState,
+    search,
   };
 }

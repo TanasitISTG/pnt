@@ -20,6 +20,7 @@ export interface NovelDetailViewModel
   costData: NovelHeaderProps["costData"];
   firstChapter: ChapterRow | null;
   readingActionsPending: boolean;
+  readingProgress: NovelHeaderProps["readingProgress"];
   exporting: NovelHeaderProps["exporting"];
   publishingNovel: boolean;
   handleExportTxt: NovelHeaderProps["onExportTxt"];
@@ -94,6 +95,7 @@ export function NovelDetailSections({
         chapters={chapters}
         lastReadChapter={lastReadChapter}
         firstChapter={firstChapter}
+        readingProgress={detail.readingProgress}
         exporting={exporting}
         publishingNovel={publishingNovel}
         chaptersPending={chapterUiLoading}

@@ -9,6 +9,7 @@ export interface ReaderHotkeysProps {
   chapterLoaded: boolean;
   jobRunning: boolean;
   overlayOpen: boolean;
+  dialogOpen: boolean;
   prevChapter: { id: string } | null;
   nextChapter: { id: string } | null;
   onUpdateViewMode: (next: "side" | "translated" | "raw") => void;
@@ -16,8 +17,11 @@ export interface ReaderHotkeysProps {
   onBeginEditing: () => void;
   onRequestCancelEditing: () => void;
   onSave: () => void;
-  onGoToChapter: (id: string) => void;
+  onGoToChapter: (id: string, hash?: string) => void;
   onSetShortcutsOpen: (open: boolean) => void;
+  onOpenFind: () => void;
+  onCloseFind: () => void;
+  findOpen: boolean;
 }
 
 const SHORTCUT_CONTROL_SELECTOR =
@@ -43,24 +47,19 @@ type ReaderViewHotkeysProps = Pick<
   ReaderHotkeysProps,
   | "editing"
   | "overlayOpen"
+  | "dialogOpen"
   | "viewMode"
   | "resolvedTheme"
   | "hasTranslation"
   | "onUpdateViewMode"
   | "onSetTheme"
   | "onSetShortcutsOpen"
+  | "onOpenFind"
 >;
 
 type ReaderEditorHotkeysProps = Pick<
   ReaderHotkeysProps,
-  | "editing"
-  | "overlayOpen"
-  | "user"
-  | "chapterLoaded"
-  | "jobRunning"
-  | "onBeginEditing"
-  | "onRequestCancelEditing"
-  | "onSave"
+  "editing" | "overlayOpen" | "user" | "chapterLoaded" | "jobRunning" | "onBeginEditing" | "onSave"
 >;
 
 function isReaderShortcutBlocked(
@@ -152,17 +151,6 @@ function saveEditing(
   onSave();
 }
 
-function cancelEditing(
-  event: KeyboardEvent,
-  editing: boolean,
-  overlayOpen: boolean,
-  onRequestCancelEditing: () => void,
-): void {
-  if (!editing || overlayOpen) return;
-  event.preventDefault();
-  onRequestCancelEditing();
-}
-
 function useReaderNavigationHotkeys({
   editing,
   overlayOpen,
@@ -197,14 +185,17 @@ function useReaderNavigationHotkeys({
 function useReaderViewHotkeys({
   editing,
   overlayOpen,
+  dialogOpen,
   viewMode,
   resolvedTheme,
   hasTranslation,
   onUpdateViewMode,
   onSetTheme,
   onSetShortcutsOpen,
+  onOpenFind,
 }: ReaderViewHotkeysProps) {
   const viewHotkeysEnabled = !editing && !overlayOpen;
+  const findHotkeyEnabled = !editing && !dialogOpen;
 
   useHotkey(
     "V",
@@ -221,6 +212,43 @@ function useReaderViewHotkeys({
     (event) => openShortcutHelp(event, editing, overlayOpen, onSetShortcutsOpen),
     { ...PASSIVE_HOTKEY_OPTIONS, enabled: viewHotkeysEnabled },
   );
+  useHotkey(
+    "Mod+F",
+    (event) => {
+      if (editing || dialogOpen) return;
+      event.preventDefault();
+      onOpenFind();
+    },
+    { ...PASSIVE_HOTKEY_OPTIONS, enabled: findHotkeyEnabled },
+  );
+}
+
+type ReaderEscapeHotkeysProps = Pick<
+  ReaderHotkeysProps,
+  "editing" | "overlayOpen" | "findOpen" | "onRequestCancelEditing" | "onCloseFind"
+>;
+
+// One Escape owner: leaving the editor wins, otherwise the find bar closes wherever focus sits.
+function useReaderEscapeHotkey({
+  editing,
+  overlayOpen,
+  findOpen,
+  onRequestCancelEditing,
+  onCloseFind,
+}: ReaderEscapeHotkeysProps) {
+  const cancelEnabled = editing && !overlayOpen;
+  useHotkey(
+    "Escape",
+    (event) => {
+      event.preventDefault();
+      if (cancelEnabled) {
+        onRequestCancelEditing();
+        return;
+      }
+      onCloseFind();
+    },
+    { ...PASSIVE_HOTKEY_OPTIONS, enabled: cancelEnabled || findOpen },
+  );
 }
 
 function useReaderEditorHotkeys({
@@ -230,7 +258,6 @@ function useReaderEditorHotkeys({
   chapterLoaded,
   jobRunning,
   onBeginEditing,
-  onRequestCancelEditing,
   onSave,
 }: ReaderEditorHotkeysProps) {
   useHotkey(
@@ -246,15 +273,11 @@ function useReaderEditorHotkeys({
     ...PASSIVE_HOTKEY_OPTIONS,
     enabled: editing && !!user && !overlayOpen,
   });
-  useHotkey(
-    "Escape",
-    (event) => cancelEditing(event, editing, overlayOpen, onRequestCancelEditing),
-    { ...PASSIVE_HOTKEY_OPTIONS, enabled: editing && !overlayOpen },
-  );
 }
 
 export function useReaderHotkeys(props: ReaderHotkeysProps) {
   useReaderNavigationHotkeys(props);
   useReaderViewHotkeys(props);
   useReaderEditorHotkeys(props);
+  useReaderEscapeHotkey(props);
 }

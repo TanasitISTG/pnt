@@ -110,9 +110,11 @@ export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: R
               label="Cycle view: Compare / Translation / Original (translated chapters)"
             />
             <ShortcutKeys keys="t" label="Toggle light/dark theme" />
+            <ShortcutKeys keys="Ctrl/⌘+F" label="Find in chapter" />
+            <ShortcutKeys keys="Enter / ⇧+Enter" label="Next / previous match while finding" />
             {shortcuts.canEdit && <ShortcutKeys keys="e" label="Edit chapter" />}
             {shortcuts.canEdit && <ShortcutKeys keys="Ctrl/⌘+S" label="Save chapter" />}
-            <ShortcutKeys keys="Esc" label="Cancel edit or close help" />
+            <ShortcutKeys keys="Esc" label="Cancel edit, close find, or close help" />
             <ShortcutKeys keys="?" label="Show this help" />
           </dl>
         </DialogContent>

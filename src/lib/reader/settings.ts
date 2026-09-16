@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { ReaderFontSize, ReaderSettings, ReaderTypeface, ReaderViewMode } from "./types";
+import type {
+  ReaderFontSize,
+  ReaderLineHeight,
+  ReaderMeasure,
+  ReaderPageTheme,
+  ReaderSettings,
+  ReaderTypeface,
+  ReaderViewMode,
+} from "./types";
 
 const STORAGE_KEY = "pnt-reader-settings";
 
@@ -8,6 +16,9 @@ const DEFAULTS: ReaderSettings = {
   fontSize: "M",
   typeface: "default",
   viewMode: "side",
+  lineHeight: "normal",
+  measure: "medium",
+  pageTheme: "app",
 };
 
 export const READER_FONT_SIZE_PX: Record<ReaderFontSize, number> = {
@@ -15,6 +26,18 @@ export const READER_FONT_SIZE_PX: Record<ReaderFontSize, number> = {
   M: 16,
   L: 18,
   XL: 20,
+};
+
+export const READER_LINE_HEIGHT: Record<ReaderLineHeight, number> = {
+  compact: 1.5,
+  normal: 1.75,
+  relaxed: 2,
+};
+
+export const READER_MEASURE_REM: Record<ReaderMeasure, number> = {
+  narrow: 34,
+  medium: 42,
+  wide: 52,
 };
 
 function isReaderFontSize(value: unknown): value is ReaderFontSize {
@@ -29,6 +52,18 @@ function isReaderViewMode(value: unknown): value is ReaderViewMode {
   return value === "side" || value === "translated" || value === "raw";
 }
 
+function isReaderLineHeight(value: unknown): value is ReaderLineHeight {
+  return value === "compact" || value === "normal" || value === "relaxed";
+}
+
+function isReaderMeasure(value: unknown): value is ReaderMeasure {
+  return value === "narrow" || value === "medium" || value === "wide";
+}
+
+function isReaderPageTheme(value: unknown): value is ReaderPageTheme {
+  return value === "app" || value === "sepia" || value === "paper";
+}
+
 function load(): ReaderSettings {
   if (typeof window === "undefined") return DEFAULTS;
   try {
@@ -41,6 +76,9 @@ function load(): ReaderSettings {
       fontSize: isReaderFontSize(stored.fontSize) ? stored.fontSize : DEFAULTS.fontSize,
       typeface: isReaderTypeface(stored.typeface) ? stored.typeface : DEFAULTS.typeface,
       viewMode: isReaderViewMode(stored.viewMode) ? stored.viewMode : DEFAULTS.viewMode,
+      lineHeight: isReaderLineHeight(stored.lineHeight) ? stored.lineHeight : DEFAULTS.lineHeight,
+      measure: isReaderMeasure(stored.measure) ? stored.measure : DEFAULTS.measure,
+      pageTheme: isReaderPageTheme(stored.pageTheme) ? stored.pageTheme : DEFAULTS.pageTheme,
     };
   } catch {
     return DEFAULTS;

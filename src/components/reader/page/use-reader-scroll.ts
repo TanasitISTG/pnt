@@ -1,11 +1,7 @@
 import { useEffect, useRef } from "react";
 
-import {
-  getReaderProgress,
-  markChapterOpened,
-  markChapterRead,
-  saveScrollPosition,
-} from "@/lib/reader/progress";
+import type { ReaderProgressStore } from "@/lib/reader/use-reader-state";
+import { findReaderAnchor } from "./reader-anchors";
 
 const READ_COMPLETE_FRACTION = 0.95;
 
@@ -18,6 +14,15 @@ interface ScrollOwner {
   chapterId: string;
 }
 
+export interface UseReaderScrollOptions {
+  novelId: string;
+  chapterId: string;
+  chapter: { id: string } | null | undefined;
+  ready: boolean;
+  store: ReaderProgressStore;
+  targetAnchor?: string | null;
+}
+
 function isOwned(owner: MutableValue<ScrollOwner>, novelId: string, chapterId: string): boolean {
   return owner.current.novelId === novelId && owner.current.chapterId === chapterId;
 }
@@ -28,31 +33,24 @@ function fractionForCurrentScroll(): number | null {
   return Math.max(0, Math.min(1, window.scrollY / maxScroll));
 }
 
-function findReaderAnchor(anchor: string): HTMLElement | null {
-  const direct = document.getElementById(anchor);
-  if (direct) return direct;
-  if (anchor.startsWith("reader-paragraph-")) {
-    return document.getElementById(anchor.replace("reader-paragraph-", "reader-pair-"));
-  }
-  if (anchor.startsWith("reader-pair-")) {
-    return document.getElementById(anchor.replace("reader-pair-", "reader-paragraph-"));
-  }
-  return null;
-}
-
-export function useReaderScroll(
-  novelId: string,
-  chapterId: string,
-  chapter: { id: string } | null | undefined,
-  settingsReady: boolean,
-  targetAnchor: string | null = null,
-): void {
+export function useReaderScroll({
+  novelId,
+  chapterId,
+  chapter,
+  ready,
+  store,
+  targetAnchor = null,
+}: UseReaderScrollOptions): void {
   const ownerRef = useRef<ScrollOwner>({ novelId, chapterId });
   const restoredChapterRef = useRef<string | null>(null);
   const isRestoringRef = useRef(false);
   const restoreFrameRef = useRef<number | null>(null);
   const userTookOverRef = useRef(false);
   const readMarkedRef = useRef(false);
+  // Read through a ref so a caller that rebuilds its store object per render cannot
+  // retrigger these effects and loop.
+  const storeRef = useRef(store);
+  storeRef.current = store;
 
   useEffect(() => {
     ownerRef.current = { novelId, chapterId };
@@ -63,25 +61,25 @@ export function useReaderScroll(
   }, [chapterId, novelId, targetAnchor]);
 
   useEffect(() => {
-    if (!settingsReady || chapter?.id !== chapterId) return;
-    markChapterOpened(novelId, chapterId);
+    if (!ready || chapter?.id !== chapterId) return;
+    storeRef.current.markOpened(chapterId);
     // Content shorter than the viewport never scrolls, so it is fully viewed.
     if (fractionForCurrentScroll() === null) {
-      markChapterRead(novelId, chapterId);
+      storeRef.current.markRead(chapterId);
       readMarkedRef.current = true;
     }
-  }, [chapter?.id, chapterId, novelId, settingsReady]);
+  }, [chapter?.id, chapterId, ready]);
 
   useEffect(() => {
     if (
-      !settingsReady ||
+      !ready ||
       chapter?.id !== chapterId ||
       restoredChapterRef.current === chapterId ||
       targetAnchor
     )
       return;
 
-    const progress = getReaderProgress(novelId);
+    const progress = storeRef.current.getProgress();
     const savedFraction =
       progress.lastChapterId === chapterId &&
       typeof progress.scrollFraction === "number" &&
@@ -166,10 +164,10 @@ export function useReaderScroll(
       restoreFrameRef.current = null;
       isRestoringRef.current = false;
     };
-  }, [chapter?.id, chapterId, novelId, settingsReady, targetAnchor]);
+  }, [chapter?.id, chapterId, novelId, ready, targetAnchor]);
 
   useEffect(() => {
-    if (!targetAnchor || !settingsReady || chapter?.id !== chapterId) return;
+    if (!targetAnchor || !ready || chapter?.id !== chapterId) return;
 
     let frame: number | null = null;
     let attempts = 0;
@@ -196,7 +194,7 @@ export function useReaderScroll(
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
     };
-  }, [chapter?.id, chapterId, settingsReady, targetAnchor]);
+  }, [chapter?.id, chapterId, ready, targetAnchor]);
 
   useEffect(() => {
     let timer: number | null = null;
@@ -206,25 +204,35 @@ export function useReaderScroll(
     const markCompleteIfFinished = (fraction: number | null) => {
       if (readMarkedRef.current) return;
       if (fraction === null || fraction < READ_COMPLETE_FRACTION) return;
-      markChapterRead(novelId, chapterId);
+      storeRef.current.markRead(chapterId);
       readMarkedRef.current = true;
     };
 
-    const flushCaptured = () => {
+    const flushCaptured = (immediate: boolean, unload = false) => {
       window.clearTimeout(timer ?? undefined);
       timer = null;
       if (capturedFraction === null) return;
       markCompleteIfFinished(capturedFraction);
-      saveScrollPosition(novelId, capturedFraction);
+      if (immediate) {
+        storeRef.current.flushScrollFraction(capturedFraction, { unload });
+      } else {
+        storeRef.current.saveScrollFraction(capturedFraction);
+      }
       capturedFraction = null;
     };
 
     const captureCurrent = () => {
-      if (!settingsReady || isRestoringRef.current || restoredChapterRef.current !== chapterId)
-        return;
+      if (!ready || isRestoringRef.current || restoredChapterRef.current !== chapterId) return;
       if (!isOwned(ownerRef, novelId, chapterId)) return;
       const fraction = fractionForCurrentScroll();
-      if (fraction !== null) capturedFraction = fraction;
+      if (fraction === null) return;
+      capturedFraction = fraction;
+      // Crossing the end marks the chapter right away: the debounced flush only carries the
+      // settled position, so a reader who reaches the end and scrolls back would be missed.
+      if (!readMarkedRef.current && fraction >= READ_COMPLETE_FRACTION) {
+        storeRef.current.markRead(chapterId);
+        readMarkedRef.current = true;
+      }
     };
 
     const handleScroll = () => {
@@ -234,13 +242,13 @@ export function useReaderScroll(
       });
       captureCurrent();
       if (capturedFraction !== null && timer === null) {
-        timer = window.setTimeout(flushCaptured, 300);
+        timer = window.setTimeout(() => flushCaptured(false), 300);
       }
     };
 
     const handlePageLifecycle = () => {
       captureCurrent();
-      flushCaptured();
+      flushCaptured(true, true);
     };
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") handlePageLifecycle();
@@ -252,10 +260,10 @@ export function useReaderScroll(
 
     return () => {
       if (frameGate !== null) cancelAnimationFrame(frameGate);
-      flushCaptured();
+      flushCaptured(true);
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("pagehide", handlePageLifecycle);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [chapterId, novelId, settingsReady, targetAnchor]);
+  }, [chapterId, novelId, ready, targetAnchor]);
 }

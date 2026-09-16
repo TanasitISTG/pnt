@@ -43,12 +43,15 @@ export function ReaderContentView({
   rawParagraphs,
   translatedParagraphs,
   fontSizePx,
+  lineHeight,
+  measureRem,
   readerFontClass,
   sourceLang = "zh",
   targetLang = "th",
   isAdmin = false,
   translationStatus = "idle",
   jobRunning = false,
+  highlightsFor,
   onTranslateRequest,
   onEditRequest,
 }: ReaderContentProps) {
@@ -82,18 +85,24 @@ export function ReaderContentView({
           rawParagraphs={rawParagraphs}
           translatedParagraphs={translatedParagraphs}
           fontSizePx={fontSizePx}
+          lineHeight={lineHeight}
+          measureRem={measureRem}
           readerFontClass={readerFontClass}
           sourceLang={sourceLang}
           sourceName={sourceName}
           targetLang={targetLang}
           targetName={targetName}
+          highlightsFor={highlightsFor}
         />
       ) : (
         <ReaderUntranslatedContent
           rawParagraphs={rawParagraphs}
           fontSizePx={fontSizePx}
+          lineHeight={lineHeight}
+          measureRem={measureRem}
           readerFontClass={readerFontClass}
           sourceLang={sourceLang}
+          highlightsFor={highlightsFor}
           isAdmin={isAdmin}
           translationStatus={translationStatus}
           jobRunning={jobRunning}

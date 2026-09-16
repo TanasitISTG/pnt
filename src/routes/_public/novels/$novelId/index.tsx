@@ -9,6 +9,7 @@ import {
   novelQueryOptions,
 } from "@/components/novels/detail/use-novel-detail-page";
 import { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
+import { readerStateQueryOptions } from "@/lib/reader/query";
 import {
   novelDetailSearchSchema,
   type NovelDetailSearch,
@@ -23,6 +24,7 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
       const core = await getAdminNovelDetailCore({ data: { novelId: params.novelId } });
       if (!core) throw notFound();
       hydrateAdminNovelDetailCore(context.queryClient, core);
+      await context.queryClient.ensureQueryData(readerStateQueryOptions(params.novelId));
       return { novel: core.novel };
     }
 

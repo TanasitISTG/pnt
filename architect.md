@@ -40,6 +40,7 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 19. Evaluation version 2 findings are bounded, immutable snapshot evidence with stable classifications, one-based paragraph locations when known, capped excerpts, and reader-anchor links. Corrections require a new report.
 20. Reader manifests contain only navigation metadata. Full chapter bodies are loaded through the full chapter query, and reader anchors take precedence over saved scroll restoration.
 21. Chapter deletion observes and locks the pointed translation job before locking the chapter, then revalidates the pointer. Active work is terminalized with an exact-generation cancellation outbox event before the chapter and cascaded job rows are deleted.
+22. Signed-in reader state is account-scoped and single-writer per `(user, novel)`. Opening a chapter preserves the stored fraction only for that chapter and resets it otherwise; a scroll sample for any other chapter is dropped rather than overwriting the newer position; read marks are idempotent. Guests keep the browser-local equivalent, and reader settings stay browser-local for everyone.
 
 ## State transitions
 
@@ -91,6 +92,12 @@ Unlocked exact speech fields are scrubbed and never reach the translator as auth
 - Stored JSON is validated before rendering. Malformed or inconsistent evidence is unavailable, not a clean result. Legacy reports preserve recorded metrics with unknown freshness and classification; new checks provide the missing metadata.
 - Owner-only summaries omit raw JSON; detail responses return 10/25/50 rows. Review URLs preserve report/filter/page across reader edits and browser Back. Guest pages never request review data.
 
+## Reader state
+
+Signed-in reading position, read chapters, and bookmarks live in `reader_progress`, `reader_chapter_reads`, and `reader_bookmarks`, one row set per user and novel, and are read through `getReaderNovelState`. The route loader prefetches `["readerState", novelId]` for signed-in readers so the restore path reads it synchronously; guests read the `pnt-reader-progress` and `pnt-reader-bookmarks` browser stores instead and never issue the request. The two sources are intentionally not merged.
+
+Client writes go through one store per `(novel, user)`: writes are serialized in order, and throttled scroll samples flush at most every 4 s or 2% of the chapter, with an immediate flush on chapter change and unmount; an unload-time flush is skipped because the browser aborts that request. The SQL guards above make out-of-order arrivals harmless. Scroll samples never enter the React snapshot, so reading does not re-render the chapter. Bookmarks store a paragraph index plus an excerpt; navigation re-locates the excerpt in the target chapter (falling back to the stored index) so re-translation and edits do not break them. One bookmark exists per paragraph and column: re-bookmarking a spot returns the existing row rather than inserting a twin, and the client drops its optimistic entry when the server reports the duplicate. In-chapter search, typography controls, and reader page themes are client-only and do not persist beyond `pnt-reader-settings`.
+
 ## Boundaries
 
 - `translation/workflow/job-state.ts`: pure transition predicates and compatibility helpers.
@@ -105,6 +112,7 @@ Unlocked exact speech fields are scrubbed and never reach the translator as auth
 - `translation/evaluation/eval.schemas.ts`, `eval.service.ts`, and `eval-worker.ts` own bounded versioned snapshots; review UI links findings to reader anchors without mutating reports.
 - `inngest/outbox.ts`: workflow-wide durable event delivery; due rows compare against PostgreSQL `CURRENT_TIMESTAMP` so database visibility and eligibility use one clock.
 - `export/stream.ts` and `/api/exports/$`: authenticated cursor-backed TXT/EPUB response streaming with numeric chapter ordering and `HEAD` support.
+- `reader/reader-state.service.ts` owns reader position, read-mark, and bookmark persistence and their ownership scoping; `reader/use-reader-state.ts` selects the account or browser store and serializes client writes.
 - `scrape.ts` and `scrape/parsers.ts`: client-safe source metadata and pure HTML parsing; `scrape/network-policy.server.ts` exclusively owns DNS resolution and private-address rejection.
 - Route-facing server functions authenticate and delegate state transitions; they do not implement worker validity rules.
 - Inngest orchestrates retries and per-novel concurrency but is not the source of truth for job validity.

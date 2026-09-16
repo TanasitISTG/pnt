@@ -51,12 +51,19 @@ export interface NovelHeaderProps {
   readingActionsPending: boolean;
   lastReadChapter: ChapterRow | null;
   firstChapter: ChapterRow | null;
+  readingProgress: ReadingProgressSummary;
   exporting: "txt" | "epub" | null;
   publishingNovel: boolean;
   onPublishNovel: (publishedAt: Date | null) => void;
   onExportTxt: () => void;
   onExportEpub: () => void;
   onDeleteNovel: () => void;
+}
+
+export interface ReadingProgressSummary {
+  readCount: number;
+  totalCount: number;
+  percent: number;
 }
 
 type AdminActionsProps = Pick<
@@ -232,6 +239,7 @@ type ReadingActionsProps = Pick<
   | "readingActionsPending"
   | "lastReadChapter"
   | "firstChapter"
+  | "readingProgress"
 >;
 
 function ReadingActions({
@@ -241,6 +249,7 @@ function ReadingActions({
   readingActionsPending,
   lastReadChapter,
   firstChapter,
+  readingProgress,
 }: ReadingActionsProps) {
   if (readingActionsPending || chaptersPending) {
     return (
@@ -256,39 +265,54 @@ function ReadingActions({
   if (!continueChapter) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-2">
-      <Button
-        size="sm"
-        className="w-full sm:w-auto"
-        render={
-          <Link
-            to="/novels/$novelId/chapters/$chapterId"
-            params={{ novelId, chapterId: continueChapter.id }}
-          />
-        }
-      >
-        <BookOpen className="size-4" />
-        <span>{lastReadChapter ? "Continue reading" : "Start reading"}</span>
-        {lastReadChapter ? (
-          <span className="max-w-50 truncate text-xs font-normal opacity-75">
-            ({lastReadChapter.translatedTitle ?? lastReadChapter.title})
-          </span>
-        ) : null}
-      </Button>
-      {lastReadChapter && firstChapter && lastReadChapter.id !== firstChapter.id ? (
+    <div className="flex flex-col gap-3 pt-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
-          variant="outline"
           size="sm"
           className="w-full sm:w-auto"
           render={
             <Link
               to="/novels/$novelId/chapters/$chapterId"
-              params={{ novelId, chapterId: firstChapter.id }}
+              params={{ novelId, chapterId: continueChapter.id }}
             />
           }
         >
-          Read first chapter
+          <BookOpen className="size-4" />
+          <span>{lastReadChapter ? "Continue reading" : "Start reading"}</span>
+          {lastReadChapter ? (
+            <span className="max-w-50 truncate text-xs font-normal opacity-75">
+              ({lastReadChapter.translatedTitle ?? lastReadChapter.title})
+            </span>
+          ) : null}
         </Button>
+        {lastReadChapter && firstChapter && lastReadChapter.id !== firstChapter.id ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto"
+            render={
+              <Link
+                to="/novels/$novelId/chapters/$chapterId"
+                params={{ novelId, chapterId: firstChapter.id }}
+              />
+            }
+          >
+            Read first chapter
+          </Button>
+        ) : null}
+      </div>
+      {readingProgress.totalCount > 0 ? (
+        <div className="flex min-w-0 items-center gap-2">
+          <Progress
+            value={readingProgress.percent}
+            className="h-1 min-w-0 max-w-48 flex-1"
+            aria-label="Reading progress"
+          />
+          <span className="shrink-0 text-caption tabular-nums text-muted-foreground">
+            {readingProgress.readCount} of {readingProgress.totalCount} chapters read ·{" "}
+            {readingProgress.percent}%
+          </span>
+        </div>
       ) : null}
     </div>
   );
@@ -371,6 +395,7 @@ export function NovelHeader({
   readingActionsPending,
   lastReadChapter,
   firstChapter,
+  readingProgress,
   exporting,
   publishingNovel,
   onPublishNovel,
@@ -396,6 +421,7 @@ export function NovelHeader({
     readingActionsPending,
     lastReadChapter,
     firstChapter,
+    readingProgress,
   };
 
   return (

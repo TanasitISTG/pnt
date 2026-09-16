@@ -17,10 +17,11 @@ export function useChapterNav<T extends { id: string }>(
     };
   }, [chapters, chapterId]);
 
-  const goToChapter = (id: string) =>
+  const goToChapter = (id: string, hash?: string) =>
     navigate({
       to: "/novels/$novelId/chapters/$chapterId",
       params: { novelId, chapterId: id },
+      ...(hash ? { hash } : {}),
     });
 
   return { prevChapter, nextChapter, goToChapter };

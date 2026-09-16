@@ -20,6 +20,8 @@ describe("ReaderContentView", () => {
         rawParagraphs={["Raw chapter text"]}
         translatedParagraphs={[]}
         fontSizePx={18}
+        lineHeight={1.75}
+        measureRem={42}
         sourceLang="en"
         isAdmin
         translationStatus="error"
@@ -44,6 +46,8 @@ describe("ReaderContentView", () => {
         rawParagraphs={["Raw chapter text"]}
         translatedParagraphs={[]}
         fontSizePx={18}
+        lineHeight={1.75}
+        measureRem={42}
         sourceLang="en"
         translationStatus="error"
         onTranslateRequest={vi.fn()}
@@ -66,6 +70,8 @@ describe("ReaderContentView", () => {
         rawParagraphs={[]}
         translatedParagraphs={[]}
         fontSizePx={18}
+        lineHeight={1.75}
+        measureRem={42}
         isAdmin
         onEditRequest={onEditRequest}
       />,
@@ -87,6 +93,8 @@ describe("ReaderContentView", () => {
         rawParagraphs={[]}
         translatedParagraphs={[]}
         fontSizePx={18}
+        lineHeight={1.75}
+        measureRem={42}
         onEditRequest={vi.fn()}
       />,
     );

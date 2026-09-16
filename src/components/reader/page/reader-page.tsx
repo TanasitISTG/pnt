@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 
 import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader/settings";
+import { useReaderState } from "@/lib/reader/use-reader-state";
 import { QueryErrorState } from "@/components/query-error-state";
 import { useReaderScroll } from "@/components/reader/page/use-reader-scroll";
+import { useReaderThemeScope } from "@/components/reader/page/use-reader-theme-scope";
 import {
   chapterQueryOptions,
   readerChapterManifestQueryOptions,
@@ -29,8 +31,17 @@ export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
   const chapter = chapterQuery.data;
   const chapters = chaptersQuery.data ?? [];
   const novel = novelQuery.data;
+  const readerState = useReaderState(novelId, !!user);
 
-  useReaderScroll(novelId, chapterId, chapter, settingsReady, targetAnchor);
+  useReaderThemeScope(settings.pageTheme, settingsReady);
+  useReaderScroll({
+    novelId,
+    chapterId,
+    chapter,
+    ready: settingsReady && readerState.ready,
+    store: readerState.store,
+    targetAnchor,
+  });
 
   if (chapterQuery.isError || chaptersQuery.isError || novelQuery.isError) {
     return (
@@ -64,6 +75,7 @@ export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
       resolvedTheme={resolvedTheme}
       setTheme={setTheme}
       fontSizePx={READER_FONT_SIZE_PX[settings.fontSize]}
+      readerState={readerState}
     />
   );
 }

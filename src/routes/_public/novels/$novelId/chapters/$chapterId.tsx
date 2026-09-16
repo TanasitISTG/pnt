@@ -3,6 +3,7 @@ import sarabunThaiUrl from "@fontsource/sarabun/files/sarabun-thai-400-normal.wo
 
 import { ReaderPage } from "@/components/reader/page/reader-page";
 import { ReaderPending } from "@/components/reader/page/reader-pending";
+import { readerStateQueryOptions } from "@/lib/reader/query";
 import {
   chapterQueryOptions,
   readerChapterManifestQueryOptions,
@@ -15,6 +16,9 @@ export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapter
       context.queryClient.ensureQueryData(chapterQueryOptions(params.chapterId)),
       context.queryClient.ensureQueryData(readerChapterManifestQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(readerNovelQueryOptions(params.novelId)),
+      context.user
+        ? context.queryClient.ensureQueryData(readerStateQueryOptions(params.novelId))
+        : Promise.resolve(null),
     ]);
     if (!chapter || !novel || chapter.novelId !== params.novelId) throw notFound();
     if (!chapters.some((item) => item.id === chapter.id)) throw notFound();

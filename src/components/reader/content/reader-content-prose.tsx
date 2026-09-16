@@ -1,3 +1,4 @@
+import type { ReaderHighlightsLookup } from "./reader-content-types";
 import {
   createReaderParagraphEntries,
   createReaderParagraphPairEntries,
@@ -7,31 +8,42 @@ import { renderParagraph } from "./render-paragraph";
 interface ReaderProseProps {
   paragraphs: string[];
   fontSizePx: number;
+  lineHeight: number;
+  measureRem: number;
   readerFontClass?: string;
   lang: string;
   dimmed?: boolean;
+  highlightsFor?: ReaderHighlightsLookup;
 }
 
 export function ReaderProse({
   paragraphs,
   fontSizePx,
+  lineHeight,
+  measureRem,
   readerFontClass,
   lang,
   dimmed = false,
+  highlightsFor,
 }: ReaderProseProps) {
   const entries = createReaderParagraphEntries(paragraphs);
 
   return (
-    <div className="mx-auto flex max-w-prose flex-col gap-5" style={{ fontSize: fontSizePx }}>
+    <div
+      className="mx-auto flex w-full flex-col gap-5"
+      style={{ fontSize: fontSizePx, maxWidth: `${measureRem}rem` }}
+    >
       {entries.map(({ key, paragraph }, index) =>
-        renderParagraph(
-          paragraph,
+        renderParagraph({
+          text: paragraph,
           key,
           readerFontClass,
           dimmed,
           lang,
-          `reader-paragraph-${index + 1}`,
-        ),
+          id: `reader-paragraph-${index + 1}`,
+          lineHeight,
+          highlights: highlightsFor?.(index, null),
+        }),
       )}
     </div>
   );
@@ -40,25 +52,34 @@ export function ReaderProse({
 interface ReaderComparisonProps {
   aligned: { raw?: string | null; translated?: string | null }[];
   fontSizePx: number;
+  lineHeight: number;
+  measureRem: number;
   readerFontClass?: string;
   sourceLang: string;
   sourceName?: string;
   targetLang: string;
   targetName: string;
+  highlightsFor?: ReaderHighlightsLookup;
 }
 
 export function ReaderComparison({
   aligned,
   fontSizePx,
+  lineHeight,
+  measureRem,
   readerFontClass,
   sourceLang,
   sourceName,
   targetLang,
   targetName,
+  highlightsFor,
 }: ReaderComparisonProps) {
   const entries = createReaderParagraphPairEntries(aligned);
   return (
-    <div className="flex flex-col gap-5" style={{ fontSize: fontSizePx }}>
+    <div
+      className="mx-auto flex w-full flex-col gap-5"
+      style={{ fontSize: fontSizePx, maxWidth: `${measureRem}rem` }}
+    >
       {entries.map(({ key, pair }, index) => (
         <div
           key={key}
@@ -70,27 +91,31 @@ export function ReaderComparison({
               {sourceName ?? sourceLang}
             </p>
             {pair.raw
-              ? renderParagraph(
-                  pair.raw,
-                  `${key}-raw`,
+              ? renderParagraph({
+                  text: pair.raw,
+                  key: `${key}-raw`,
                   readerFontClass,
-                  true,
-                  sourceLang,
-                  `reader-paragraph-${index + 1}-raw`,
-                )
+                  dimmed: true,
+                  lang: sourceLang,
+                  id: `reader-paragraph-${index + 1}-raw`,
+                  lineHeight,
+                  highlights: highlightsFor?.(index, "raw"),
+                })
               : null}
           </div>
           <div className="min-w-0">
             <p className="mb-2 text-caption font-medium text-muted-foreground">{targetName}</p>
             {pair.translated
-              ? renderParagraph(
-                  pair.translated,
-                  `${key}-translated`,
+              ? renderParagraph({
+                  text: pair.translated,
+                  key: `${key}-translated`,
                   readerFontClass,
-                  false,
-                  targetLang,
-                  `reader-paragraph-${index + 1}-translated`,
-                )
+                  dimmed: false,
+                  lang: targetLang,
+                  id: `reader-paragraph-${index + 1}-translated`,
+                  lineHeight,
+                  highlights: highlightsFor?.(index, "translated"),
+                })
               : null}
           </div>
         </div>

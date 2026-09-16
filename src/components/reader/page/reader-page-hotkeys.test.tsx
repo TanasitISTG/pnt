@@ -12,6 +12,8 @@ type ReaderHotkeysHarnessProps = {
   editing?: boolean;
   hasTranslation?: boolean;
   overlayOpen?: boolean;
+  dialogOpen?: boolean;
+  findOpen?: boolean;
   resolvedTheme?: string;
   initialTheme?: string;
   user?: unknown;
@@ -25,6 +27,8 @@ function ReaderHotkeysHarness({
   editing = false,
   hasTranslation = true,
   overlayOpen = false,
+  dialogOpen = false,
+  findOpen = false,
   resolvedTheme = "dark",
   initialTheme,
   user = { id: "user" },
@@ -41,6 +45,8 @@ function ReaderHotkeysHarness({
   const [saveCount, setSaveCount] = useState(0);
   const [cancelCount, setCancelCount] = useState(0);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [findCount, setFindCount] = useState(0);
+  const [closeFindCount, setCloseFindCount] = useState(0);
 
   useReaderHotkeys({
     viewMode,
@@ -51,6 +57,7 @@ function ReaderHotkeysHarness({
     chapterLoaded,
     jobRunning,
     overlayOpen,
+    dialogOpen,
     prevChapter,
     nextChapter,
     onUpdateViewMode: (next) => setViewMode(next),
@@ -63,6 +70,9 @@ function ReaderHotkeysHarness({
       setLastNavigation(id);
     },
     onSetShortcutsOpen: setShortcutsOpen,
+    onOpenFind: () => setFindCount((count) => count + 1),
+    onCloseFind: () => setCloseFindCount((count) => count + 1),
+    findOpen,
   });
 
   return (
@@ -76,6 +86,8 @@ function ReaderHotkeysHarness({
       <div data-testid="save">{saveCount}</div>
       <div data-testid="cancel">{cancelCount}</div>
       <div data-testid="shortcuts">{shortcutsOpen ? "open" : "closed"}</div>
+      <div data-testid="find">{findCount}</div>
+      <div data-testid="close-find">{closeFindCount}</div>
       <input aria-label="Editor input" />
       <button type="button">Reader control</button>
     </div>
@@ -92,6 +104,15 @@ function pressBody(key: string, event: Omit<KeyboardEventInit, "key"> = {}) {
 
 function pressHelp(target: HTMLElement = document.body) {
   keyDown(target, { key: "?", code: "Slash", shiftKey: true });
+}
+
+function pressModF(target: HTMLElement = document.body) {
+  const isMac = /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
+  keyDown(target, {
+    key: "f",
+    code: "KeyF",
+    ...(isMac ? { metaKey: true } : { ctrlKey: true }),
+  });
 }
 
 function pressModS(target: HTMLElement) {
@@ -150,6 +171,58 @@ describe("useReaderHotkeys", () => {
     pressHelp();
 
     expect(screen.getByTestId("shortcuts").textContent).toBe("open");
+  });
+
+  it("opens find with Mod+F while no dialog or editor owns the page", () => {
+    render(<ReaderHotkeysHarness />);
+
+    pressModF();
+    expect(screen.getByTestId("find").textContent).toBe("1");
+
+    pressModF();
+    expect(screen.getByTestId("find").textContent).toBe("2");
+  });
+
+  it("keeps Mod+F live while the find bar itself is open", () => {
+    render(<ReaderHotkeysHarness overlayOpen />);
+
+    pressModF();
+
+    expect(screen.getByTestId("find").textContent).toBe("1");
+  });
+
+  it("suppresses Mod+F while editing or while a dialog is open", () => {
+    const rendered = render(<ReaderHotkeysHarness dialogOpen />);
+
+    pressModF();
+    expect(screen.getByTestId("find").textContent).toBe("0");
+
+    rendered.rerender(<ReaderHotkeysHarness editing />);
+    pressModF(screen.getByRole("textbox", { name: "Editor input" }));
+
+    expect(screen.getByTestId("find").textContent).toBe("0");
+  });
+
+  it("closes the find bar from Escape wherever focus sits", () => {
+    render(<ReaderHotkeysHarness findOpen />);
+
+    pressBody("Escape", { code: "Escape" });
+    expect(screen.getByTestId("close-find").textContent).toBe("1");
+
+    keyDown(screen.getByRole("textbox", { name: "Editor input" }), {
+      key: "Escape",
+      code: "Escape",
+    });
+    expect(screen.getByTestId("close-find").textContent).toBe("2");
+  });
+
+  it("leaves Escape to the editor while the find bar is closed", () => {
+    render(<ReaderHotkeysHarness editing />);
+
+    pressBody("Escape", { code: "Escape" });
+
+    expect(screen.getByTestId("close-find").textContent).toBe("0");
+    expect(screen.getByTestId("cancel").textContent).toBe("1");
   });
 
   it("suppresses ordinary shortcuts from inputs and controls", () => {

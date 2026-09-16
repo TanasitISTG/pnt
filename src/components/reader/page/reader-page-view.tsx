@@ -2,9 +2,11 @@ import type { ActiveJobState } from "@/lib/translation/types/api";
 import type { ReaderTranslationStatus } from "@/components/reader/content/reader-content-types";
 import { QueryErrorState } from "@/components/query-error-state";
 import type { ReaderSettings } from "@/lib/reader/types";
+import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import { ReaderContent } from "@/components/reader/content/chapter-content";
 import { ChapterEditor } from "@/components/reader/editor/chapter-editor";
 import { ChapterTitleRow } from "@/components/reader/editor/chapter-title-row";
+import type { ReaderSearchApi } from "./use-reader-search";
 import { ReaderDialogs } from "./reader-dialogs";
 import type { ReaderChapterSummary } from "@/components/reader/controls/reader-toolbar";
 import { ReaderToolbar } from "@/components/reader/controls/reader-toolbar";
@@ -39,6 +41,8 @@ export interface ReaderPageViewProps {
   rawParagraphs: string[];
   translatedParagraphs: string[];
   fontSizePx: number;
+  lineHeight: number;
+  measureRem: number;
   readerFontClass?: string;
   settings: ReaderSettings;
   update: (patch: Partial<ReaderSettings>) => void;
@@ -51,11 +55,13 @@ export interface ReaderPageViewProps {
   translationStatusError: unknown;
   retryTranslationStatus: () => Promise<unknown>;
   activeJob: ActiveJobState | undefined;
-  panel: "chapters" | "settings" | null;
-  onPanelChange: (panel: "chapters" | "settings" | null) => void;
+  readerState: ReaderStateApi;
+  search: ReaderSearchApi;
+  panel: "chapters" | "settings" | "bookmarks" | null;
+  onPanelChange: (panel: "chapters" | "settings" | "bookmarks" | null) => void;
   actionsOpen: boolean;
   onActionsOpenChange: (open: boolean) => void;
-  onGoToChapter: (id: string) => void;
+  onGoToChapter: (id: string, hash?: string) => void;
   onEditRequest: () => void;
   onTranslateRequest: () => void;
   onShortcutsRequest: () => void;
@@ -92,6 +98,8 @@ export function ReaderPageView({
   rawParagraphs,
   translatedParagraphs,
   fontSizePx,
+  lineHeight,
+  measureRem,
   readerFontClass,
   settings,
   update,
@@ -104,6 +112,8 @@ export function ReaderPageView({
   translationStatusError,
   retryTranslationStatus,
   activeJob,
+  readerState,
+  search,
   panel,
   onPanelChange,
   actionsOpen,
@@ -150,6 +160,8 @@ export function ReaderPageView({
         editing={editing}
         jobRunning={jobRunning}
         activeJob={activeJob}
+        readerState={readerState}
+        search={search}
         panel={panel}
         onPanelChange={onPanelChange}
         actionsOpen={actionsOpen}
@@ -179,6 +191,7 @@ export function ReaderPageView({
         <ChapterEditor
           form={editorForm}
           fontSizePx={fontSizePx}
+          lineHeight={lineHeight}
           readerFontClass={readerFontClass}
           onSave={onSave}
           onCancel={onCancel}
@@ -192,12 +205,15 @@ export function ReaderPageView({
             rawParagraphs={rawParagraphs}
             translatedParagraphs={translatedParagraphs}
             fontSizePx={fontSizePx}
+            lineHeight={lineHeight}
+            measureRem={measureRem}
             readerFontClass={readerFontClass}
             sourceLang={novel.sourceLang}
             targetLang={novel.targetLang}
             isAdmin={isAdmin}
             translationStatus={translationStatus}
             jobRunning={jobRunning}
+            highlightsFor={search.open ? search.highlightsFor : undefined}
             onTranslateRequest={onTranslateRequest}
             onEditRequest={onEditRequest}
           />

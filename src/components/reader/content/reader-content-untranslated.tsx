@@ -1,12 +1,15 @@
 import { Button } from "@/components/ui/button";
-import type { ReaderTranslationStatus } from "./reader-content-types";
+import type { ReaderHighlightsLookup, ReaderTranslationStatus } from "./reader-content-types";
 import { ReaderProse } from "./reader-content-prose";
 
 interface ReaderUntranslatedContentProps {
   rawParagraphs: string[];
   fontSizePx: number;
+  lineHeight: number;
+  measureRem: number;
   readerFontClass?: string;
   sourceLang: string;
+  highlightsFor?: ReaderHighlightsLookup;
   isAdmin?: boolean;
   translationStatus?: ReaderTranslationStatus;
   jobRunning?: boolean;
@@ -17,8 +20,11 @@ interface ReaderUntranslatedContentProps {
 export function ReaderUntranslatedContent({
   rawParagraphs,
   fontSizePx,
+  lineHeight,
+  measureRem,
   readerFontClass,
   sourceLang,
+  highlightsFor,
   isAdmin = false,
   translationStatus = "idle",
   jobRunning = false,
@@ -55,8 +61,11 @@ export function ReaderUntranslatedContent({
       <ReaderProse
         paragraphs={rawParagraphs}
         fontSizePx={fontSizePx}
+        lineHeight={lineHeight}
+        measureRem={measureRem}
         readerFontClass={readerFontClass}
         lang={sourceLang}
+        highlightsFor={highlightsFor}
       />
     </div>
   );

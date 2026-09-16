@@ -1,11 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Bookmark,
   Download,
   HelpCircle,
   MoreHorizontal,
   Pencil,
   RotateCw,
+  Search,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -22,8 +24,13 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { downloadText, sanitizeFilename } from "@/lib/download";
 import type { ReaderSettings } from "@/lib/reader/types";
+import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import type { ActiveJobState } from "@/lib/translation/types/api";
+import type { ReaderSearchApi } from "@/components/reader/page/use-reader-search";
+import { ReaderBookmarksDialog } from "./reader-bookmarks-dialog";
 import { ReaderChapterDialog } from "./reader-chapter-dialog";
+import { ReaderChapterProgress } from "./reader-chapter-progress";
+import { ReaderFindBar } from "./reader-find-bar";
 import { ReaderSettingsPanel } from "./reader-settings-panel";
 
 export interface ReaderChapterSummary {
@@ -53,11 +60,13 @@ export interface ReaderToolbarProps {
   editing: boolean;
   jobRunning: boolean;
   activeJob: ActiveJobState | undefined;
-  panel: "chapters" | "settings" | null;
-  onPanelChange: (panel: "chapters" | "settings" | null) => void;
+  readerState: ReaderStateApi;
+  search: ReaderSearchApi;
+  panel: "chapters" | "settings" | "bookmarks" | null;
+  onPanelChange: (panel: "chapters" | "settings" | "bookmarks" | null) => void;
   actionsOpen: boolean;
   onActionsOpenChange: (open: boolean) => void;
-  onGoToChapter: (id: string) => void;
+  onGoToChapter: (id: string, hash?: string) => void;
   onEditRequest: () => void;
   onTranslateRequest: () => void;
   onShortcutsRequest: () => void;
@@ -80,6 +89,8 @@ export function ReaderToolbar({
   editing,
   jobRunning,
   activeJob,
+  readerState,
+  search,
   panel,
   onPanelChange,
   actionsOpen,
@@ -90,9 +101,9 @@ export function ReaderToolbar({
   onShortcutsRequest,
 }: ReaderToolbarProps) {
   return (
-    <header className="sticky top-0 z-30 -mx-4 border-b border-border bg-background px-4 py-2 sm:-mx-6 sm:px-6">
-      <div className="mx-auto flex max-w-[1200px] min-w-0 flex-col gap-2">
-        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 sm:flex sm:gap-1.5">
+    <header className="sticky top-0 z-30 -mx-4 border-b border-border bg-background sm:-mx-6">
+      <div className="mx-auto flex max-w-[1200px] min-w-0 flex-col px-4 sm:px-6">
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1 py-1.5 sm:flex sm:gap-1">
           <Button
             variant="ghost"
             size="icon"
@@ -106,7 +117,7 @@ export function ReaderToolbar({
           <span className="col-start-2 row-start-1 min-w-0 flex-1 truncate text-caption text-muted-foreground">
             {novelTitle}
           </span>
-          <div className="col-span-2 row-start-2 flex min-w-0 items-center justify-end gap-0.5 sm:contents">
+          <div className="col-span-2 row-start-2 flex min-w-0 flex-wrap items-center justify-end gap-0.5 sm:contents">
             <ReaderChapterDialog
               chapters={chapters}
               chapterId={chapterId}
@@ -136,6 +147,29 @@ export function ReaderToolbar({
             >
               <ChevronRight className="size-4" aria-hidden="true" />
             </Button>
+            {!editing ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-11 shrink-0"
+                onClick={() => (search.open ? search.close() : search.openFind())}
+                aria-label="Find in chapter"
+                aria-pressed={search.open}
+                title="Find in chapter (Ctrl/⌘+F)"
+              >
+                <Search className="size-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+            <ReaderBookmarksDialog
+              chapterId={chapterId}
+              chapters={chapters}
+              readerState={readerState}
+              isAdmin={isAdmin}
+              editing={editing}
+              open={panel === "bookmarks"}
+              onOpenChange={(open) => onPanelChange(open ? "bookmarks" : null)}
+              onGoToChapter={onGoToChapter}
+            />
             <ReaderSettingsPanel
               settings={settings}
               update={update}
@@ -181,6 +215,16 @@ export function ReaderToolbar({
                       Download chapter .txt
                     </DropdownMenuItem>
                   ) : null}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      onActionsOpenChange(false);
+                      onPanelChange("bookmarks");
+                    }}
+                  >
+                    <Bookmark className="size-4" aria-hidden="true" />
+                    Bookmarks
+                    {readerState.bookmarks.length > 0 ? ` (${readerState.bookmarks.length})` : ""}
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => {
@@ -196,8 +240,10 @@ export function ReaderToolbar({
             </DropdownMenu>
           </div>
         </div>
+        {search.open ? <ReaderFindBar search={search} /> : null}
         {jobRunning ? <ReaderJobStatus activeJob={activeJob} /> : null}
       </div>
+      <ReaderChapterProgress />
     </header>
   );
 }
@@ -205,10 +251,7 @@ export function ReaderToolbar({
 function ReaderJobStatus({ activeJob }: { activeJob: ActiveJobState | undefined }) {
   if (!activeJob) {
     return (
-      <div
-        className="min-w-0 border-t border-border pt-2 text-caption text-muted-foreground"
-        role="status"
-      >
+      <div className="min-w-0 pb-2 text-caption text-muted-foreground" role="status">
         Translation in progress
       </div>
     );
@@ -219,7 +262,7 @@ function ReaderJobStatus({ activeJob }: { activeJob: ActiveJobState | undefined 
       ? Math.round((activeJob.doneChunks / activeJob.totalChunks) * 100)
       : 0;
   return (
-    <div className="flex min-w-0 items-center gap-2 border-t border-border pt-2" role="status">
+    <div className="flex min-w-0 items-center gap-2 pb-2" role="status">
       <span className="shrink-0 text-caption text-muted-foreground">Translating…</span>
       <Progress
         value={percent}

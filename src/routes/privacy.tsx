@@ -27,7 +27,13 @@ function PrivacyPage() {
           <ul className="list-disc pl-5 space-y-1 text-body text-muted-foreground">
             <li>
               <strong className="text-foreground">Local Storage</strong>: Reader preferences, font
-              sizes, theme, and reading progress are stored locally on your device.
+              sizes, line height, text width, page theme, and reading progress for guests are stored
+              locally on your device.
+            </li>
+            <li>
+              <strong className="text-foreground">Account Reader State</strong>: For the signed-in
+              admin, reading position, read chapters, and bookmarks are stored with the account
+              instead of the browser.
             </li>
             <li>
               <strong className="text-foreground">Session Data</strong>: Admin sessions are

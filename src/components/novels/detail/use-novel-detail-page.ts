@@ -1,29 +1,18 @@
 import { queryOptions, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { getAdminNovelDetailMetrics, getNovel } from "@/lib/content/novel/novel.functions";
 import type { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
 import { listChapters } from "@/lib/content/chapter/chapter.functions";
-import type { ReaderProgress } from "@/lib/reader/types";
-import { getReaderProgress } from "@/lib/reader/progress";
+import { useReaderState } from "@/lib/reader/use-reader-state";
 import { useChapterSelection } from "@/components/chapters/toolbar/use-chapter-selection";
 import { useChapterTitleEdit } from "@/components/chapters/table/use-chapter-title-edit";
 import { useNovelDetailMutations } from "@/components/novels/detail/use-novel-detail-mutations";
 import { useNovelExport } from "@/components/novels/detail/use-novel-export";
 import { useTranslationJob } from "@/components/translation/use-translation-job";
-import { useHydrated } from "@/lib/use-hydrated";
 
 const EMPTY_CHAPTERS: never[] = [];
 const EMPTY_RESIDUAL_SCRIPTS: never[] = [];
-const READER_PROGRESS_STORAGE_KEY = "pnt-reader-progress";
-const EMPTY_READER_PROGRESS: ReaderProgress = {
-  lastChapterId: null,
-  readChapterIds: [],
-};
-
-function getServerReaderProgressSnapshot() {
-  return EMPTY_READER_PROGRESS;
-}
 
 export const novelQueryOptions = (novelId: string) =>
   queryOptions({
@@ -76,30 +65,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     return map;
   }, [residualScriptChapters]);
 
-  const readerProgressStore = useMemo(() => {
-    let snapshot: ReaderProgress | null = null;
-    const getSnapshot = () => {
-      if (!snapshot) snapshot = getReaderProgress(novelId);
-      return snapshot;
-    };
-    const subscribe = (onStoreChange: () => void) => {
-      if (typeof window === "undefined") return () => {};
-      const handleStorage = (event: StorageEvent) => {
-        if (event.key !== READER_PROGRESS_STORAGE_KEY) return;
-        snapshot = null;
-        onStoreChange();
-      };
-      window.addEventListener("storage", handleStorage);
-      return () => window.removeEventListener("storage", handleStorage);
-    };
-    return { getSnapshot, subscribe };
-  }, [novelId]);
-  const readerProgress = useSyncExternalStore(
-    readerProgressStore.subscribe,
-    readerProgressStore.getSnapshot,
-    getServerReaderProgressSnapshot,
-  );
-  const readerProgressReady = useHydrated();
+  const readerState = useReaderState(novelId, isAdmin);
+  const readerProgress = readerState.progress;
   const readChapterIdSet = useMemo(
     () => new Set(readerProgress.readChapterIds),
     [readerProgress.readChapterIds],
@@ -118,8 +85,20 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
 
   const firstChapter = chapters[0] ?? null;
   const chaptersReady = chaptersQuery.isSuccess && !chaptersQuery.isError;
-  const readingActionsPending = chaptersQuery.isPending || !readerProgressReady;
+  const readingActionsPending = chaptersQuery.isPending || !readerState.ready;
   const chapterUiLoading = isAdmin && readingActionsPending;
+  const readingProgress = useMemo(() => {
+    const totalCount = chapters.length;
+    const readCount = chapters.reduce(
+      (count, chapter) => (readChapterIdSet.has(chapter.id) ? count + 1 : count),
+      0,
+    );
+    return {
+      readCount,
+      totalCount,
+      percent: totalCount > 0 ? Math.round((readCount / totalCount) * 100) : 0,
+    };
+  }, [chapters, readChapterIdSet]);
 
   const {
     start: startTranslate,
@@ -294,6 +273,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     isChaptersPending: chaptersQuery.isPending,
     isNovelError: novelQuery.isError,
     lastReadChapter,
+    readingProgress,
+    readerState,
     missingTitleCount,
     novel: novelQuery.data,
     novelError: novelQuery.error,

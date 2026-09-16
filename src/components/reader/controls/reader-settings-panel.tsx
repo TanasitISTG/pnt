@@ -11,6 +11,9 @@ import {
 } from "@/components/ui/dialog";
 import type {
   ReaderFontSize,
+  ReaderLineHeight,
+  ReaderMeasure,
+  ReaderPageTheme,
   ReaderSettings,
   ReaderTypeface,
   ReaderViewMode,
@@ -76,6 +79,26 @@ export function ReaderSettingsPanel({
             onChange={(value) => update({ fontSize: value as ReaderFontSize })}
           />
           <ReaderRadioGroup
+            label="Line height"
+            value={settings.lineHeight}
+            options={[
+              ["compact", "Compact · 1.5"],
+              ["normal", "Normal · 1.75"],
+              ["relaxed", "Relaxed · 2.0"],
+            ]}
+            onChange={(value) => update({ lineHeight: value as ReaderLineHeight })}
+          />
+          <ReaderRadioGroup
+            label="Text width"
+            value={settings.measure}
+            options={[
+              ["narrow", "Narrow"],
+              ["medium", "Medium"],
+              ["wide", "Wide"],
+            ]}
+            onChange={(value) => update({ measure: value as ReaderMeasure })}
+          />
+          <ReaderRadioGroup
             label="Typeface"
             value={settings.typeface}
             options={[
@@ -85,7 +108,17 @@ export function ReaderSettingsPanel({
             onChange={(value) => update({ typeface: value as ReaderTypeface })}
           />
           <ReaderRadioGroup
-            label="Theme"
+            label="Page"
+            value={settings.pageTheme}
+            options={[
+              ["app", "Default"],
+              ["sepia", "Sepia"],
+              ["paper", "Paper"],
+            ]}
+            onChange={(value) => update({ pageTheme: value as ReaderPageTheme })}
+          />
+          <ReaderRadioGroup
+            label="App theme"
             value={theme ?? "system"}
             options={[
               ["light", "Light"],

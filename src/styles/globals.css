@@ -349,6 +349,40 @@
   --focus-shadow: rgba(247, 244, 237, 0.15) 0px 4px 12px;
 }
 
+/* Reader page themes. Declared after .dark so they win on equal specificity, and
+   `color-scheme` needs !important because next-themes writes it inline on <html>. */
+[data-reader-theme="sepia"] {
+  color-scheme: light !important;
+  --background: #f4ecd8;
+  --foreground: #5b4636;
+  --muted: rgba(91, 70, 54, 0.06);
+  --muted-foreground: #856f57;
+  --border: #e2d5b8;
+  --surface: #f4ecd8;
+  --surface-2: #f9f2e2;
+  --primary: #5b4636;
+  --primary-foreground: #f9f2e2;
+  --destructive: #8f4630;
+  --destructive-foreground: #f9f2e2;
+  --focus-shadow: rgba(91, 70, 54, 0.12) 0px 4px 12px;
+}
+
+[data-reader-theme="paper"] {
+  color-scheme: light !important;
+  --background: #f6f6f2;
+  --foreground: #1f1f1c;
+  --muted: rgba(31, 31, 28, 0.05);
+  --muted-foreground: #63635c;
+  --border: #e6e6df;
+  --surface: #f6f6f2;
+  --surface-2: #fcfcfa;
+  --primary: #1f1f1c;
+  --primary-foreground: #fcfcfa;
+  --destructive: #9c4530;
+  --destructive-foreground: #fcfcfa;
+  --focus-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
+}
+
 @layer base {
   * {
     box-sizing: border-box;

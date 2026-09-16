@@ -1,23 +1,8 @@
 import type { ReaderProgress } from "./types";
-
-const STORAGE_KEY = "pnt-reader-progress";
-
-function getStorage(): Storage | null {
-  try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      return window.localStorage;
-    }
-    if (typeof localStorage !== "undefined") {
-      return localStorage;
-    }
-  } catch {
-    // Return null if storage is disabled or restricted
-  }
-  return null;
-}
+import { getReaderStorage, READER_PROGRESS_STORAGE_KEY as STORAGE_KEY } from "./storage";
 
 export function getReaderProgress(novelId: string): ReaderProgress {
-  const storage = getStorage();
+  const storage = getReaderStorage();
   if (!storage) {
     return { lastChapterId: null, readChapterIds: [] };
   }
@@ -74,7 +59,7 @@ function writeNovelProgress(storage: Storage, novelId: string, progress: ReaderP
 }
 
 export function markChapterOpened(novelId: string, chapterId: string): ReaderProgress {
-  const storage = getStorage();
+  const storage = getReaderStorage();
   if (!storage) {
     return { lastChapterId: chapterId, readChapterIds: [] };
   }
@@ -97,7 +82,7 @@ export function markChapterOpened(novelId: string, chapterId: string): ReaderPro
 }
 
 export function markChapterRead(novelId: string, chapterId: string): ReaderProgress {
-  const storage = getStorage();
+  const storage = getReaderStorage();
   if (!storage) {
     return { lastChapterId: chapterId, readChapterIds: [chapterId] };
   }
@@ -124,7 +109,7 @@ export function markChapterRead(novelId: string, chapterId: string): ReaderProgr
 
 export function saveScrollPosition(novelId: string, fraction: number): void {
   if (!Number.isFinite(fraction)) return;
-  const storage = getStorage();
+  const storage = getReaderStorage();
   if (!storage) return;
 
   try {
