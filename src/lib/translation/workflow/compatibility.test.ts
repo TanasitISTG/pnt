@@ -42,7 +42,7 @@ describe("translation workflow compatibility contract", () => {
   it("cancels only the exact job generation", () => {
     const functions = source("../../inngest/functions.ts");
     const translationFunctions = source("../api/mutations.ts");
-    const chapterEditService = source("../../content/chapter-edit.service.ts");
+    const chapterEditService = source("../../content/chapter/chapter-edit.service.ts");
     const cancellation = source("./cancel.ts");
 
     expect(functions).toContain("if: TRANSLATION_CANCEL_IF");

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
-import type * as ChapterOpsService from "./chapter-ops.service";
-import type * as NovelEditService from "./novel-edit.service";
+import type * as ChapterOpsService from "@/lib/content/chapter/chapter-ops.service";
+import type * as NovelEditService from "@/lib/content/novel/novel-edit.service";
 import type * as TranslationMutations from "@/lib/translation/api/mutations";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -401,10 +401,10 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
     // Server-only modules must load after DATABASE_URL points at the disposable test database.
     ({ deleteAllNovelTranslationsForUser, getResidualScriptChaptersForUser } =
-      await import("./chapter-ops.service"));
+      await import("@/lib/content/chapter/chapter-ops.service"));
     ({ deleteAllGlossaryTermsForUser, rejectAllPendingGlossaryTermsForUser } =
       await import("../glossary/service"));
-    ({ updateNovelForUser } = await import("./novel-edit.service"));
+    ({ updateNovelForUser } = await import("@/lib/content/novel/novel-edit.service"));
     ({ enqueueTranslationJob } = await import("@/lib/translation/api/mutations"));
   });
 

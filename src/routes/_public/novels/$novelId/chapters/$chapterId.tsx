@@ -1,13 +1,13 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import sarabunThaiUrl from "@fontsource/sarabun/files/sarabun-thai-400-normal.woff2?url";
 
-import { ReaderPage } from "@/components/reader/reader-page";
-import { ReaderPending } from "@/components/reader/reader-pending";
+import { ReaderPage } from "@/components/reader/page/reader-page";
+import { ReaderPending } from "@/components/reader/page/reader-pending";
 import {
   chapterQueryOptions,
   readerChapterManifestQueryOptions,
   readerNovelQueryOptions,
-} from "@/components/reader/reader-queries";
+} from "@/components/reader/page/reader-queries";
 
 export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapterId")({
   loader: async ({ params, context }) => {

@@ -23,7 +23,7 @@ import {
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { publishState } from "@/lib/content/publish";
+import { publishState } from "@/lib/content/publish/publish";
 import { formatLocalDateTime } from "@/lib/date-time";
 import { useHydrated } from "@/lib/use-hydrated";
 

@@ -20,7 +20,7 @@ import type {
   TranslationJobDetails,
   TranslationJobProgress,
 } from "@/lib/translation/types/api";
-import { ChapterStatusBadge } from "@/components/chapters/chapter-status-badge";
+import { ChapterStatusBadge } from "@/components/chapters/table/chapter-status-badge";
 import type { ChapterStatus } from "@/components/chapters/types";
 import { formatLocalDateTime, formatLocalTime, parseDateTime } from "@/lib/date-time";
 import { Cpu, Terminal, XCircle, Zap } from "lucide-react";

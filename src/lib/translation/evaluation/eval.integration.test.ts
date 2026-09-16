@@ -4,7 +4,7 @@ import postgres, { type Sql } from "postgres";
 import type * as EvalService from "./eval.service";
 import type * as EvalWorker from "./eval-worker";
 import type * as Outbox from "@/lib/inngest/outbox";
-import type * as ChapterEdit from "@/lib/content/chapter-edit.service";
+import type * as ChapterEdit from "@/lib/content/chapter/chapter-edit.service";
 import { EVAL_SELECTOR_ERROR, evalStoredResultV2Schema, evalSummaryV2Schema } from "./eval.schemas";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -172,7 +172,7 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
     } = await import("./eval.service"));
     ({ runTranslationEvalReport, failTranslationEvalReport } = await import("./eval-worker"));
     ({ dispatchWorkflowOutboxEvent } = await import("@/lib/inngest/outbox"));
-    ({ updateChapterForUser } = await import("@/lib/content/chapter-edit.service"));
+    ({ updateChapterForUser } = await import("@/lib/content/chapter/chapter-edit.service"));
   });
 
   afterAll(async () => {

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
-import type * as AdminDetail from "./admin-novel-detail.service";
-import type * as Publish from "./publish.service";
+import type * as AdminDetail from "@/lib/content/novel/admin-novel-detail.service";
+import type * as Publish from "@/lib/content/publish/publish.service";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
@@ -92,9 +92,10 @@ integrationDescribe("translation-aware publication PostgreSQL invariants", () =>
     process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
     process.env.INNGEST_DEV ||= "1";
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
-    ({ getAdminNovelDetailCoreForUser } = await import("./admin-novel-detail.service"));
+    ({ getAdminNovelDetailCoreForUser } =
+      await import("@/lib/content/novel/admin-novel-detail.service"));
     ({ setChapterPublishedForUser, setAllChaptersPublishedForUser } =
-      await import("./publish.service"));
+      await import("@/lib/content/publish/publish.service"));
   });
 
   afterAll(async () => {

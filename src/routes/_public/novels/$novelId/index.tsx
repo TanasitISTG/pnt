@@ -1,18 +1,18 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useCallback } from "react";
 
-import { NovelDetailController } from "@/components/novels/novel-detail-controller";
-import { NovelPending } from "@/components/novels/novel-detail-pending";
+import { NovelDetailController } from "@/components/novels/detail/novel-detail-controller";
+import { NovelPending } from "@/components/novels/detail/novel-detail-pending";
 import {
   chaptersQueryOptions,
   hydrateAdminNovelDetailCore,
   novelQueryOptions,
-} from "@/components/novels/use-novel-detail-page";
-import { getAdminNovelDetailCore } from "@/lib/content/novel.functions";
+} from "@/components/novels/detail/use-novel-detail-page";
+import { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
 import {
   novelDetailSearchSchema,
   type NovelDetailSearch,
-} from "@/components/novels/novel-detail-search";
+} from "@/components/novels/detail/novel-detail-search";
 
 export const Route = createFileRoute("/_public/novels/$novelId/")({
   validateSearch: novelDetailSearchSchema,

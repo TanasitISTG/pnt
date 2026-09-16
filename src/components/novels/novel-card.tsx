@@ -3,8 +3,8 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { NovelCover } from "@/components/novels/novel-cover";
-import { publishState, type PublishState } from "@/lib/content/publish";
-import type { LibraryNovel } from "@/components/novels/library-search";
+import { publishState, type PublishState } from "@/lib/content/publish/publish";
+import type { LibraryNovel } from "@/components/novels/library/library-search";
 
 interface NovelCardProps {
   novel: LibraryNovel;

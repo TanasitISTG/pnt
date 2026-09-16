@@ -15,7 +15,7 @@
         // Sequential by design: each EPUB chunk is converted and uploaded in
         // order so progress is deterministic, failures stop later uploads,
         // and a whole-file base64 copy is not retained for a 50 MB upload.
-        "files": ["src/components/chapters/epub-import-section.tsx"],
+        "files": ["src/components/chapters/import/epub-import-section.tsx"],
         "rules": ["react-doctor/async-await-in-loop"]
       },
       {

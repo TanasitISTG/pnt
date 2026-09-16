@@ -4,8 +4,8 @@ import postgres, { type Sql } from "postgres";
 import type {
   reorderChaptersForUser as ReorderChaptersForUser,
   updateChapterForUser as UpdateChapterForUser,
-} from "./chapter-edit.service";
-import type { deleteChapterForUser as DeleteChapterForUser } from "./chapter-delete.service";
+} from "@/lib/content/chapter/chapter-edit.service";
+import type { deleteChapterForUser as DeleteChapterForUser } from "@/lib/content/chapter/chapter-delete.service";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
@@ -138,8 +138,9 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
 
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
     // Load server-only database code after the test database override is set.
-    ({ updateChapterForUser, reorderChaptersForUser } = await import("./chapter-edit.service"));
-    ({ deleteChapterForUser } = await import("./chapter-delete.service"));
+    ({ updateChapterForUser, reorderChaptersForUser } =
+      await import("@/lib/content/chapter/chapter-edit.service"));
+    ({ deleteChapterForUser } = await import("@/lib/content/chapter/chapter-delete.service"));
   });
 
   afterAll(async () => {

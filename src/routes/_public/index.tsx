@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { LibraryPage } from "@/components/novels/library-page";
-import { LibraryPending } from "@/components/novels/library-pending";
-import { novelsQueryOptions } from "@/components/novels/library-query";
-import { librarySearchSchema } from "@/components/novels/library-search";
+import { LibraryPage } from "@/components/novels/library/library-page";
+import { LibraryPending } from "@/components/novels/library/library-pending";
+import { novelsQueryOptions } from "@/components/novels/library/library-query";
+import { librarySearchSchema } from "@/components/novels/library/library-search";
 
 export const Route = createFileRoute("/_public/")({
   validateSearch: librarySearchSchema,

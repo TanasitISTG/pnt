@@ -60,7 +60,7 @@ export const Route = createFileRoute("/api/covers/$")({
             : "public, max-age=31536000, immutable";
           if (requestedWidth) {
             // Sharp stays out of the browser graph and only loads for variant requests.
-            const { resizeCover } = await import("@/lib/content/cover-image.server");
+            const { resizeCover } = await import("@/lib/content/novel/cover-image.server");
             const resized = await resizeCover(new Uint8Array(buffer), requestedWidth);
             return new Response(Buffer.from(resized), {
               headers: {

@@ -17,20 +17,20 @@ Personal Novel Translator (PNT) is a single-admin novel translation app. It supp
 
 ## Key Directories
 
-| Directory                                                       | Purpose                                                                                                                        |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `src/routes/`                                                   | File-based public/protected pages and API handlers.                                                                            |
-| `src/components/`                                               | Feature UI plus restyled shadcn/Base UI primitives in `ui/`.                                                                   |
-| `src/lib/content/`                                              | Novel/chapter CRUD, publishing, ownership, covers, and schemas.                                                                |
-| `src/lib/translation/`                                          | Chunking, prompts, provider clients, job APIs/state/store, worker, outbox, and evaluation.                                     |
-| `src/lib/scrape/`                                               | Source registry, HTML parsers, safe fetches, network policy, and import worker.                                                |
-| `src/lib/inngest/`                                              | Inngest client and durable function registration.                                                                              |
-| `src/lib/db/`                                                   | Server-only Drizzle connection and schema modules.                                                                             |
-| `src/lib/auth/`, `glossary/`, `reader/`, `export/`, `settings/` | Authentication, glossary propagation, persisted reader preferences/progress, streaming exports, and provider/account settings. |
-| `src/styles/globals.css`                                        | Tailwind v4 CSS-first theme, semantic tokens, light/dark variables, and font stacks.                                           |
-| `scripts/`                                                      | Migrations, seed user, postbuild Vercel patch, translation evaluation, and E2E supervisor.                                     |
-| `e2e/`                                                          | Playwright browser workflow; integration tests are colocated under `src/**/*.integration.test.ts`.                             |
-| `drizzle/`                                                      | Generated PostgreSQL migrations and migration metadata.                                                                        |
+| Directory                                                       | Purpose                                                                                                                            |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routes/`                                                   | File-based public/protected pages and API handlers.                                                                                |
+| `src/components/`                                               | Feature UI plus restyled shadcn/Base UI primitives in `ui/`; `chapters/`, `novels/`, and `reader/` are split into role subfolders. |
+| `src/lib/content/`                                              | Novel/chapter CRUD, publishing, ownership, covers, and schemas in `novel/`, `chapter/`, and `publish/`.                            |
+| `src/lib/translation/`                                          | Chunking, prompts, provider clients, job APIs/state/store, worker, outbox, and evaluation.                                         |
+| `src/lib/scrape/`                                               | Source registry, HTML parsers, safe fetches, network policy, and import worker.                                                    |
+| `src/lib/inngest/`                                              | Inngest client and durable function registration.                                                                                  |
+| `src/lib/db/`                                                   | Server-only Drizzle connection and schema modules.                                                                                 |
+| `src/lib/auth/`, `glossary/`, `reader/`, `export/`, `settings/` | Authentication, glossary propagation, persisted reader preferences/progress, streaming exports, and provider/account settings.     |
+| `src/styles/globals.css`                                        | Tailwind v4 CSS-first theme, semantic tokens, light/dark variables, and font stacks.                                               |
+| `scripts/`                                                      | Migrations, seed user, postbuild Vercel patch, translation evaluation, and E2E supervisor.                                         |
+| `e2e/`                                                          | Playwright browser workflow; integration tests are colocated under `src/**/*.integration.test.ts`.                                 |
+| `drizzle/`                                                      | Generated PostgreSQL migrations and migration metadata.                                                                            |
 
 ## Development Commands
 
@@ -67,6 +67,7 @@ Database migrations are a release operation, not a Vercel build operation. Produ
 ## Code Conventions & Common Patterns
 
 - **TypeScript:** Strict compiler settings, no unused locals/parameters, no explicit `any`, no unchecked side-effect imports, and no fallthrough. Prefer named exports, descriptive camelCase symbols, and colocated leaf types such as `translation/types/*.ts`, `reader/types.ts`, and `*.schemas.ts` for Zod-inferred inputs. Use `@/` (or `#/`) aliases instead of long relative imports.
+- **Folder organization:** A domain folder that outgrows a flat listing splits into role subfolders (`chapters/table/`, `chapters/import/`, `novels/detail/`, `lib/content/chapter/`, `translation/workflow/`), not one folder per file. Keep leaf filenames unchanged, colocate `*.test.ts(x)` with the module, leave domain-wide `*.integration.test.ts` at the domain root, and keep modules shared across subfolders at the domain root. There are no barrel `index.ts` re-exports — import the module directly through `@/`, using relative paths only for same-folder siblings.
 - **Server functions:** Follow `createServerFn({ method })` + `.validator(schema)` + `.handler(...)`. Use `ensureSession()` for mutations, verify resource ownership through the novel/user join, apply guest publication filters and `checkRateLimit` to public reads, and return safe errors through `withSafeHandler`/`SafeServerError`.
 - **Errors and untrusted data:** Catch variables are `unknown`; narrow with `instanceof Error`. Validate request/form/JSON input with Zod. Unknown server failures are logged and exposed as a generic safe message. Do not leak provider keys or internal database details.
 - **Database/state:** Drizzle properties are camelCase over snake_case columns. Use `nanoid()` IDs, transactions, and `for('update')` locks for job ownership/state changes. Keep source revisions, translation generations, active job IDs, and outbox intent consistent; do not implement worker validity rules in route handlers.

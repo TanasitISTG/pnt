@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 
-import { getNovel } from "@/lib/content/novel.functions";
+import { getNovel } from "@/lib/content/novel/novel.functions";
 import { getRelationshipMap, getRelationshipWorkspace } from "@/lib/relationships/functions";
 
 export const relationshipMapViewSchema = z.enum(["characters", "relationships"]);

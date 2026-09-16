@@ -11,7 +11,7 @@ const serverFunctions = vi.hoisted(() => ({
 vi.mock("@/components/relationships/relationships-page", () => ({
   RelationshipsPage: () => null,
 }));
-vi.mock("@/lib/content/novel.functions", () => ({ getNovel: serverFunctions.getNovel }));
+vi.mock("@/lib/content/novel/novel.functions", () => ({ getNovel: serverFunctions.getNovel }));
 vi.mock("@/lib/relationships/functions", () => ({
   getRelationshipMap: serverFunctions.getRelationshipMap,
   getRelationshipWorkspace: serverFunctions.getRelationshipWorkspace,
