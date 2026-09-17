@@ -88,18 +88,23 @@ function ProductionCover({
 }
 
 function DevelopmentCover({
+  rootRef,
   devSrc,
   alt,
   className,
   loaded,
   onLoad,
 }: Pick<NovelCoverProps, "alt" | "className"> & {
+  rootRef: React.RefObject<HTMLDivElement | null>;
   devSrc: string | undefined;
   loaded: boolean;
   onLoad: () => void;
 }) {
   return (
-    <div className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}>
+    <div
+      ref={rootRef}
+      className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}
+    >
       <div
         className={`absolute inset-0 bg-foreground/5 animate-pulse rounded-[inherit] transition-opacity duration-300 ${
           loaded ? "opacity-0" : "opacity-100"
@@ -189,6 +194,7 @@ export function NovelCover({
 
   return (
     <DevelopmentCover
+      rootRef={rootRef}
       devSrc={devSrc}
       alt={alt}
       className={className}

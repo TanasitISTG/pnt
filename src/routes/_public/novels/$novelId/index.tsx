@@ -3,11 +3,8 @@ import { useCallback } from "react";
 
 import { NovelDetailController } from "@/components/novels/detail/novel-detail-controller";
 import { NovelPending } from "@/components/novels/detail/novel-detail-pending";
-import {
-  chaptersQueryOptions,
-  hydrateAdminNovelDetailCore,
-  novelQueryOptions,
-} from "@/components/novels/detail/use-novel-detail-page";
+import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
+import { hydrateAdminNovelDetailCore, novelQueryOptions } from "@/lib/content/novel/novel.query";
 import { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
 import { readerStateQueryOptions } from "@/lib/reader/query";
 import {

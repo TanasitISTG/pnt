@@ -1,23 +1,46 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
-// Read-only chapter progress drawn as a hairline on the toolbar edge. It never writes
-// progress, so it cannot disturb scroll restore.
-export function ReaderChapterProgress() {
+import {
+  getReaderScrollFraction,
+  getReaderScrollRange,
+  getReaderTopInset,
+} from "@/lib/reader/scroll-geometry";
+
+export interface ReaderChapterProgressProps {
+  proseRef: RefObject<HTMLDivElement | null>;
+  proseNode?: HTMLDivElement | null;
+  toolbarRef: RefObject<HTMLElement | null>;
+  // Layout identity: reattach observers when the rendered prose node can differ.
+  layoutKey: string;
+}
+
+// Read-only chapter progress drawn as a hairline on the toolbar edge. It measures the
+// prose element rather than the document, so the app footer cannot inflate the ratio, and
+// it never writes progress, so it cannot disturb scroll restore.
+export function ReaderChapterProgress({
+  proseRef,
+  proseNode,
+  toolbarRef,
+  layoutKey,
+}: ReaderChapterProgressProps) {
   const [progress, setProgress] = useState({ percent: 0, scrollable: false });
 
   useEffect(() => {
     let frame: number | null = null;
 
+    const measure = () => {
+      const prose = proseRef.current;
+      if (!prose) return null;
+      const inset = toolbarRef.current ? getReaderTopInset(toolbarRef.current) : 0;
+      const range = getReaderScrollRange(prose, inset);
+      if (!range.scrollable) return { percent: 0, scrollable: false };
+      const fraction = getReaderScrollFraction(prose, inset) ?? 0;
+      return { percent: Math.round(fraction * 100), scrollable: true };
+    };
+
     const update = () => {
       frame = null;
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      const next =
-        maxScroll <= 0
-          ? { percent: 0, scrollable: false }
-          : {
-              percent: Math.round(Math.min(1, Math.max(0, window.scrollY / maxScroll)) * 100),
-              scrollable: true,
-            };
+      const next = measure() ?? { percent: 0, scrollable: false };
       setProgress((current) =>
         current.percent === next.percent && current.scrollable === next.scrollable ? current : next,
       );
@@ -28,7 +51,8 @@ export function ReaderChapterProgress() {
     };
 
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
-    observer?.observe(document.documentElement);
+    if (proseRef.current) observer?.observe(proseRef.current);
+    if (toolbarRef.current) observer?.observe(toolbarRef.current);
 
     update();
     window.addEventListener("scroll", schedule, { passive: true });
@@ -39,7 +63,7 @@ export function ReaderChapterProgress() {
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
     };
-  }, []);
+  }, [layoutKey, proseRef, proseNode, toolbarRef]);
 
   if (!progress.scrollable) return null;
 

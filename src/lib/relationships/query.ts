@@ -1,7 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 
-import { getNovel } from "@/lib/content/novel/novel.functions";
 import { getRelationshipMap, getRelationshipWorkspace } from "@/lib/relationships/functions";
 
 export const relationshipMapViewSchema = z.enum(["characters", "relationships"]);
@@ -32,12 +31,6 @@ export const relationshipWorkspaceQueryOptions = (novelId: string) =>
   queryOptions({
     queryKey: ["relationshipWorkspace", novelId] as const,
     queryFn: () => getRelationshipWorkspace({ data: { novelId } }),
-  });
-
-export const relationshipNovelQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["novel", novelId] as const,
-    queryFn: () => getNovel({ data: { novelId } }),
   });
 
 export const relationshipMapQueryOptions = (novelId: string) =>

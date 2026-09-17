@@ -135,6 +135,56 @@ export type JobActivity = {
   failed?: number;
 };
 
+export const jobActivityTypeSchema = z.enum(["translation", "scrape", "epub"]);
+
+export const jobActivityIdentitySchema = z.object({
+  id: z.string().trim().min(1).max(200),
+  type: jobActivityTypeSchema,
+});
+
+/**
+ * The activity endpoint projects the identities the caller is actually
+ * rendering (at most one history page) instead of truncating a global active
+ * list. Bounded by the existing maximum history page size of 50.
+ */
+export const jobActivityInputSchema = z.object({
+  jobs: z.array(jobActivityIdentitySchema).max(50).default([]),
+});
+
+export type JobActivityIdentity = z.infer<typeof jobActivityIdentitySchema>;
+export type JobActivityInput = z.infer<typeof jobActivityInputSchema>;
+
+export type JobActivitySnapshot = {
+  activities: JobActivity[];
+  activeTranslationJobs: number;
+  activeImportJobs: number;
+  /**
+   * Opaque exact-database change fingerprint across every retained owned job
+   * (terminal rows included). It is an invalidation signal, not an event feed.
+   */
+  revision: string;
+};
+
+function compareActivityIdentities(left: JobActivityIdentity, right: JobActivityIdentity): number {
+  if (left.type !== right.type) return left.type < right.type ? -1 : 1;
+  if (left.id !== right.id) return left.id < right.id ? -1 : 1;
+  return 0;
+}
+
+export function normalizeJobActivityInput(
+  jobs: readonly JobActivityIdentity[],
+): JobActivityIdentity[] {
+  const seen = new Set<string>();
+  const normalized: JobActivityIdentity[] = [];
+  for (const job of jobs.toSorted(compareActivityIdentities)) {
+    const key = `${job.type}:${job.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({ id: job.id, type: job.type });
+  }
+  return normalized;
+}
+
 type ChunkStatsRow = {
   avgLatencyMs: number | null;
   promptTokens: number | null;

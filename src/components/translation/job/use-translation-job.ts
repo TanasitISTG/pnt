@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { invalidateJobDashboard } from "@/lib/job-dashboard/query";
 import {
   startTranslationJob,
   startTranslationJobs,
@@ -45,8 +46,24 @@ import {
 export function useTranslationJob(novelId: string, enabled = true) {
   const queryClient = useQueryClient();
   const [activeJobs, setActiveJobs] = useState<Map<string, ActiveJobState>>(new Map());
+  // Reconciliation reads the latest local map synchronously; state is only for
+  // rendering, so an unrelated poll re-render must not re-enter the effect or
+  // invalidate a claimed terminal lookup.
+  const activeJobsRef = useRef<Map<string, ActiveJobState>>(activeJobs);
   const authorityRef = useRef<JobAuthorityState>(createJobAuthorityState());
   const mountedRef = useRef(true);
+  const lifecycleRef = useRef(0);
+
+  // Terminal lookups outlive the effect that claimed them. They are abandoned
+  // only when the consumer unmounts or the hook lifecycle (novel/enabled)
+  // changes, never because a sibling job's state published a new Map.
+  useEffect(() => {
+    const generation = lifecycleRef.current + 1;
+    lifecycleRef.current = generation;
+    return () => {
+      if (lifecycleRef.current === generation) lifecycleRef.current = generation + 1;
+    };
+  }, [novelId, enabled]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -95,15 +112,27 @@ export function useTranslationJob(novelId: string, enabled = true) {
   );
 
   const setJobState = useCallback((state: ActiveJobState) => {
-    setActiveJobs((prev) => mergeJobState(prev, state));
+    const next = mergeJobState(activeJobsRef.current, state);
+    activeJobsRef.current = next;
+    setActiveJobs(next);
+  }, []);
+
+  const markJobFailed = useCallback((chapterId: string, jobId: string, error: string | null) => {
+    const next = withJobFailure(activeJobsRef.current, chapterId, jobId, error);
+    activeJobsRef.current = next;
+    setActiveJobs(next);
   }, []);
 
   const removeJob = useCallback((chapterId: string, jobId: string) => {
-    setActiveJobs((prev) => removeJobIfMatches(prev, chapterId, jobId));
+    const next = removeJobIfMatches(activeJobsRef.current, chapterId, jobId);
+    activeJobsRef.current = next;
+    setActiveJobs(next);
   }, []);
 
   const clearActiveJobs = useCallback(() => {
-    setActiveJobs(new Map());
+    const next = new Map<string, ActiveJobState>();
+    activeJobsRef.current = next;
+    setActiveJobs(next);
   }, []);
 
   const invalidateJobProgress = useCallback(() => {
@@ -113,6 +142,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
   const invalidateJobOutcome = useCallback(() => {
     invalidateJobProgress();
+    void invalidateJobDashboard(queryClient);
     queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
     queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
@@ -132,9 +162,9 @@ export function useTranslationJob(novelId: string, enabled = true) {
   useEffect(() => {
     const dbJobs = activeJobsQuery.data;
     if (!enabled || !dbJobs) return;
-    let cancelled = false;
+    const lifecycle = lifecycleRef.current;
 
-    const plan = planPollReconciliation(authorityRef.current, dbJobs, activeJobs);
+    const plan = planPollReconciliation(authorityRef.current, dbJobs, activeJobsRef.current);
     authorityRef.current = { ...plan.state, previousActiveJobs: plan.nextPreviousActiveJobs };
     if (plan.ignoredJobIds.length > 0) {
       writeActiveJobsCache(plan.expectedJobsForCacheRewrite, plan.ignoredJobIds);
@@ -170,7 +200,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
         const terminal = await getTranslationJobsTerminalStatus({
           data: { jobIds: claimed.map(({ job }) => job.jobId) },
         });
-        if (cancelled || !mountedRef.current) return;
+        if (lifecycle !== lifecycleRef.current || !mountedRef.current) return;
         const terminalMap = new Map(terminal.map((job) => [job.id, job]));
 
         for (const { job, mutationVersion } of claimed) {
@@ -207,7 +237,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
             authorityRef.current = forgetTrackedJob(authorityRef.current, job);
             errorCount++;
             resolvedJobIds.push(job.jobId);
-            setActiveJobs((prev) => withJobFailure(prev, job.chapterId, job.jobId, outcome.error));
+            markJobFailed(job.chapterId, job.jobId, outcome.error);
           } else if (outcome.kind === "cancelled") {
             authorityRef.current = rememberTerminalJob(
               authorityRef.current,
@@ -245,7 +275,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
         );
       }
 
-      if (cancelled || !mountedRef.current) return;
+      if (lifecycle !== lifecycleRef.current || !mountedRef.current) return;
       for (const job of unresolved) {
         authorityRef.current = trackUnresolvedJob(authorityRef.current, job);
       }
@@ -258,6 +288,9 @@ export function useTranslationJob(novelId: string, enabled = true) {
       if (unresolved.length === 0 && plan.accepted.length === 0) {
         invalidateJobOutcome();
       } else {
+        // A terminal/removed resolution must refresh the dashboard even when
+        // sibling jobs force the progress-only branch.
+        void invalidateJobDashboard(queryClient);
         invalidateJobProgress();
       }
       if (terminalCount === 0) return;
@@ -274,17 +307,14 @@ export function useTranslationJob(novelId: string, enabled = true) {
         toast.info(`Translation: ${parts.join(", ")}`);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
-    activeJobs,
     activeJobsQuery.data,
     activeJobsQuery.dataUpdatedAt,
     enabled,
     invalidateJobOutcome,
     invalidateJobProgress,
+    markJobFailed,
+    queryClient,
     removeJob,
     setJobState,
     writeActiveJobsCache,
@@ -495,7 +525,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
         await retryTranslationJob({ data: { jobId } });
         if (!mountedRef.current || !ownsMutation(authorityRef.current, chapterId, version)) return;
 
-        const existing = activeJobs.get(chapterId);
+        const existing = activeJobsRef.current.get(chapterId);
         const retriedJob: ActiveJobState = {
           jobId,
           chapterId,
@@ -520,7 +550,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
         }
       }
     },
-    [activeJobs, invalidateJobOutcome, reconcileActiveJobsCache, setJobState],
+    [invalidateJobOutcome, reconcileActiveJobsCache, setJobState],
   );
 
   return {

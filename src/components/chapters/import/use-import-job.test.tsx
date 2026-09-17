@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -59,8 +61,13 @@ function deferred<T>() {
 }
 
 describe("useImportJob", () => {
+  let queryClient: QueryClient;
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+
   beforeEach(() => {
     vi.clearAllMocks();
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     vi.mocked(getActiveImportJob).mockResolvedValue(null as never);
     vi.mocked(getLatestImportJob).mockResolvedValue(null as never);
     vi.mocked(getImportJobStatus).mockResolvedValue(activeJob as never);
@@ -74,7 +81,7 @@ describe("useImportJob", () => {
 
   it("recovers an initial active-job lookup failure and resumes polling", async () => {
     vi.mocked(getActiveImportJob).mockRejectedValueOnce(new Error("Status unavailable"));
-    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"));
+    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"), { wrapper });
 
     await waitFor(() =>
       expect(result.current.importStatusError?.message).toBe("Status unavailable"),
@@ -100,7 +107,7 @@ describe("useImportJob", () => {
   it("does not let a stale initial lookup erase a locally attached job", async () => {
     const discovery = deferred<ImportJobState | null>();
     vi.mocked(getActiveImportJob).mockReturnValueOnce(discovery.promise as never);
-    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"));
+    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"), { wrapper });
 
     act(() => result.current.attachJob("attached-job", "novel.epub"));
     expect(result.current.initialStatusLoading).toBe(true);
@@ -117,7 +124,7 @@ describe("useImportJob", () => {
   it("guards rapid duplicate starts synchronously", async () => {
     const start = deferred<{ jobId: string }>();
     vi.mocked(startImportJob).mockReturnValueOnce(start.promise as never);
-    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"));
+    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"), { wrapper });
     await waitFor(() => expect(result.current.initialStatusLoading).toBe(false));
 
     act(() => {
@@ -138,7 +145,8 @@ describe("useImportJob", () => {
   it("serializes polling and stops after a terminal response", async () => {
     const firstStatus = deferred<ImportJobState>();
     vi.mocked(getImportJobStatus).mockReturnValueOnce(firstStatus.promise as never);
-    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"));
+    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"), { wrapper });
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
     await waitFor(() => expect(result.current.initialStatusLoading).toBe(false));
     vi.useFakeTimers();
     act(() => result.current.attachJob("poll-job"));
@@ -158,6 +166,8 @@ describe("useImportJob", () => {
       await firstStatus.promise;
     });
     expect(result.current.importJob?.status).toBe("done");
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["job-dashboard", "history"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["job-dashboard", "stats"] });
 
     act(() => {
       vi.advanceTimersByTime(10_000);
@@ -168,7 +178,7 @@ describe("useImportJob", () => {
   it("ignores an out-of-date poll after a replacement job is attached", async () => {
     const staleStatus = deferred<ImportJobState>();
     vi.mocked(getImportJobStatus).mockReturnValueOnce(staleStatus.promise as never);
-    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"));
+    const { result } = renderHook(() => useImportJob("novel-1", vi.fn(), "scrape"), { wrapper });
     await waitFor(() => expect(result.current.initialStatusLoading).toBe(false));
     vi.useFakeTimers();
     act(() => result.current.attachJob("old-job"));
@@ -190,7 +200,7 @@ describe("useImportJob", () => {
 
   it("recovers the latest failed EPUB job but not an older failure behind a newer done job", async () => {
     vi.mocked(getLatestImportJob).mockResolvedValueOnce(epubFailedJob as never);
-    const failed = renderHook(() => useImportJob("novel-1", vi.fn(), "epub"));
+    const failed = renderHook(() => useImportJob("novel-1", vi.fn(), "epub"), { wrapper });
     await waitFor(() => expect(failed.result.current.importJob?.id).toBe("epub-job-1"));
     expect(failed.result.current.importJob?.status).toBe("error");
     failed.unmount();
@@ -200,7 +210,7 @@ describe("useImportJob", () => {
       id: "epub-done",
       status: "done",
     } as never);
-    const done = renderHook(() => useImportJob("novel-1", vi.fn(), "epub"));
+    const done = renderHook(() => useImportJob("novel-1", vi.fn(), "epub"), { wrapper });
     await waitFor(() => expect(done.result.current.initialStatusLoading).toBe(false));
     expect(done.result.current.importJob).toBeNull();
   });

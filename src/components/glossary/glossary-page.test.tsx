@@ -5,11 +5,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  glossaryNovelQueryOptions,
-  glossaryStatsQueryOptions,
-  glossaryTermsQueryOptions,
-} from "@/lib/glossary/query";
+import { glossaryStatsQueryOptions, glossaryTermsQueryOptions } from "@/lib/glossary/query";
+import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import type { GlossaryListPage, GlossaryListRow, GlossaryListSearch } from "@/lib/glossary/schemas";
 
 const defaultSearch: GlossaryListSearch = {
@@ -113,7 +110,7 @@ function renderGlossary(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   });
-  queryClient.setQueryData(glossaryNovelQueryOptions("novel-1").queryKey, novel);
+  queryClient.setQueryData(novelQueryOptions("novel-1").queryKey, novel);
   queryClient.setQueryData(glossaryStatsQueryOptions("novel-1").queryKey, stats);
   queryClient.setQueryData(glossaryTermsQueryOptions("novel-1", search).queryKey, page);
   render(
@@ -400,7 +397,7 @@ describe("GlossaryPage list workspace", () => {
 
     cleanup();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    queryClient.setQueryData(glossaryNovelQueryOptions("novel-1").queryKey, novel);
+    queryClient.setQueryData(novelQueryOptions("novel-1").queryKey, novel);
     queryClient.setQueryData(glossaryStatsQueryOptions("novel-1").queryKey, stats);
     serverFunctions.listGlossaryTerms.mockRejectedValueOnce(new Error("Network down"));
     render(

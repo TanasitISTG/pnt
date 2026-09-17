@@ -380,7 +380,7 @@ export function ProviderSettingsCard({
                       )}
                     </div>
                     {hasApiKey && (
-                      <span className="flex items-center gap-1 text-caption text-emerald-600 dark:text-emerald-400">
+                      <span className="flex items-center gap-1 text-caption text-success">
                         <ShieldCheck className="size-3.5" />
                         Key saved ({apiKeyMasked})
                       </span>

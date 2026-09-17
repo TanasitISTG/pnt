@@ -23,11 +23,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  relationshipMapQueryOptions,
-  relationshipNovelQueryOptions,
-  type RelationshipMapSearch,
-} from "@/lib/relationships/query";
+import { relationshipMapQueryOptions, type RelationshipMapSearch } from "@/lib/relationships/query";
+import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import { LANG_LABELS, parseLanguagePair } from "@/lib/language-pair";
 
 const relationshipsRoute = getRouteApi("/_protected/novels/$novelId/relationships");
@@ -36,7 +33,7 @@ export function RelationshipsPage() {
   const { novelId } = relationshipsRoute.useParams();
   const search = relationshipsRoute.useSearch();
   const navigate = relationshipsRoute.useNavigate();
-  const novelQuery = useQuery(relationshipNovelQueryOptions(novelId));
+  const novelQuery = useQuery(novelQueryOptions(novelId));
   const novel = novelQuery.data;
   const pair = novel ? parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`) : null;
   const languageLabels = pair ? LANG_LABELS[pair] : null;

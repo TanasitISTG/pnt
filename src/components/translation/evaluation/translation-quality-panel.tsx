@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { QueryErrorState } from "@/components/query-error-state";
-import { TranslationEvalReportDialog } from "@/components/translation/translation-eval-report-dialog";
+import { TranslationEvalReportDialog } from "@/components/translation/evaluation/translation-eval-report-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

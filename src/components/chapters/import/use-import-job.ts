@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
@@ -8,6 +9,7 @@ import {
   getLatestImportJob,
   startImportJob,
 } from "@/lib/scrape/functions";
+import { invalidateJobDashboard } from "@/lib/job-dashboard/query";
 import type { JobHistoryStatus } from "@/lib/job-dashboard/contracts";
 import type { ScrapeProvider } from "@/lib/scrape/types";
 
@@ -100,6 +102,7 @@ export function useImportJob(
   invalidateChapters: () => void,
   kind: ImportJobKind = "scrape",
 ): ImportJobController {
+  const queryClient = useQueryClient();
   const [importJob, setImportJob] = useState<ImportJobState | null>(null);
   const [importStatusError, setImportStatusError] = useState<Error | null>(null);
   const [initialStatusLoading, setInitialStatusLoading] = useState(true);
@@ -262,6 +265,7 @@ export function useImportJob(
         if (!result) {
           applyRemoteJob(null);
           invalidateChaptersRef.current();
+          void invalidateJobDashboard(queryClient);
           return;
         }
 
@@ -271,16 +275,17 @@ export function useImportJob(
         setImportJob(result);
         setImportStatusError(null);
 
-        if (result.status === "done") {
+        if (isTerminalStatus(result.status)) {
           invalidateChaptersRef.current();
+          void invalidateJobDashboard(queryClient);
+        }
+        if (result.status === "done") {
           toast.success(
             `Import done: added ${result.added}, skipped ${result.skipped}, failed ${result.failed}`,
           );
         } else if (result.status === "error") {
-          invalidateChaptersRef.current();
           toast.error(`Import failed: ${result.error || "Unknown error"}`);
         } else if (result.status === "cancelled") {
-          invalidateChaptersRef.current();
           toast.info("Import cancelled");
         }
       } catch (error: unknown) {
@@ -306,7 +311,7 @@ export function useImportJob(
       clearInterval(interval);
       if (pollRun === pollRunRef.current) pollRunRef.current += 1;
     };
-  }, [polledJobId, polledJobStatus, jobVersion]);
+  }, [polledJobId, polledJobStatus, jobVersion, queryClient]);
 
   const startImport = async (
     baseUrl: string,
@@ -353,6 +358,7 @@ export function useImportJob(
       lastScrapeRequestRef.current = request;
       setLastScrapeRequest(request);
       setImportStatusError(null);
+      void invalidateJobDashboard(queryClient);
       toast.info(`Import of chapters ${from}–${to} queued`);
     } catch (error: unknown) {
       if (revision === localRevisionRef.current) {
@@ -393,6 +399,7 @@ export function useImportJob(
       importJobRef.current = cancelledJob;
       setImportJob(cancelledJob);
       invalidateChaptersRef.current();
+      void invalidateJobDashboard(queryClient);
       toast.info("Import cancelled");
     } catch (error: unknown) {
       if (revision === localRevisionRef.current && importJobRef.current?.id === jobId) {
@@ -426,6 +433,8 @@ export function useImportJob(
       importJobRef.current = nextJob;
       setImportJob(nextJob);
       setImportStatusError(null);
+      // A locally attached active import changes the global dashboard counts.
+      void invalidateJobDashboard(queryClient);
     }
   };
 
@@ -465,7 +474,12 @@ export function useImportJob(
       importJobRef.current = nextJob;
       setImportJob(nextJob);
       setImportStatusError(null);
-      if (!nextJob) invalidateChaptersRef.current();
+      // A manual refresh that discovers a terminal result (or a removed job)
+      // must update the dashboard exactly like polled completion does.
+      if (!nextJob || isTerminalStatus(nextJob.status)) {
+        invalidateChaptersRef.current();
+        void invalidateJobDashboard(queryClient);
+      }
     } catch (error: unknown) {
       if (
         requestId === statusRequestRef.current &&

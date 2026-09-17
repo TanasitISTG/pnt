@@ -4,86 +4,71 @@ import { formatCost } from "@/lib/utils";
 import { ChapterReorderDialog } from "@/components/chapters/reorder/chapter-reorder-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { JobLogsDialog } from "@/components/translation/job-logs-dialog";
+import { JobLogsDialog } from "@/components/translation/job/job-logs-dialog";
 import type { ChapterRow } from "@/components/chapters/types";
 import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 
-export interface NovelDetailDialogDetail {
+export interface NovelDetailDialogData {
   novelId: string;
-  selectedTranslatedIds: string[];
-  chapters: ChapterRow[];
-  reorderOpen: boolean;
-  setReorderOpen: (open: boolean) => void;
-  handleSaveChapterOrder: (chapterIds: string[]) => Promise<void>;
-  deleteNovelOpen: boolean;
-  setDeleteNovelOpen: (open: boolean) => void;
-  removeNovel: () => void;
-  deletingNovel: boolean;
-  deleteAllTranslationsOpen: boolean;
-  setDeleteAllTranslationsOpen: (open: boolean) => void;
-  deleteAllTranslations: () => void;
-  deletingAllTranslations: boolean;
-  deleteChapterId: string | null;
-  setDeleteChapterId: (chapterId: string | null) => void;
-  removeChapter: (variables: { chapterId: string }) => void;
-  deletingChapter: boolean;
-  logChapterId: string | null;
-  setLogChapterId: (chapterId: string | null) => void;
-  retranslateChapterId: string | null;
-  setRetranslateChapterId: (chapterId: string | null) => void;
-  batchRetranslateOpen: boolean;
-  setBatchRetranslateOpen: (open: boolean) => void;
-  selectedTranslatedCount: number;
-  batchStarting: boolean;
-  confirmBatchRetranslate: () => Promise<void>;
-  stopSelectedOpen: boolean;
-  setStopSelectedOpen: (open: boolean) => void;
-  selectedActiveCount: number;
-  batchStopping: boolean;
-  confirmStopSelectedTranslations: () => Promise<void>;
-  startTranslate: (chapterId: string, mode: TranslationStartMode) => void;
+  reorder: {
+    chapters: ChapterRow[];
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onSave: (chapterIds: string[]) => Promise<void>;
+  };
+  deleteNovel: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onConfirm: () => void;
+    pending: boolean;
+  };
+  deleteTranslations: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onConfirm: () => void;
+    pending: boolean;
+  };
+  deleteChapter: {
+    chapterId: string | null;
+    setChapterId: (chapterId: string | null) => void;
+    remove: (variables: { chapterId: string }) => void;
+    pending: boolean;
+  };
+  logs: {
+    chapterId: string | null;
+    setChapterId: (chapterId: string | null) => void;
+  };
+  retranslate: {
+    chapterId: string | null;
+    setChapterId: (chapterId: string | null) => void;
+    start: (chapterId: string, mode: TranslationStartMode) => void;
+  };
+  batchRetranslate: {
+    chapterIds: string[];
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    pending: boolean;
+    onConfirm: () => Promise<void>;
+  };
+  stopSelected: {
+    count: number;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    pending: boolean;
+    onConfirm: () => Promise<void>;
+  };
 }
 
 export interface NovelDetailDialogsProps {
-  detail: NovelDetailDialogDetail;
+  detail: NovelDetailDialogData;
 }
 
 export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
-  const {
-    novelId,
-    selectedTranslatedIds,
-    chapters,
-    reorderOpen,
-    setReorderOpen,
-    handleSaveChapterOrder,
-    deleteNovelOpen,
-    setDeleteNovelOpen,
-    removeNovel,
-    deletingNovel,
-    deleteAllTranslationsOpen,
-    setDeleteAllTranslationsOpen,
-    deleteAllTranslations,
-    deletingAllTranslations,
-    deleteChapterId,
-    setDeleteChapterId,
-    removeChapter,
-    deletingChapter,
-    logChapterId,
-    setLogChapterId,
-    retranslateChapterId,
-    setRetranslateChapterId,
-    batchRetranslateOpen,
-    setBatchRetranslateOpen,
-    selectedTranslatedCount,
-    batchStarting,
-    confirmBatchRetranslate,
-    stopSelectedOpen,
-    setStopSelectedOpen,
-    selectedActiveCount,
-    batchStopping,
-    confirmStopSelectedTranslations,
-    startTranslate,
-  } = detail;
+  const { novelId, reorder, deleteNovel, deleteTranslations, deleteChapter } = detail;
+  const { logs, retranslate, batchRetranslate, stopSelected } = detail;
+  const selectedTranslatedIds = batchRetranslate.chapterIds;
+  const selectedTranslatedCount = selectedTranslatedIds.length;
+  const selectedActiveCount = stopSelected.count;
   const previewQuery = useQuery({
     queryKey: ["translationBatchPreview", novelId, selectedTranslatedIds],
     queryFn: () =>
@@ -94,7 +79,7 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
           mode: "overwrite",
         },
       }),
-    enabled: batchRetranslateOpen && selectedTranslatedIds.length > 0,
+    enabled: batchRetranslate.open && selectedTranslatedIds.length > 0,
     staleTime: 30_000,
   });
   const previewDescription = previewQuery.isPending
@@ -116,28 +101,29 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
 
   return (
     <>
-      {reorderOpen ? (
+      {reorder.open ? (
         <ChapterReorderDialog
-          chapters={chapters}
-          onOpenChange={setReorderOpen}
-          onSave={handleSaveChapterOrder}
+          key={JSON.stringify(reorder.chapters.map((chapter) => [chapter.id, chapter.number]))}
+          chapters={reorder.chapters}
+          onOpenChange={reorder.onOpenChange}
+          onSave={reorder.onSave}
         />
       ) : null}
       <DeleteConfirmDialog
         title="Delete Novel Project"
         description="Are you absolutely sure you want to delete this novel? This action is permanent and will delete all chapters, glossaries, and translation jobs associated with it."
-        open={deleteNovelOpen}
-        onOpenChange={setDeleteNovelOpen}
-        onConfirm={removeNovel}
-        pending={deletingNovel}
+        open={deleteNovel.open}
+        onOpenChange={deleteNovel.onOpenChange}
+        onConfirm={deleteNovel.onConfirm}
+        pending={deleteNovel.pending}
       />
       <DeleteConfirmDialog
         title="Delete All Translations"
         description="This permanently deletes translated titles, chapter text, chapter summaries, and the story summary for this novel. Active translation jobs will be cancelled. Raw chapters, publishing settings, and translation job history are kept."
-        open={deleteAllTranslationsOpen}
-        onOpenChange={setDeleteAllTranslationsOpen}
-        onConfirm={deleteAllTranslations}
-        pending={deletingAllTranslations}
+        open={deleteTranslations.open}
+        onOpenChange={deleteTranslations.onOpenChange}
+        onConfirm={deleteTranslations.onConfirm}
+        pending={deleteTranslations.pending}
       />
       <ConfirmDialog
         title="Re-translate selected chapters?"
@@ -145,50 +131,54 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
         confirmText={
           previewQuery.isPending
             ? "Preparing preview…"
-            : batchStarting
+            : batchRetranslate.pending
               ? "Re-translating…"
               : "Re-translate chapters"
         }
-        open={batchRetranslateOpen}
-        onOpenChange={setBatchRetranslateOpen}
+        open={batchRetranslate.open}
+        onOpenChange={batchRetranslate.onOpenChange}
         onConfirm={() => {
-          if (!previewQuery.isPending) void confirmBatchRetranslate();
+          if (!previewQuery.isPending) void batchRetranslate.onConfirm();
         }}
-        pending={batchStarting || previewQuery.isPending}
+        pending={batchRetranslate.pending || previewQuery.isPending}
       />
       <ConfirmDialog
         title="Stop selected translations?"
         description={`This will cancel ${selectedActiveCount} queued or running translation${selectedActiveCount === 1 ? "" : "s"}. Existing completed translations will stay unchanged.`}
-        confirmText={batchStopping ? "Stopping…" : "Stop translations"}
+        confirmText={stopSelected.pending ? "Stopping…" : "Stop translations"}
         variant="destructive"
-        open={stopSelectedOpen}
-        onOpenChange={setStopSelectedOpen}
-        onConfirm={confirmStopSelectedTranslations}
-        pending={batchStopping}
+        open={stopSelected.open}
+        onOpenChange={stopSelected.onOpenChange}
+        onConfirm={stopSelected.onConfirm}
+        pending={stopSelected.pending}
       />
       <DeleteConfirmDialog
         title="Delete Chapter"
         description="Are you sure you want to delete this chapter? This action is permanent and cannot be undone."
-        open={deleteChapterId !== null}
-        onOpenChange={(open) => !open && setDeleteChapterId(null)}
-        onConfirm={() => deleteChapterId && removeChapter({ chapterId: deleteChapterId })}
-        pending={deletingChapter}
+        open={deleteChapter.chapterId !== null}
+        onOpenChange={(open) => !open && deleteChapter.setChapterId(null)}
+        onConfirm={() => {
+          const chapterId = deleteChapter.chapterId;
+          if (chapterId) deleteChapter.remove({ chapterId });
+        }}
+        pending={deleteChapter.pending}
       />
       <JobLogsDialog
-        chapterId={logChapterId}
-        open={logChapterId !== null}
-        onOpenChange={(open) => !open && setLogChapterId(null)}
+        chapterId={logs.chapterId}
+        open={logs.chapterId !== null}
+        onOpenChange={(open) => !open && logs.setChapterId(null)}
       />
       <ConfirmDialog
         title="Overwrite Existing Translation?"
         description="This chapter already has a translation. Re-translating will replace it; any manual changes will be lost."
         confirmText="Overwrite & Translate"
-        open={retranslateChapterId !== null}
-        onOpenChange={(open) => !open && setRetranslateChapterId(null)}
+        open={retranslate.chapterId !== null}
+        onOpenChange={(open) => !open && retranslate.setChapterId(null)}
         onConfirm={() => {
-          if (retranslateChapterId) {
-            startTranslate(retranslateChapterId, "overwrite");
-            setRetranslateChapterId(null);
+          const chapterId = retranslate.chapterId;
+          if (chapterId) {
+            retranslate.start(chapterId, "overwrite");
+            retranslate.setChapterId(null);
           }
         }}
       />

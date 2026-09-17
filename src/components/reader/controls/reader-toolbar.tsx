@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import type { RefObject } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,10 @@ export interface ReaderToolbarProps {
   activeJob: ActiveJobState | undefined;
   readerState: ReaderStateApi;
   search: ReaderSearchApi;
+  // Prose bounds drive progress and restore; the toolbar measures its own pinned offset.
+  proseRef: RefObject<HTMLDivElement | null>;
+  proseNode?: HTMLDivElement | null;
+  toolbarRef: RefObject<HTMLElement | null>;
   panel: "chapters" | "settings" | "bookmarks" | null;
   onPanelChange: (panel: "chapters" | "settings" | "bookmarks" | null) => void;
   actionsOpen: boolean;
@@ -91,6 +96,9 @@ export function ReaderToolbar({
   activeJob,
   readerState,
   search,
+  proseRef,
+  proseNode,
+  toolbarRef,
   panel,
   onPanelChange,
   actionsOpen,
@@ -101,7 +109,10 @@ export function ReaderToolbar({
   onShortcutsRequest,
 }: ReaderToolbarProps) {
   return (
-    <header className="sticky top-0 z-30 -mx-4 border-b border-border bg-background sm:-mx-6">
+    <header
+      ref={toolbarRef}
+      className="sticky top-0 z-30 -mx-4 border-b border-border bg-background sm:-mx-6"
+    >
       <div className="mx-auto flex max-w-[1200px] min-w-0 flex-col px-4 sm:px-6">
         <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1 py-1.5 sm:flex sm:gap-1">
           <Button
@@ -223,7 +234,9 @@ export function ReaderToolbar({
                   >
                     <Bookmark className="size-4" aria-hidden="true" />
                     Bookmarks
-                    {readerState.bookmarks.length > 0 ? ` (${readerState.bookmarks.length})` : ""}
+                    {readerState.bookmarks.length > 0 || readerState.bookmarksHasMore
+                      ? ` (${readerState.bookmarks.length}${readerState.bookmarksHasMore ? "+" : ""})`
+                      : ""}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -243,7 +256,12 @@ export function ReaderToolbar({
         {search.open ? <ReaderFindBar search={search} /> : null}
         {jobRunning ? <ReaderJobStatus activeJob={activeJob} /> : null}
       </div>
-      <ReaderChapterProgress />
+      <ReaderChapterProgress
+        proseRef={proseRef}
+        proseNode={proseNode}
+        toolbarRef={toolbarRef}
+        layoutKey={`${chapterId}|${settings.viewMode}|${settings.fontSize}|${settings.typeface}|${settings.lineHeight}|${settings.measure}|${editing}|${hasTranslation}`}
+      />
     </header>
   );
 }

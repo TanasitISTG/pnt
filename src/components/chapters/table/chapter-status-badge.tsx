@@ -17,7 +17,7 @@ export function ChapterStatusBadge({ status }: ChapterStatusBadgeProps) {
       return (
         <Badge
           variant="outline"
-          className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 capitalize font-medium"
+          className="bg-info/10 text-info border-info/20 capitalize font-medium"
         >
           Queued
         </Badge>
@@ -26,7 +26,7 @@ export function ChapterStatusBadge({ status }: ChapterStatusBadgeProps) {
       return (
         <Badge
           variant="outline"
-          className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 capitalize font-medium animate-pulse"
+          className="bg-warning/10 text-warning border-warning/20 capitalize font-medium animate-pulse"
         >
           Translating
         </Badge>
@@ -35,7 +35,7 @@ export function ChapterStatusBadge({ status }: ChapterStatusBadgeProps) {
       return (
         <Badge
           variant="outline"
-          className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 capitalize font-medium"
+          className="bg-success/10 text-success border-success/20 capitalize font-medium"
         >
           Translated
         </Badge>

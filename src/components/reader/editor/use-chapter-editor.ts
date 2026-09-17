@@ -64,36 +64,35 @@ const emptyChapterEditorValues: ChapterEditorFormValues = {
   sourceChangePolicy: null,
 };
 
-function createChapterEditorSchema(
-  chapter: EditableChapter | null | undefined,
-): ChapterEditorSchema {
-  return z
-    .object({
-      title: z
-        .string()
-        .max(500)
-        .refine((value) => value.trim().length > 0, "Source title is required"),
-      translatedTitle: z.string().max(500),
-      rawContent: z
-        .string()
-        .refine((value) => value.trim().length > 0, "Source content is required"),
-      translatedContent: z.string(),
-      sourceChangePolicy: z.enum(["keep", "clear"]).nullable(),
-    })
-    .superRefine((value, context) => {
-      if (
-        value.sourceChangePolicy !== "clear" &&
-        typeof chapter?.translatedContent === "string" &&
-        value.translatedContent.trim().length === 0
-      ) {
-        context.addIssue({
-          code: "custom",
-          message:
-            "Translation cannot be empty. Restore it, or change the source text and choose Clear Translation.",
-          path: ["translatedContent"],
-        });
-      }
-    });
+const chapterEditorObjectSchema = z.object({
+  title: z
+    .string()
+    .max(500)
+    .refine((value) => value.trim().length > 0, "Source title is required"),
+  translatedTitle: z.string().max(500),
+  rawContent: z.string().refine((value) => value.trim().length > 0, "Source content is required"),
+  translatedContent: z.string(),
+  sourceChangePolicy: z.enum(["keep", "clear"]).nullable(),
+});
+
+const chapterEditorSchemaWithStoredTranslation: ChapterEditorSchema =
+  chapterEditorObjectSchema.superRefine((value, context) => {
+    if (value.sourceChangePolicy !== "clear" && value.translatedContent.trim().length === 0) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Translation cannot be empty. Restore it, or change the source text and choose Clear Translation.",
+        path: ["translatedContent"],
+      });
+    }
+  });
+
+const chapterEditorSchemaWithoutStoredTranslation: ChapterEditorSchema = chapterEditorObjectSchema;
+
+function createChapterEditorSchema(hasStoredTranslation: boolean): ChapterEditorSchema {
+  return hasStoredTranslation
+    ? chapterEditorSchemaWithStoredTranslation
+    : chapterEditorSchemaWithoutStoredTranslation;
 }
 
 export function useChapterEditor({
@@ -107,7 +106,7 @@ export function useChapterEditor({
   const [editing, setEditing] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [sourcePolicyDialogOpen, setSourcePolicyDialogOpen] = useState(false);
-  const schema = createChapterEditorSchema(chapter);
+  const schema = createChapterEditorSchema(typeof chapter?.translatedContent === "string");
   const { mutateAsync: saveChapter } = useMutation({
     mutationFn: (payload: EditChapterInput) => updateChapter({ data: payload }),
   });

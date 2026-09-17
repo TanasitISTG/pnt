@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { jobHistorySearchSchema, normalizeJobStats } from "@/lib/job-dashboard/contracts";
+import {
+  jobActivityInputSchema,
+  jobHistorySearchSchema,
+  normalizeJobActivityInput,
+  normalizeJobStats,
+} from "@/lib/job-dashboard/contracts";
 
 describe("jobHistorySearchSchema", () => {
   it("normalizes omitted search values to the canonical defaults", () => {
@@ -37,6 +42,44 @@ describe("jobHistorySearchSchema", () => {
 
   it("rejects queries longer than the server limit", () => {
     expect(() => jobHistorySearchSchema.parse({ q: "x".repeat(101) })).toThrow();
+  });
+});
+
+describe("jobActivityInputSchema", () => {
+  it("defaults to an empty request and trims requested identities", () => {
+    expect(jobActivityInputSchema.parse({})).toEqual({ jobs: [] });
+    expect(
+      jobActivityInputSchema.parse({ jobs: [{ id: " job-1 ", type: "translation" }] }),
+    ).toEqual({ jobs: [{ id: "job-1", type: "translation" }] });
+  });
+
+  it("rejects more than one history page of identities and invalid types", () => {
+    const identities = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({ id: `job-${index}`, type: "scrape" }));
+
+    expect(jobActivityInputSchema.parse({ jobs: identities(50) }).jobs).toHaveLength(50);
+    expect(() => jobActivityInputSchema.parse({ jobs: identities(51) })).toThrow();
+    expect(() =>
+      jobActivityInputSchema.parse({ jobs: [{ id: "", type: "translation" }] }),
+    ).toThrow();
+    expect(() => jobActivityInputSchema.parse({ jobs: [{ id: "job-1", type: "all" }] })).toThrow();
+  });
+});
+
+describe("normalizeJobActivityInput", () => {
+  it("sorts by type then id and de-duplicates identities", () => {
+    expect(
+      normalizeJobActivityInput([
+        { id: "job-b", type: "translation" },
+        { id: "job-a", type: "scrape" },
+        { id: "job-a", type: "scrape" },
+        { id: "job-c", type: "translation" },
+      ]),
+    ).toEqual([
+      { id: "job-a", type: "scrape" },
+      { id: "job-b", type: "translation" },
+      { id: "job-c", type: "translation" },
+    ]);
   });
 });
 

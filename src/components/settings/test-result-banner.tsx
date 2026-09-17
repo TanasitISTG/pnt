@@ -17,14 +17,14 @@ export function TestResultBanner({
     <div
       className={`flex items-start gap-3 rounded-lg border p-4 ${
         testResult.success
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
-          : "border-red-500/30 bg-red-500/10 text-red-800 dark:text-red-200"
+          ? "border-success/30 bg-success/10 text-success"
+          : "border-destructive/30 bg-destructive/10 text-foreground"
       }`}
     >
       {testResult.success ? (
-        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" />
       ) : (
-        <AlertCircle className="mt-0.5 size-5 shrink-0 text-red-600 dark:text-red-400" />
+        <AlertCircle className="mt-0.5 size-5 shrink-0 text-foreground" />
       )}
       <div className="min-w-0 flex-1 text-body">
         <p className="font-semibold">

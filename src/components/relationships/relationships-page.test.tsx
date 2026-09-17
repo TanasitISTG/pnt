@@ -5,11 +5,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  relationshipMapQueryOptions,
-  relationshipNovelQueryOptions,
-  type RelationshipMapSearch,
-} from "@/lib/relationships/query";
+import { relationshipMapQueryOptions, type RelationshipMapSearch } from "@/lib/relationships/query";
+import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import type {
   CharacterProfile,
   CharacterRelationship,
@@ -135,7 +132,7 @@ function renderRelationships(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   });
-  queryClient.setQueryData(relationshipNovelQueryOptions("novel-relationships").queryKey, {
+  queryClient.setQueryData(novelQueryOptions("novel-relationships").queryKey, {
     ...novel,
     ...novelOverride,
   });
@@ -523,7 +520,7 @@ describe("RelationshipsPage workspace", () => {
 
     cleanup();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    queryClient.setQueryData(relationshipNovelQueryOptions("novel-relationships").queryKey, novel);
+    queryClient.setQueryData(novelQueryOptions("novel-relationships").queryKey, novel);
     serverFunctions.getRelationshipMap.mockRejectedValueOnce(new Error("Map unavailable"));
     render(
       <QueryClientProvider client={queryClient}>

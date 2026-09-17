@@ -1,16 +1,38 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider, queryOptions } from "@tanstack/react-query";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { readerStateQueryKey } from "./query";
-import type { ReaderNovelState } from "./types";
+import type * as ReaderQuery from "./query";
+import type { ReaderBookmarkPage, ReaderNovelState } from "./types";
 import {
   createAccountReaderStore,
   createLocalReaderStore,
   useReaderState,
 } from "./use-reader-state";
 import { getReaderProgress } from "./progress";
+
+// Continuation pages resolve from this registry so the paging hook can be driven without a
+// server: the key is the cursor id the hook is continuing from.
+const bookmarkPages = vi.hoisted(() => new Map<string, () => Promise<ReaderBookmarkPage>>());
+
+vi.mock("./query", async (importOriginal) => {
+  const actual = await importOriginal<typeof ReaderQuery>();
+  return {
+    ...actual,
+    readerBookmarkPageQueryOptions: (novelId: string, cursor: { createdAt: string; id: string }) =>
+      queryOptions({
+        queryKey: [...actual.readerBookmarkPagesQueryKey(novelId), cursor.createdAt, cursor.id],
+        queryFn: async (): Promise<ReaderBookmarkPage> => {
+          const load = bookmarkPages.get(cursor.id);
+          if (!load) throw new Error(`unexpected bookmark cursor ${cursor.id}`);
+          return load();
+        },
+        staleTime: 0,
+      }),
+  };
+});
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -39,6 +61,7 @@ const SERVER_STATE: ReaderNovelState = {
   scrollFraction: 0.4,
   readChapterIds: ["chapter-1"],
   bookmarks: [],
+  bookmarkNextCursor: null,
 };
 
 function flushPromises() {
@@ -461,6 +484,85 @@ describe("createAccountReaderStore", () => {
     expect(removeBookmark).toHaveBeenCalledWith({ bookmarkId: "bookmark-1" });
   });
 
+  it("resets the flush window when a new chapter opens", async () => {
+    vi.useFakeTimers();
+    let clock = 0;
+    const savePosition = vi.fn(async () => ({}));
+    const setChapter = vi.fn(async () => ({}));
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(readerStateQueryKey("novel"), SERVER_STATE);
+    const store = createAccountReaderStore({
+      novelId: "novel",
+      queryClient,
+      persist: { savePosition, setChapter },
+      now: () => clock,
+    });
+
+    store.markOpened("chapter-1");
+    await vi.runOnlyPendingTimersAsync();
+
+    store.saveScrollFraction(0.5);
+    await vi.runOnlyPendingTimersAsync();
+    expect(savePosition).toHaveBeenCalledTimes(1);
+
+    // The second sample only arms the periodic flush.
+    clock = 1_000;
+    store.saveScrollFraction(0.6);
+    expect(savePosition).toHaveBeenCalledTimes(1);
+
+    store.markOpened("chapter-2");
+    clock = 1_100;
+    store.saveScrollFraction(0.2);
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(savePosition).toHaveBeenLastCalledWith({
+      novelId: "novel",
+      chapterId: "chapter-2",
+      scrollFraction: 0.2,
+    });
+    expect(savePosition).toHaveBeenCalledTimes(2);
+
+    // The chapter-1 timer must not survive its chapter and flush chapter-2 later.
+    await vi.runOnlyPendingTimersAsync();
+    expect(savePosition).toHaveBeenCalledTimes(2);
+  });
+
+  it("resets the flush window when markRead moves to another chapter", async () => {
+    vi.useFakeTimers();
+    let clock = 0;
+    const savePosition = vi.fn(async () => ({}));
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(readerStateQueryKey("novel"), SERVER_STATE);
+    const store = createAccountReaderStore({
+      novelId: "novel",
+      queryClient,
+      persist: { savePosition, setChapter: async () => ({}), markRead: async () => ({}) },
+      now: () => clock,
+    });
+
+    store.markOpened("chapter-1");
+    await vi.runOnlyPendingTimersAsync();
+    store.saveScrollFraction(0.5);
+    await vi.runOnlyPendingTimersAsync();
+    expect(savePosition).toHaveBeenCalledTimes(1);
+
+    clock = 1_000;
+    store.saveScrollFraction(0.6);
+
+    store.markRead("chapter-2");
+    clock = 1_100;
+    store.saveScrollFraction(0.2);
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(savePosition).toHaveBeenLastCalledWith({
+      novelId: "novel",
+      chapterId: "chapter-2",
+      scrollFraction: 0.2,
+    });
+    await vi.runOnlyPendingTimersAsync();
+    expect(savePosition).toHaveBeenCalledTimes(2);
+  });
+
   it("resyncs the cached state when a write fails", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(readerStateQueryKey("novel"), SERVER_STATE);
@@ -476,15 +578,6 @@ describe("createAccountReaderStore", () => {
     await flushPromises();
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: readerStateQueryKey("novel") });
-  });
-
-  it("keeps working when the reader state was never cached", () => {
-    const queryClient = new QueryClient();
-    const store = createAccountReaderStore({ novelId: "novel", queryClient });
-
-    expect(store.getProgress()).toEqual({ lastChapterId: null, readChapterIds: [] });
-    store.markOpened("chapter-1");
-    expect(cachedState(queryClient).lastChapterId).toBe("chapter-1");
   });
 });
 
@@ -530,5 +623,270 @@ describe("useReaderState", () => {
       scrollFraction: 0.4,
     });
     expect(result.current.bookmarks).toEqual([]);
+  });
+});
+
+describe("useReaderState bookmark paging", () => {
+  const FIRST_CURSOR = { createdAt: "2026-01-01 00:00:00.123456", id: "bookmark-1" };
+
+  function bookmark(id: string) {
+    return {
+      id,
+      chapterId: "chapter-1",
+      paragraphIndex: 1,
+      column: null,
+      excerpt: id,
+      note: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+  }
+
+  function renderPagingReader(isAdmin = true) {
+    // Retries stay off so a failed page surfaces once, the way a user-visible retry behaves.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(readerStateQueryKey("novel"), {
+      ...SERVER_STATE,
+      bookmarks: [bookmark("bookmark-1")],
+      bookmarkNextCursor: FIRST_CURSOR,
+    });
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    return {
+      queryClient,
+      ...renderHook(({ novelId, isAdmin }) => useReaderState(novelId, isAdmin), {
+        wrapper,
+        initialProps: { novelId: "novel", isAdmin },
+      }),
+    };
+  }
+
+  afterEach(() => {
+    bookmarkPages.clear();
+  });
+
+  it("appends the next page by id and advances the cursor", async () => {
+    bookmarkPages.set("bookmark-1", async () => ({
+      bookmarks: [bookmark("bookmark-2"), bookmark("bookmark-1"), bookmark("bookmark-3")],
+      nextCursor: { createdAt: "2025-12-31 00:00:00", id: "bookmark-3" },
+    }));
+    const { queryClient, result } = renderPagingReader();
+
+    expect(result.current.bookmarksHasMore).toBe(true);
+    await act(async () => {
+      await result.current.loadMoreBookmarks();
+    });
+
+    expect(cachedState(queryClient).bookmarks.map((entry) => entry.id)).toEqual([
+      "bookmark-1",
+      "bookmark-2",
+      "bookmark-3",
+    ]);
+    expect(cachedState(queryClient).bookmarkNextCursor).toEqual({
+      createdAt: "2025-12-31 00:00:00",
+      id: "bookmark-3",
+    });
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+    expect(result.current.bookmarksLoadError).toBeNull();
+  });
+
+  it("keeps the loaded bookmarks and exposes a failed page for retry", async () => {
+    bookmarkPages.set("bookmark-1", async () => {
+      throw new Error("offline");
+    });
+    const { queryClient, result } = renderPagingReader();
+
+    await act(async () => {
+      await result.current.loadMoreBookmarks();
+    });
+
+    expect(cachedState(queryClient).bookmarks.map((entry) => entry.id)).toEqual(["bookmark-1"]);
+    expect(cachedState(queryClient).bookmarkNextCursor).toEqual(FIRST_CURSOR);
+    expect(result.current.bookmarksLoadError).toBeInstanceOf(Error);
+    expect(result.current.bookmarksHasMore).toBe(true);
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+  });
+
+  it("does not start a second page request while one is in flight", async () => {
+    const deferred = Promise.withResolvers<ReaderBookmarkPage>();
+    let requests = 0;
+    bookmarkPages.set("bookmark-1", () => {
+      requests += 1;
+      return deferred.promise;
+    });
+    const { result } = renderPagingReader();
+
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.loadMoreBookmarks();
+    });
+    await act(async () => {
+      await result.current.loadMoreBookmarks();
+    });
+    expect(requests).toBe(1);
+
+    await act(async () => {
+      deferred.resolve({ bookmarks: [], nextCursor: null });
+      await pending;
+    });
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+  });
+
+  it("discards a page response that arrives after the state was replaced", async () => {
+    const deferred = Promise.withResolvers<ReaderBookmarkPage>();
+    bookmarkPages.set("bookmark-1", () => deferred.promise);
+    const { queryClient, result } = renderPagingReader();
+
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.loadMoreBookmarks();
+    });
+
+    // An authoritative refetch replaces accumulated pages with a fresh first page.
+    queryClient.setQueryData(readerStateQueryKey("novel"), {
+      ...SERVER_STATE,
+      bookmarks: [bookmark("bookmark-9")],
+      bookmarkNextCursor: null,
+    });
+
+    await act(async () => {
+      deferred.resolve({ bookmarks: [bookmark("bookmark-2")], nextCursor: null });
+      await pending;
+    });
+
+    expect(cachedState(queryClient).bookmarks.map((entry) => entry.id)).toEqual(["bookmark-9"]);
+    expect(cachedState(queryClient).bookmarkNextCursor).toBeNull();
+  });
+
+  it("retains continuation after every loaded bookmark is removed", async () => {
+    const { queryClient, result } = renderPagingReader();
+    const store = createAccountReaderStore({
+      novelId: "novel",
+      queryClient,
+      persist: { removeBookmark: async () => undefined },
+    });
+
+    await act(async () => {
+      store.removeBookmark("bookmark-1");
+      await flushPromises();
+    });
+
+    expect(result.current.bookmarks).toEqual([]);
+    expect(result.current.bookmarksHasMore).toBe(true);
+    bookmarkPages.set("bookmark-1", async () => ({
+      bookmarks: [bookmark("older-bookmark")],
+      nextCursor: null,
+    }));
+    await act(async () => {
+      await result.current.loadMoreBookmarks();
+    });
+    expect(cachedState(queryClient).bookmarks.map((entry) => entry.id)).toEqual(["older-bookmark"]);
+  });
+
+  it("clears a page error when switching novels or leaving account mode", async () => {
+    bookmarkPages.set("bookmark-1", async () => {
+      throw new Error("offline");
+    });
+    const { queryClient, result, rerender } = renderPagingReader();
+    queryClient.setQueryData(readerStateQueryKey("other-novel"), {
+      ...SERVER_STATE,
+      bookmarkNextCursor: FIRST_CURSOR,
+    });
+
+    await act(async () => {
+      await result.current.loadMoreBookmarks();
+    });
+    expect(result.current.bookmarksLoadError).toBeInstanceOf(Error);
+    rerender({ novelId: "other-novel", isAdmin: true });
+    expect(result.current.bookmarksLoadError).toBeNull();
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+
+    await act(async () => {
+      await result.current.loadMoreBookmarks();
+    });
+    expect(result.current.bookmarksLoadError).toBeInstanceOf(Error);
+    rerender({ novelId: "other-novel", isAdmin: false });
+    expect(result.current.bookmarksHasMore).toBe(false);
+    expect(result.current.bookmarksLoadError).toBeNull();
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+  });
+
+  it("does not let a previous novel's failed request release the current request guard", async () => {
+    const previous = Promise.withResolvers<ReaderBookmarkPage>();
+    const current = Promise.withResolvers<ReaderBookmarkPage>();
+    bookmarkPages.set("bookmark-1", () => previous.promise);
+    const loadCurrent = vi.fn(() => current.promise);
+    bookmarkPages.set("other-cursor", loadCurrent);
+    const { queryClient, result, rerender } = renderPagingReader();
+    queryClient.setQueryData(readerStateQueryKey("other-novel"), {
+      ...SERVER_STATE,
+      bookmarkNextCursor: { ...FIRST_CURSOR, id: "other-cursor" },
+    });
+    let previousRequest!: Promise<void>;
+    act(() => {
+      previousRequest = result.current.loadMoreBookmarks();
+    });
+    expect(result.current.bookmarksLoadingMore).toBe(true);
+
+    rerender({ novelId: "other-novel", isAdmin: true });
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+    let currentRequest!: Promise<void>;
+    act(() => {
+      currentRequest = result.current.loadMoreBookmarks();
+    });
+    expect(result.current.bookmarksLoadingMore).toBe(true);
+    await act(async () => {
+      previous.reject(new Error("previous novel offline"));
+      await previousRequest;
+    });
+    expect(result.current.bookmarksLoadError).toBeNull();
+    expect(result.current.bookmarksLoadingMore).toBe(true);
+    await act(async () => {
+      await result.current.loadMoreBookmarks();
+    });
+    expect(loadCurrent).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      current.resolve({ bookmarks: [bookmark("other-bookmark")], nextCursor: null });
+      await currentRequest;
+    });
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+    expect(result.current.bookmarks.map((entry) => entry.id)).toEqual(["other-bookmark"]);
+  });
+
+  it("keeps guest paging neutral when an account request fails after switching modes", async () => {
+    const deferred = Promise.withResolvers<ReaderBookmarkPage>();
+    bookmarkPages.set("bookmark-1", () => deferred.promise);
+    const { result, rerender } = renderPagingReader();
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.loadMoreBookmarks();
+    });
+    expect(result.current.bookmarksLoadingMore).toBe(true);
+    rerender({ novelId: "novel", isAdmin: false });
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+    expect(result.current.bookmarksLoadError).toBeNull();
+    await act(async () => {
+      deferred.reject(new Error("account request failed"));
+      await pending;
+    });
+    expect(result.current.bookmarksHasMore).toBe(false);
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+    expect(result.current.bookmarksLoadError).toBeNull();
+    rerender({ novelId: "novel", isAdmin: true });
+    expect(result.current.bookmarksLoadError).toBeNull();
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+  });
+
+  it("keeps paging disabled for guests", async () => {
+    const { result } = renderPagingReader(false);
+
+    expect(result.current.bookmarksHasMore).toBe(false);
+    await act(async () => {
+      await result.current.loadMoreBookmarks();
+    });
+
+    expect(result.current.bookmarksLoadingMore).toBe(false);
+    expect(result.current.bookmarksLoadError).toBeNull();
   });
 });

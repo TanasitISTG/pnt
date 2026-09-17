@@ -1,5 +1,5 @@
 import { Grid2X2, List, Search, SlidersHorizontal, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   formatLibraryLanguage,
@@ -35,8 +35,8 @@ export function LibraryToolbar({
   totalCount,
   onSearchChange,
 }: LibraryToolbarProps) {
-  const queryTimeoutRef = useRef<number | null>(null);
-  const queryInputRef = useRef<HTMLInputElement>(null);
+  const [queryInput, setQueryInput] = useState(search.q);
+  const onSearchChangeRef = useRef(onSearchChange);
   const languageItems = useMemo(() => {
     const items: Record<string, string> = { all: LIBRARY_LANGUAGE_ALL_LABEL };
     for (const language of languages) items[language] = formatLibraryLanguage(language);
@@ -44,25 +44,22 @@ export function LibraryToolbar({
   }, [languages]);
 
   useEffect(() => {
-    window.clearTimeout(queryTimeoutRef.current ?? undefined);
-    queryTimeoutRef.current = null;
-    return () => window.clearTimeout(queryTimeoutRef.current ?? undefined);
+    onSearchChangeRef.current = onSearchChange;
+  });
+
+  useEffect(() => {
+    setQueryInput(search.q);
   }, [search.q]);
 
-  const handleQueryChange = (value: string) => {
-    window.clearTimeout(queryTimeoutRef.current ?? undefined);
-    if (value === search.q) return;
-    queryTimeoutRef.current = window.setTimeout(() => {
-      queryTimeoutRef.current = null;
-      onSearchChange({ q: value });
-    }, 300);
-  };
+  useEffect(() => {
+    if (queryInput === search.q) return;
+    const timeoutId = window.setTimeout(() => onSearchChangeRef.current({ q: queryInput }), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [queryInput, search.q]);
 
   const clear = () => {
-    window.clearTimeout(queryTimeoutRef.current ?? undefined);
-    queryTimeoutRef.current = null;
-    if (queryInputRef.current) queryInputRef.current.value = "";
-    onSearchChange({ q: "", language: "all", publication: "all" });
+    setQueryInput("");
+    onSearchChangeRef.current({ q: "", language: "all", publication: "all" });
   };
 
   const hasFilters =
@@ -104,13 +101,11 @@ export function LibraryToolbar({
             Search novels
           </label>
           <Input
-            key={search.q}
-            ref={queryInputRef}
             id="library-search"
             name="q"
             autoComplete="off"
-            defaultValue={search.q}
-            onChange={(event) => handleQueryChange(event.target.value)}
+            value={queryInput}
+            onChange={(event) => setQueryInput(event.target.value)}
             placeholder="Search title, author, or original title…"
             aria-label="Search novels"
             className="h-10 pl-9"

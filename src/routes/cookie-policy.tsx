@@ -13,7 +13,7 @@ function CookiePolicyPage() {
     <AppShell user={user}>
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
-          <h1 className="text-display font-bold text-foreground">Cookie Policy</h1>
+          <h1 className="text-display font-semibold text-foreground">Cookie Policy</h1>
           <p className="mt-2 text-body text-muted-foreground">
             This policy explains how Pnt uses cookies and local storage to operate the platform.
           </p>

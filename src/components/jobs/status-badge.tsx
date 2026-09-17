@@ -11,10 +11,7 @@ export function StatusBadge({ status }: { status: JobHistoryStatus }) {
       );
     case "running":
       return (
-        <Badge
-          variant="outline"
-          className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-        >
+        <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
           <span
             className="size-1.5 rounded-full bg-current motion-safe:animate-pulse"
             aria-hidden="true"
@@ -24,10 +21,7 @@ export function StatusBadge({ status }: { status: JobHistoryStatus }) {
       );
     case "done":
       return (
-        <Badge
-          variant="outline"
-          className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-        >
+        <Badge variant="outline" className="border-success/30 bg-success/10 text-success">
           Completed
         </Badge>
       );

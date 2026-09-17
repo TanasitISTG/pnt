@@ -268,6 +268,11 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
 
+  /* Status colors — muted olive/umber/warm slate, flip in .dark and reader themes */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
   /* Constant palette */
   --color-cream: #f7f4ed;
   --color-charcoal: #1c1c1c;
@@ -330,6 +335,9 @@
   --primary-foreground: #fcfbf8;
   --destructive: #a8442f;
   --destructive-foreground: #fcfbf8;
+  --success: #53604b;
+  --warning: #735735;
+  --info: #505f65;
   --focus-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
 }
 
@@ -346,6 +354,9 @@
   --primary-foreground: #1c1c1c;
   --destructive: #a8442f;
   --destructive-foreground: #fcfbf8;
+  --success: #bcc7b5;
+  --warning: #d5b991;
+  --info: #b8c5ca;
   --focus-shadow: rgba(247, 244, 237, 0.15) 0px 4px 12px;
 }
 
@@ -364,6 +375,9 @@
   --primary-foreground: #f9f2e2;
   --destructive: #8f4630;
   --destructive-foreground: #f9f2e2;
+  --success: #566047;
+  --warning: #705333;
+  --info: #525d61;
   --focus-shadow: rgba(91, 70, 54, 0.12) 0px 4px 12px;
 }
 
@@ -380,6 +394,9 @@
   --primary-foreground: #fcfcfa;
   --destructive: #9c4530;
   --destructive-foreground: #fcfcfa;
+  --success: #53604b;
+  --warning: #735735;
+  --info: #505f65;
   --focus-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
 }
 

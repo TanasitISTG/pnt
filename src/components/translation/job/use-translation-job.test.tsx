@@ -42,6 +42,12 @@ vi.mock("@/lib/translation/api/queries", () => ({
   ),
 }));
 
+vi.mock("@/lib/job-dashboard/functions", () => ({
+  getJobActivity: vi.fn(),
+  getJobHistory: vi.fn(),
+  getJobStats: vi.fn(),
+}));
+
 describe("useTranslationJob", () => {
   let queryClient: QueryClient;
 
@@ -450,6 +456,88 @@ describe("useTranslationJob", () => {
     });
 
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("resolves a claimed terminal lookup across sibling poll re-renders", async () => {
+    const terminalLookup =
+      Promise.withResolvers<
+        Array<{ id: string; chapterId: string; status: "done"; error: null }>
+      >();
+    const terminalStarted = Promise.withResolvers<void>();
+    vi.mocked(translationQueries.getTranslationJobsTerminalStatus).mockImplementationOnce(() => {
+      terminalStarted.resolve();
+      return terminalLookup.promise as never;
+    });
+    vi.mocked(translationQueries.listActiveTranslationJobs)
+      .mockResolvedValueOnce([
+        {
+          id: "job-a",
+          chapterId: "ch-a",
+          status: "running",
+          doneChunks: 1,
+          totalChunks: 2,
+          error: null,
+        },
+        {
+          id: "job-b",
+          chapterId: "ch-b",
+          status: "running",
+          doneChunks: 1,
+          totalChunks: 4,
+          error: null,
+        },
+      ] as never)
+      .mockResolvedValueOnce([
+        {
+          id: "job-b",
+          chapterId: "ch-b",
+          status: "running",
+          doneChunks: 3,
+          totalChunks: 4,
+          error: null,
+        },
+      ] as never)
+      .mockResolvedValueOnce([
+        {
+          id: "job-b",
+          chapterId: "ch-b",
+          status: "running",
+          doneChunks: 4,
+          totalChunks: 4,
+          error: null,
+        },
+      ] as never);
+    queryClient.setQueryData(["job-dashboard", "history"], { rows: [] });
+    queryClient.setQueryData(["job-dashboard", "stats"], { activeTranslationJobs: 2 });
+    const { result } = renderHook(() => useTranslationJob("novel-1"), { wrapper });
+    await waitFor(() => expect(result.current.activeJobs.get("ch-a")?.jobId).toBe("job-a"));
+
+    // The next poll omits A — claiming its terminal lookup — and advances B.
+    await act(async () => {
+      await result.current.refetchActiveJobs();
+    });
+    await terminalStarted.promise;
+    await waitFor(() => expect(result.current.activeJobs.get("ch-b")?.doneChunks).toBe(3));
+
+    // A sibling re-render plus another poll must not abandon the claimed lookup.
+    await act(async () => {
+      await result.current.refetchActiveJobs();
+    });
+    // Refetch resolves before React Query's scheduled observer notification and
+    // the hook's reconciliation effect necessarily publish the local job map.
+    await waitFor(() => expect(result.current.activeJobs.get("ch-b")?.doneChunks).toBe(4));
+
+    await act(async () => {
+      terminalLookup.resolve([{ id: "job-a", chapterId: "ch-a", status: "done", error: null }]);
+      await terminalLookup.promise;
+    });
+
+    await waitFor(() => expect(result.current.activeJobs.has("ch-a")).toBe(false));
+    expect(result.current.activeJobs.get("ch-b")?.jobId).toBe("job-b");
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith("Translation: 1 completed");
+    expect(queryClient.getQueryState(["job-dashboard", "history"])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(["job-dashboard", "stats"])?.isInvalidated).toBe(true);
   });
 });
 

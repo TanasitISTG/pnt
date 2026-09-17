@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import { ReviewRowDetails } from "@/components/translation/translation-eval-review-row-details";
+import { ReviewRowDetails } from "@/components/translation/evaluation/translation-eval-review-row-details";
 import { Badge } from "@/components/ui/badge";
 import type { EvalReviewRow } from "@/lib/translation/evaluation/eval.schemas";
 

@@ -1,7 +1,7 @@
 import { RefreshCw } from "lucide-react";
 
 import { QueryErrorState } from "@/components/query-error-state";
-import { TranslationEvalReviewRow } from "@/components/translation/translation-eval-review-row";
+import { TranslationEvalReviewRow } from "@/components/translation/evaluation/translation-eval-review-row";
 import { Button } from "@/components/ui/button";
 import {
   DataTablePagination,

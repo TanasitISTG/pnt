@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import type { ReaderColumn } from "@/lib/reader/types";
 import type { ReaderParagraphHighlights } from "@/lib/reader/search";
 
@@ -24,6 +26,8 @@ export interface ReaderContentProps {
   translationStatus?: ReaderTranslationStatus;
   jobRunning?: boolean;
   highlightsFor?: ReaderHighlightsLookup;
+  // The outer prose node, measured for reader progress and restore.
+  proseRef?: Ref<HTMLDivElement>;
   onTranslateRequest?: () => void;
   onEditRequest?: () => void;
 }

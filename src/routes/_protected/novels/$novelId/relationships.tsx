@@ -4,9 +4,9 @@ import { RelationshipsPage } from "@/components/relationships/relationships-page
 import {
   relationshipMapQueryOptions,
   relationshipMapSearchSchema,
-  relationshipNovelQueryOptions,
   relationshipWorkspaceQueryOptions,
 } from "@/lib/relationships/query";
+import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 
 export const Route = createFileRoute("/_protected/novels/$novelId/relationships")({
   validateSearch: relationshipMapSearchSchema,
@@ -20,10 +20,7 @@ export const Route = createFileRoute("/_protected/novels/$novelId/relationships"
     if (!workspace?.map) {
       throw redirect({ to: "/novels/$novelId", params: { novelId: params.novelId } });
     }
-    context.queryClient.setQueryData(
-      relationshipNovelQueryOptions(params.novelId).queryKey,
-      workspace.novel,
-    );
+    context.queryClient.setQueryData(novelQueryOptions(params.novelId).queryKey, workspace.novel);
     context.queryClient.setQueryData(
       relationshipMapQueryOptions(params.novelId).queryKey,
       workspace.map,

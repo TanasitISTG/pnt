@@ -13,6 +13,7 @@ import {
   deleteAllNovelTranslations,
   translateMissingTitles,
 } from "@/lib/content/chapter/chapter-ops.functions";
+import { invalidateNovelChapterDetails } from "@/lib/content/chapter/chapter.query";
 type ChapterPublishInput = {
   chapterId: string;
   publishedAt: Date | null;
@@ -159,7 +160,7 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
         queryClient.invalidateQueries({ queryKey: ["chapters", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
-        queryClient.invalidateQueries({ queryKey: ["chapter"] }),
+        invalidateNovelChapterDetails(queryClient, novelId),
       ]);
       toast.success("Chapter order saved");
     },

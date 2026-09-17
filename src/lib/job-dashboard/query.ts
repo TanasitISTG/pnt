@@ -2,10 +2,12 @@ import { keepPreviousData, queryOptions, type QueryClient } from "@tanstack/reac
 
 import type {
   JobActivity,
+  JobActivityIdentity,
   JobHistoryPage,
   JobHistorySearch,
   JobStats,
 } from "@/lib/job-dashboard/contracts";
+import { normalizeJobActivityInput } from "@/lib/job-dashboard/contracts";
 import { getJobActivity, getJobHistory, getJobStats } from "@/lib/job-dashboard/functions";
 
 export const JOB_HISTORY_QUERY_KEY = ["job-dashboard", "history"] as const;
@@ -26,14 +28,32 @@ export const statsQueryOptions = () =>
     staleTime: 60_000,
   });
 
-export const activityQueryOptions = () =>
-  queryOptions({
-    queryKey: JOB_ACTIVITY_QUERY_KEY,
-    queryFn: () => getJobActivity(),
+/**
+ * Projects the identities the caller currently renders; global active counts
+ * keep polling alive even when the requested page contains no active row.
+ */
+export const activityQueryOptions = (jobs: readonly JobActivityIdentity[]) => {
+  const requestedJobs = normalizeJobActivityInput(jobs);
+  return queryOptions({
+    queryKey: [...JOB_ACTIVITY_QUERY_KEY, requestedJobs] as const,
+    queryFn: () => getJobActivity({ data: { jobs: requestedJobs } }),
     staleTime: 1_000,
-    refetchInterval: (query) => (query.state.data && query.state.data.length > 0 ? 5_000 : false),
+    refetchInterval: (query) => {
+      const snapshot = query.state.data;
+      if (!snapshot) return false;
+      return snapshot.activeTranslationJobs + snapshot.activeImportJobs > 0 ? 5_000 : false;
+    },
     refetchIntervalInBackground: false,
   });
+};
+
+export function invalidateJobDashboard(queryClient: QueryClient): Promise<void> {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: JOB_HISTORY_QUERY_KEY }),
+    queryClient.invalidateQueries({ queryKey: JOB_STATS_QUERY_KEY }),
+    queryClient.invalidateQueries({ queryKey: JOB_ACTIVITY_QUERY_KEY }),
+  ]).then(() => undefined);
+}
 
 export type JobDashboardData = {
   history: JobHistoryPage;
@@ -56,7 +76,7 @@ export function mergeJobActivityIntoHistory(
         error: activity.error,
         updatedAt: activity.updatedAt,
         progress: activity.progress,
-        canCancel: true,
+        canCancel: activity.status === "pending" || activity.status === "running",
         canRetry: false,
       };
       if (row.type === "translation") {
@@ -65,16 +85,27 @@ export function mergeJobActivityIntoHistory(
           ...common,
           doneChunks: activity.doneChunks ?? row.doneChunks,
           totalChunks: activity.totalChunks ?? row.totalChunks,
+          canRetry: activity.status === "error" || activity.status === "cancelled",
         };
       }
       if (row.type === "scrape") {
+        const added = activity.added ?? row.added;
+        const skipped = activity.skipped ?? row.skipped;
+        const failed = activity.failed ?? row.failed;
+        const completedWithFailures = activity.status === "done" && failed > 0;
         return {
           ...row,
           ...common,
-          added: activity.added ?? row.added,
-          skipped: activity.skipped ?? row.skipped,
-          failed: activity.failed ?? row.failed,
-          completedWithFailures: false,
+          added,
+          skipped,
+          failed,
+          completedWithFailures,
+          canRetry:
+            (activity.status === "error" ||
+              activity.status === "cancelled" ||
+              completedWithFailures) &&
+            Boolean(row.baseUrl) &&
+            row.scrapeProvider !== null,
         };
       }
       return { ...row, ...common };

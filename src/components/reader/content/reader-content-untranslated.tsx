@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import { Button } from "@/components/ui/button";
 import type { ReaderHighlightsLookup, ReaderTranslationStatus } from "./reader-content-types";
 import { ReaderProse } from "./reader-content-prose";
@@ -10,6 +12,7 @@ interface ReaderUntranslatedContentProps {
   readerFontClass?: string;
   sourceLang: string;
   highlightsFor?: ReaderHighlightsLookup;
+  proseRef?: Ref<HTMLDivElement>;
   isAdmin?: boolean;
   translationStatus?: ReaderTranslationStatus;
   jobRunning?: boolean;
@@ -25,6 +28,7 @@ export function ReaderUntranslatedContent({
   readerFontClass,
   sourceLang,
   highlightsFor,
+  proseRef,
   isAdmin = false,
   translationStatus = "idle",
   jobRunning = false,
@@ -66,6 +70,7 @@ export function ReaderUntranslatedContent({
         readerFontClass={readerFontClass}
         lang={sourceLang}
         highlightsFor={highlightsFor}
+        proseRef={proseRef}
       />
     </div>
   );

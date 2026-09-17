@@ -6,15 +6,13 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImportJobDetailsDialog } from "@/components/jobs/import-job-details-dialog";
 import { JobHistoryTable } from "@/components/jobs/job-history-table";
-import { JobLogsDialog } from "@/components/translation/job-logs-dialog";
+import { JobLogsDialog } from "@/components/translation/job/job-logs-dialog";
 import { Metric } from "@/components/jobs/metric";
 import { Button } from "@/components/ui/button";
 import {
   activityQueryOptions,
-  JOB_ACTIVITY_QUERY_KEY,
   historyQueryOptions,
-  JOB_HISTORY_QUERY_KEY,
-  JOB_STATS_QUERY_KEY,
+  invalidateJobDashboard,
   mergeJobActivityIntoHistory,
   statsQueryOptions,
 } from "@/lib/job-dashboard/query";
@@ -60,22 +58,19 @@ export function JobsPage() {
   const queryClient = useQueryClient();
   const historyQuery = useQuery(historyQueryOptions(search));
   const statsQuery = useQuery(statsQueryOptions());
-  const activityQuery = useQuery(activityQueryOptions());
-  const previousActivityIdsRef = useRef<Set<string>>(new Set());
+  const activityQuery = useQuery(
+    activityQueryOptions(historyQuery.data?.rows.map(({ id, type }) => ({ id, type })) ?? []),
+  );
+  // The revision fingerprint covers every retained owned job, so equal-count
+  // start/completion replacements refresh exactly like an ending job does.
+  const activityRevisionRef = useRef<string | null>(null);
   useEffect(() => {
-    const activities = activityQuery.data;
-    if (!activities) return;
-    const currentIds = new Set(activities.map((activity) => activity.id));
-    const previousIds = previousActivityIdsRef.current;
-    previousActivityIdsRef.current = currentIds;
-    if (previousIds.size === 0) return;
-    const activityEnded = [...previousIds].some((id) => !currentIds.has(id));
-    if (activityEnded) {
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: JOB_HISTORY_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: JOB_STATS_QUERY_KEY }),
-      ]);
-    }
+    const snapshot = activityQuery.data;
+    if (!snapshot) return;
+    const previousRevision = activityRevisionRef.current;
+    activityRevisionRef.current = snapshot.revision;
+    if (previousRevision === null || previousRevision === snapshot.revision) return;
+    void invalidateJobDashboard(queryClient);
   }, [activityQuery.data, queryClient]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [operation, setOperation] = useState<Operation>(null);
@@ -117,9 +112,7 @@ export function JobsPage() {
 
   const invalidateAffectedQueries = async (job: JobHistoryRow) => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: JOB_HISTORY_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: JOB_STATS_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: JOB_ACTIVITY_QUERY_KEY }),
+      invalidateJobDashboard(queryClient),
       queryClient.invalidateQueries({ queryKey: ["novels"] }),
       queryClient.invalidateQueries({ queryKey: ["chapters", job.novelId] }),
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", job.novelId] }),
@@ -214,10 +207,15 @@ export function JobsPage() {
   const history = useMemo(
     () =>
       historyQuery.data
-        ? mergeJobActivityIntoHistory(historyQuery.data, activityQuery.data ?? [])
+        ? mergeJobActivityIntoHistory(historyQuery.data, activityQuery.data?.activities ?? [])
         : undefined,
     [activityQuery.data, historyQuery.data],
   );
+  // The snapshot summary is the last known global count; stats remain the
+  // fallback until the first snapshot arrives.
+  const activeTranslationJobs =
+    activityQuery.data?.activeTranslationJobs ?? stats.activeTranslationJobs;
+  const activeImportJobs = activityQuery.data?.activeImportJobs ?? stats.activeImportJobs;
   const totalTokens = Number(stats.promptTokens) + Number(stats.completionTokens);
   const compactTokenCount = useMemo(
     () =>
@@ -260,10 +258,10 @@ export function JobsPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
           label="Active jobs"
-          value={stats.activeTranslationJobs + stats.activeImportJobs}
+          value={activeTranslationJobs + activeImportJobs}
           detail={
             <>
-              Translation {stats.activeTranslationJobs} · Import {stats.activeImportJobs}
+              Translation {activeTranslationJobs} · Import {activeImportJobs}
             </>
           }
         />

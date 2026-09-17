@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { filterChapters } from "@/lib/content/chapter/chapter-search";
 export interface NovelDetailChapterPanelDetail {
   chapters: ChapterRow[];
-  chapterTableProps: Omit<ChapterTableProps, "chapters">;
   chapterUiLoading: boolean;
   isChaptersPending: boolean;
   lastReadChapter: ChapterRow | null;
@@ -59,29 +58,25 @@ function ChapterSearchToolbar({
   onChange,
 }: ChapterSearchToolbarProps) {
   const [queryInput, setQueryInput] = useState(query);
-  const timeoutRef = useRef<number | null>(null);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
+  useEffect(() => {
+    setQueryInput(query);
+  }, [query]);
 
   useEffect(() => {
     if (disabled || queryInput === query) return;
-    timeoutRef.current = window.setTimeout(() => {
-      timeoutRef.current = null;
-      onChange(queryInput);
-    }, 300);
-    return () => {
-      if (timeoutRef.current !== null) {
-        window.clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [disabled, onChange, query, queryInput]);
+    const timeoutId = window.setTimeout(() => onChangeRef.current(queryInput), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [disabled, query, queryInput]);
 
   const handleClear = () => {
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
     setQueryInput("");
-    onChange("");
+    onChangeRef.current("");
   };
 
   return (
@@ -119,6 +114,7 @@ export interface NovelDetailChapterPanelProps {
   isAdmin: boolean;
   chapterQuery: string;
   detail: NovelDetailChapterPanelDetail;
+  tableProps: Omit<ChapterTableProps, "chapters">;
   onReviewSearchChange: (query: string) => void;
   onAddChapters?: () => void;
 }
@@ -127,12 +123,12 @@ export function NovelDetailChapterPanel({
   isAdmin,
   chapterQuery,
   detail,
+  tableProps,
   onReviewSearchChange,
   onAddChapters,
 }: NovelDetailChapterPanelProps) {
   const {
     chapters,
-    chapterTableProps,
     chapterUiLoading,
     isChaptersPending,
     lastReadChapter,
@@ -175,7 +171,7 @@ export function NovelDetailChapterPanel({
     [filteredIdSet, selectedIds],
   );
   const chapterTableLoading = isChaptersPending || chapterUiLoading;
-  const titleEditing = chapterTableProps.titleEdit !== null;
+  const titleEditing = tableProps.titleEdit !== null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -188,7 +184,6 @@ export function NovelDetailChapterPanel({
         />
       ) : null}
       <ChapterSearchToolbar
-        key={chapterQuery}
         query={chapterQuery}
         totalCount={chapters.length}
         resultCount={filteredChapters.length}
@@ -234,7 +229,7 @@ export function NovelDetailChapterPanel({
           chapters={filteredChapters}
           isAdmin={isAdmin}
           loading={chapterTableLoading}
-          tableProps={chapterTableProps}
+          tableProps={tableProps}
           initialChapterId={lastReadChapter?.id}
           groupResetKey={chapterQuery}
           onAddChapters={onAddChapters}

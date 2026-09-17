@@ -202,7 +202,7 @@ function ChapterTitleLink({
       {residualScriptCount ? (
         <Badge
           variant="outline"
-          className="border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-xs"
+          className="border-warning/50 bg-warning/10 text-warning font-mono text-xs"
         >
           {residualScriptCount} foreign-script letters
         </Badge>
@@ -331,7 +331,7 @@ function TranslationActionButton({
       <Button
         variant="ghost"
         size="icon"
-        className="size-8 text-amber-500 hover:text-amber-600"
+        className="size-8 text-warning hover:text-warning"
         onClick={() => onCancelTranslate(activeJob.jobId, chapter.id)}
         aria-label="Cancel translation"
         title="Cancel translation"

@@ -9,7 +9,7 @@ export function NotFoundPage() {
       <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
         <BookOpen className="size-7 text-muted-foreground" />
       </div>
-      <h1 className="text-display font-bold text-foreground tracking-tight">404</h1>
+      <h1 className="text-display font-semibold text-foreground tracking-tight">404</h1>
       <h2 className="text-card-title font-semibold text-foreground mt-2">Page Not Found</h2>
       <p className="mt-2 max-w-sm text-body text-muted-foreground">
         The page or chapter you are looking for doesn't exist or has been moved.

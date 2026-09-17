@@ -1,84 +1,66 @@
 import { QueryErrorState } from "@/components/query-error-state";
 import { NovelHeader } from "@/components/novels/detail/novel-header";
+import type { NovelHeaderProps } from "@/components/novels/detail/novel-header";
 import { AddChapterSection } from "@/components/chapters/import/add-chapter-section";
 import { NovelDetailChapterPanel } from "@/components/novels/detail/novel-detail-chapter-panel";
 import type { NovelDetailChapterPanelDetail } from "@/components/novels/detail/novel-detail-chapter-panel";
-import type { NovelDetailDialogDetail } from "@/components/novels/detail/novel-detail-dialogs";
+import type { ChapterTableProps } from "@/components/chapters/table/chapter-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TranslationQualityPanel } from "@/components/translation/translation-quality-panel";
+import { TranslationQualityPanel } from "@/components/translation/evaluation/translation-quality-panel";
 import type { EvalReviewSearch } from "@/lib/translation/evaluation/eval.schemas";
 import type {
   DetailSection,
   NovelDetailSearch,
 } from "@/components/novels/detail/novel-detail-search";
-import type { ChapterRow } from "@/components/chapters/types";
-import type { NovelHeaderProps } from "@/components/novels/detail/novel-header";
-export interface NovelDetailViewModel
-  extends NovelDetailChapterPanelDetail, NovelDetailDialogDetail {
-  novel: NovelHeaderProps["novel"] | undefined;
-  glossaryStats: NovelHeaderProps["glossaryStats"];
-  costData: NovelHeaderProps["costData"];
-  firstChapter: ChapterRow | null;
-  readingActionsPending: boolean;
-  readingProgress: NovelHeaderProps["readingProgress"];
-  exporting: NovelHeaderProps["exporting"];
-  publishingNovel: boolean;
-  handleExportTxt: NovelHeaderProps["onExportTxt"];
-  handleExportEpub: NovelHeaderProps["onExportEpub"];
-  publishNovel: NovelHeaderProps["onPublishNovel"];
-  chaptersReady: boolean;
-  invalidateChapters: () => void;
-  metricsError: unknown;
-  isMetricsError: boolean;
-  refetchMetrics: () => Promise<unknown>;
+
+export interface NovelDetailSectionData {
+  header: Omit<NovelHeaderProps, "novel" | "novelId" | "isAdmin">;
+  chapterPanel: NovelDetailChapterPanelDetail;
+  metrics: {
+    error: unknown;
+    isError: boolean;
+    refetch: () => Promise<unknown>;
+  };
+  chapterTools: {
+    ready: boolean;
+    invalidateChapters: () => void;
+  };
 }
 
 export interface NovelDetailSectionsProps {
+  novel: NovelHeaderProps["novel"];
   novelId: string;
   isAdmin: boolean;
   section: DetailSection;
   addVisited: boolean;
   reviewSearch: NovelDetailSearch;
-  detail: NovelDetailViewModel;
+  detail: NovelDetailSectionData;
+  tableProps: Omit<ChapterTableProps, "chapters">;
   onSectionChange: (section: string) => void;
   onReviewSearchChange: (patch: Partial<NovelDetailSearch>) => void;
 }
 
 export function NovelDetailSections({
+  novel,
   novelId,
   isAdmin,
   section,
   addVisited,
   reviewSearch,
   detail,
+  tableProps,
   onSectionChange,
   onReviewSearchChange,
 }: NovelDetailSectionsProps) {
-  const {
-    novel,
-    glossaryStats,
-    costData,
-    chapters,
-    lastReadChapter,
-    firstChapter,
-    exporting,
-    publishingNovel,
-    readingActionsPending,
-    chapterUiLoading,
-    invalidateChapters,
-    handleExportTxt,
-    handleExportEpub,
-    publishNovel,
-    setDeleteNovelOpen,
-  } = detail;
+  const { chapters } = detail.header;
+  const { chapterPanel, chapterTools, metrics } = detail;
 
-  if (!novel) return null;
-
-  const chapterPanel = (
+  const panel = (
     <NovelDetailChapterPanel
       isAdmin={isAdmin}
       chapterQuery={reviewSearch.chapterQuery ?? ""}
-      detail={detail}
+      detail={chapterPanel}
+      tableProps={tableProps}
       onReviewSearchChange={(query) => onReviewSearchChange({ chapterQuery: query })}
       onAddChapters={isAdmin ? () => onSectionChange("add") : undefined}
     />
@@ -86,33 +68,15 @@ export function NovelDetailSections({
 
   return (
     <>
-      <NovelHeader
-        novel={novel}
-        novelId={novelId}
-        isAdmin={isAdmin}
-        glossaryStats={glossaryStats}
-        costData={costData}
-        chapters={chapters}
-        lastReadChapter={lastReadChapter}
-        firstChapter={firstChapter}
-        readingProgress={detail.readingProgress}
-        exporting={exporting}
-        publishingNovel={publishingNovel}
-        chaptersPending={chapterUiLoading}
-        readingActionsPending={readingActionsPending}
-        onPublishNovel={publishNovel}
-        onExportTxt={handleExportTxt}
-        onExportEpub={handleExportEpub}
-        onDeleteNovel={() => setDeleteNovelOpen(true)}
-      />
+      <NovelHeader novel={novel} novelId={novelId} isAdmin={isAdmin} {...detail.header} />
       <hr className="border-border" />
 
-      {isAdmin && detail.isMetricsError ? (
+      {isAdmin && metrics.isError ? (
         <QueryErrorState
           title="Failed to refresh novel metrics"
-          error={detail.metricsError}
+          error={metrics.error}
           onRetry={() => {
-            void detail.refetchMetrics();
+            void metrics.refetch();
           }}
           className="my-0 p-4"
         />
@@ -126,15 +90,15 @@ export function NovelDetailSections({
             <TabsTrigger value="quality">Translation quality</TabsTrigger>
           </TabsList>
           <TabsContent value="chapters" keepMounted>
-            {chapterPanel}
+            {panel}
           </TabsContent>
           <TabsContent value="add" keepMounted={addVisited}>
             {addVisited ? (
-              detail.chaptersReady ? (
+              chapterTools.ready ? (
                 <AddChapterSection
                   novelId={novelId}
                   chapters={chapters}
-                  invalidateChapters={invalidateChapters}
+                  invalidateChapters={chapterTools.invalidateChapters}
                 />
               ) : (
                 <div className="rounded-xl border border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -144,7 +108,7 @@ export function NovelDetailSections({
             ) : null}
           </TabsContent>
           <TabsContent value="quality">
-            {section === "quality" && detail.chaptersReady ? (
+            {section === "quality" && chapterTools.ready ? (
               <TranslationQualityPanel
                 novelId={novelId}
                 reviewSearch={reviewSearch}
@@ -160,7 +124,7 @@ export function NovelDetailSections({
           </TabsContent>
         </Tabs>
       ) : (
-        chapterPanel
+        panel
       )}
     </>
   );

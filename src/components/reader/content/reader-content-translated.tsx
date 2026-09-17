@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import type { ReaderHighlightsLookup } from "./reader-content-types";
 import {
   ReaderMissingOriginalContent,
@@ -19,6 +21,7 @@ interface ReaderTranslatedContentProps {
   targetLang: string;
   targetName: string;
   highlightsFor?: ReaderHighlightsLookup;
+  proseRef?: Ref<HTMLDivElement>;
 }
 
 export function ReaderTranslatedContent({
@@ -35,6 +38,7 @@ export function ReaderTranslatedContent({
   targetLang,
   targetName,
   highlightsFor,
+  proseRef,
 }: ReaderTranslatedContentProps) {
   if (viewMode === "side") {
     return (
@@ -49,6 +53,7 @@ export function ReaderTranslatedContent({
         targetLang={targetLang}
         targetName={targetName}
         highlightsFor={highlightsFor}
+        proseRef={proseRef}
       />
     );
   }
@@ -63,6 +68,7 @@ export function ReaderTranslatedContent({
         readerFontClass={readerFontClass}
         lang={targetLang}
         highlightsFor={highlightsFor}
+        proseRef={proseRef}
       />
     ) : (
       <ReaderMissingTranslationContent />
@@ -78,6 +84,7 @@ export function ReaderTranslatedContent({
       readerFontClass={readerFontClass}
       lang={sourceLang}
       highlightsFor={highlightsFor}
+      proseRef={proseRef}
     />
   ) : (
     <ReaderMissingOriginalContent />

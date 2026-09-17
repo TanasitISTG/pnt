@@ -13,7 +13,7 @@ function PrivacyPage() {
     <AppShell user={user}>
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
-          <h1 className="text-display font-bold text-foreground">Privacy Policy</h1>
+          <h1 className="text-display font-semibold text-foreground">Privacy Policy</h1>
           <p className="mt-2 text-body text-muted-foreground">
             Information on how data is handled on Personal Novel Translator (Pnt).
           </p>

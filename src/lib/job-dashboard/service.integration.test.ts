@@ -9,6 +9,7 @@ const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
+let loadJobActivity: typeof import("./service").loadJobActivity;
 let loadJobHistory: typeof import("./service").loadJobHistory;
 let loadJobStats: typeof import("./service").loadJobStats;
 
@@ -45,7 +46,7 @@ integrationDescribe("job observability PostgreSQL contracts", () => {
     process.env.INNGEST_DEV ||= "1";
 
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
-    ({ loadJobHistory, loadJobStats } = await import("./service"));
+    ({ loadJobActivity, loadJobHistory, loadJobStats } = await import("./service"));
   });
 
   afterAll(async () => {
@@ -374,6 +375,67 @@ integrationDescribe("job observability PostgreSQL contracts", () => {
       expect(metrics).toContain("translation-job-stats");
       expect(metrics).toContain("import-job-stats");
       expect(metrics).toContain("chunk-stats");
+
+      const baselineActivity = await loadJobActivity(ownerUserId, timing, { jobs: [] });
+      expect(baselineActivity.activeTranslationJobs).toBe(1);
+      expect(baselineActivity.activeImportJobs).toBe(1);
+      expect(baselineActivity.activities).toEqual([]);
+
+      const requestedActivity = await loadJobActivity(ownerUserId, timing, {
+        jobs: [
+          { id: translationJobIds[0], type: "translation" },
+          { id: translationJobIds[1], type: "translation" },
+          { id: importJobIds[1], type: "epub" },
+          { id: importJobIds[25], type: "scrape" },
+          { id: otherJobId, type: "translation" },
+        ],
+      });
+      expect(requestedActivity.activities.map((activity) => activity.id).toSorted()).toEqual(
+        [translationJobIds[0], translationJobIds[1], importJobIds[1], importJobIds[25]].toSorted(),
+      );
+      expect(
+        requestedActivity.activities.find((activity) => activity.id === translationJobIds[0]),
+      ).toMatchObject({ type: "translation", status: "error", novelId });
+      expect(
+        requestedActivity.activities.find((activity) => activity.id === translationJobIds[1]),
+      ).toMatchObject({ type: "translation", status: "done" });
+      expect(
+        requestedActivity.activities.find((activity) => activity.id === importJobIds[25]),
+      ).toMatchObject({ type: "scrape", status: "pending", novelId });
+      expect(
+        requestedActivity.activities.find((activity) => activity.id === importJobIds[1]),
+      ).toMatchObject({ type: "epub", status: "done", novelId });
+      expect(requestedActivity.activities.some((activity) => activity.id === otherJobId)).toBe(
+        false,
+      );
+      // The fingerprint is global: requesting a page's identities cannot change it.
+      expect(requestedActivity.revision).toBe(baselineActivity.revision);
+
+      const parsedRevision = JSON.parse(baselineActivity.revision) as unknown[];
+      expect(parsedRevision).toHaveLength(4);
+      expect(parsedRevision[0]).toEqual({ done: 23, error: 2, running: 1 });
+      expect(Object.keys(parsedRevision[0] as Record<string, number>)).toEqual([
+        "done",
+        "error",
+        "running",
+      ]);
+      expect(typeof parsedRevision[1]).toBe("string");
+      expect(parsedRevision[2]).toEqual({ done: 23, error: 2, pending: 1 });
+      expect(Object.keys(parsedRevision[2] as Record<string, number>)).toEqual([
+        "done",
+        "error",
+        "pending",
+      ]);
+
+      // Equal global active counts must still change the fingerprint so the UI
+      // refreshes after a completion/start replacement.
+      await sql`
+        UPDATE "translation_jobs" SET "status" = 'cancelled', "updated_at" = now()
+        WHERE "id" = ${translationJobIds[1]}
+      `;
+      const afterStatusChange = await loadJobActivity(ownerUserId, timing, { jobs: [] });
+      expect(afterStatusChange.activeTranslationJobs).toBe(1);
+      expect(afterStatusChange.revision).not.toBe(baselineActivity.revision);
     } finally {
       await sql`DELETE FROM "user" WHERE "id" IN (${ownerUserId}, ${otherUserId})`;
     }

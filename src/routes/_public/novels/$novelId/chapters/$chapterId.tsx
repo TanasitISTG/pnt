@@ -4,8 +4,8 @@ import sarabunThaiUrl from "@fontsource/sarabun/files/sarabun-thai-400-normal.wo
 import { ReaderPage } from "@/components/reader/page/reader-page";
 import { ReaderPending } from "@/components/reader/page/reader-pending";
 import { readerStateQueryOptions } from "@/lib/reader/query";
+import { chapterQueryOptions } from "@/lib/content/chapter/chapter.query";
 import {
-  chapterQueryOptions,
   readerChapterManifestQueryOptions,
   readerNovelQueryOptions,
 } from "@/components/reader/page/reader-queries";
@@ -13,7 +13,7 @@ import {
 export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapterId")({
   loader: async ({ params, context }) => {
     const [chapter, chapters, novel] = await Promise.all([
-      context.queryClient.ensureQueryData(chapterQueryOptions(params.chapterId)),
+      context.queryClient.ensureQueryData(chapterQueryOptions(params.chapterId, params.novelId)),
       context.queryClient.ensureQueryData(readerChapterManifestQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(readerNovelQueryOptions(params.novelId)),
       context.user

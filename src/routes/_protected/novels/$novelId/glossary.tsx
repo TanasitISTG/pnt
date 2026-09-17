@@ -1,11 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { GlossaryPage } from "@/components/glossary/glossary-page";
-import {
-  glossaryNovelQueryOptions,
-  glossaryStatsQueryOptions,
-  glossaryTermsQueryOptions,
-} from "@/lib/glossary/query";
+import { glossaryStatsQueryOptions, glossaryTermsQueryOptions } from "@/lib/glossary/query";
+import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import { glossaryListSearchSchema } from "@/lib/glossary/schemas";
 
 export const Route = createFileRoute("/_protected/novels/$novelId/glossary")({
@@ -15,7 +12,7 @@ export const Route = createFileRoute("/_protected/novels/$novelId/glossary")({
   loader: async ({ context, location, params }) => {
     const search = glossaryListSearchSchema.parse(location.search);
     await Promise.all([
-      context.queryClient.ensureQueryData(glossaryNovelQueryOptions(params.novelId)),
+      context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(glossaryStatsQueryOptions(params.novelId)),
       context.queryClient.ensureQueryData(glossaryTermsQueryOptions(params.novelId, search)),
     ]);

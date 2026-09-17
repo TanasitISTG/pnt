@@ -1,4 +1,5 @@
 import type { ActiveJobState } from "@/lib/translation/types/api";
+import type { RefObject } from "react";
 import type { ReaderTranslationStatus } from "@/components/reader/content/reader-content-types";
 import { QueryErrorState } from "@/components/query-error-state";
 import type { ReaderSettings } from "@/lib/reader/types";
@@ -81,6 +82,11 @@ export interface ReaderPageViewProps {
   onClearTranslation: () => void;
   onKeepTranslation: () => void;
   editorForm: ChapterEditorFormApi;
+  // Shared geometry anchors: prose defines the readable range, toolbar its pinned offset.
+  proseRef: RefObject<HTMLDivElement | null>;
+  proseNode?: HTMLDivElement | null;
+  onProseNodeChange?: (node: HTMLDivElement | null) => void;
+  toolbarRef: RefObject<HTMLElement | null>;
   onSave: () => void;
   onCancel: () => void;
 }
@@ -138,6 +144,10 @@ export function ReaderPageView({
   onClearTranslation,
   onKeepTranslation,
   editorForm,
+  proseRef,
+  proseNode,
+  onProseNodeChange,
+  toolbarRef,
   onSave,
   onCancel,
 }: ReaderPageViewProps) {
@@ -162,6 +172,9 @@ export function ReaderPageView({
         activeJob={activeJob}
         readerState={readerState}
         search={search}
+        proseRef={proseRef}
+        proseNode={proseNode}
+        toolbarRef={toolbarRef}
         panel={panel}
         onPanelChange={onPanelChange}
         actionsOpen={actionsOpen}
@@ -214,6 +227,7 @@ export function ReaderPageView({
             translationStatus={translationStatus}
             jobRunning={jobRunning}
             highlightsFor={search.open ? search.highlightsFor : undefined}
+            proseRef={onProseNodeChange ?? proseRef}
             onTranslateRequest={onTranslateRequest}
             onEditRequest={onEditRequest}
           />

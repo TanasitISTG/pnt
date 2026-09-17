@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import type { ReaderHighlightsLookup } from "./reader-content-types";
 import {
   createReaderParagraphEntries,
@@ -14,6 +16,7 @@ interface ReaderProseProps {
   lang: string;
   dimmed?: boolean;
   highlightsFor?: ReaderHighlightsLookup;
+  proseRef?: Ref<HTMLDivElement>;
 }
 
 export function ReaderProse({
@@ -25,11 +28,13 @@ export function ReaderProse({
   lang,
   dimmed = false,
   highlightsFor,
+  proseRef,
 }: ReaderProseProps) {
   const entries = createReaderParagraphEntries(paragraphs);
 
   return (
     <div
+      ref={proseRef}
       className="mx-auto flex w-full flex-col gap-5"
       style={{ fontSize: fontSizePx, maxWidth: `${measureRem}rem` }}
     >
@@ -60,6 +65,7 @@ interface ReaderComparisonProps {
   targetLang: string;
   targetName: string;
   highlightsFor?: ReaderHighlightsLookup;
+  proseRef?: Ref<HTMLDivElement>;
 }
 
 export function ReaderComparison({
@@ -73,10 +79,12 @@ export function ReaderComparison({
   targetLang,
   targetName,
   highlightsFor,
+  proseRef,
 }: ReaderComparisonProps) {
   const entries = createReaderParagraphPairEntries(aligned);
   return (
     <div
+      ref={proseRef}
       className="mx-auto flex w-full flex-col gap-5"
       style={{ fontSize: fontSizePx, maxWidth: `${measureRem}rem` }}
     >

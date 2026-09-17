@@ -81,7 +81,6 @@ export function LibraryPage() {
       ) : (
         <>
           <LibraryToolbar
-            key={search.q}
             search={search}
             languages={languages}
             isAdmin={isAdmin}

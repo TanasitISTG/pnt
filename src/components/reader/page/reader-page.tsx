@@ -1,14 +1,15 @@
 import { notFound, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
+import { useCallback, useRef, useState } from "react";
 
 import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader/settings";
 import { useReaderState } from "@/lib/reader/use-reader-state";
 import { QueryErrorState } from "@/components/query-error-state";
 import { useReaderScroll } from "@/components/reader/page/use-reader-scroll";
 import { useReaderThemeScope } from "@/components/reader/page/use-reader-theme-scope";
+import { chapterQueryOptions } from "@/lib/content/chapter/chapter.query";
 import {
-  chapterQueryOptions,
   readerChapterManifestQueryOptions,
   readerNovelQueryOptions,
 } from "@/components/reader/page/reader-queries";
@@ -21,7 +22,7 @@ export interface ReaderPageProps {
 }
 
 export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
-  const chapterQuery = useQuery(chapterQueryOptions(chapterId));
+  const chapterQuery = useQuery(chapterQueryOptions(chapterId, novelId));
   const chaptersQuery = useQuery(readerChapterManifestQueryOptions(novelId));
   const novelQuery = useQuery(readerNovelQueryOptions(novelId));
   const { settings, update, ready: settingsReady } = useReaderSettings();
@@ -32,6 +33,24 @@ export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
   const chapters = chaptersQuery.data ?? [];
   const novel = novelQuery.data;
   const readerState = useReaderState(novelId, !!user);
+  // Measuring the prose element keeps the app footer out of saved positions and progress.
+  const proseRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLElement | null>(null);
+  const [proseNode, setProseNode] = useState<HTMLDivElement | null>(null);
+  const attachProse = useCallback((node: HTMLDivElement | null) => {
+    proseRef.current = node;
+    setProseNode(node);
+  }, []);
+  const proseLayoutKey = [
+    chapterId,
+    settings.viewMode,
+    settings.fontSize,
+    settings.typeface,
+    settings.lineHeight,
+    settings.measure,
+    chapter?.translatedContent ? "translated" : "raw",
+    chapter?.editedAt ? String(chapter.editedAt) : "",
+  ].join("|");
 
   useReaderThemeScope(settings.pageTheme, settingsReady);
   useReaderScroll({
@@ -41,6 +60,10 @@ export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
     ready: settingsReady && readerState.ready,
     store: readerState.store,
     targetAnchor,
+    proseRef,
+    proseNode,
+    toolbarRef,
+    layoutKey: proseLayoutKey,
   });
 
   if (chapterQuery.isError || chaptersQuery.isError || novelQuery.isError) {
@@ -76,6 +99,10 @@ export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
       setTheme={setTheme}
       fontSizePx={READER_FONT_SIZE_PX[settings.fontSize]}
       readerState={readerState}
+      proseRef={proseRef}
+      proseNode={proseNode}
+      onProseNodeChange={attachProse}
+      toolbarRef={toolbarRef}
     />
   );
 }

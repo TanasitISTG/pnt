@@ -8,11 +8,8 @@ import { GlossaryHeader } from "@/components/glossary/glossary-header";
 import { GlossaryTermDialog } from "@/components/glossary/glossary-term-dialog";
 import { GlossaryTable } from "@/components/glossary/glossary-table";
 import { useGlossaryPageController } from "@/components/glossary/use-glossary-page-controller";
-import {
-  glossaryNovelQueryOptions,
-  glossaryStatsQueryOptions,
-  glossaryTermsQueryOptions,
-} from "@/lib/glossary/query";
+import { glossaryStatsQueryOptions, glossaryTermsQueryOptions } from "@/lib/glossary/query";
+import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import type { GlossaryListSearch } from "@/lib/glossary/schemas";
 
 const glossaryRoute = getRouteApi("/_protected/novels/$novelId/glossary");
@@ -38,7 +35,7 @@ function PendingSuggestionsNotice({
 }) {
   if (pendingCount === 0 || isViewingPending) return null;
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <section className="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="font-medium text-foreground">
           {pendingCount.toLocaleString()} AI suggestions awaiting review
@@ -47,7 +44,7 @@ function PendingSuggestionsNotice({
           Review extracted mappings before they influence future translations.
         </p>
       </div>
-      <Button variant="outline" size="sm" className="border-amber-500/40" onClick={onReview}>
+      <Button variant="outline" size="sm" className="border-warning/40" onClick={onReview}>
         Review suggestions
       </Button>
     </section>
@@ -113,7 +110,7 @@ export function GlossaryPage() {
   const { novelId } = glossaryRoute.useParams();
   const search = glossaryRoute.useSearch();
   const navigate = glossaryRoute.useNavigate();
-  const novelQuery = useQuery(glossaryNovelQueryOptions(novelId));
+  const novelQuery = useQuery(novelQueryOptions(novelId));
   const statsQuery = useQuery(glossaryStatsQueryOptions(novelId));
   const termsQuery = useQuery(glossaryTermsQueryOptions(novelId, search));
   const {

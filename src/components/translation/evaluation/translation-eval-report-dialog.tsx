@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
 
-import { TranslationEvalReportContent } from "@/components/translation/translation-eval-report-content";
+import { TranslationEvalReportContent } from "@/components/translation/evaluation/translation-eval-report-content";
 import { Badge } from "@/components/ui/badge";
 import { type DataTablePaginationTable } from "@/components/ui/data-table-parts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";

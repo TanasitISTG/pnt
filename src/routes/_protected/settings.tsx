@@ -88,7 +88,7 @@ function SettingsPage() {
       </div>
 
       {!isConfigured && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-amber-800 dark:text-amber-200">
+        <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-warning">
           <AlertCircle className="mt-0.5 size-5 shrink-0" />
           <div className="text-body">
             <p className="font-semibold">AI Provider Not Configured</p>

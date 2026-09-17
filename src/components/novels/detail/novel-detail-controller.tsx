@@ -5,14 +5,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { QueryErrorState } from "@/components/query-error-state";
 import { useNovelDetailPage } from "@/components/novels/detail/use-novel-detail-page";
-import {
-  NovelDetailDialogs,
-  type NovelDetailDialogDetail,
-} from "@/components/novels/detail/novel-detail-dialogs";
-import {
-  NovelDetailSections,
-  type NovelDetailViewModel,
-} from "@/components/novels/detail/novel-detail-sections";
+import { NovelDetailDialogs } from "@/components/novels/detail/novel-detail-dialogs";
+import { NovelDetailSections } from "@/components/novels/detail/novel-detail-sections";
 import type {
   DetailSection,
   NovelDetailSearch,
@@ -31,9 +25,9 @@ export function NovelDetailController({
   reviewSearch,
   onReviewSearchChange,
 }: NovelDetailControllerProps) {
-  const detail = useNovelDetailPage(novelId, isAdmin);
+  const { loadState, sectionProps, tableProps, dialogProps } = useNovelDetailPage(novelId, isAdmin);
   const [addVisited, setAddVisited] = useState(reviewSearch.section === "add");
-  const titleEditing = detail.chapterTableProps.titleEdit !== null;
+  const titleEditing = tableProps.titleEdit !== null;
   const requestedSection: DetailSection = reviewSearch.reviewReport
     ? "quality"
     : (reviewSearch.section ?? "chapters");
@@ -53,21 +47,22 @@ export function NovelDetailController({
     [onReviewSearchChange, titleEditing],
   );
 
-  if (detail.isNovelError || detail.isChaptersError) {
+  if (loadState.isNovelError || loadState.isChaptersError) {
     return (
       <QueryErrorState
         title="Failed to load novel"
-        error={detail.novelError || detail.chaptersError}
+        error={loadState.novelError || loadState.chaptersError}
         onRetry={() => {
-          detail.refetchNovel();
-          detail.refetchChapters();
+          loadState.refetchNovel();
+          loadState.refetchChapters();
         }}
         className="my-12 min-h-[40vh]"
       />
     );
   }
 
-  if (!detail.novel) {
+  const novel = loadState.novel;
+  if (!novel) {
     return (
       <div className="py-12 text-center">
         <h2 className="text-card-title font-semibold text-foreground">Novel not found</h2>
@@ -79,22 +74,21 @@ export function NovelDetailController({
     );
   }
 
-  const viewModel: NovelDetailViewModel = { ...detail, novel: detail.novel, novelId };
-  const dialogDetail: NovelDetailDialogDetail = { ...detail, novelId };
-
   return (
     <div className="flex flex-col gap-8">
       <NovelDetailSections
+        novel={novel}
         novelId={novelId}
         isAdmin={isAdmin}
         section={section}
         addVisited={addVisited}
         reviewSearch={reviewSearch}
-        detail={viewModel}
+        detail={sectionProps}
+        tableProps={tableProps}
         onSectionChange={setSection}
         onReviewSearchChange={onReviewSearchChange}
       />
-      <NovelDetailDialogs detail={dialogDetail} />
+      <NovelDetailDialogs detail={dialogProps} />
     </div>
   );
 }

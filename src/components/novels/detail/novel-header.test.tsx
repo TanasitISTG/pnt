@@ -53,6 +53,8 @@ function renderNovelHeader(description: string): void {
       lastReadChapter={null}
       firstChapter={null}
       readingProgress={{ readCount: 0, totalCount: 0, percent: 0 }}
+      readyUnpublishedCount={0}
+      unreadyCount={0}
       exporting={null}
       publishingNovel={false}
       onPublishNovel={() => undefined}

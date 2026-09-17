@@ -52,6 +52,7 @@ export function ReaderContentView({
   translationStatus = "idle",
   jobRunning = false,
   highlightsFor,
+  proseRef,
   onTranslateRequest,
   onEditRequest,
 }: ReaderContentProps) {
@@ -93,6 +94,7 @@ export function ReaderContentView({
           targetLang={targetLang}
           targetName={targetName}
           highlightsFor={highlightsFor}
+          proseRef={proseRef}
         />
       ) : (
         <ReaderUntranslatedContent
@@ -103,6 +105,7 @@ export function ReaderContentView({
           readerFontClass={readerFontClass}
           sourceLang={sourceLang}
           highlightsFor={highlightsFor}
+          proseRef={proseRef}
           isAdmin={isAdmin}
           translationStatus={translationStatus}
           jobRunning={jobRunning}

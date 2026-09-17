@@ -6,14 +6,14 @@ import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  activityQueryOptions,
   historyQueryOptions,
-  JOB_ACTIVITY_QUERY_KEY,
   JOB_HISTORY_QUERY_KEY,
   JOB_STATS_QUERY_KEY,
 } from "@/lib/job-dashboard/query";
 import { JobHistoryTable } from "@/components/jobs/job-history-table";
 import type {
-  JobActivity,
+  JobActivitySnapshot,
   JobHistoryEpubRow,
   JobHistoryPage,
   JobHistoryScrapeRow,
@@ -81,7 +81,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@/lib/job-dashboard/functions", () => serverFunctions);
 vi.mock("@/lib/translation/api/mutations", () => mutationFunctions);
 vi.mock("@/lib/scrape/functions", () => scrapeFunctions);
-vi.mock("@/components/translation/job-logs-dialog", () => detailMocks);
+vi.mock("@/components/translation/job/job-logs-dialog", () => detailMocks);
 vi.mock("@/components/jobs/import-job-details-dialog", () => detailMocks);
 
 import { JobsPage } from "@/components/jobs/jobs-page";
@@ -188,7 +188,29 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function renderJobsPage(page: JobHistoryPage = history, search: JobHistorySearch = defaultSearch) {
+const defaultActivity: JobActivitySnapshot = {
+  activities: [],
+  activeTranslationJobs: 1,
+  activeImportJobs: 1,
+  revision: "rev-1",
+};
+
+const idleActivity: JobActivitySnapshot = {
+  activities: [],
+  activeTranslationJobs: 0,
+  activeImportJobs: 0,
+  revision: "rev-1",
+};
+
+function activityKey(page: JobHistoryPage) {
+  return activityQueryOptions(page.rows.map(({ id, type }) => ({ id, type }))).queryKey;
+}
+
+function renderJobsPage(
+  page: JobHistoryPage = history,
+  search: JobHistorySearch = defaultSearch,
+  activity: JobActivitySnapshot = defaultActivity,
+) {
   routerState.search = search;
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -196,7 +218,7 @@ function renderJobsPage(page: JobHistoryPage = history, search: JobHistorySearch
     },
   });
   queryClient.setQueryData(historyQueryOptions(search).queryKey, page);
-  queryClient.setQueryData(JOB_ACTIVITY_QUERY_KEY, []);
+  queryClient.setQueryData(activityKey(page), activity);
   queryClient.setQueryData(JOB_STATS_QUERY_KEY, stats);
 
   render(
@@ -211,7 +233,7 @@ function renderJobsPage(page: JobHistoryPage = history, search: JobHistorySearch
 beforeEach(() => {
   serverFunctions.getJobHistory.mockResolvedValue(history);
   serverFunctions.getJobStats.mockResolvedValue(stats);
-  serverFunctions.getJobActivity.mockResolvedValue([]);
+  serverFunctions.getJobActivity.mockResolvedValue(defaultActivity);
 });
 
 afterEach(() => {
@@ -406,15 +428,127 @@ describe("JobsPage dashboard", () => {
     });
 
     expect(serverFunctions.getJobHistory).not.toHaveBeenCalled();
+    expect(serverFunctions.getJobActivity).toHaveBeenCalledTimes(1);
     expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(
       false,
     );
   });
 
+  it("stops live polling once the global snapshot reports no active work", async () => {
+    vi.useFakeTimers();
+    renderJobsPage(history, defaultSearch, idleActivity);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+
+    expect(serverFunctions.getJobActivity).not.toHaveBeenCalled();
+  });
+
+  it("keeps polling while global work exists even when the visible page is idle", async () => {
+    vi.useFakeTimers();
+    const busyActivity: JobActivitySnapshot = {
+      ...defaultActivity,
+      activeTranslationJobs: 2,
+      activeImportJobs: 0,
+    };
+    serverFunctions.getJobActivity.mockResolvedValue(busyActivity);
+    renderJobsPage(history, defaultSearch, busyActivity);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(serverFunctions.getJobActivity).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(serverFunctions.getJobActivity).toHaveBeenCalledTimes(2);
+    expect(serverFunctions.getJobHistory).not.toHaveBeenCalled();
+  });
+
+  it("refreshes history and stats when the global revision changes", async () => {
+    const queryClient = renderJobsPage();
+    const completedRow: JobHistoryTranslationRow = {
+      ...translationRow,
+      status: "done",
+      error: null,
+      doneChunks: 4,
+      progress: { completed: 4, total: 4, percent: 100, preparing: false },
+      canRetry: false,
+    };
+    serverFunctions.getJobHistory.mockResolvedValue({
+      ...history,
+      rows: [completedRow, scrapeRow, epubRow, retryScrapeRow],
+    });
+    serverFunctions.getJobStats.mockResolvedValue({
+      ...stats,
+      failedTranslationJobs: 0,
+      promptTokens: 2_400,
+      completionTokens: 1_600,
+    });
+    // Active counts stay unchanged: only the revision signals the retained
+    // history/stats change, and no activity row can supply the completed status.
+    serverFunctions.getJobActivity.mockResolvedValue({ ...defaultActivity, revision: "rev-2" });
+    expect(screen.getByText("Prompt 1,200 · Completion 800")).toBeTruthy();
+
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: activityKey(history), exact: true });
+    });
+
+    await waitFor(() => {
+      expect(getMobileCard("Translation Novel").getByText("Completed")).toBeTruthy();
+      expect(screen.getByText("Translation 0 · Import 1")).toBeTruthy();
+      expect(screen.getByText("Prompt 2,400 · Completion 1,600")).toBeTruthy();
+    });
+  });
+
+  it("overlays live global active counts on the dashboard metric", () => {
+    renderJobsPage(history, defaultSearch, {
+      ...defaultActivity,
+      activeTranslationJobs: 2,
+      activeImportJobs: 3,
+    });
+
+    expect(screen.getByText("Translation 2 · Import 3")).toBeTruthy();
+  });
+
+  it("drops cancel from a visible row whose live activity finished", () => {
+    const runningRow: JobHistoryTranslationRow = {
+      ...translationRow,
+      status: "running",
+      error: null,
+      canCancel: true,
+      canRetry: false,
+    };
+    const page: JobHistoryPage = { ...history, rows: [runningRow], rowCount: 1 };
+    renderJobsPage(page, defaultSearch, {
+      ...defaultActivity,
+      activities: [
+        {
+          id: runningRow.id,
+          type: "translation",
+          status: "done",
+          novelId: runningRow.novelId,
+          error: null,
+          updatedAt: "2026-01-01T00:09:00.000Z",
+          progress: { completed: 4, total: 4, percent: 100, preparing: false },
+          doneChunks: 4,
+          totalChunks: 4,
+        },
+      ],
+    });
+
+    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Translation Novel" }));
+    expect(screen.queryByRole("menuitem", { name: "Cancel job" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Retry job" })).toBeNull();
+  });
+
   it("waits for history, stats, and activity during manual Refresh", async () => {
     const historyRefresh = deferred<JobHistoryPage>();
     const statsRefresh = deferred<JobStats>();
-    const activityRefresh = deferred<JobActivity[]>();
+    const activityRefresh = deferred<JobActivitySnapshot>();
     serverFunctions.getJobHistory.mockReturnValueOnce(historyRefresh.promise);
     serverFunctions.getJobStats.mockReturnValueOnce(statsRefresh.promise);
     serverFunctions.getJobActivity.mockReturnValueOnce(activityRefresh.promise);
@@ -440,7 +574,7 @@ describe("JobsPage dashboard", () => {
       (screen.getByRole("button", { name: "Refreshing…" }) as HTMLButtonElement).disabled,
     ).toBe(true);
 
-    activityRefresh.resolve([]);
+    activityRefresh.resolve(defaultActivity);
     await waitFor(() => {
       expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(
         false,

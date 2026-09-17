@@ -138,13 +138,13 @@ interface JobLogsDialogProps {
 function getLogLevelClassName(level: string) {
   switch (level) {
     case "error":
-      return "font-semibold text-red-400";
+      return "font-semibold text-foreground";
     case "warn":
-      return "font-semibold text-amber-400";
+      return "font-semibold text-warning";
     case "success":
-      return "font-semibold text-emerald-400";
+      return "font-semibold text-success";
     default:
-      return "font-medium text-sky-300";
+      return "font-medium text-info";
   }
 }
 
@@ -155,14 +155,14 @@ function LogEntryRow({ log, mounted }: { log: LogEntry; mounted: boolean }) {
   return (
     <div className="grid grid-cols-[auto_1fr] items-start gap-x-2.5 gap-y-1 leading-relaxed sm:grid-cols-[auto_auto_minmax(0,1fr)]">
       <time
-        className="shrink-0 font-mono text-cream/40"
+        className="shrink-0 font-mono text-muted-foreground"
         dateTime={timestamp?.toISOString()}
         title={timestamp && mounted ? formatLocalDateTime(timestamp) : undefined}
       >
         [{timestampLabel}]
       </time>
       <span className={getLogLevelClassName(log.level)}>[{log.level.toUpperCase()}]</span>
-      <span className="col-span-2 min-w-0 whitespace-pre-wrap break-words text-cream/90 sm:col-span-1">
+      <span className="col-span-2 min-w-0 whitespace-pre-wrap break-words text-foreground sm:col-span-1">
         {log.message}
       </span>
     </div>
@@ -175,9 +175,9 @@ function LogConsole({ logs, mounted }: { logs: LogEntry[]; mounted: boolean }) {
       <h4 className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
         Live Execution Console
       </h4>
-      <div className="flex h-64 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-charcoal p-3 font-mono text-xs text-cream/90 shadow-inner sm:gap-2 sm:p-4">
+      <div className="flex h-64 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface-2 p-3 font-mono text-xs text-foreground sm:gap-2 sm:p-4">
         {logs.length === 0 ? (
-          <span className="text-cream/40 italic">No logs recorded yet.</span>
+          <span className="text-muted-foreground italic">No logs recorded yet.</span>
         ) : (
           logs.map((log) => <LogEntryRow key={log.id} log={log} mounted={mounted} />)
         )}
@@ -217,7 +217,7 @@ function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
                   {chunk.hasTranslation ? (
                     <Badge
                       variant="outline"
-                      className="text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 font-medium"
+                      className="text-xs text-success border-success/30 bg-success/10 font-medium"
                     >
                       Completed
                     </Badge>

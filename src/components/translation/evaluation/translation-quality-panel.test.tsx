@@ -20,7 +20,7 @@ const dialogState = vi.hoisted(() => ({ selector: "5-8" }));
 
 vi.mock("@/lib/translation/evaluation/eval.functions", () => serverFunctions);
 vi.mock("sonner", () => ({ toast: toastMocks }));
-vi.mock("@/components/translation/translation-eval-report-dialog", () => ({
+vi.mock("@/components/translation/evaluation/translation-eval-report-dialog", () => ({
   TranslationEvalReportDialog: ({ onRunAgain }: { onRunAgain: (selector: string) => void }) => (
     <button type="button" onClick={() => onRunAgain(dialogState.selector)}>
       Run again
@@ -28,7 +28,7 @@ vi.mock("@/components/translation/translation-eval-report-dialog", () => ({
   ),
 }));
 
-import { TranslationQualityPanel } from "@/components/translation/translation-quality-panel";
+import { TranslationQualityPanel } from "@/components/translation/evaluation/translation-quality-panel";
 
 const REVIEW_SEARCH: EvalReviewSearch = {
   reviewReport: undefined,

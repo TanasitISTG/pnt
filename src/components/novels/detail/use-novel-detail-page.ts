@@ -1,51 +1,43 @@
-import { queryOptions, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
-import { getAdminNovelDetailMetrics, getNovel } from "@/lib/content/novel/novel.functions";
-import type { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
-import { listChapters } from "@/lib/content/chapter/chapter.functions";
-import { useReaderState } from "@/lib/reader/use-reader-state";
-import { useChapterSelection } from "@/components/chapters/toolbar/use-chapter-selection";
+import type { ChapterTableProps } from "@/components/chapters/table/chapter-table";
 import { useChapterTitleEdit } from "@/components/chapters/table/use-chapter-title-edit";
+import { useChapterSelection } from "@/components/chapters/toolbar/use-chapter-selection";
+import type { NovelDetailDialogData } from "@/components/novels/detail/novel-detail-dialogs";
+import type { NovelDetailSectionData } from "@/components/novels/detail/novel-detail-sections";
 import { useNovelDetailMutations } from "@/components/novels/detail/use-novel-detail-mutations";
 import { useNovelExport } from "@/components/novels/detail/use-novel-export";
-import { useTranslationJob } from "@/components/translation/use-translation-job";
+import type { NovelHeaderProps } from "@/components/novels/detail/novel-header";
+import { useTranslationJob } from "@/components/translation/job/use-translation-job";
+import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
+import {
+  adminNovelDetailMetricsQueryOptions,
+  novelQueryOptions,
+} from "@/lib/content/novel/novel.query";
+import { useReaderState } from "@/lib/reader/use-reader-state";
 
 const EMPTY_CHAPTERS: never[] = [];
 const EMPTY_RESIDUAL_SCRIPTS: never[] = [];
 
-export const novelQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["novel", novelId],
-    queryFn: () => getNovel({ data: { novelId } }),
-    staleTime: 10_000,
-  });
-
-export const chaptersQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["chapters", novelId],
-    queryFn: () => listChapters({ data: { novelId } }),
-    staleTime: 10_000,
-  });
-
-export const adminNovelDetailMetricsQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["adminNovelDetailMetrics", novelId],
-    queryFn: () => getAdminNovelDetailMetrics({ data: { novelId } }),
-    staleTime: 5_000,
-  });
-
-type AdminNovelDetailCore = NonNullable<Awaited<ReturnType<typeof getAdminNovelDetailCore>>>;
-
-export function hydrateAdminNovelDetailCore(
-  queryClient: QueryClient,
-  core: AdminNovelDetailCore,
-): void {
-  queryClient.setQueryData(["novel", core.novel.id], core.novel);
-  queryClient.setQueryData(["chapters", core.novel.id], core.chapters);
+export interface NovelDetailLoadState {
+  novel: NovelHeaderProps["novel"] | null | undefined;
+  isNovelError: boolean;
+  novelError: unknown;
+  isChaptersError: boolean;
+  chaptersError: unknown;
+  refetchNovel: () => Promise<unknown>;
+  refetchChapters: () => Promise<unknown>;
 }
 
-export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
+export interface NovelDetailPageResult {
+  loadState: NovelDetailLoadState;
+  sectionProps: NovelDetailSectionData;
+  tableProps: Omit<ChapterTableProps, "chapters">;
+  dialogProps: NovelDetailDialogData;
+}
+
+export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDetailPageResult {
   const queryClient = useQueryClient();
   const novelQuery = useQuery(novelQueryOptions(novelId));
   const chaptersQuery = useQuery(chaptersQueryOptions(novelId));
@@ -188,14 +180,14 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     queryClient.invalidateQueries({ queryKey: ["novels"] });
   }, [queryClient, novelId]);
   const { readyUnpublishedCount, unreadyCount } = useMemo(() => {
-    const now = new Date();
+    const now = Date.now();
     let readyCount = 0;
     let unreadyChapterCount = 0;
     for (const chapter of chapters) {
       const ready = chapter.status === "translated" && chapter.hasTranslation;
       if (!ready) {
         unreadyChapterCount++;
-      } else if (!chapter.publishedAt || new Date(chapter.publishedAt) > now) {
+      } else if (!chapter.publishedAt || new Date(chapter.publishedAt).getTime() > now) {
         readyCount++;
       }
     }
@@ -203,7 +195,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
   }, [chapters]);
   const { exporting, handleExportTxt, handleExportEpub } = useNovelExport(novelId);
 
-  const chapterTableProps = {
+  const tableProps: Omit<ChapterTableProps, "chapters"> = {
     novelId,
     isAdmin,
     activeJobs,
@@ -228,91 +220,127 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean) {
     onDeleteChapter: setDeleteChapterId,
   };
 
-  return {
-    novelId,
-    chapterTableProps,
-    activeJobs,
-    activeJobsError,
-    refetchActiveJobs,
-    backfillTitles,
-    backfillingTitles,
-    batchStarting,
-    batchStopping,
-    cancelTranslate,
-    chapterUiLoading,
-    readingActionsPending,
-    chapters,
-    chaptersError: chaptersQuery.error,
-    metricsError: metricsQuery.error,
-    isMetricsError: metricsQuery.isError,
-    refetchMetrics: metricsQuery.refetch,
-    chaptersReady,
-    confirmBatchRetranslate,
-    confirmStopSelectedTranslations,
-    batchRetranslateOpen,
-    setBatchRetranslateOpen,
-    deleteAllTranslations,
-    deleteAllTranslationsOpen,
-    deleteChapterId,
-    deleteNovelOpen,
-    deletingAllTranslations,
-    deletingChapter,
-    deletingNovel,
-    exporting,
-    firstChapter,
-    costData: metrics?.costData,
-    glossaryStats: metrics?.glossaryStats,
-    handleBatchStop,
-    handleBatchTranslate,
-    handleExportEpub,
-    onRequestBatchRetranslate: () => setBatchRetranslateOpen(true),
-    handleExportTxt,
-    handleSaveChapterOrder,
-    invalidateChapters,
-    isChaptersError: chaptersQuery.isError,
-    isChaptersPending: chaptersQuery.isPending,
-    isNovelError: novelQuery.isError,
-    lastReadChapter,
-    readingProgress,
-    readerState,
-    missingTitleCount,
+  const loadState: NovelDetailLoadState = {
     novel: novelQuery.data,
+    isNovelError: novelQuery.isError,
     novelError: novelQuery.error,
-    publishAllChapters,
-    publishChapter,
-    publishNovel,
-    publishingAll,
-    publishingChapterId,
-    publishingNovel,
-    refetchChapters: chaptersQuery.refetch,
+    isChaptersError: chaptersQuery.isError,
+    chaptersError: chaptersQuery.error,
     refetchNovel: novelQuery.refetch,
-    removeChapter,
-    removeNovel,
-    reorderDisabled,
-    reorderOpen,
-    reorderingChapters,
-    retryTranslate,
-    selectableIds,
-    selectedTranslatedCount: selectedTranslatedIds.length,
-    selectedActiveCount: selectedActiveIds.length,
-    selectedActiveIds,
-    selectedMissingIds,
-    selectedTranslatedIds,
-    selectedIds,
-    setDeleteAllTranslationsOpen,
-    setDeleteChapterId,
-    setDeleteNovelOpen,
-    setLogChapterId,
-    setRetranslateChapterId,
-    setReorderOpen,
-    setSelectedIds,
-    setStopSelectedOpen,
-    startTranslate,
-    stopSelectedOpen,
-    readyUnpublishedCount,
-    unreadyCount,
-    logChapterId,
-    selectByRange,
-    retranslateChapterId,
+    refetchChapters: chaptersQuery.refetch,
   };
+
+  const sectionProps: NovelDetailSectionData = {
+    header: {
+      glossaryStats: metrics?.glossaryStats,
+      costData: metrics?.costData,
+      chapters,
+      chaptersPending: chapterUiLoading,
+      readingActionsPending,
+      lastReadChapter,
+      firstChapter,
+      readingProgress,
+      readyUnpublishedCount,
+      unreadyCount,
+      exporting,
+      publishingNovel,
+      onPublishNovel: publishNovel,
+      onExportTxt: handleExportTxt,
+      onExportEpub: handleExportEpub,
+      onDeleteNovel: () => setDeleteNovelOpen(true),
+    },
+    chapterPanel: {
+      chapters,
+      chapterUiLoading,
+      isChaptersPending: chaptersQuery.isPending,
+      lastReadChapter,
+      selectedIds,
+      selectedMissingIds,
+      selectedTranslatedIds,
+      selectedActiveIds,
+      selectableIds,
+      batchStarting,
+      batchStopping,
+      handleBatchTranslate,
+      onRequestBatchRetranslate: () => setBatchRetranslateOpen(true),
+      activeJobsError,
+      refetchActiveJobs,
+      setSelectedIds,
+      setStopSelectedOpen,
+      selectByRange,
+      readyUnpublishedCount,
+      unreadyCount,
+      publishAllChapters,
+      publishingAll,
+      missingTitleCount,
+      backfillTitles,
+      backfillingTitles,
+      setReorderOpen,
+      reorderDisabled,
+      deletingAllTranslations,
+      setDeleteAllTranslationsOpen,
+    },
+    metrics: {
+      error: metricsQuery.error,
+      isError: metricsQuery.isError,
+      refetch: metricsQuery.refetch,
+    },
+    chapterTools: {
+      ready: chaptersReady,
+      invalidateChapters,
+    },
+  };
+
+  const dialogProps: NovelDetailDialogData = {
+    novelId,
+    reorder: {
+      chapters,
+      open: reorderOpen,
+      onOpenChange: setReorderOpen,
+      onSave: handleSaveChapterOrder,
+    },
+    deleteNovel: {
+      open: deleteNovelOpen,
+      onOpenChange: setDeleteNovelOpen,
+      onConfirm: removeNovel,
+      pending: deletingNovel,
+    },
+    deleteTranslations: {
+      open: deleteAllTranslationsOpen,
+      onOpenChange: setDeleteAllTranslationsOpen,
+      onConfirm: deleteAllTranslations,
+      pending: deletingAllTranslations,
+    },
+    deleteChapter: {
+      chapterId: deleteChapterId,
+      setChapterId: setDeleteChapterId,
+      remove: removeChapter,
+      pending: deletingChapter,
+    },
+    logs: {
+      chapterId: logChapterId,
+      setChapterId: setLogChapterId,
+    },
+    retranslate: {
+      chapterId: retranslateChapterId,
+      setChapterId: setRetranslateChapterId,
+      start: startTranslate,
+    },
+    batchRetranslate: {
+      chapterIds: selectedTranslatedIds,
+      open: batchRetranslateOpen,
+      onOpenChange: setBatchRetranslateOpen,
+      pending: batchStarting,
+      onConfirm: confirmBatchRetranslate,
+    },
+    stopSelected: {
+      count: selectedActiveIds.length,
+      open: stopSelectedOpen,
+      onOpenChange: setStopSelectedOpen,
+      pending: batchStopping,
+      onConfirm: confirmStopSelectedTranslations,
+    },
+  };
+
+  return { loadState, sectionProps, tableProps, dialogProps };
 }

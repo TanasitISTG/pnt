@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -112,7 +112,7 @@ export function useRelationshipsPageController(novelId: string) {
   const openRelationshipAdd = () => {
     setRelationshipDialog({ initialValues: { ...EMPTY_RELATIONSHIP_FORM } });
   };
-  const openCharacterEdit = (character: CharacterProfile) => {
+  const openCharacterEdit = useCallback((character: CharacterProfile) => {
     setCharacterDialog({
       id: character.id,
       initialValues: {
@@ -125,8 +125,8 @@ export function useRelationshipsPageController(novelId: string) {
         evidence: character.evidence ?? "",
       },
     });
-  };
-  const openRelationshipEdit = (relationship: CharacterRelationship) => {
+  }, []);
+  const openRelationshipEdit = useCallback((relationship: CharacterRelationship) => {
     setRelationshipDialog({
       id: relationship.id,
       initialValues: {
@@ -143,7 +143,7 @@ export function useRelationshipsPageController(novelId: string) {
         evidence: relationship.evidence ?? "",
       },
     });
-  };
+  }, []);
   const closeCharacterDialog = (open: boolean) => {
     if (!open && !saveCharacter.isPending) setCharacterDialog(null);
   };
@@ -171,8 +171,11 @@ export function useRelationshipsPageController(novelId: string) {
     await saveRelationship.mutateAsync(payload).catch(() => {});
   };
 
-  const requestDelete = (entryType: DeleteTarget["entryType"], entryId: string, label: string) =>
-    setDeleteTarget({ entryType, entryId, label });
+  const requestDelete = useCallback(
+    (entryType: DeleteTarget["entryType"], entryId: string, label: string) =>
+      setDeleteTarget({ entryType, entryId, label }),
+    [],
+  );
   const closeDeleteDialog = (open: boolean) => {
     if (!open) setDeleteTarget(null);
   };
@@ -185,20 +188,35 @@ export function useRelationshipsPageController(novelId: string) {
     });
   };
 
-  const actions: RelationshipTableActions = {
-    onEditCharacter: openCharacterEdit,
-    onEditRelationship: openRelationshipEdit,
-    onToggle: (entryType, entryId, enabled) =>
-      toggleEntry.mutate({ novelId, entryType, entryId, enabled }),
-    onAuto: (entryType, entryId) => useAutoUpdates.mutate({ novelId, entryType, entryId }),
-    onDelete: requestDelete,
-    pending:
-      saveCharacter.isPending ||
-      saveRelationship.isPending ||
-      toggleEntry.isPending ||
-      useAutoUpdates.isPending ||
-      removeEntry.isPending,
-  };
+  const { mutate: toggleEntryMutate } = toggleEntry;
+  const { mutate: useAutoUpdatesMutate } = useAutoUpdates;
+  const onToggle = useCallback(
+    (entryType: "character" | "relationship", entryId: string, enabled: boolean) =>
+      toggleEntryMutate({ novelId, entryType, entryId, enabled }),
+    [novelId, toggleEntryMutate],
+  );
+  const onAuto = useCallback(
+    (entryType: "character" | "relationship", entryId: string) =>
+      useAutoUpdatesMutate({ novelId, entryType, entryId }),
+    [novelId, useAutoUpdatesMutate],
+  );
+  const pending =
+    saveCharacter.isPending ||
+    saveRelationship.isPending ||
+    toggleEntry.isPending ||
+    useAutoUpdates.isPending ||
+    removeEntry.isPending;
+  const actions = useMemo<RelationshipTableActions>(
+    () => ({
+      onEditCharacter: openCharacterEdit,
+      onEditRelationship: openRelationshipEdit,
+      onToggle,
+      onAuto,
+      onDelete: requestDelete,
+      pending,
+    }),
+    [openCharacterEdit, openRelationshipEdit, onToggle, onAuto, requestDelete, pending],
+  );
 
   return {
     actions,

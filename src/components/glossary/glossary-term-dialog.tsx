@@ -104,7 +104,7 @@ function GlossaryReplacementStep({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+      <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">
         <p className="font-medium text-foreground">Replace this target in translated chapters?</p>
         <p className="mt-2 text-muted-foreground">
           The old target <span className="font-medium text-foreground">“{originalTarget}”</span>{" "}

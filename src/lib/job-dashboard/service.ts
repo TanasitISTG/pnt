@@ -1,5 +1,5 @@
 import "@tanstack/react-start/server-only";
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 
@@ -13,6 +13,8 @@ import {
 } from "@/lib/db/schema";
 import type {
   JobActivity,
+  JobActivityInput,
+  JobActivitySnapshot,
   JobHistoryEpubRow,
   JobHistoryPage,
   JobHistoryRow,
@@ -22,7 +24,7 @@ import type {
   JobHistoryTranslationRow,
   JobHistoryType,
 } from "@/lib/job-dashboard/contracts";
-import { normalizeJobStats } from "@/lib/job-dashboard/contracts";
+import { normalizeJobActivityInput, normalizeJobStats } from "@/lib/job-dashboard/contracts";
 import type { ScrapeProvider } from "@/lib/scrape/types";
 import type { ServerTiming } from "@/lib/server-timing";
 
@@ -378,50 +380,161 @@ export async function loadJobStats(userId: string, timing: ServerTiming) {
   return normalizeJobStats(chunkStats[0], translationStats[0], importStats[0]);
 }
 
+type TranslationActivityRow = {
+  id: string;
+  type: JobHistoryType;
+  status: JobHistoryStatus;
+  novelId: string;
+  error: string | null;
+  updatedAt: Date;
+  doneChunks: number;
+  totalChunks: number;
+};
+
+type ImportActivityRow = {
+  id: string;
+  type: JobHistoryType;
+  status: JobHistoryStatus;
+  novelId: string;
+  error: string | null;
+  updatedAt: Date;
+  fromNumber: number;
+  toNumber: number;
+  added: number;
+  skipped: number;
+  failed: number;
+};
+
+type JobStatusAggregateRow = {
+  status: string;
+  count: number;
+  maxUpdatedAt: string | null;
+};
+
+function compareStatusAggregates(
+  left: JobStatusAggregateRow,
+  right: JobStatusAggregateRow,
+): number {
+  if (left.status === right.status) return 0;
+  return left.status < right.status ? -1 : 1;
+}
+
+function buildStatusCounts(rows: readonly JobStatusAggregateRow[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const row of [...rows].sort(compareStatusAggregates)) {
+    counts[row.status] = Number(row.count);
+  }
+  return counts;
+}
+
+function latestUpdatedAtText(rows: readonly JobStatusAggregateRow[]): string | null {
+  let latest: string | null = null;
+  for (const row of rows) {
+    if (row.maxUpdatedAt !== null && (latest === null || row.maxUpdatedAt > latest)) {
+      latest = row.maxUpdatedAt;
+    }
+  }
+  return latest;
+}
+
+function buildTranslationActivityRows(userId: string, jobIds: readonly string[]) {
+  return db
+    .select({
+      id: sql<string>`${translationJobs.id}::text`,
+      type: sql<JobHistoryType>`'translation'::text`,
+      status: sql<JobHistoryStatus>`${translationJobs.status}::text`,
+      novelId: sql<string>`${novels.id}::text`,
+      error: sql<string | null>`${translationJobs.error}::text`,
+      updatedAt: translationJobs.updatedAt,
+      doneChunks: sql<number>`${translationJobs.doneChunks}::int`,
+      totalChunks: sql<number>`${translationJobs.totalChunks}::int`,
+    })
+    .from(translationJobs)
+    .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+    .innerJoin(novels, eq(chapters.novelId, novels.id))
+    .where(and(eq(novels.userId, userId), inArray(translationJobs.id, [...jobIds])));
+}
+
+function buildImportActivityRows(userId: string, jobIds: readonly string[]) {
+  return db
+    .select({
+      id: sql<string>`${importJobs.id}::text`,
+      type: sql<JobHistoryType>`${importJobs.kind}::text`,
+      status: sql<JobHistoryStatus>`${importJobs.status}::text`,
+      novelId: sql<string>`${novels.id}::text`,
+      error: sql<string | null>`${importJobs.error}::text`,
+      updatedAt: importJobs.updatedAt,
+      fromNumber: sql<number>`${importJobs.fromNumber}::int`,
+      toNumber: sql<number>`${importJobs.toNumber}::int`,
+      added: sql<number>`${importJobs.added}::int`,
+      skipped: sql<number>`${importJobs.skipped}::int`,
+      failed: sql<number>`${importJobs.failed}::int`,
+    })
+    .from(importJobs)
+    .innerJoin(novels, eq(importJobs.novelId, novels.id))
+    .where(and(eq(novels.userId, userId), inArray(importJobs.id, [...jobIds])));
+}
+
+function buildTranslationActivityAggregates(userId: string) {
+  return db
+    .select({
+      status: sql<string>`${translationJobs.status}::text`.as("status"),
+      count: sql<number>`COUNT(*)::int`.as("count"),
+      maxUpdatedAt: sql<string | null>`MAX(${translationJobs.updatedAt})::text`.as("maxUpdatedAt"),
+    })
+    .from(translationJobs)
+    .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+    .innerJoin(novels, eq(chapters.novelId, novels.id))
+    .where(eq(novels.userId, userId))
+    .groupBy(sql`${translationJobs.status}::text`);
+}
+
+function buildImportActivityAggregates(userId: string) {
+  return db
+    .select({
+      status: sql<string>`${importJobs.status}::text`.as("status"),
+      count: sql<number>`COUNT(*)::int`.as("count"),
+      maxUpdatedAt: sql<string | null>`MAX(${importJobs.updatedAt})::text`.as("maxUpdatedAt"),
+    })
+    .from(importJobs)
+    .innerJoin(novels, eq(importJobs.novelId, novels.id))
+    .where(eq(novels.userId, userId))
+    .groupBy(sql`${importJobs.status}::text`);
+}
+
 export async function loadJobActivity(
   userId: string,
   timing: ServerTiming,
-): Promise<JobActivity[]> {
-  const [translationRows, importRows] = await Promise.all([
-    timing.measure("job-activity-translations", () =>
-      db
-        .select({
-          id: sql<string>`${translationJobs.id}::text`,
-          type: sql<JobHistoryType>`'translation'::text`,
-          status: sql<JobHistoryStatus>`${translationJobs.status}::text`,
-          novelId: sql<string>`${novels.id}::text`,
-          error: sql<string | null>`${translationJobs.error}::text`,
-          updatedAt: translationJobs.updatedAt,
-          doneChunks: sql<number>`${translationJobs.doneChunks}::int`,
-          totalChunks: sql<number>`${translationJobs.totalChunks}::int`,
-        })
-        .from(translationJobs)
-        .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(
-          and(eq(novels.userId, userId), sql`${translationJobs.status} IN ('pending', 'running')`),
-        ),
+  input: JobActivityInput = { jobs: [] },
+): Promise<JobActivitySnapshot> {
+  const requested = normalizeJobActivityInput(input.jobs);
+  const translationJobIds = requested
+    .filter((job) => job.type === "translation")
+    .map((job) => job.id);
+  const importJobIds = requested.filter((job) => job.type !== "translation").map((job) => job.id);
+
+  const translationDetail: Promise<TranslationActivityRow[]> =
+    translationJobIds.length === 0
+      ? Promise.resolve([])
+      : timing.measure("job-activity-translations", () =>
+          buildTranslationActivityRows(userId, translationJobIds),
+        );
+  const importDetail: Promise<ImportActivityRow[]> =
+    importJobIds.length === 0
+      ? Promise.resolve([])
+      : timing.measure("job-activity-imports", () => buildImportActivityRows(userId, importJobIds));
+
+  const [translationStatusRows, importStatusRows, translationRows, importRows] = await Promise.all([
+    timing.measure("job-activity-translation-fingerprint", () =>
+      buildTranslationActivityAggregates(userId),
     ),
-    timing.measure("job-activity-imports", () =>
-      db
-        .select({
-          id: sql<string>`${importJobs.id}::text`,
-          type: sql<JobHistoryType>`${importJobs.kind}::text`,
-          status: sql<JobHistoryStatus>`${importJobs.status}::text`,
-          novelId: sql<string>`${novels.id}::text`,
-          error: sql<string | null>`${importJobs.error}::text`,
-          updatedAt: importJobs.updatedAt,
-          fromNumber: sql<number>`${importJobs.fromNumber}::int`,
-          toNumber: sql<number>`${importJobs.toNumber}::int`,
-          added: sql<number>`${importJobs.added}::int`,
-          skipped: sql<number>`${importJobs.skipped}::int`,
-          failed: sql<number>`${importJobs.failed}::int`,
-        })
-        .from(importJobs)
-        .innerJoin(novels, eq(importJobs.novelId, novels.id))
-        .where(and(eq(novels.userId, userId), sql`${importJobs.status} IN ('pending', 'running')`)),
-    ),
+    timing.measure("job-activity-import-fingerprint", () => buildImportActivityAggregates(userId)),
+    translationDetail,
+    importDetail,
   ]);
+
+  const translationStatusCounts = buildStatusCounts(translationStatusRows);
+  const importStatusCounts = buildStatusCounts(importStatusRows);
 
   const activities: JobActivity[] = translationRows.map((row) => {
     const doneChunks = Math.max(0, Number(row.doneChunks ?? 0));
@@ -460,9 +573,21 @@ export async function loadJobActivity(
     });
   }
 
-  return activities.toSorted(
-    (left, right) =>
-      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime() ||
-      left.id.localeCompare(right.id),
-  );
+  return {
+    activities: activities.toSorted(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime() ||
+        left.id.localeCompare(right.id),
+    ),
+    activeTranslationJobs:
+      Number(translationStatusCounts.pending ?? 0) + Number(translationStatusCounts.running ?? 0),
+    activeImportJobs:
+      Number(importStatusCounts.pending ?? 0) + Number(importStatusCounts.running ?? 0),
+    revision: JSON.stringify([
+      translationStatusCounts,
+      latestUpdatedAtText(translationStatusRows),
+      importStatusCounts,
+      latestUpdatedAtText(importStatusRows),
+    ]),
+  };
 }

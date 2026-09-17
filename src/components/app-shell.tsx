@@ -34,6 +34,7 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
   const router = useRouter();
   const queryClient = useQueryClient();
   const { consent, hydrated } = useConsent();
+  const yearHydrated = useHydrated();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -211,7 +212,7 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
       </main>
       <footer className="mt-12 border-t border-border bg-background py-6">
         <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 px-6 sm:flex-row text-caption text-muted-foreground">
-          <p>© {new Date().getFullYear()} Pnt — Personal Novel Translator</p>
+          <p>© {yearHydrated ? new Date().getFullYear() : null} Pnt — Personal Novel Translator</p>
           <div className="flex items-center gap-6">
             <Link to="/privacy" className="hover:text-foreground no-underline">
               Privacy Policy

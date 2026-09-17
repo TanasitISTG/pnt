@@ -91,14 +91,14 @@ export function GlossaryHeader({
           </Badge>
           <Badge
             variant="outline"
-            className="px-3 py-1 text-xs font-mono text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+            className="px-3 py-1 text-xs font-mono text-success border-success/30"
           >
             Approved: {stats?.approved ?? 0}
           </Badge>
           {(stats?.pending ?? 0) > 0 && (
             <Badge
               variant="outline"
-              className="px-3 py-1 text-xs font-mono text-amber-600 dark:text-amber-400 border-amber-500/40 bg-amber-500/10"
+              className="px-3 py-1 text-xs font-mono text-warning border-warning/40 bg-warning/10"
             >
               Pending: {stats?.pending}
             </Badge>

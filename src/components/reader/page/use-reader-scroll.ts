@@ -1,6 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import type { ReaderProgressStore } from "@/lib/reader/use-reader-state";
+import {
+  getReaderScrollFraction,
+  getReaderScrollRange,
+  getReaderTopInset,
+} from "@/lib/reader/scroll-geometry";
 import { findReaderAnchor } from "./reader-anchors";
 
 const READ_COMPLETE_FRACTION = 0.95;
@@ -21,16 +26,17 @@ export interface UseReaderScrollOptions {
   ready: boolean;
   store: ReaderProgressStore;
   targetAnchor?: string | null;
+  // The reader page owns both nodes: prose bounds define the fraction, and the pinned
+  // toolbar covers the top of the prose.
+  proseRef: RefObject<HTMLDivElement | null>;
+  proseNode?: HTMLDivElement | null;
+  toolbarRef: RefObject<HTMLElement | null>;
+  // Layout identity; a change means the rendered prose node can differ from the old one.
+  layoutKey: string;
 }
 
 function isOwned(owner: MutableValue<ScrollOwner>, novelId: string, chapterId: string): boolean {
   return owner.current.novelId === novelId && owner.current.chapterId === chapterId;
-}
-
-function fractionForCurrentScroll(): number | null {
-  const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-  if (maxScroll <= 0) return null;
-  return Math.max(0, Math.min(1, window.scrollY / maxScroll));
 }
 
 export function useReaderScroll({
@@ -40,6 +46,10 @@ export function useReaderScroll({
   ready,
   store,
   targetAnchor = null,
+  proseRef,
+  proseNode,
+  toolbarRef,
+  layoutKey,
 }: UseReaderScrollOptions): void {
   const ownerRef = useRef<ScrollOwner>({ novelId, chapterId });
   const restoredChapterRef = useRef<string | null>(null);
@@ -63,12 +73,35 @@ export function useReaderScroll({
   useEffect(() => {
     if (!ready || chapter?.id !== chapterId) return;
     storeRef.current.markOpened(chapterId);
-    // Content shorter than the viewport never scrolls, so it is fully viewed.
-    if (fractionForCurrentScroll() === null) {
+  }, [chapter?.id, chapterId, ready]);
+
+  // Prose that fits between the pinned toolbar and the fold never scrolls, so it is fully
+  // viewed. A missing prose node (editor, empty or error branch) is unknown geometry and
+  // must never be treated as a short chapter. The observer re-samples when the rendered
+  // node or its size changes.
+  useEffect(() => {
+    if (!ready || chapter?.id !== chapterId) return;
+
+    const checkFits = () => {
+      if (readMarkedRef.current) return;
+      const prose = proseRef.current;
+      if (!prose) return;
+      const inset = toolbarRef.current ? getReaderTopInset(toolbarRef.current) : 0;
+      if (getReaderScrollRange(prose, inset).scrollable) return;
       storeRef.current.markRead(chapterId);
       readMarkedRef.current = true;
-    }
-  }, [chapter?.id, chapterId, ready]);
+    };
+
+    checkFits();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(checkFits);
+    if (proseRef.current) observer?.observe(proseRef.current);
+    if (toolbarRef.current) observer?.observe(toolbarRef.current);
+    window.addEventListener("resize", checkFits);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", checkFits);
+    };
+  }, [chapter?.id, chapterId, layoutKey, ready, proseRef, proseNode, toolbarRef]);
 
   useEffect(() => {
     if (
@@ -110,26 +143,30 @@ export function useReaderScroll({
     const tryScroll = () => {
       if (!isOwned(ownerRef, novelId, chapterId) || userTookOverRef.current) return;
       frames += 1;
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      if (maxScroll > 0) {
-        const target = maxScroll * savedFraction;
-        const currentY = window.scrollY;
-        if (lastWritten !== null && Math.abs(currentY - lastWritten) > 2 && currentY !== 0) {
-          cancelRestore();
-          return;
-        }
-        if (lastWritten !== null && Math.abs(currentY - target) <= 2) {
-          stableFrames += 1;
-          if (stableFrames >= 3) {
-            restoredChapterRef.current = chapterId;
-            isRestoringRef.current = false;
-            restoreFrameRef.current = null;
+      const prose = proseRef.current;
+      if (prose) {
+        const inset = toolbarRef.current ? getReaderTopInset(toolbarRef.current) : 0;
+        const range = getReaderScrollRange(prose, inset);
+        if (range.scrollable) {
+          const target = range.start + savedFraction * (range.end - range.start);
+          const currentY = window.scrollY;
+          if (lastWritten !== null && Math.abs(currentY - lastWritten) > 2 && currentY !== 0) {
+            cancelRestore();
             return;
           }
-        } else {
-          stableFrames = 0;
-          window.scrollTo({ top: target, behavior: "instant" as ScrollBehavior });
-          lastWritten = target;
+          if (lastWritten !== null && Math.abs(currentY - target) <= 2) {
+            stableFrames += 1;
+            if (stableFrames >= 3) {
+              restoredChapterRef.current = chapterId;
+              isRestoringRef.current = false;
+              restoreFrameRef.current = null;
+              return;
+            }
+          } else {
+            stableFrames = 0;
+            window.scrollTo({ top: target, behavior: "instant" as ScrollBehavior });
+            lastWritten = target;
+          }
         }
       }
       if (frames < 90) {
@@ -164,7 +201,7 @@ export function useReaderScroll({
       restoreFrameRef.current = null;
       isRestoringRef.current = false;
     };
-  }, [chapter?.id, chapterId, novelId, ready, targetAnchor]);
+  }, [chapter?.id, chapterId, novelId, proseRef, ready, targetAnchor, toolbarRef]);
 
   useEffect(() => {
     if (!targetAnchor || !ready || chapter?.id !== chapterId) return;
@@ -224,7 +261,10 @@ export function useReaderScroll({
     const captureCurrent = () => {
       if (!ready || isRestoringRef.current || restoredChapterRef.current !== chapterId) return;
       if (!isOwned(ownerRef, novelId, chapterId)) return;
-      const fraction = fractionForCurrentScroll();
+      const prose = proseRef.current;
+      if (!prose) return;
+      const inset = toolbarRef.current ? getReaderTopInset(toolbarRef.current) : 0;
+      const fraction = getReaderScrollFraction(prose, inset);
       if (fraction === null) return;
       capturedFraction = fraction;
       // Crossing the end marks the chapter right away: the debounced flush only carries the
@@ -265,5 +305,5 @@ export function useReaderScroll({
       window.removeEventListener("pagehide", handlePageLifecycle);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [chapterId, novelId, ready, targetAnchor]);
+  }, [chapterId, novelId, proseRef, ready, targetAnchor, toolbarRef]);
 }

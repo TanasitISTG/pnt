@@ -1,14 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { getChapter, getReaderChapterManifest } from "@/lib/content/chapter/chapter.functions";
+import { getReaderChapterManifest } from "@/lib/content/chapter/chapter.functions";
 import { getReaderNovel } from "@/lib/content/novel/novel.functions";
-
-export const chapterQueryOptions = (chapterId: string) =>
-  queryOptions({
-    queryKey: ["chapter", chapterId],
-    queryFn: () => getChapter({ data: { chapterId } }),
-    staleTime: 10_000,
-  });
 
 export const readerChapterManifestQueryOptions = (novelId: string) =>
   queryOptions({

@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
+import { createRef, useCallback, useRef, useState } from "react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 import { getReaderProgress } from "@/lib/reader/progress";
 import type { ReaderProgressStore } from "@/lib/reader/use-reader-state";
 import { createLocalReaderStore } from "@/lib/reader/use-reader-state";
 import { useReaderScroll } from "./use-reader-scroll";
+import { ReaderProse } from "../content/reader-content-prose";
+import { ReaderChapterProgress } from "../controls/reader-chapter-progress";
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -29,13 +32,64 @@ class MemoryStorage implements Storage {
   }
 }
 
-function setScrollMetrics(scrollY: number) {
-  Object.defineProperty(document.documentElement, "scrollHeight", {
-    configurable: true,
-    value: 1000,
-  });
-  Object.defineProperty(window, "innerHeight", { configurable: true, value: 100 });
-  Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: scrollY });
+// Viewport 1000 tall, prose spanning 200..3200 with a pinned toolbar covering 80px:
+// readable range 120..2200, so the app footer below 2200 cannot move the fraction.
+const VIEWPORT_HEIGHT = 1000;
+const TOOLBAR_HEIGHT = 80;
+const RANGE_START = 120;
+const RANGE_END = 2200;
+const RANGE_SPAN = RANGE_END - RANGE_START;
+
+function setScrollY(value: number) {
+  Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value });
+}
+
+function scrollToFraction(fraction: number) {
+  setScrollY(RANGE_START + fraction * RANGE_SPAN);
+}
+
+function rectFor(top: number, bottom: number): DOMRect {
+  const height = bottom - top;
+  return {
+    top,
+    bottom,
+    height,
+    left: 0,
+    right: 0,
+    width: 0,
+    x: 0,
+    y: top,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function createProse({
+  top = 200,
+  bottom = 3200,
+  onMeasure,
+}: {
+  top?: number;
+  bottom?: number;
+  onMeasure?: () => void;
+} = {}) {
+  const prose = document.createElement("div");
+  prose.getBoundingClientRect = () => {
+    onMeasure?.();
+    // The helper adds window.scrollY back, so a document-relative rect is what a real
+    // browser would report for this scroll offset.
+    return rectFor(top - window.scrollY, bottom - window.scrollY);
+  };
+  document.body.append(prose);
+  return prose;
+}
+
+function createToolbar({ pinnedTop = "0px" }: { pinnedTop?: string } = {}) {
+  const toolbar = document.createElement("header");
+  toolbar.style.position = "sticky";
+  toolbar.style.top = pinnedTop;
+  toolbar.getBoundingClientRect = () => rectFor(0, TOOLBAR_HEIGHT);
+  document.body.append(toolbar);
+  return toolbar;
 }
 
 function renderReaderScroll(options: {
@@ -43,8 +97,14 @@ function renderReaderScroll(options: {
   ready?: boolean;
   targetAnchor?: string | null;
   store?: ReaderProgressStore;
+  prose?: HTMLDivElement | null;
+  toolbar?: HTMLElement | null;
 }) {
   const store = options.store ?? createLocalReaderStore("novel");
+  const proseRef = createRef<HTMLDivElement>();
+  const toolbarRef = createRef<HTMLElement>();
+  proseRef.current = options.prose ?? null;
+  toolbarRef.current = options.toolbar ?? null;
   const render = (props: { chapterId: string; ready: boolean }) =>
     useReaderScroll({
       novelId: "novel",
@@ -53,6 +113,9 @@ function renderReaderScroll(options: {
       ready: props.ready,
       store,
       targetAnchor: options.targetAnchor ?? null,
+      proseRef,
+      toolbarRef,
+      layoutKey: props.chapterId,
     });
   return {
     store,
@@ -75,7 +138,15 @@ describe("useReaderScroll", () => {
     });
     vi.useFakeTimers();
     storage.clear();
-    setScrollMetrics(0);
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: VIEWPORT_HEIGHT,
+    });
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 4000,
+    });
+    setScrollY(0);
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
       window.setTimeout(() => callback(0), 0),
     );
@@ -84,31 +155,33 @@ describe("useReaderScroll", () => {
       configurable: true,
       writable: true,
       value: vi.fn((options?: ScrollToOptions) => {
-        Object.defineProperty(window, "scrollY", {
-          configurable: true,
-          writable: true,
-          value: options?.top ?? 0,
-        });
+        setScrollY(options?.top ?? 0);
       }),
     });
   });
 
   afterEach(() => {
     cleanup();
+    document.body.innerHTML = "";
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
   it("persists returning from a nonzero position to the top across reload", () => {
-    const hook = renderReaderScroll({ chapterId: "chapter" });
+    const toolbar = createToolbar();
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse(),
+      toolbar,
+    });
     act(() => vi.runAllTimers());
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 450 });
+    scrollToFraction(0.5);
     window.dispatchEvent(new Event("scroll"));
     act(() => vi.advanceTimersByTime(300));
     expect(getReaderProgress("novel").scrollFraction).toBe(0.5);
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 0 });
+    setScrollY(RANGE_START);
     window.dispatchEvent(new Event("scroll"));
     act(() => vi.advanceTimersByTime(300));
     expect(getReaderProgress("novel").scrollFraction).toBe(0);
@@ -116,17 +189,21 @@ describe("useReaderScroll", () => {
     act(() => hook.unmount());
     vi.clearAllMocks();
 
-    renderReaderScroll({ chapterId: "chapter" });
+    renderReaderScroll({ chapterId: "chapter", prose: createProse(), toolbar });
     act(() => vi.runAllTimers());
 
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "instant" });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: RANGE_START, behavior: "instant" });
   });
 
   it("flushes the trailing scroll sample when unmounted before the throttle delay", () => {
-    const hook = renderReaderScroll({ chapterId: "chapter" });
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 675 });
+    scrollToFraction(0.75);
     window.dispatchEvent(new Event("scroll"));
     act(() => vi.advanceTimersByTime(100));
     act(() => hook.unmount());
@@ -142,17 +219,35 @@ describe("useReaderScroll", () => {
       }),
     );
 
-    renderReaderScroll({ chapterId: "chapter" });
+    renderReaderScroll({ chapterId: "chapter", prose: createProse(), toolbar: createToolbar() });
     act(() => vi.runAllTimers());
 
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "instant" });
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: RANGE_START, behavior: "instant" });
+  });
+
+  it("restores a saved fraction against the prose bounds", () => {
+    localStorage.setItem(
+      "pnt-reader-progress",
+      JSON.stringify({
+        novel: { lastChapterId: "chapter", readChapterIds: [], scrollFraction: 0.5 },
+      }),
+    );
+
+    renderReaderScroll({ chapterId: "chapter", prose: createProse(), toolbar: createToolbar() });
+    act(() => vi.runAllTimers());
+
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 1160, behavior: "instant" });
   });
 
   it("flushes the throttled scroll sample", () => {
-    const hook = renderReaderScroll({ chapterId: "chapter" });
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 450 });
+    scrollToFraction(0.5);
     window.dispatchEvent(new Event("scroll"));
     act(() => vi.advanceTimersByTime(300));
 
@@ -168,7 +263,11 @@ describe("useReaderScroll", () => {
       }),
     );
 
-    const hook = renderReaderScroll({ chapterId: "chapter-1" });
+    const hook = renderReaderScroll({
+      chapterId: "chapter-1",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     hook.rerender({ chapterId: "chapter-2", ready: true });
     act(() => vi.runAllTimers());
 
@@ -180,12 +279,16 @@ describe("useReaderScroll", () => {
   });
 
   it("flushes the captured fraction instead of sampling replacement DOM on navigation", () => {
-    const hook = renderReaderScroll({ chapterId: "chapter-1" });
+    const hook = renderReaderScroll({
+      chapterId: "chapter-1",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 450 });
+    scrollToFraction(0.5);
     window.dispatchEvent(new Event("scroll"));
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 90 });
+    setScrollY(90);
 
     hook.rerender({ chapterId: "chapter-2", ready: false });
     expect(getReaderProgress("novel")).toMatchObject({
@@ -209,7 +312,12 @@ describe("useReaderScroll", () => {
     target.scrollIntoView = vi.fn();
     document.body.append(target);
 
-    renderReaderScroll({ chapterId: "chapter", targetAnchor: "reader-paragraph-3" });
+    renderReaderScroll({
+      chapterId: "chapter",
+      targetAnchor: "reader-paragraph-3",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
 
     expect(target.scrollIntoView).toHaveBeenCalledWith({
@@ -217,11 +325,14 @@ describe("useReaderScroll", () => {
       behavior: "instant",
     });
     expect(window.scrollTo).not.toHaveBeenCalled();
-    target.remove();
   });
 
   it("does not mark a chapter as read just for opening it", () => {
-    const hook = renderReaderScroll({ chapterId: "chapter" });
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
 
     expect(getReaderProgress("novel")).toMatchObject({
@@ -232,11 +343,15 @@ describe("useReaderScroll", () => {
   });
 
   it("marks a chapter as read once the reader reaches the end", () => {
-    const hook = renderReaderScroll({ chapterId: "chapter" });
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
     expect(getReaderProgress("novel").readChapterIds).toEqual([]);
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 900 });
+    setScrollY(RANGE_END);
     window.dispatchEvent(new Event("scroll"));
     act(() => vi.advanceTimersByTime(300));
 
@@ -248,12 +363,16 @@ describe("useReaderScroll", () => {
   });
 
   it("marks the chapter read even when the reader leaves the end before the flush", () => {
-    const hook = renderReaderScroll({ chapterId: "chapter" });
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 900 });
+    setScrollY(RANGE_END);
     window.dispatchEvent(new Event("scroll"));
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 0 });
+    setScrollY(RANGE_START);
     window.dispatchEvent(new Event("scroll"));
     act(() => vi.advanceTimersByTime(300));
 
@@ -261,31 +380,183 @@ describe("useReaderScroll", () => {
     act(() => hook.unmount());
   });
 
-  it("marks unscrollable content as read on open", () => {
+  it("marks prose that fits above the fold as read even when the footer scrolls", () => {
     Object.defineProperty(document.documentElement, "scrollHeight", {
       configurable: true,
-      value: 100,
+      value: 6000,
     });
 
-    renderReaderScroll({ chapterId: "chapter" });
+    renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse({ top: 200, bottom: 700 }),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
 
     expect(getReaderProgress("novel").readChapterIds).toEqual(["chapter"]);
   });
 
-  it("coalesces rapid scroll events into one layout read per frame", () => {
-    const hook = renderReaderScroll({ chapterId: "chapter" });
+  it("does not mark a chapter read while the prose node is absent", () => {
+    renderReaderScroll({ chapterId: "chapter", prose: null, toolbar: createToolbar() });
     act(() => vi.runAllTimers());
 
-    let reads = 0;
-    Object.defineProperty(document.documentElement, "scrollHeight", {
-      configurable: true,
-      get() {
-        reads += 1;
-        return 1000;
-      },
+    expect(getReaderProgress("novel")).toMatchObject({
+      lastChapterId: "chapter",
+      readChapterIds: [],
+      scrollFraction: undefined,
     });
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 450 });
+  });
+
+  it("reattaches fit and progress observers after the editor replaces the prose node", () => {
+    const observers = new Set<{ targets: Set<Element>; notify: () => void }>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        targets = new Set<Element>();
+        notify: () => void;
+        constructor(notify: () => void) {
+          this.notify = notify;
+          observers.add(this);
+        }
+        observe(target: Element) {
+          this.targets.add(target);
+        }
+        disconnect() {
+          this.targets.clear();
+          observers.delete(this);
+        }
+      },
+    );
+    let bottom = 3200;
+    const store = createLocalReaderStore("novel");
+    const toolbarRef = createRef<HTMLElement>();
+    toolbarRef.current = createToolbar();
+    function Harness({ editing }: { editing: boolean }) {
+      const proseRef = useRef<HTMLDivElement | null>(null);
+      const [proseNode, setProseNode] = useState<HTMLDivElement | null>(null);
+      const attach = useCallback((node: HTMLDivElement | null) => {
+        if (node)
+          node.getBoundingClientRect = () => rectFor(200 - window.scrollY, bottom - window.scrollY);
+        proseRef.current = node;
+        setProseNode(node);
+      }, []);
+      useReaderScroll({
+        novelId: "novel",
+        chapterId: "chapter",
+        chapter: { id: "chapter" },
+        ready: true,
+        store,
+        proseRef,
+        proseNode,
+        toolbarRef,
+        layoutKey: "unchanged",
+      });
+      return (
+        <>
+          <ReaderChapterProgress
+            proseRef={proseRef}
+            proseNode={proseNode}
+            toolbarRef={toolbarRef}
+            layoutKey="unchanged"
+          />
+          {editing ? (
+            <textarea aria-label="Chapter editor" />
+          ) : (
+            <ReaderProse
+              paragraphs={["Chapter prose"]}
+              fontSizePx={18}
+              lineHeight={1.8}
+              measureRem={40}
+              lang="en"
+              proseRef={attach}
+            />
+          )}
+        </>
+      );
+    }
+    const view = render(<Harness editing={false} />);
+    act(() => vi.runAllTimers());
+    const original = screen.getByText("Chapter prose").parentElement!;
+    expect(screen.getByRole("progressbar")).toBeTruthy();
+    view.rerender(<Harness editing />);
+    act(() => vi.runAllTimers());
+    expect(original.isConnected).toBe(false);
+    expect(getReaderProgress("novel").readChapterIds).toEqual([]);
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    view.rerender(<Harness editing={false} />);
+    act(() => vi.runAllTimers());
+    const replacement = screen.getByText("Chapter prose").parentElement!;
+    expect(replacement).not.toBe(original);
+    expect(screen.getByRole("progressbar")).toBeTruthy();
+    // Only observers attached to the replacement receive its resize. No window event
+    // or layout-key change can accidentally rescue an observer stranded on the old node.
+    bottom = 800;
+    act(() => {
+      for (const observer of observers) {
+        if (observer.targets.has(replacement)) observer.notify();
+        expect(observer.targets.has(original)).toBe(false);
+      }
+      vi.runAllTimers();
+    });
+    expect(getReaderProgress("novel").readChapterIds).toEqual(["chapter"]);
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    view.unmount();
+    expect(observers.size).toBe(0);
+  });
+
+  it("resamples fitting prose on viewport-height-only resize and removes the listener", () => {
+    const store = createLocalReaderStore("novel");
+    const markRead = vi.spyOn(store, "markRead");
+    const onMeasure = vi.fn();
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      store,
+      prose: createProse({ bottom: 1600, onMeasure }),
+      toolbar: createToolbar(),
+    });
+    act(() => vi.runAllTimers());
+    expect(markRead).not.toHaveBeenCalled();
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 1800 });
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(getReaderProgress("novel").readChapterIds).toEqual(["chapter"]);
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(markRead).toHaveBeenCalledTimes(1);
+    hook.unmount();
+    onMeasure.mockClear();
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(onMeasure).not.toHaveBeenCalled();
+  });
+
+  it("keeps the footer out of the saved fraction", () => {
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
+    act(() => vi.runAllTimers());
+
+    setScrollY(RANGE_END);
+    window.dispatchEvent(new Event("scroll"));
+    act(() => vi.advanceTimersByTime(300));
+    expect(getReaderProgress("novel").scrollFraction).toBe(1);
+
+    // Scrolling on into the app footer cannot push the fraction past the prose end.
+    setScrollY(RANGE_END + 800);
+    window.dispatchEvent(new Event("scroll"));
+    act(() => vi.advanceTimersByTime(300));
+    expect(getReaderProgress("novel").scrollFraction).toBe(1);
+    act(() => hook.unmount());
+  });
+
+  it("coalesces rapid scroll events into one layout read per frame", () => {
+    let reads = 0;
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      prose: createProse({ onMeasure: () => (reads += 1) }),
+      toolbar: createToolbar(),
+    });
+    act(() => vi.runAllTimers());
+    reads = 0;
 
     for (let index = 0; index < 5; index += 1) {
       window.dispatchEvent(new Event("scroll"));
@@ -308,16 +579,21 @@ describe("useReaderScroll", () => {
       flushScrollFraction: (fraction: number) => calls.push(`flush:${fraction}`),
     };
 
-    const hook = renderReaderScroll({ chapterId: "chapter", store });
+    const hook = renderReaderScroll({
+      chapterId: "chapter",
+      store,
+      prose: createProse(),
+      toolbar: createToolbar(),
+    });
     act(() => vi.runAllTimers());
     expect(calls).toEqual(["opened:chapter"]);
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 450 });
+    scrollToFraction(0.5);
     window.dispatchEvent(new Event("scroll"));
     act(() => vi.advanceTimersByTime(300));
     expect(calls).toEqual(["opened:chapter", "save:0.5"]);
 
-    Object.defineProperty(window, "scrollY", { configurable: true, writable: true, value: 675 });
+    scrollToFraction(0.75);
     window.dispatchEvent(new Event("scroll"));
     act(() => hook.unmount());
 
@@ -335,6 +611,10 @@ describe("useReaderScroll", () => {
       saveScrollFraction: () => {},
       flushScrollFraction: () => {},
     });
+    const proseRef = createRef<HTMLDivElement>();
+    const toolbarRef = createRef<HTMLElement>();
+    proseRef.current = createProse();
+    toolbarRef.current = createToolbar();
 
     const { rerender, unmount } = renderHook(() =>
       useReaderScroll({
@@ -343,6 +623,9 @@ describe("useReaderScroll", () => {
         chapter: { id: "chapter" },
         ready: true,
         store: createStore(),
+        proseRef,
+        toolbarRef,
+        layoutKey: "chapter",
       }),
     );
     act(() => vi.runAllTimers());

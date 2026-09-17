@@ -52,6 +52,8 @@ export interface NovelHeaderProps {
   lastReadChapter: ChapterRow | null;
   firstChapter: ChapterRow | null;
   readingProgress: ReadingProgressSummary;
+  readyUnpublishedCount: number;
+  unreadyCount: number;
   exporting: "txt" | "epub" | null;
   publishingNovel: boolean;
   onPublishNovel: (publishedAt: Date | null) => void;
@@ -115,7 +117,7 @@ function AdminActions({
           </Badge>
         ) : null}
         {glossaryStats && glossaryStats.pending > 0 ? (
-          <span className="ml-0.5 size-2 animate-pulse rounded-full bg-amber-500" />
+          <span className="ml-0.5 size-2 animate-pulse rounded-full bg-warning" />
         ) : null}
       </Button>
       {showRelationships ? (
@@ -318,24 +320,21 @@ function ReadingActions({
   );
 }
 
-type NovelProgressProps = Pick<NovelHeaderProps, "chapters" | "chaptersPending" | "costData">;
+type NovelProgressProps = Pick<
+  NovelHeaderProps,
+  "chapters" | "chaptersPending" | "costData" | "readyUnpublishedCount" | "unreadyCount"
+>;
 
-function NovelProgress({ chapters, chaptersPending, costData }: NovelProgressProps) {
+function NovelProgress({
+  chapters,
+  chaptersPending,
+  costData,
+  readyUnpublishedCount,
+  unreadyCount,
+}: NovelProgressProps) {
   const translatedChapterCount = chaptersPending
     ? 0
     : chapters.filter((chapter) => chapter.status === "translated").length;
-  const readyUnpublishedCount = chaptersPending
-    ? 0
-    : chapters.filter(
-        (chapter) =>
-          chapter.status === "translated" &&
-          chapter.hasTranslation &&
-          (!chapter.publishedAt || new Date(chapter.publishedAt) > new Date()),
-      ).length;
-  const unreadyCount = chaptersPending
-    ? 0
-    : chapters.filter((chapter) => chapter.status !== "translated" || !chapter.hasTranslation)
-        .length;
   const progressPercent =
     chaptersPending || chapters.length === 0
       ? 0
@@ -396,6 +395,8 @@ export function NovelHeader({
   lastReadChapter,
   firstChapter,
   readingProgress,
+  readyUnpublishedCount,
+  unreadyCount,
   exporting,
   publishingNovel,
   onPublishNovel,
@@ -452,6 +453,8 @@ export function NovelHeader({
               chapters={chapters}
               chaptersPending={chaptersPending}
               costData={costData}
+              readyUnpublishedCount={readyUnpublishedCount}
+              unreadyCount={unreadyCount}
             />
           ) : null}
         </div>

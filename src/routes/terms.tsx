@@ -13,7 +13,7 @@ function TermsPage() {
     <AppShell user={user}>
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
-          <h1 className="text-display font-bold text-foreground">Terms of Service</h1>
+          <h1 className="text-display font-semibold text-foreground">Terms of Service</h1>
           <p className="mt-2 text-body text-muted-foreground">
             Terms governing access to Personal Novel Translator (Pnt).
           </p>

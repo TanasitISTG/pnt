@@ -13,6 +13,7 @@ import {
   rejectAllPendingTerms,
 } from "@/lib/glossary/functions";
 import type { CreateTermInput, UpdateTermInput } from "@/lib/glossary/schemas";
+import { invalidateNovelChapterDetails } from "@/lib/content/chapter/chapter.query";
 
 export interface GlossaryMutationCallbacks {
   /** Reset the add-term form after a successful create. */
@@ -36,7 +37,7 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     queryClient.invalidateQueries({ queryKey: ["glossaryStats", novelId] });
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
     queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
-    queryClient.invalidateQueries({ queryKey: ["chapter"] });
+    void invalidateNovelChapterDetails(queryClient, novelId);
     queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
   };
 

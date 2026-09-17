@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import type {
   ReaderBookmark,
@@ -7,7 +7,12 @@ import type {
   ReaderNovelState,
   ReaderProgress,
 } from "./types";
-import { readerStateQueryKey, readerStateQueryOptions } from "./query";
+import {
+  readerBookmarkPageQueryOptions,
+  readerBookmarkPagesQueryKey,
+  readerStateQueryKey,
+  readerStateQueryOptions,
+} from "./query";
 import {
   addReaderBookmark,
   listReaderBookmarks,
@@ -40,6 +45,7 @@ const EMPTY_STATE: ReaderNovelState = {
   scrollFraction: null,
   readChapterIds: [],
   bookmarks: [],
+  bookmarkNextCursor: null,
 };
 
 export interface ReaderProgressStore {
@@ -64,6 +70,11 @@ export interface ReaderStateApi extends ReaderProgressStore {
   ready: boolean;
   progress: ReaderProgress;
   bookmarks: ReaderBookmark[];
+  // Bookmark list is paged; `hasMore` stays true until the server reports no next cursor.
+  bookmarksHasMore: boolean;
+  bookmarksLoadingMore: boolean;
+  bookmarksLoadError: unknown;
+  loadMoreBookmarks(): Promise<void>;
   store: ReaderProgressStore;
   addBookmark(input: ReaderBookmarkInput): boolean;
   updateBookmarkNote(bookmarkId: string, note: string | null): void;
@@ -121,6 +132,7 @@ function localSnapshot(novelId: string): ReaderNovelState {
     scrollFraction: progress.scrollFraction ?? null,
     readChapterIds: progress.readChapterIds,
     bookmarks: listReaderBookmarks(novelId),
+    bookmarkNextCursor: null,
   };
 }
 
@@ -212,11 +224,27 @@ export function createAccountReaderStore({
   let lastFlushedFraction: number | null = null;
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
+  const invalidateBookmarkPages = () => {
+    void queryClient.invalidateQueries({ queryKey: readerBookmarkPagesQueryKey(novelId) });
+  };
+
   const enqueue = (task: () => Promise<unknown>) => {
     queue = queue.then(task).catch(() => {
       void queryClient.invalidateQueries({ queryKey: readerStateQueryKey(novelId) });
+      invalidateBookmarkPages();
     });
     return queue;
+  };
+
+  // A chapter change must not inherit the previous chapter's flush window or timer.
+  const resetThrottle = () => {
+    hasFlushed = false;
+    lastFlushedAt = 0;
+    lastFlushedFraction = null;
+    if (pendingTimer !== null) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
   };
 
   const updateCache = (updater: (state: ReaderNovelState) => ReaderNovelState) => {
@@ -257,7 +285,7 @@ export function createAccountReaderStore({
       const sameChapter = readCachedState(queryClient, novelId).lastChapterId === chapterId;
       localChapterId = chapterId;
       localFraction = null;
-      lastFlushedFraction = null;
+      resetThrottle();
       updateCache((state) => ({
         ...state,
         lastChapterId: chapterId,
@@ -269,7 +297,7 @@ export function createAccountReaderStore({
       if (localChapterId !== chapterId) {
         localChapterId = chapterId;
         localFraction = null;
-        lastFlushedFraction = null;
+        resetThrottle();
       }
       updateCache((state) => ({
         ...state,
@@ -333,17 +361,24 @@ export function createAccountReaderStore({
             state ? { ...state, bookmarks: state.bookmarks.filter((b) => b.id !== tempId) } : state,
           );
           await queryClient.invalidateQueries({ queryKey: readerStateQueryKey(novelId) });
+          invalidateBookmarkPages();
           return;
         }
         queryClient.setQueryData<ReaderNovelState>(readerStateQueryKey(novelId), (state) => {
           if (!state) return state;
+          // The stored row may already be inside a loaded continuation page; adopting its id
+          // again would leave a second optimistic twin behind.
+          const alreadyLoaded = state.bookmarks.some((bookmark) => bookmark.id === created.id);
           return {
             ...state,
-            bookmarks: state.bookmarks.map((bookmark) =>
-              bookmark.id === tempId ? { ...bookmark, id: created.id } : bookmark,
-            ),
+            bookmarks: alreadyLoaded
+              ? state.bookmarks.filter((bookmark) => bookmark.id !== tempId)
+              : state.bookmarks.map((bookmark) =>
+                  bookmark.id === tempId ? { ...bookmark, id: created.id } : bookmark,
+                ),
           };
         });
+        invalidateBookmarkPages();
       });
       return true;
     },
@@ -354,14 +389,20 @@ export function createAccountReaderStore({
           bookmark.id === bookmarkId ? { ...bookmark, note } : bookmark,
         ),
       }));
-      enqueue(() => write.updateBookmarkNote({ bookmarkId, note }));
+      enqueue(async () => {
+        await write.updateBookmarkNote({ bookmarkId, note });
+        invalidateBookmarkPages();
+      });
     },
     removeBookmark: (bookmarkId) => {
       updateCache((state) => ({
         ...state,
         bookmarks: state.bookmarks.filter((bookmark) => bookmark.id !== bookmarkId),
       }));
-      enqueue(() => write.removeBookmark({ bookmarkId }));
+      enqueue(async () => {
+        await write.removeBookmark({ bookmarkId });
+        invalidateBookmarkPages();
+      });
     },
   };
 
@@ -388,6 +429,67 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
   const state = isAdmin ? accountState : snapshot;
   const ready = isAdmin ? query.isSuccess || query.isError : hydrated;
 
+  const [bookmarksLoadingMore, setBookmarksLoadingMore] = useState(false);
+  const [bookmarksLoadError, setBookmarksLoadError] = useState<unknown>(null);
+  const loadingMoreRef = useRef(false);
+  const pagingGenerationRef = useRef(0);
+
+  useEffect(() => {
+    setBookmarksLoadError(null);
+    setBookmarksLoadingMore(false);
+    loadingMoreRef.current = false;
+    return () => {
+      pagingGenerationRef.current += 1;
+    };
+  }, [novelId, isAdmin]);
+
+  // Continuation stays in the authoritative reader-state cache. A response only lands while
+  // that cache still holds the cursor it was requested for and no refetch intervened, so a
+  // late page can never overwrite newer state; the caller keeps the rows it already has.
+  const loadMoreBookmarks = useCallback(async () => {
+    if (!isAdmin || loadingMoreRef.current) return;
+    const cursor =
+      queryClient.getQueryData<ReaderNovelState>(readerStateQueryKey(novelId))
+        ?.bookmarkNextCursor ?? null;
+    if (!cursor) return;
+
+    const generation = queryClient.getQueryState(readerStateQueryKey(novelId))?.dataUpdatedAt ?? 0;
+    const pagingGeneration = pagingGenerationRef.current;
+    loadingMoreRef.current = true;
+    setBookmarksLoadingMore(true);
+    setBookmarksLoadError(null);
+    try {
+      const page = await queryClient.fetchQuery(readerBookmarkPageQueryOptions(novelId, cursor));
+      if (pagingGenerationRef.current !== pagingGeneration) return;
+      const latest = queryClient.getQueryData<ReaderNovelState>(readerStateQueryKey(novelId));
+      const latestCursor = latest?.bookmarkNextCursor ?? null;
+      const latestGeneration =
+        queryClient.getQueryState(readerStateQueryKey(novelId))?.dataUpdatedAt ?? 0;
+      const stillExpected =
+        latestCursor !== null &&
+        latestCursor.createdAt === cursor.createdAt &&
+        latestCursor.id === cursor.id;
+      if (!latest || latestGeneration !== generation || !stillExpected) return;
+
+      const loadedIds = new Set(latest.bookmarks.map((bookmark) => bookmark.id));
+      queryClient.setQueryData<ReaderNovelState>(readerStateQueryKey(novelId), {
+        ...latest,
+        bookmarks: [
+          ...latest.bookmarks,
+          ...page.bookmarks.filter((bookmark) => !loadedIds.has(bookmark.id)),
+        ],
+        bookmarkNextCursor: page.nextCursor,
+      });
+    } catch (error) {
+      if (pagingGenerationRef.current === pagingGeneration) setBookmarksLoadError(error);
+    } finally {
+      if (pagingGenerationRef.current === pagingGeneration) {
+        loadingMoreRef.current = false;
+        setBookmarksLoadingMore(false);
+      }
+    }
+  }, [isAdmin, novelId, queryClient]);
+
   // `store` keeps its identity for a given (novel, reader) so effects can depend on it safely.
   return useMemo(
     () => ({
@@ -396,6 +498,10 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
       ready,
       progress: toProgress(state),
       bookmarks: state.bookmarks,
+      bookmarksHasMore: isAdmin && state.bookmarkNextCursor !== null,
+      bookmarksLoadingMore: isAdmin && bookmarksLoadingMore,
+      bookmarksLoadError: isAdmin ? bookmarksLoadError : null,
+      loadMoreBookmarks,
       getProgress: store.getProgress,
       markOpened: store.markOpened,
       markRead: store.markRead,
@@ -405,6 +511,15 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
       updateBookmarkNote: store.updateBookmarkNote,
       removeBookmark: store.removeBookmark,
     }),
-    [novelId, ready, state, store],
+    [
+      bookmarksLoadError,
+      bookmarksLoadingMore,
+      isAdmin,
+      loadMoreBookmarks,
+      novelId,
+      ready,
+      state,
+      store,
+    ],
   );
 }

@@ -1,21 +1,16 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
-import { getNovel, updateNovel, setNovelPublished } from "@/lib/content/novel/novel.functions";
+import { updateNovel, setNovelPublished } from "@/lib/content/novel/novel.functions";
+import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import type { UpdateNovelInput } from "@/lib/content/novel/novel.schemas";
 import { NovelForm } from "@/components/novels/form/novel-form";
 import { PublishMenu } from "@/components/publish-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { emptyRelationshipMap } from "@/lib/relationships/map";
-
-const novelQueryOptions = (novelId: string) =>
-  queryOptions({
-    queryKey: ["novel", novelId],
-    queryFn: () => getNovel({ data: { novelId } }),
-  });
 
 export const Route = createFileRoute("/_protected/novels/$novelId/edit")({
   loader: ({ params, context }) =>
@@ -51,6 +46,7 @@ function EditNovelPage() {
         queryClient.invalidateQueries({ queryKey: ["novels"] }),
         queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
+        queryClient.invalidateQueries({ queryKey: ["readerNovel", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] }),
       ]);
       toast.success("Novel updated successfully");

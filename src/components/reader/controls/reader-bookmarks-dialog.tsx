@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { chapterQueryOptions } from "@/lib/content/chapter/chapter.query";
 import type { ReaderBookmark } from "@/lib/reader/types";
 import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import {
@@ -22,7 +23,6 @@ import {
   resolveBookmarkParagraphIndex,
   resolveBookmarkTarget,
 } from "@/components/reader/page/reader-anchors";
-import { chapterQueryOptions } from "@/components/reader/page/reader-queries";
 import type { ReaderChapterSummary } from "./reader-toolbar";
 
 export interface ReaderBookmarksDialogProps {
@@ -74,7 +74,8 @@ export function ReaderBookmarksDialog({
 
   const goToBookmark = async (bookmark: ReaderBookmark) => {
     const paragraphIndex = await resolveBookmarkParagraphIndex(
-      (targetChapterId) => queryClient.ensureQueryData(chapterQueryOptions(targetChapterId)),
+      (targetChapterId) =>
+        queryClient.ensureQueryData(chapterQueryOptions(targetChapterId, readerState.novelId)),
       bookmark,
     );
     const anchor = bookmarkAnchorId(paragraphIndex);
@@ -107,7 +108,7 @@ export function ReaderBookmarksDialog({
       excerpt,
     });
     if (added) {
-      toast.success(`Bookmarked paragraph ${target.paragraphIndex + 1}`);
+      toast.success("Bookmark saved");
     } else {
       toast.info("Already bookmarked here");
     }
@@ -145,9 +146,11 @@ export function ReaderBookmarksDialog({
         </Button>
 
         {sortedBookmarks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No bookmarks yet. Open this dialog while reading a paragraph you want to keep.
-          </p>
+          !readerState.bookmarksHasMore && !readerState.bookmarksLoadError ? (
+            <p className="text-sm text-muted-foreground">
+              No bookmarks yet. Open this dialog while reading a paragraph you want to keep.
+            </p>
+          ) : null
         ) : (
           <ul className="flex flex-col gap-3">
             {sortedBookmarks.map((bookmark, index) => {
@@ -235,6 +238,30 @@ export function ReaderBookmarksDialog({
             })}
           </ul>
         )}
+        {readerState.bookmarksLoadError ? (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-caption text-destructive">Could not load more bookmarks.</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void readerState.loadMoreBookmarks()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : readerState.bookmarksHasMore ? (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-caption text-muted-foreground">{sortedBookmarks.length} loaded</p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={readerState.bookmarksLoadingMore}
+              onClick={() => void readerState.loadMoreBookmarks()}
+            >
+              {readerState.bookmarksLoadingMore ? "Loading…" : "Load more"}
+            </Button>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
