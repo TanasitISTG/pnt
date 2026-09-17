@@ -1,6 +1,32 @@
 import "@tanstack/react-start/server-only";
 import { z } from "zod";
 
+export function parseLocalProviderOrigins(raw: string): readonly string[] {
+  const values: unknown = JSON.parse(raw);
+  if (!Array.isArray(values) || !values.every((value) => typeof value === "string")) {
+    throw new Error("LOCAL_PROVIDER_ORIGINS must be an array of canonical origins");
+  }
+  return Object.freeze([
+    ...new Set(
+      values.map((value: string) => {
+        const url = new URL(value);
+        if (
+          !["http:", "https:"].includes(url.protocol) ||
+          url.username ||
+          url.password ||
+          url.search ||
+          url.hash ||
+          url.pathname !== "/" ||
+          value !== url.origin
+        ) {
+          throw new Error("LOCAL_PROVIDER_ORIGINS must contain canonical HTTP(S) origins");
+        }
+        return url.origin;
+      }),
+    ),
+  ]);
+}
+
 const baseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   BETTER_AUTH_SECRET: z.string().min(32),
@@ -8,6 +34,19 @@ const baseEnvSchema = z.object({
   APP_ENCRYPTION_KEY: z.string().min(32),
   // Local dev only: puts the SDK in dev mode (v4 defaults to cloud mode).
   INNGEST_DEV: z.string().optional(),
+  RATE_LIMIT_TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+  VERCEL: z.literal("1").optional(),
+  LOCAL_PROVIDER_ORIGINS: z
+    .string()
+    .default("[]")
+    .transform((raw, ctx) => {
+      try {
+        return parseLocalProviderOrigins(raw);
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Invalid LOCAL_PROVIDER_ORIGINS" });
+        return z.NEVER;
+      }
+    }),
 
   // ZenRows scraper configuration (optional, app boots keyless).
   SCRAPER_API_KEY: z.string().optional(),

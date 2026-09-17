@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 
 import { auth, type Session, type User } from "@/lib/auth/auth";
-import { UnauthorizedError } from "@/lib/server-fn-error";
+import { UnauthorizedError, withSafeHandler } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
 
 export function requireSession(session: { user: User; session: Session } | null) {
@@ -15,14 +15,18 @@ export function requireSession(session: { user: User; session: Session } | null)
   return session;
 }
 
-export const getSession = createServerFn({ method: "GET" }).handler(async () => {
-  const headers = getRequestHeaders();
-  const session = await auth.api.getSession({ headers });
-  return session;
-});
+export const getSession = createServerFn({ method: "GET" }).handler(() =>
+  withSafeHandler(async () => {
+    const headers = getRequestHeaders();
+    const session = await auth.api.getSession({ headers });
+    return session;
+  }),
+);
 
-export const ensureSession = createServerFn({ method: "GET" }).handler(async () => {
-  const headers = getRequestHeaders();
-  const session = await auth.api.getSession({ headers });
-  return requireSession(session);
-});
+export const ensureSession = createServerFn({ method: "GET" }).handler(() =>
+  withSafeHandler(async () => {
+    const headers = getRequestHeaders();
+    const session = await auth.api.getSession({ headers });
+    return requireSession(session);
+  }),
+);

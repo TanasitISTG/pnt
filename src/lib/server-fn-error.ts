@@ -14,6 +14,13 @@ export class SafeServerError extends Error {
   }
 }
 
+export class RateLimitError extends SafeServerError {
+  constructor() {
+    super("Too many requests");
+    this.name = "RateLimitError";
+  }
+}
+
 export async function withSafeHandler<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
@@ -22,8 +29,10 @@ export async function withSafeHandler<T>(fn: () => Promise<T>): Promise<T> {
     if (
       err instanceof UnauthorizedError ||
       err instanceof SafeServerError ||
+      err instanceof RateLimitError ||
       name === "UnauthorizedError" ||
-      name === "SafeServerError"
+      name === "SafeServerError" ||
+      name === "RateLimitError"
     ) {
       throw err;
     }
@@ -32,6 +41,6 @@ export async function withSafeHandler<T>(fn: () => Promise<T>): Promise<T> {
       throw new UnauthorizedError();
     }
     log("error", "Unhandled server function error", { error: message });
-    throw new Error("Something went wrong.", { cause: err });
+    throw new Error("Something went wrong.");
   }
 }

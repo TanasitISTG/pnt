@@ -3,7 +3,8 @@ import { eq, and, lte } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels, chapters } from "@/lib/db/schema";
-import { checkRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { RateLimitError } from "@/lib/server-fn-error";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const escapeXml = (str: string) =>
   str

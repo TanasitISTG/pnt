@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import OpenAI from "openai";
-import { GoogleGenAI } from "@google/genai";
+import { z } from "zod";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
@@ -13,11 +13,13 @@ import type {
   ProviderType,
   ReasoningEffort,
 } from "@/lib/providers/types";
+import { OPEN_CODE_GO_BASE_URL, isOpenCodeLunaModel } from "./provider-compatibility";
 import {
-  OPEN_CODE_GO_BASE_URL,
-  isOpenCodeLunaModel,
-  normalizeOpenCodeBaseUrl,
-} from "./provider-compatibility";
+  assertProviderBaseUrl,
+  createProviderFetch,
+  normalizeProviderBaseUrl,
+  ProviderRequestError,
+} from "./provider-network.server";
 
 export class ProviderNotConfiguredError extends Error {
   constructor(message = "AI provider settings are not configured") {
@@ -61,13 +63,14 @@ export class OpenAIProviderClient implements AIProviderClient {
     this.outputPricePer1M = config.outputPricePer1M;
     this.temperature = config.temperature;
     this.reasoningEffort = config.reasoningEffort;
-    this.baseUrl = normalizeOpenCodeBaseUrl(config.baseUrl);
+    this.baseUrl = normalizeProviderBaseUrl(config.baseUrl, "openai");
     this.requestTimeoutSec = config.requestTimeoutSec;
     this.client = new OpenAI({
       baseURL: this.baseUrl,
       apiKey: config.apiKey,
       timeout: (config.requestTimeoutSec ?? 240) * 1000,
       maxRetries: 0,
+      fetch: createProviderFetch(this.baseUrl),
     });
   }
 
@@ -114,6 +117,36 @@ export class OpenAIProviderClient implements AIProviderClient {
   }
 }
 
+const geminiResponseSchema = z.object({
+  candidates: z
+    .array(
+      z.object({
+        content: z
+          .object({
+            parts: z
+              .array(z.object({ text: z.string().optional(), thought: z.boolean().optional() }))
+              .optional(),
+          })
+          .optional(),
+      }),
+    )
+    .optional(),
+  usageMetadata: z
+    .object({
+      promptTokenCount: z.number().finite().nonnegative().optional(),
+      candidatesTokenCount: z.number().finite().nonnegative().optional(),
+    })
+    .optional(),
+});
+const geminiErrorSchema = z.object({
+  error: z
+    .object({
+      message: z.string().optional(),
+      status: z.string().optional(),
+    })
+    .optional(),
+});
+
 export class GeminiProviderClient implements AIProviderClient {
   provider: ProviderType = "gemini";
   model: string;
@@ -123,7 +156,8 @@ export class GeminiProviderClient implements AIProviderClient {
   inputPricePer1M?: number | null;
   outputPricePer1M?: number | null;
   requestTimeoutSec?: number | null;
-  private ai: GoogleGenAI;
+  private apiKey: string;
+  private fetch: typeof globalThis.fetch;
 
   constructor(config: {
     apiKey: string;
@@ -140,17 +174,16 @@ export class GeminiProviderClient implements AIProviderClient {
     this.inputPricePer1M = config.inputPricePer1M;
     this.outputPricePer1M = config.outputPricePer1M;
     this.temperature = config.temperature;
-    this.baseUrl = config.baseUrl || "https://generativelanguage.googleapis.com";
+    this.baseUrl = normalizeProviderBaseUrl(config.baseUrl ?? "", "gemini");
     this.requestTimeoutSec = config.requestTimeoutSec;
-    this.ai = new GoogleGenAI({
-      apiKey: config.apiKey,
-      httpOptions: {
-        ...(config.baseUrl && config.baseUrl !== "https://generativelanguage.googleapis.com"
-          ? { baseUrl: config.baseUrl }
-          : {}),
-        timeout: (config.requestTimeoutSec ?? 240) * 1000,
-      },
-    });
+    if (config.apiKey.startsWith("auth_tokens/")) {
+      throw new ProviderRequestError(
+        "Provider authentication failed. Check the API key.",
+        "AUTH_FAILED",
+      );
+    }
+    this.apiKey = config.apiKey;
+    this.fetch = createProviderFetch(this.baseUrl);
   }
 
   async generateChatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
@@ -168,26 +201,102 @@ export class GeminiProviderClient implements AIProviderClient {
       }
     }
 
-    const response = await this.ai.models.generateContent({
-      model: options.model ?? this.model,
-      contents,
-      config: {
-        systemInstruction:
-          systemInstructionParts.length > 0 ? systemInstructionParts.join("\n\n") : undefined,
-        temperature: options.temperature ?? this.temperature,
-        maxOutputTokens: options.maxTokens,
-        responseMimeType:
-          options.responseFormat?.type === "json_object" ? "application/json" : undefined,
-      },
-    });
-
-    return {
-      content: response.text || "",
-      usage: {
-        promptTokens: response.usageMetadata?.promptTokenCount || 0,
-        completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
-      },
-    };
+    const model = options.model ?? this.model;
+    if (!model || /\.\.|[?&]/.test(model) || model.split("/").some((part) => !part)) {
+      throw new ProviderRequestError("Provider model is invalid", "INVALID_MODEL");
+    }
+    const resource =
+      model.startsWith("models/") || model.startsWith("tunedModels/") ? model : `models/${model}`;
+    const url = new URL(this.baseUrl);
+    url.pathname = `${url.pathname.replace(/\/$/, "")}/v1beta/${resource.split("/").map(encodeURIComponent).join("/")}:generateContent`;
+    const signal = AbortSignal.timeout((this.requestTimeoutSec ?? 240) * 1000);
+    try {
+      const response = await this.fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": this.apiKey },
+        signal,
+        body: JSON.stringify({
+          contents,
+          systemInstruction: systemInstructionParts.length
+            ? {
+                role: "user",
+                parts: [{ text: systemInstructionParts.join("\n\n") }],
+              }
+            : undefined,
+          generationConfig: {
+            temperature: options.temperature ?? this.temperature,
+            maxOutputTokens: options.maxTokens,
+            responseMimeType:
+              options.responseFormat?.type === "json_object" ? "application/json" : undefined,
+          },
+        }),
+      });
+      if (!response.ok) {
+        let unsupportedJson = false;
+        if (
+          (response.status === 400 || response.status === 422) &&
+          options.responseFormat?.type === "json_object"
+        ) {
+          const envelope: unknown = await response.json().catch(() => null);
+          const parsed = geminiErrorSchema.safeParse(envelope);
+          if (parsed.success) {
+            const text = [parsed.data.error?.message, parsed.data.error?.status]
+              .join(" ")
+              .toLowerCase();
+            unsupportedJson =
+              /responsemimetype|application\/json/.test(text) &&
+              /unsupported|not supported|unknown|unrecognized|invalid|not allowed/.test(text);
+          }
+        } else {
+          await response.body?.cancel().catch(() => undefined);
+        }
+        throw new ProviderRequestError(
+          response.status === 401 || response.status === 403
+            ? "Provider authentication failed. Check the API key."
+            : response.status === 404
+              ? "Provider endpoint or model was not found."
+              : response.status === 429
+                ? "Provider rate limit reached. Try again later."
+                : "Could not connect to the provider. Check the settings and try again.",
+          unsupportedJson ? "JSON_MODE_UNSUPPORTED" : "HTTP_ERROR",
+          response.status,
+        );
+      }
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        if (signal.aborted) throw error;
+        throw new ProviderRequestError("Invalid provider response", "INVALID_RESPONSE");
+      }
+      const parsed = geminiResponseSchema.safeParse(payload);
+      if (!parsed.success)
+        throw new ProviderRequestError("Invalid provider response", "INVALID_RESPONSE");
+      const parts = parsed.data.candidates?.[0]?.content?.parts ?? [];
+      return {
+        content: parts
+          .filter((part) => part.thought !== true && typeof part.text === "string")
+          .map((part) => part.text)
+          .join(""),
+        usage: {
+          promptTokens: parsed.data.usageMetadata?.promptTokenCount || 0,
+          completionTokens: parsed.data.usageMetadata?.candidatesTokenCount || 0,
+        },
+      };
+    } catch (error) {
+      if (error instanceof ProviderRequestError) throw error;
+      if (
+        signal.aborted ||
+        (error instanceof Error &&
+          (error.name === "TimeoutError" || error.name === "APIConnectionTimeoutError"))
+      ) {
+        throw new ProviderRequestError("Provider request timed out.", "TIMEOUT");
+      }
+      throw new ProviderRequestError(
+        "Could not connect to the provider. Check the settings and try again.",
+        "CONNECTION_FAILED",
+      );
+    }
   }
 }
 
@@ -217,6 +326,7 @@ export async function createProviderClient(
     throw new ProviderSnapshotMismatchError();
   }
   const provider = overrides.provider ?? configuredProvider;
+  const baseUrl = await assertProviderBaseUrl(settings.baseUrl, provider);
   const model = overrides.model ?? settings.model;
   const fastModel = "fastModel" in overrides ? overrides.fastModel : settings.fastModel;
   const pricing = {
@@ -227,7 +337,7 @@ export async function createProviderClient(
   if (provider === "gemini") {
     return new GeminiProviderClient({
       apiKey,
-      baseUrl: settings.baseUrl,
+      baseUrl,
       model,
       fastModel,
       temperature: settings.temperature,
@@ -238,7 +348,7 @@ export async function createProviderClient(
 
   return new OpenAIProviderClient({
     apiKey,
-    baseUrl: settings.baseUrl,
+    baseUrl,
     model,
     fastModel,
     reasoningEffort: settings.reasoningEffort as ReasoningEffort | null,

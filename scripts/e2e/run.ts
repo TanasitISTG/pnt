@@ -40,6 +40,8 @@ const environment = {
   INNGEST_SIGNING_KEY: "",
   E2E_APP_URL: appUrl,
   E2E_OPENAI_PORT: "4010",
+  LOCAL_PROVIDER_ORIGINS: JSON.stringify([new URL(stubUrl).origin]),
+  RATE_LIMIT_TRUSTED_PROXY_HOPS: "1",
   PLAYWRIGHT_CHANNEL: detectBrowserChannel(),
   PORT: "3000",
   NITRO_PORT: "3000",

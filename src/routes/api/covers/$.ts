@@ -5,7 +5,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { novels } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/functions";
-import { checkRateLimit, RateLimitError } from "@/lib/rate-limit";
+import { RateLimitError } from "@/lib/server-fn-error";
+import { checkRateLimit } from "@/lib/rate-limit";
 const coverWidthSchema = z.enum(["320", "480", "640"]);
 
 export const Route = createFileRoute("/api/covers/$")({

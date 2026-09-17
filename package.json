@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run --exclude '**/*.integration.test.ts' --exclude 'e2e/**'",
-    "test:integration": "vitest run src/lib/translation/workflow/workflow.integration.test.ts src/lib/inngest/outbox.integration.test.ts src/lib/translation/workflow/chunk-migration.integration.test.ts src/lib/export/stream.integration.test.ts src/lib/content/novel-maintenance.integration.test.ts src/lib/content/chapter-edit.integration.test.ts src/lib/content/publish.integration.test.ts src/lib/import/workflow.integration.test.ts src/lib/epub/import.integration.test.ts src/lib/job-dashboard/service.integration.test.ts src/lib/glossary/service.integration.test.ts src/lib/translation/evaluation/eval.integration.test.ts src/lib/auth/session-revocation.integration.test.ts src/lib/reader/reader-state.integration.test.ts --fileParallelism=false --reporter=dot",
+    "test:integration": "vitest run src/lib/translation/workflow/workflow.integration.test.ts src/lib/inngest/outbox.integration.test.ts src/lib/translation/workflow/chunk-migration.integration.test.ts src/lib/export/stream.integration.test.ts src/lib/content/novel-maintenance.integration.test.ts src/lib/content/chapter-edit.integration.test.ts src/lib/content/publish.integration.test.ts src/lib/import/workflow.integration.test.ts src/lib/epub/import.integration.test.ts src/lib/job-dashboard/service.integration.test.ts src/lib/glossary/service.integration.test.ts src/lib/translation/evaluation/eval.integration.test.ts src/lib/auth/session-revocation.integration.test.ts src/lib/rate-limit.integration.test.ts src/lib/reader/reader-state.integration.test.ts --fileParallelism=false --reporter=dot",
     "test:e2e": "bun scripts/e2e/run.ts",
     "audit:release": "bun audit --audit-level=moderate",
     "lint": "oxlint",
@@ -38,7 +38,6 @@
     "@fontsource-variable/sofia-sans": "5.2.8",
     "@fontsource/noto-sans-thai": "5.2.8",
     "@fontsource/sarabun": "5.2.8",
-    "@google/genai": "2.13.0",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-devtools": "0.10.8",
     "@tanstack/react-form": "1.33.5",
@@ -69,6 +68,7 @@
     "sonner": "2.0.7",
     "tailwind-merge": "3.6.0",
     "tailwindcss": "4.3.3",
+    "undici": "7.29.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

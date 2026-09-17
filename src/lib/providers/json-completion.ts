@@ -45,6 +45,7 @@ function isJsonModeUnsupportedError(error: unknown): boolean {
     (value): value is number => typeof value === "number" && Number.isFinite(value),
   );
   if (status !== undefined && status !== 400 && status !== 422) return false;
+  if (candidate.code === "JSON_MODE_UNSUPPORTED") return true;
 
   const text = [candidate.message, candidate.code, candidate.param, candidate.type]
     .filter((value): value is string => typeof value === "string")

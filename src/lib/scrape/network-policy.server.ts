@@ -1,63 +1,134 @@
 import "@tanstack/react-start/server-only";
 
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
-
+import type { LookupAddress } from "node:dns";
+import { BlockList, isIP } from "node:net";
 import { findSource } from "@/lib/scrape";
 
+export type HostAddress = { address: string; family: 4 | 6 };
+
+const blockedV4 = new BlockList();
+for (const [address, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4],
+] as const)
+  blockedV4.addSubnet(address, prefix, "ipv4");
+const mappedV4 = new BlockList();
+mappedV4.addSubnet("::ffff:0:0", 96, "ipv6");
+const globalV6 = new BlockList();
+globalV6.addSubnet("2000::", 3, "ipv6");
+const blockedV6 = new BlockList();
+for (const [address, prefix] of [
+  ["2001::", 32],
+  ["2001:2::", 48],
+  ["2001:10::", 28],
+  ["2001:20::", 28],
+  ["2001:db8::", 32],
+  ["2002::", 16],
+  ["3fff::", 20],
+] as const)
+  blockedV6.addSubnet(address, prefix, "ipv6");
+
+export function normalizeIpAddress(address: string): HostAddress | null {
+  let value = address.trim();
+  if (value.startsWith("[") && value.endsWith("]")) value = value.slice(1, -1);
+  if (value.includes("%")) return null;
+  const family = isIP(value);
+  if (family === 4) return { address: value, family };
+  if (family !== 6) return null;
+  value = new URL(`http://[${value}]/`).hostname.slice(1, -1);
+  if (mappedV4.check(value, "ipv6")) {
+    const parts = value.split(":");
+    const high = Number.parseInt(parts[parts.length - 2], 16);
+    const low = Number.parseInt(parts[parts.length - 1], 16);
+    return { address: `${high >>> 8}.${high & 255}.${low >>> 8}.${low & 255}`, family: 4 };
+  }
+  return { address: value, family: 6 };
+}
+
 export function isPrivateIp(address: string): boolean {
-  const normalized = address.trim().toLowerCase();
-  if (
-    normalized === "localhost" ||
-    normalized === "::1" ||
-    normalized === "::" ||
-    normalized === "0.0.0.0"
-  ) {
-    return true;
-  }
+  const normalized = normalizeIpAddress(address);
+  if (!normalized) return true;
+  if (normalized.family === 4) return blockedV4.check(normalized.address, "ipv4");
+  return !globalV6.check(normalized.address, "ipv6") || blockedV6.check(normalized.address, "ipv6");
+}
 
-  if (isIP(normalized) === 6) {
-    return (
-      normalized.startsWith("fc") || normalized.startsWith("fd") || /^fe[89ab]/.test(normalized)
+export class HostResolutionError extends Error {
+  constructor(readonly code: "DNS_TIMEOUT" | "DNS_FAILED" | "NON_PUBLIC") {
+    super(
+      code === "DNS_TIMEOUT"
+        ? "Hostname lookup timed out"
+        : code === "NON_PUBLIC"
+          ? "Host resolves to a non-public address"
+          : "Hostname could not be resolved",
     );
+    this.name = "HostResolutionError";
   }
+}
 
-  const parts = normalized.split(".").map(Number);
+export async function resolveHostAddresses(hostname: string): Promise<readonly HostAddress[]> {
+  const literal = normalizeIpAddress(hostname);
+  if (literal) return [literal];
+  // Invalid numeric/zone literals must not be handed to an OS resolver.
   if (
-    parts.length !== 4 ||
-    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+    hostname.includes(":") ||
+    hostname.includes("%") ||
+    hostname.includes("[") ||
+    hostname.includes("]")
   ) {
-    return false;
+    throw new HostResolutionError("DNS_FAILED");
   }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let answers: LookupAddress[];
+  try {
+    const lookupPromise = lookup(hostname, { all: true, verbatim: true });
+    // The timeout can win the race; consume a late rejection so it stays handled.
+    void lookupPromise.catch(() => {});
+    answers = await Promise.race([
+      lookupPromise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new HostResolutionError("DNS_TIMEOUT")), 5000);
+      }),
+    ]);
+  } catch (error) {
+    if (error instanceof HostResolutionError) throw error;
+    throw new HostResolutionError("DNS_FAILED");
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+  const unique = new Map<string, HostAddress>();
+  for (const answer of answers) {
+    if ((answer.family !== 4 && answer.family !== 6) || isIP(answer.address) !== answer.family) {
+      throw new HostResolutionError("DNS_FAILED");
+    }
+    const normalized = normalizeIpAddress(answer.address);
+    if (!normalized) throw new HostResolutionError("DNS_FAILED");
+    unique.set(normalized.address, normalized);
+  }
+  if (!unique.size) throw new HostResolutionError("DNS_FAILED");
+  return [...unique.values()];
+}
 
-  const [first, second] = parts;
-  return (
-    first === 0 ||
-    first === 10 ||
-    first === 127 ||
-    (first === 169 && second === 254) ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 168)
-  );
+export async function resolvePublicHost(hostname: string): Promise<readonly HostAddress[]> {
+  const addresses = await resolveHostAddresses(hostname);
+  if (addresses.some(({ address }) => isPrivateIp(address)))
+    throw new HostResolutionError("NON_PUBLIC");
+  return addresses;
 }
 
 export async function assertPublicHost(url: string): Promise<void> {
   findSource(url);
-  const hostname = new URL(url).hostname;
-  if (isPrivateIp(hostname)) {
-    throw new Error(`Private or local host access blocked: ${hostname}`);
-  }
-
-  try {
-    const addresses = await lookup(hostname, { all: true });
-    for (const { address } of addresses) {
-      if (isPrivateIp(address)) {
-        throw new Error(`Private IP address blocked: ${address}`);
-      }
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("blocked")) throw error;
-    throw new Error(`DNS resolution failed for ${hostname}: ${message}`, { cause: error });
-  }
+  await resolvePublicHost(new URL(url).hostname);
 }
