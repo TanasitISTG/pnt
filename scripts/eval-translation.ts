@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { eq, and, inArray, lt, sql, desc } from "drizzle-orm";
+import { eq, and, lt, sql, desc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels, chapters, glossaryTerms } from "@/lib/db/schema";
@@ -18,6 +18,7 @@ import { filterGlossaryForChunk, formatGlossaryBlock } from "@/lib/translation/g
 import { createProviderClient } from "@/lib/translation/providers/provider-client";
 import { analyzeRelationshipSourceChunk } from "@/lib/relationships/analyzer";
 import { emptyRelationshipMap, parseRelationshipMap } from "@/lib/relationships/map";
+import { parseEvalSelection } from "@/lib/translation/evaluation/eval.schemas";
 
 interface ChapterEvalResult {
   chapterNumber: string;
@@ -36,36 +37,21 @@ interface ChapterEvalResult {
   chunksCompleted?: number;
 }
 
-function parseChapterNumbers(input?: string): number[] {
-  if (!input) return [];
-  const numbers: number[] = [];
-  const parts = input.split(",");
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (trimmed.includes("-")) {
-      const [start, end] = trimmed.split("-").map(Number);
-      if (!isNaN(start) && !isNaN(end)) {
-        for (let i = start; i <= end; i++) numbers.push(i);
-      }
-    } else {
-      const num = Number(trimmed);
-      if (!isNaN(num)) numbers.push(num);
-    }
-  }
-  return numbers;
-}
-
 async function runEval() {
   const args = process.argv.slice(2);
   const novelId = args[0];
   const chapterArg = args[1];
 
   if (!novelId) {
-    console.error("Usage: bun run eval:translation <novelId> [chapterNumbers|all]");
-    console.error("Example: bun run eval:translation novel_123 1,2,3-5");
+    console.error(
+      "Usage: bun run eval:translation <novelId> [first3|all|--all|chapterNumbers/ranges]",
+    );
+    console.error("Example: bun run eval:translation novel_123 1.5,2,3-5");
     console.error("Example: bun run eval:translation novel_123 all");
     process.exit(1);
   }
+
+  const selection = parseEvalSelection(chapterArg === "--all" ? "all" : (chapterArg ?? "first3"));
 
   const [novel] = await db.select().from(novels).where(eq(novels.id, novelId)).limit(1);
   if (!novel) {
@@ -73,29 +59,33 @@ async function runEval() {
     process.exit(1);
   }
 
-  const isAll = chapterArg === "all" || chapterArg === "--all";
-  const requestedNumbers = isAll ? [] : parseChapterNumbers(chapterArg);
-
-  let query = db
+  const query = db
     .select()
     .from(chapters)
     .where(
-      requestedNumbers.length > 0
-        ? and(eq(chapters.novelId, novelId), inArray(chapters.number, requestedNumbers.map(String)))
+      selection.mode === "ranges"
+        ? and(
+            eq(chapters.novelId, novelId),
+            sql`EXISTS (
+              SELECT 1 FROM jsonb_to_recordset(${JSON.stringify(selection.ranges)}::jsonb)
+                AS selected("from" numeric, "to" numeric)
+              WHERE ${chapters.number} BETWEEN selected."from" AND selected."to"
+            )`,
+          )
         : eq(chapters.novelId, novelId),
     )
-    .orderBy(sql`COALESCE(${chapters.number}::numeric, 0)`);
+    .orderBy(chapters.number, chapters.id);
 
-  let targetChapters = await (requestedNumbers.length === 0 && !isAll ? query.limit(3) : query);
+  const targetChapters = await (selection.mode === "first3" ? query.limit(3) : query);
 
   if (targetChapters.length === 0) {
     console.error(`No chapters found for novel "${novelId}" matching input criteria.`);
     process.exit(1);
   }
 
-  if (!chapterArg) {
+  if (chapterArg === undefined) {
     console.log(
-      "Notice: No chapter numbers specified — defaulting to first 3 chapters. (Pass 'all' or specific numbers like '1,2,3' to evaluate more).\n",
+      "Notice: No selection specified — defaulting to first 3 chapters. (Pass 'all' or numbers/ranges like '1.5,2-5' to evaluate more).\n",
     );
   }
 

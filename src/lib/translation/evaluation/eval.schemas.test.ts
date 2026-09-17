@@ -23,7 +23,19 @@ describe("parseEvalSelection", () => {
   });
 
   it("rejects malformed, reversed, signed, overprecise, and empty selectors", () => {
-    for (const selector of ["garbage", "1,,2", "3-1", "1e3", "1.234", "", "1-2-3", "+1"]) {
+    for (const selector of [
+      "garbage",
+      "1,,2",
+      "3-1",
+      "1e3",
+      "0x10",
+      "Infinity",
+      "-1",
+      "1.234",
+      "",
+      "1-2-3",
+      "+1",
+    ]) {
       expect(() => parseEvalSelection(selector)).toThrow(EVAL_SELECTOR_ERROR);
     }
     expect(() => parseEvalSelection("9".repeat(513))).toThrow(EVAL_SELECTOR_ERROR);
@@ -87,6 +99,20 @@ describe("evaluation schemas", () => {
         targetTerm: null,
       }),
     ).toThrow();
+  });
+
+  it("preserves full long glossary finding terms including supplementary characters", () => {
+    const finding = {
+      type: "glossary-miss" as const,
+      paragraphIndex: 1,
+      sourceExcerpt: "Source excerpt",
+      translationExcerpt: "Translation excerpt",
+      sourceTerm: "𐐀".repeat(501),
+      targetTerm: "ส".repeat(501) + "🌟",
+    };
+    expect(evalFindingSchema.parse(finding)).toEqual(finding);
+    expect(() => evalFindingSchema.parse({ ...finding, sourceTerm: "" })).toThrow();
+    expect(() => evalFindingSchema.parse({ ...finding, targetTerm: "" })).toThrow();
   });
 
   it("accepts version two summaries with the same aggregate invariants", () => {

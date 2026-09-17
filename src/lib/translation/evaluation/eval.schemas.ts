@@ -171,8 +171,8 @@ export const evalFindingSchema = z
     paragraphIndex: z.number().int().positive().nullable(),
     sourceExcerpt: evalFindingExcerptSchema.nullable(),
     translationExcerpt: evalFindingExcerptSchema.nullable(),
-    sourceTerm: z.string().min(1).max(500).nullable(),
-    targetTerm: z.string().min(1).max(500).nullable(),
+    sourceTerm: z.string().min(1).nullable(),
+    targetTerm: z.string().min(1).nullable(),
   })
   .refine(
     (finding) =>

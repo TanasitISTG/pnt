@@ -595,6 +595,119 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
     }
   }, 30_000);
 
+  it("ignores invalid approved mappings without reporting immediate context changes", async () => {
+    const fixture = await seedFixture(
+      [{ ...makeChapter("1", "API"), rawContent: "Alpha" }],
+      [
+        { source: "", target: "Empty source" },
+        { source: " \t\n ", target: "Whitespace source" },
+        { source: "Al", target: "" },
+        { source: "pha", target: " \t\n " },
+        { source: "Alpha", target: "API" },
+      ],
+    );
+    try {
+      const reportId = await queueReport(fixture, "all");
+      await runTranslationEvalReport(reportId);
+      const snapshot = parseCurrentSnapshot(await readReport(reportId));
+      expect(snapshot.summary).toMatchObject({
+        matchedGlossaryTerms: 1,
+        adheredGlossaryTerms: 1,
+        attentionChapterCount: 0,
+      });
+      expect(snapshot.results[0]).toMatchObject({
+        matchedGlossaryTerms: 1,
+        adheredGlossaryTerms: 1,
+        glossaryAdherencePercent: 100,
+        missingGlossaryTerms: [],
+        findings: [],
+      });
+      const detail = await getTranslationEvalReportForUser(fixture.ownerUserId, {
+        novelId: fixture.novelId,
+        reportId,
+        filter: "all",
+        page: 1,
+        pageSize: 25,
+      });
+      expect(detail.detailsState).toBe("ready");
+      expect(detail.contextChanged).toBe(false);
+
+      await sql`DELETE FROM glossary_terms WHERE novel_id = ${fixture.novelId} AND source = 'Alpha'`;
+      const invalidOnlyReportId = await queueReport(fixture, "all");
+      await runTranslationEvalReport(invalidOnlyReportId);
+      const invalidOnly = parseCurrentSnapshot(await readReport(invalidOnlyReportId));
+      expect(invalidOnly.summary).toMatchObject({
+        matchedGlossaryTerms: 0,
+        adheredGlossaryTerms: 0,
+      });
+      expect(invalidOnly.results[0]).toMatchObject({
+        matchedGlossaryTerms: 0,
+        adheredGlossaryTerms: 0,
+        glossaryAdherencePercent: null,
+        missingGlossaryTerms: [],
+      });
+      expect(
+        invalidOnly.results[0]!.findings.filter((finding) => finding.type === "glossary-miss"),
+      ).toEqual([]);
+      const invalidOnlyDetail = await getTranslationEvalReportForUser(fixture.ownerUserId, {
+        novelId: fixture.novelId,
+        reportId: invalidOnlyReportId,
+        filter: "all",
+        page: 1,
+        pageSize: 25,
+      });
+      expect(invalidOnlyDetail.contextChanged).toBe(false);
+    } finally {
+      await cleanupFixture(fixture);
+    }
+  });
+
+  it("keeps reports readable when approved terms exceed the legacy 500-unit finding cap", async () => {
+    const sourceTerm = "𐐀".repeat(501);
+    const targetTerm = "ส".repeat(501) + "🌟";
+    const fixture = await seedFixture(
+      [{ ...makeChapter("1", "ดี"), rawContent: sourceTerm }],
+      [{ source: sourceTerm, target: targetTerm }],
+    );
+    try {
+      const reportId = await queueReport(fixture, "all");
+      await runTranslationEvalReport(reportId);
+      const report = await readReport(reportId);
+      expect(report).toMatchObject({ status: "done", error: null });
+
+      const snapshot = parseCurrentSnapshot(report);
+      expect(snapshot.summary).toMatchObject({
+        matchedGlossaryTerms: 1,
+        adheredGlossaryTerms: 0,
+        attentionChapterCount: 1,
+      });
+      expect(snapshot.results[0]!.missingGlossaryTerms).toEqual([
+        { source: sourceTerm, target: targetTerm },
+      ]);
+
+      const detail = await getTranslationEvalReportForUser(fixture.ownerUserId, {
+        novelId: fixture.novelId,
+        reportId,
+        filter: "all",
+        page: 1,
+        pageSize: 25,
+      });
+      expect(detail.detailsState).toBe("ready");
+      expect(detail.contextChanged).toBe(false);
+      expect(detail.rows).toHaveLength(1);
+      expect(detail.rows[0]!.findings).toEqual([
+        expect.objectContaining({
+          type: "glossary-miss",
+          paragraphIndex: 1,
+          sourceTerm,
+          targetTerm,
+        }),
+      ]);
+    } finally {
+      await cleanupFixture(fixture);
+    }
+  });
+
   it("reads Unicode previews, skips whitespace, and inspects retained queued translations", async () => {
     const fixture = await seedFixture(
       [

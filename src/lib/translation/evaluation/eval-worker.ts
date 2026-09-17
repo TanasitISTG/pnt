@@ -55,7 +55,7 @@ function canonicalTimestamp(value: string): string {
 }
 
 function containsLiteralText(text: string, candidate: string): boolean {
-  if (candidate.length === 0) return true;
+  if (candidate.length === 0) return false;
   return text.includes(candidate);
 }
 
@@ -342,12 +342,14 @@ export async function runTranslationEvalReport(reportId: string) {
       .select({ source: glossaryTerms.source, target: glossaryTerms.target })
       .from(glossaryTerms)
       .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved")));
-    const approvedTerms = terms.toSorted(compareTerms);
+    const approvedTerms = terms
+      .filter((term) => term.source.trim().length > 0 && term.target.trim().length > 0)
+      .sort(compareTerms);
     const languagePair = `${novel.sourceLang}->${novel.targetLang}`;
     const contextFingerprint = createEvalContextFingerprint(
       novel.sourceLang,
       novel.targetLang,
-      approvedTerms,
+      terms,
     );
     const protectedTerms = approvedTerms.map((term) => term.target);
     const results: EvalStoredResultV2[] = [];
