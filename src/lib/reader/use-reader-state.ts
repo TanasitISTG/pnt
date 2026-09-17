@@ -38,7 +38,6 @@ import { useHydrated } from "@/lib/use-hydrated";
 import { nanoid } from "@/lib/utils";
 
 const FLUSH_INTERVAL_MS = 4_000;
-const FLUSH_DELTA = 0.02;
 
 const EMPTY_STATE: ReaderNovelState = {
   lastChapterId: null,
@@ -83,11 +82,10 @@ export interface ReaderStateApi extends ReaderProgressStore {
 
 export interface AccountReaderPersistence {
   setChapter(input: { novelId: string; chapterId: string }): Promise<unknown>;
-  savePosition(input: {
-    novelId: string;
-    chapterId: string;
-    scrollFraction: number;
-  }): Promise<unknown>;
+  savePosition(
+    input: { novelId: string; chapterId: string; scrollFraction: number },
+    options?: { keepalive?: boolean },
+  ): Promise<unknown>;
   markRead(input: { novelId: string; chapterId: string }): Promise<unknown>;
   createBookmark(
     input: ReaderBookmarkInput & { novelId: string },
@@ -96,9 +94,18 @@ export interface AccountReaderPersistence {
   removeBookmark(input: { bookmarkId: string }): Promise<unknown>;
 }
 
+function keepaliveFetch(
+  ...[input, init]: Parameters<typeof globalThis.fetch>
+): ReturnType<typeof globalThis.fetch> {
+  return globalThis.fetch(input, { ...init, keepalive: true });
+}
+
 const DEFAULT_PERSISTENCE: AccountReaderPersistence = {
   setChapter: (input) => setReaderChapter({ data: input }),
-  savePosition: (input) => saveReaderPosition({ data: input }),
+  savePosition: (input, options) =>
+    options?.keepalive
+      ? saveReaderPosition({ data: input, fetch: keepaliveFetch })
+      : saveReaderPosition({ data: input }),
   markRead: (input) => markReaderChapterRead({ data: input }),
   createBookmark: (input) => createBookmark({ data: input }),
   updateBookmarkNote: (input) => updateBookmarkNote({ data: input }),
@@ -253,7 +260,7 @@ export function createAccountReaderStore({
     queryClient.setQueryData(readerStateQueryKey(novelId), updater(current));
   };
 
-  const persistFraction = (fraction: number) => {
+  const persistFraction = (fraction: number, options?: { keepalive?: boolean }) => {
     hasFlushed = true;
     lastFlushedAt = now();
     lastFlushedFraction = fraction;
@@ -263,7 +270,13 @@ export function createAccountReaderStore({
     }
     const chapterId = localChapterId;
     if (chapterId === null) return;
-    enqueue(() => write.savePosition({ novelId, chapterId, scrollFraction: fraction }));
+    updateCache((state) =>
+      state.lastChapterId === chapterId ? { ...state, scrollFraction: fraction } : state,
+    );
+    enqueue(() => {
+      const input = { novelId, chapterId, scrollFraction: fraction };
+      return options ? write.savePosition(input, options) : write.savePosition(input);
+    });
   };
 
   const store: ReaderStateStore = {
@@ -310,16 +323,17 @@ export function createAccountReaderStore({
     },
     saveScrollFraction: (fraction) => {
       localFraction = fraction;
-      const moved =
-        lastFlushedFraction === null || Math.abs(fraction - lastFlushedFraction) >= FLUSH_DELTA;
-      const elapsed = now() - lastFlushedAt >= FLUSH_INTERVAL_MS;
-      if (!moved && !elapsed) return;
+      if (fraction === lastFlushedFraction) return;
+      const remaining = Math.max(0, FLUSH_INTERVAL_MS - (now() - lastFlushedAt));
+      const elapsed = remaining === 0;
       if (hasFlushed && !elapsed) {
         if (pendingTimer === null) {
           pendingTimer = setTimeout(() => {
             pendingTimer = null;
-            if (localFraction !== null) persistFraction(localFraction);
-          }, FLUSH_INTERVAL_MS);
+            if (localFraction !== null && localFraction !== lastFlushedFraction) {
+              persistFraction(localFraction);
+            }
+          }, remaining);
         }
         return;
       }
@@ -327,10 +341,8 @@ export function createAccountReaderStore({
     },
     flushScrollFraction: (fraction, options) => {
       localFraction = fraction;
-      // A request started while the page unloads is aborted by the browser; the last
-      // periodic flush stands instead of a write that can never land.
-      if (options?.unload) return;
-      persistFraction(fraction);
+      if (options?.unload) persistFraction(fraction, { keepalive: true });
+      else persistFraction(fraction);
     },
     addBookmark: (input) => {
       if (findBookmarkAtSpot(readCachedState(queryClient, novelId).bookmarks, input)) return false;

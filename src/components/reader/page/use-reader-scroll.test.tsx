@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
+import { QueryClient } from "@tanstack/react-query";
 import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
 import { createRef, useCallback, useRef, useState } from "react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 import { getReaderProgress } from "@/lib/reader/progress";
-import type { ReaderProgressStore } from "@/lib/reader/use-reader-state";
-import { createLocalReaderStore } from "@/lib/reader/use-reader-state";
+import { readerStateQueryKey } from "@/lib/reader/query";
+import type { ReaderNovelState } from "@/lib/reader/types";
+import type { AccountReaderPersistence, ReaderProgressStore } from "@/lib/reader/use-reader-state";
+import { createAccountReaderStore, createLocalReaderStore } from "@/lib/reader/use-reader-state";
 import { useReaderScroll } from "./use-reader-scroll";
 import { ReaderProse } from "../content/reader-content-prose";
 import { ReaderChapterProgress } from "../controls/reader-chapter-progress";
@@ -569,36 +572,100 @@ describe("useReaderScroll", () => {
     act(() => hook.unmount());
   });
 
-  it("routes every write through the injected store", () => {
-    const calls: string[] = [];
-    const store = {
-      getProgress: () => ({ lastChapterId: "chapter", readChapterIds: [], scrollFraction: 0 }),
-      markOpened: (chapterId: string) => calls.push(`opened:${chapterId}`),
-      markRead: (chapterId: string) => calls.push(`read:${chapterId}`),
-      saveScrollFraction: (fraction: number) => calls.push(`save:${fraction}`),
-      flushScrollFraction: (fraction: number) => calls.push(`flush:${fraction}`),
-    };
+  it.each(["pagehide", "hidden visibilitychange"])(
+    "persists and restores the latest account fraction on %s before the capture timer",
+    async (lifecycle) => {
+      vi.setSystemTime(0);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { staleTime: 30_000, retry: false } },
+      });
+      queryClient.setQueryData<ReaderNovelState>(readerStateQueryKey("novel"), {
+        lastChapterId: "chapter",
+        scrollFraction: 0.2,
+        readChapterIds: [],
+        bookmarks: [],
+        bookmarkNextCursor: null,
+      });
+      let durableFraction = 0.2;
+      const savePosition = vi.fn(
+        async (
+          input: Parameters<AccountReaderPersistence["savePosition"]>[0],
+          _options?: { keepalive?: boolean },
+        ) => {
+          durableFraction = input.scrollFraction;
+          return {};
+        },
+      );
+      const persist = { setChapter: vi.fn(async () => ({})), savePosition };
+      const store = createAccountReaderStore({ novelId: "novel", queryClient, persist });
+      const toolbar = createToolbar();
+      const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 
-    const hook = renderReaderScroll({
-      chapterId: "chapter",
-      store,
-      prose: createProse(),
-      toolbar: createToolbar(),
-    });
-    act(() => vi.runAllTimers());
-    expect(calls).toEqual(["opened:chapter"]);
+      try {
+        const hook = renderReaderScroll({
+          chapterId: "chapter",
+          store,
+          prose: createProse(),
+          toolbar,
+        });
+        // The fake animation frames settle restoration before scroll capture starts.
+        await act(async () => vi.advanceTimersByTimeAsync(10));
+        scrollToFraction(0.6);
+        window.dispatchEvent(new Event("scroll"));
+        await act(async () => vi.advanceTimersByTimeAsync(300));
+        expect(durableFraction).toBe(0.6);
+        expect(savePosition).toHaveBeenCalledTimes(1);
 
-    scrollToFraction(0.5);
-    window.dispatchEvent(new Event("scroll"));
-    act(() => vi.advanceTimersByTime(300));
-    expect(calls).toEqual(["opened:chapter", "save:0.5"]);
+        // The second event shares the frame gate: lifecycle capture must read the
+        // current geometry, not just reuse the earlier pending 0.605 sample.
+        scrollToFraction(0.605);
+        window.dispatchEvent(new Event("scroll"));
+        scrollToFraction(0.61);
+        window.dispatchEvent(new Event("scroll"));
+        await act(async () => vi.advanceTimersByTimeAsync(100));
+        document.dispatchEvent(new Event("visibilitychange"));
+        await act(async () => vi.advanceTimersByTimeAsync(0));
+        expect(durableFraction).toBe(0.6);
+        expect(savePosition).toHaveBeenCalledTimes(1);
 
-    scrollToFraction(0.75);
-    window.dispatchEvent(new Event("scroll"));
-    act(() => hook.unmount());
+        if (lifecycle === "pagehide") {
+          window.dispatchEvent(new Event("pagehide"));
+        } else {
+          visibility.mockReturnValue("hidden");
+          document.dispatchEvent(new Event("visibilitychange"));
+        }
+        // Drain the persistence queue without reaching the 300ms capture deadline
+        // or the account store's four-second trailing-save deadline.
+        await act(async () => vi.advanceTimersByTimeAsync(0));
+        expect(durableFraction).toBe(0.61);
+        expect(savePosition).toHaveBeenLastCalledWith(
+          { novelId: "novel", chapterId: "chapter", scrollFraction: 0.61 },
+          { keepalive: true },
+        );
+        hook.unmount();
 
-    expect(calls).toEqual(["opened:chapter", "save:0.5", "flush:0.75"]);
-  });
+        const reopenedStore = createAccountReaderStore({ novelId: "novel", queryClient, persist });
+        setScrollY(0);
+        vi.mocked(window.scrollTo).mockClear();
+        const reopened = renderReaderScroll({
+          chapterId: "chapter",
+          store: reopenedStore,
+          prose: createProse(),
+          toolbar,
+        });
+        await act(async () => vi.advanceTimersByTimeAsync(10));
+        expect(window.scrollTo).toHaveBeenCalledWith({
+          top: RANGE_START + 0.61 * RANGE_SPAN,
+          behavior: "instant",
+        });
+        expect(reopenedStore.getProgress().readChapterIds).toEqual([]);
+        reopened.unmount();
+      } finally {
+        visibility.mockRestore();
+        queryClient.clear();
+      }
+    },
+  );
 
   it("survives a caller that rebuilds its store object on every render", () => {
     let opened = 0;

@@ -217,35 +217,76 @@ describe("createAccountReaderStore", () => {
     });
   });
 
-  it("ignores scroll samples that barely moved inside the flush window", async () => {
-    let clock = 0;
-    const savePosition = vi.fn(async () => ({}));
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(readerStateQueryKey("novel"), SERVER_STATE);
-    const store = createAccountReaderStore({
-      novelId: "novel",
-      queryClient,
-      persist: { savePosition },
-      now: () => clock,
+  it("persists a final tiny movement at the original four-second deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let durableFraction = 0.2;
+    const savePosition = vi.fn(async ({ scrollFraction }: { scrollFraction: number }) => {
+      durableFraction = scrollFraction;
     });
+    const { store } = setupAccountStore({ setChapter: async () => ({}), savePosition });
 
     store.markOpened("chapter-1");
-    await flushPromises();
-    savePosition.mockClear();
+    store.saveScrollFraction(0.6);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(durableFraction).toBe(0.6);
 
-    store.saveScrollFraction(0.5);
-    await flushPromises();
+    await vi.advanceTimersByTimeAsync(500);
+    store.saveScrollFraction(0.61);
+    await vi.advanceTimersByTimeAsync(3_499);
+    expect(durableFraction).toBe(0.6);
     expect(savePosition).toHaveBeenCalledTimes(1);
 
-    clock = 500;
-    store.saveScrollFraction(0.505);
-    await flushPromises();
-    expect(savePosition).toHaveBeenCalledTimes(1);
-
-    clock = 4_500;
-    store.saveScrollFraction(0.51);
-    await flushPromises();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(durableFraction).toBe(0.61);
     expect(savePosition).toHaveBeenCalledTimes(2);
+  });
+
+  it("coalesces changed samples without moving the original trailing deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const durableFractions: number[] = [];
+    const savePosition = async ({ scrollFraction }: { scrollFraction: number }) => {
+      durableFractions.push(scrollFraction);
+    };
+    const { store } = setupAccountStore({ setChapter: async () => ({}), savePosition });
+
+    store.markOpened("chapter-1");
+    store.saveScrollFraction(0.6);
+    await vi.advanceTimersByTimeAsync(500);
+    store.saveScrollFraction(0.63);
+    await vi.advanceTimersByTimeAsync(1_000);
+    store.saveScrollFraction(0.66);
+    await vi.advanceTimersByTimeAsync(2_000);
+    store.saveScrollFraction(0.69);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(durableFractions).toEqual([0.6]);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(durableFractions).toEqual([0.6, 0.69]);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(durableFractions).toEqual([0.6, 0.69]);
+  });
+
+  it("does not write a trailing sample when scrolling returns to the sent fraction", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const durableFractions: number[] = [];
+    const savePosition = async ({ scrollFraction }: { scrollFraction: number }) => {
+      durableFractions.push(scrollFraction);
+    };
+    const { store } = setupAccountStore({ setChapter: async () => ({}), savePosition });
+
+    store.markOpened("chapter-1");
+    store.saveScrollFraction(0.6);
+    await vi.advanceTimersByTimeAsync(500);
+    store.saveScrollFraction(0.65);
+    await vi.advanceTimersByTimeAsync(500);
+    store.saveScrollFraction(0.6);
+    await vi.advanceTimersByTimeAsync(7_000);
+
+    expect(durableFractions).toEqual([0.6]);
+    expect(store.getProgress().scrollFraction).toBe(0.6);
   });
 
   it("does not repeat a sample the periodic flush already sent", async () => {
@@ -302,48 +343,141 @@ describe("createAccountReaderStore", () => {
       scrollFraction: 0.55,
     });
   });
-
-  it("skips the write that an unloading page could never deliver", async () => {
+  it("restores the latest flushed fraction for a fresh store sharing the cache", async () => {
+    const setChapter = vi.fn(async () => ({}));
     const savePosition = vi.fn(async () => ({}));
-    const { store } = setupAccountStore({ savePosition });
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(readerStateQueryKey("novel"), {
+      lastChapterId: "chapter-1",
+      scrollFraction: 0.2,
+      readChapterIds: [],
+      bookmarks: [],
+      bookmarkNextCursor: null,
+    });
 
-    store.markOpened("chapter-1");
-    await flushPromises();
-    savePosition.mockClear();
-
-    store.flushScrollFraction(0.55, { unload: true });
-    await flushPromises();
-    expect(savePosition).not.toHaveBeenCalled();
-
-    store.flushScrollFraction(0.6);
+    const first = createAccountReaderStore({
+      novelId: "novel",
+      queryClient,
+      persist: { setChapter, savePosition },
+    });
+    first.markOpened("chapter-1");
+    first.saveScrollFraction(0.6);
+    first.flushScrollFraction(0.6);
     await flushPromises();
     expect(savePosition).toHaveBeenCalledWith({
       novelId: "novel",
       chapterId: "chapter-1",
       scrollFraction: 0.6,
     });
+
+    const second = createAccountReaderStore({
+      novelId: "novel",
+      queryClient,
+      persist: { setChapter, savePosition },
+    });
+    second.markOpened("chapter-1");
+
+    expect(second.getProgress().scrollFraction).toBe(0.6);
+    expect(second.getProgress().readChapterIds).toEqual([]);
   });
 
-  it("serializes writes so a chapter change cannot be overwritten by a late sample", async () => {
-    const order: string[] = [];
-    const { store } = setupAccountStore({
-      setChapter: async () => {
-        order.push("open:start");
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        order.push("open:end");
+  it("queues an unload flush behind an earlier save and preserves the latest fraction", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const earlierSave = Promise.withResolvers<void>();
+    let durableFraction = 0.2;
+    let durableKeepalive: boolean | undefined;
+    const savePosition = vi.fn(
+      async ({ scrollFraction }: { scrollFraction: number }, options?: { keepalive?: boolean }) => {
+        if (scrollFraction === 0.6) await earlierSave.promise;
+        durableFraction = scrollFraction;
+        durableKeepalive = options?.keepalive;
       },
-      savePosition: async () => {
-        order.push("save");
-      },
+    );
+    const setChapter = async () => ({});
+    const { queryClient, store } = setupAccountStore({ setChapter, savePosition });
+    queryClient.setQueryData(readerStateQueryKey("novel"), {
+      ...SERVER_STATE,
+      scrollFraction: 0.2,
+      readChapterIds: [],
     });
 
     store.markOpened("chapter-1");
-    store.saveScrollFraction(0.5);
-    await flushPromises();
-    expect(order).toEqual(["open:start"]);
+    store.saveScrollFraction(0.6);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(savePosition).toHaveBeenCalledTimes(1);
+    expect(savePosition).toHaveBeenCalledWith({
+      novelId: "novel",
+      chapterId: "chapter-1",
+      scrollFraction: 0.6,
+    });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(order).toEqual(["open:start", "open:end", "save"]);
+    await vi.advanceTimersByTimeAsync(500);
+    store.saveScrollFraction(0.61);
+    store.flushScrollFraction(0.61, { unload: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(savePosition).toHaveBeenCalledTimes(1);
+    expect(durableFraction).toBe(0.2);
+
+    earlierSave.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(savePosition).toHaveBeenCalledTimes(2);
+    expect(savePosition).toHaveBeenLastCalledWith(
+      { novelId: "novel", chapterId: "chapter-1", scrollFraction: 0.61 },
+      { keepalive: true },
+    );
+    expect(durableFraction).toBe(0.61);
+    expect(durableKeepalive).toBe(true);
+
+    const reopened = createAccountReaderStore({
+      novelId: "novel",
+      queryClient,
+      persist: { setChapter, savePosition },
+    });
+    reopened.markOpened("chapter-1");
+    expect(reopened.getProgress().scrollFraction).toBe(0.61);
+    expect(reopened.getProgress().readChapterIds).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(savePosition).toHaveBeenCalledTimes(2);
+    expect(durableFraction).toBe(0.61);
+  });
+
+  it("does not let an outgoing store flush contaminate a newer chapter cache", async () => {
+    const setChapter = async () => ({});
+    const savePosition = vi.fn(async () => ({}));
+    const { queryClient, store: outgoing } = setupAccountStore({ setChapter, savePosition });
+    outgoing.markOpened("chapter-1");
+    outgoing.saveScrollFraction(0.6);
+    await flushPromises();
+
+    const incoming = createAccountReaderStore({
+      novelId: "novel",
+      queryClient,
+      persist: { setChapter, savePosition },
+    });
+    incoming.markOpened("chapter-2");
+    incoming.saveScrollFraction(0.35);
+    await flushPromises();
+
+    outgoing.flushScrollFraction(0.61);
+    expect(cachedState(queryClient).lastChapterId).toBe("chapter-2");
+    expect(cachedState(queryClient).scrollFraction).toBe(0.35);
+    await flushPromises();
+    expect(savePosition).toHaveBeenLastCalledWith({
+      novelId: "novel",
+      chapterId: "chapter-1",
+      scrollFraction: 0.61,
+    });
+
+    const reopened = createAccountReaderStore({
+      novelId: "novel",
+      queryClient,
+      persist: { setChapter, savePosition },
+    });
+    reopened.markOpened("chapter-2");
+    expect(reopened.getProgress().lastChapterId).toBe("chapter-2");
+    expect(reopened.getProgress().scrollFraction).toBe(0.35);
   });
 
   it("marks a chapter read once and keeps the read set deduplicated", async () => {
