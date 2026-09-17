@@ -29,6 +29,23 @@ export const updateBookmarkNoteSchema = z.object({
   note: z.string().max(READER_BOOKMARK_NOTE_MAX_LENGTH).nullable(),
 });
 
+// The cursor carries the database's own timestamp text so fractional precision survives
+// the round trip; the server also casts it back to a timestamp when binding the query.
+export const READER_BOOKMARK_CURSOR_TIMESTAMP_PATTERN =
+  /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/;
+
+export const readerBookmarkCursorSchema = z.object({
+  createdAt: z
+    .string()
+    .max(26)
+    .regex(READER_BOOKMARK_CURSOR_TIMESTAMP_PATTERN, "Invalid bookmark cursor timestamp"),
+  id: z.string().min(1),
+});
+
+export const listReaderBookmarksSchema = readerNovelSchema.extend({
+  cursor: readerBookmarkCursorSchema.nullable().default(null),
+});
+
 export const deleteBookmarkSchema = z.object({
   bookmarkId: z.string().min(1),
 });
@@ -38,3 +55,4 @@ export type SaveReaderPositionInput = z.input<typeof saveReaderPositionSchema>;
 export type CreateBookmarkInput = z.input<typeof createBookmarkSchema>;
 export type UpdateBookmarkNoteInput = z.input<typeof updateBookmarkNoteSchema>;
 export type DeleteBookmarkInput = z.input<typeof deleteBookmarkSchema>;
+export type ListReaderBookmarksInput = z.input<typeof listReaderBookmarksSchema>;

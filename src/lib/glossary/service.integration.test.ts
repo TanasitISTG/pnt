@@ -281,9 +281,43 @@ integrationDescribe("glossary pagination PostgreSQL contracts", () => {
 
     const dispatched: string[] = [];
     try {
+      const snapshot = async () => {
+        const [state] = await sql`
+          SELECT row_to_json(t) AS term, row_to_json(c) AS chapter,
+                 row_to_json(n) AS novel, row_to_json(j) AS job,
+                 (SELECT count(*)::int FROM workflow_outbox
+                  WHERE payload_json LIKE ${`%${jobId}%`}) AS outbox_count
+          FROM glossary_terms t, chapters c, novels n, translation_jobs j
+          WHERE t.id = ${termId} AND c.id = ${chapterId}
+            AND n.id = ${novelId} AND j.id = ${jobId}
+        `;
+        return state;
+      };
+      const before = await snapshot();
+      await expect(
+        updateGlossaryTermAtomic(
+          ownerUserId,
+          { termId, target: " \t\n ", applyToChapters: true },
+          async (id) => {
+            dispatched.push(id);
+          },
+        ),
+      ).rejects.toThrow();
+      await expect(
+        updateGlossaryTermAtomic(
+          ownerUserId,
+          { termId, source: " \t\n ", target: "New Name", applyToChapters: true },
+          async (id) => {
+            dispatched.push(id);
+          },
+        ),
+      ).rejects.toThrow();
+      expect(await snapshot()).toEqual(before);
+      expect(dispatched).toEqual([]);
+
       await updateGlossaryTermAtomic(
         ownerUserId,
-        { termId, target: "New Name", applyToChapters: true },
+        { termId, target: " New Name ", applyToChapters: true },
         async (outboxId) => {
           dispatched.push(outboxId);
         },
@@ -337,4 +371,70 @@ integrationDescribe("glossary pagination PostgreSQL contracts", () => {
       await sql`DELETE FROM "user" WHERE "id" = ${ownerUserId}`;
     }
   }, 30_000);
+
+  it.each(["", " \t\n "])(
+    "repairs a legacy blank target %j without changing chapter work",
+    async (oldTarget) => {
+      const ownerUserId = `user-${randomUUID()}`;
+      const novelId = `novel-${randomUUID()}`;
+      const termId = `term-${randomUUID()}`;
+      const chapterId = `chapter-${randomUUID()}`;
+      const jobId = `job-${randomUUID()}`;
+      await sql.begin(async (tx) => {
+        await tx`INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
+        VALUES (${ownerUserId}, 'Legacy Owner', ${`${ownerUserId}@example.test`}, true, now(), now())`;
+        await tx`INSERT INTO novels (id, user_id, title, source_lang, target_lang, story_summary)
+        VALUES (${novelId}, ${ownerUserId}, 'Legacy Fixture', 'zh', 'th', 'story summary')`;
+        await tx`INSERT INTO glossary_terms (id, novel_id, source, target, category, status)
+        VALUES (${termId}, ${novelId}, 'Alpha', ${oldTarget}, 'other', 'approved')`;
+        await tx`INSERT INTO chapters
+        (id, novel_id, number, title, raw_content, translated_content, status, summary,
+         raw_char_count, active_translation_job_id)
+        VALUES (${chapterId}, ${novelId}, 1, 'Chapter', 'raw', ${`Prose ${oldTarget} remains`},
+          'translating', 'chapter summary', 3, ${jobId})`;
+        await tx`INSERT INTO translation_jobs (id, chapter_id, status, generation, total_chunks)
+        VALUES (${jobId}, ${chapterId}, 'running', 4, 1)`;
+      });
+      try {
+        const snapshot = async () => {
+          const [state] = await sql`SELECT row_to_json(c) AS chapter, row_to_json(n) AS novel,
+          row_to_json(j) AS job FROM chapters c, novels n, translation_jobs j
+          WHERE c.id = ${chapterId} AND n.id = ${novelId} AND j.id = ${jobId}`;
+          return state;
+        };
+        const before = await snapshot();
+        const dispatched: string[] = [];
+        await expect(
+          updateGlossaryTermAtomic(
+            ownerUserId,
+            {
+              termId,
+              target: " Beta ",
+              applyToChapters: true,
+            },
+            async (id) => {
+              dispatched.push(id);
+            },
+          ),
+        ).resolves.toEqual({ success: true });
+        const [term] =
+          await sql`SELECT source, target, category, status FROM glossary_terms WHERE id = ${termId}`;
+        expect(term).toEqual({
+          source: "Alpha",
+          target: "Beta",
+          category: "other",
+          status: "approved",
+        });
+        expect(await snapshot()).toEqual(before);
+        expect(dispatched).toEqual([]);
+        const events =
+          await sql`SELECT id FROM workflow_outbox WHERE payload_json LIKE ${`%${jobId}%`}`;
+        expect(events).toEqual([]);
+      } finally {
+        await sql`DELETE FROM workflow_outbox WHERE payload_json LIKE ${`%${jobId}%`}`;
+        await sql`DELETE FROM novels WHERE id = ${novelId}`;
+        await sql`DELETE FROM "user" WHERE id = ${ownerUserId}`;
+      }
+    },
+  );
 });

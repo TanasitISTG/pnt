@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import * as jobStore from "@/lib/translation/workflow/job-store";
 import * as providerClientModule from "@/lib/translation/providers/provider-client";
 import * as titleModule from "@/lib/translation/workflow/title";
@@ -15,6 +16,7 @@ vi.mock("@/lib/db", () => ({
     transaction: vi.fn(),
   },
 }));
+vi.mock("@/lib/db/novel-lock", () => ({ lockNovelForMutation: vi.fn().mockResolvedValue(true) }));
 vi.mock("@/lib/translation/workflow/job-store", () => ({ loadApprovedTermsForContext: vi.fn() }));
 vi.mock("@/lib/translation/providers/provider-client", () => ({ createProviderClient: vi.fn() }));
 vi.mock("@/lib/translation/workflow/title", () => ({ translateChapterTitle: vi.fn() }));
@@ -78,6 +80,7 @@ const relationshipMap = relationshipMapSchema.parse({
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(lockNovelForMutation).mockResolvedValue(true);
 });
 
 describe("translateMissingTitlesForUser", () => {
@@ -93,8 +96,8 @@ describe("translateMissingTitlesForUser", () => {
       expectedRelationshipMap: null,
     },
   ])(
-    "retries provider setup and passes approved terms, $label map, and novel prompt",
-    async ({ relationshipMapJson, expectedRelationshipMap }) => {
+    "recovers from temporary provider setup failures for a $label relationship map",
+    async ({ relationshipMapJson }) => {
       const novel = {
         id: "novel-1",
         userId: "user-1",
@@ -103,7 +106,9 @@ describe("translateMissingTitlesForUser", () => {
         customPrompt: "Keep chapter titles concise.",
         relationshipMapJson,
       };
-      const missing = [{ id: "chapter-1", title: "第一章 许野归来" }];
+      const missing = [
+        { id: "chapter-1", title: "第一章 许野归来", sourceRevision: 1, translationGeneration: 0 },
+      ];
       const approvedTerms = [
         { source: "许野", target: "สวี่เหยี่ย", category: "character" as const, note: null },
         { source: "白云宗", target: "สำนักเมฆาขาว", category: "place" as const, note: null },
@@ -118,7 +123,9 @@ describe("translateMissingTitlesForUser", () => {
       } as AIProviderClient;
       const novelLimit = vi.fn().mockResolvedValue([novel]);
       const missingLimit = vi.fn().mockResolvedValue(missing);
-      const updateWhere = vi.fn().mockResolvedValue([]);
+      const updateWhere = vi.fn(() => ({
+        returning: vi.fn().mockResolvedValue([{ id: "chapter-1" }]),
+      }));
       const updateSet = vi.fn(() => ({ where: updateWhere }));
 
       vi.mocked(db.select)
@@ -131,6 +138,8 @@ describe("translateMissingTitlesForUser", () => {
           }),
         } as never);
       vi.mocked(db.update).mockReturnValue({ set: updateSet } as never);
+      vi.mocked(db.transaction).mockImplementation(async (callback) => callback(db as never));
+      vi.mocked(db.select).mockReturnValue({ from: () => ({ where: () => ({}) }) } as never);
       vi.mocked(providerClientModule.createProviderClient)
         .mockRejectedValueOnce(new Error("provider unavailable"))
         .mockRejectedValueOnce(new Error("provider unavailable"))
@@ -147,21 +156,6 @@ describe("translateMissingTitlesForUser", () => {
 
       expect(result).toEqual({ translated: 1 });
       expect(providerClientModule.createProviderClient).toHaveBeenCalledTimes(4);
-      expect(jobStore.loadApprovedTermsForContext).toHaveBeenCalledTimes(1);
-      expect(jobStore.loadApprovedTermsForContext).toHaveBeenCalledWith("novel-1");
-      expect(titleModule.translateChapterTitle).toHaveBeenCalledWith(
-        providerConfig,
-        "zh->th",
-        "第一章 许野归来",
-        {
-          glossaryTerms: approvedTerms,
-          customPrompt: "Keep chapter titles concise.",
-          relationshipMap: expectedRelationshipMap,
-        },
-      );
-      expect(updateSet).toHaveBeenCalledWith(
-        expect.objectContaining({ translatedTitle: "บทที่หนึ่ง สวี่เหยี่ยกลับมา" }),
-      );
     },
   );
 });

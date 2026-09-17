@@ -15,6 +15,8 @@ import {
 import { SafeServerError } from "@/lib/server-fn-error";
 import { assertExportableBackup, parseBackup, type Backup } from "./backup.schemas";
 
+const BATCH_SIZE = 50;
+
 function iso(value: Date | string | null): string | null {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
@@ -85,53 +87,59 @@ export async function exportBackupForUser(userId: string, novelId?: string): Pro
     app: "pnt",
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
-    novels: novelRows.map((novel) => ({
-      id: novel.id,
-      title: novel.title,
-      originalTitle: novel.originalTitle,
-      author: novel.author,
-      description: novel.description,
-      coverBase64: novel.cover ? Buffer.from(novel.cover).toString("base64") : null,
-      coverMime: exportableCoverMime(novel.id, novel.coverMime, Boolean(novel.cover)),
-      sourceLang: novel.sourceLang,
-      targetLang: novel.targetLang,
-      customPrompt: novel.customPrompt,
-      storySummary: novel.storySummary,
-      relationshipMap: parseRelationshipMap(novel.relationshipMapJson) ?? emptyRelationshipMap(),
-      chunkSize: novel.chunkSize,
-      contextTailLength: novel.contextTailLength,
-      publishedAt: iso(novel.publishedAt),
-      createdAt: iso(novel.createdAt) || new Date().toISOString(),
-      updatedAt: iso(novel.updatedAt) || new Date().toISOString(),
-      chapters: (chaptersByNovel.get(novel.id) ?? []).map((chapter) => ({
-        id: chapter.id,
-        number: chapter.number,
-        title: chapter.title,
-        translatedTitle: chapter.translatedTitle,
-        rawContent: chapter.rawContent,
-        translatedContent: chapter.translatedContent,
-        status: chapter.status,
-        summary: chapter.summary,
-        rawCharCount: chapter.rawCharCount,
-        sourceRevision: chapter.sourceRevision,
-        translationGeneration: chapter.translationGeneration,
-        publishedAt: iso(chapter.publishedAt),
-        translatedAt: iso(chapter.translatedAt),
-        editedAt: iso(chapter.editedAt),
-        createdAt: iso(chapter.createdAt) || new Date().toISOString(),
-        updatedAt: iso(chapter.updatedAt) || new Date().toISOString(),
-      })),
-      glossaryTerms: (termsByNovel.get(novel.id) ?? []).map((term) => ({
-        id: term.id,
-        source: term.source,
-        target: term.target,
-        category: term.category,
-        note: term.note,
-        status: term.status,
-        createdAt: iso(term.createdAt) || new Date().toISOString(),
-        updatedAt: iso(term.updatedAt) || new Date().toISOString(),
-      })),
-    })),
+    novels: novelRows.map((novel) => {
+      const relationshipMap = parseRelationshipMap(novel.relationshipMapJson);
+      if (!relationshipMap) {
+        throw new SafeServerError("Novel " + novel.id + " has an invalid relationship map");
+      }
+      return {
+        id: novel.id,
+        title: novel.title,
+        originalTitle: novel.originalTitle,
+        author: novel.author,
+        description: novel.description,
+        coverBase64: novel.cover ? Buffer.from(novel.cover).toString("base64") : null,
+        coverMime: exportableCoverMime(novel.id, novel.coverMime, Boolean(novel.cover)),
+        sourceLang: novel.sourceLang,
+        targetLang: novel.targetLang,
+        customPrompt: novel.customPrompt,
+        storySummary: novel.storySummary,
+        relationshipMap,
+        chunkSize: novel.chunkSize,
+        contextTailLength: novel.contextTailLength,
+        publishedAt: iso(novel.publishedAt),
+        createdAt: iso(novel.createdAt) || new Date().toISOString(),
+        updatedAt: iso(novel.updatedAt) || new Date().toISOString(),
+        chapters: (chaptersByNovel.get(novel.id) ?? []).map((chapter) => ({
+          id: chapter.id,
+          number: chapter.number,
+          title: chapter.title,
+          translatedTitle: chapter.translatedTitle,
+          rawContent: chapter.rawContent,
+          translatedContent: chapter.translatedContent,
+          status: chapter.status,
+          summary: chapter.summary,
+          rawCharCount: chapter.rawCharCount,
+          sourceRevision: chapter.sourceRevision,
+          translationGeneration: chapter.translationGeneration,
+          publishedAt: iso(chapter.publishedAt),
+          translatedAt: iso(chapter.translatedAt),
+          editedAt: iso(chapter.editedAt),
+          createdAt: iso(chapter.createdAt) || new Date().toISOString(),
+          updatedAt: iso(chapter.updatedAt) || new Date().toISOString(),
+        })),
+        glossaryTerms: (termsByNovel.get(novel.id) ?? []).map((term) => ({
+          id: term.id,
+          source: term.source,
+          target: term.target,
+          category: term.category,
+          note: term.note,
+          status: term.status,
+          createdAt: iso(term.createdAt) || new Date().toISOString(),
+          updatedAt: iso(term.updatedAt) || new Date().toISOString(),
+        })),
+      };
+    }),
   };
 
   // Guarantees the invariant that matters for a backup: anything this exports,
@@ -154,81 +162,76 @@ export async function importBackupForUser(userId: string, value: unknown) {
   }
 
   const imported = await db.transaction(async (tx) => {
-    const importedNovels = backup.novels.map((sourceNovel) => ({
-      sourceNovel,
-      newNovelId: nanoid(),
-    }));
-    const importedNovelIds = importedNovels.map(({ newNovelId }) => newNovelId);
-
-    if (importedNovels.length) {
-      await tx.insert(novels).values(
-        importedNovels.map(({ sourceNovel, newNovelId }) => ({
-          id: newNovelId,
-          userId,
-          title: `${sourceNovel.title} (imported)`,
-          originalTitle: sourceNovel.originalTitle,
-          author: sourceNovel.author,
-          description: sourceNovel.description,
-          cover: sourceNovel.coverBase64 ? Buffer.from(sourceNovel.coverBase64, "base64") : null,
-          coverMime: sourceNovel.coverMime,
-          sourceLang: sourceNovel.sourceLang,
-          targetLang: sourceNovel.targetLang,
-          customPrompt: sourceNovel.customPrompt,
-          storySummary: sourceNovel.storySummary,
-          relationshipMapJson: serializeRelationshipMap(
-            sourceNovel.relationshipMap ?? emptyRelationshipMap(),
-          ),
-          chunkSize: sourceNovel.chunkSize,
-          contextTailLength: sourceNovel.contextTailLength,
-          publishedAt: null,
-          createdAt: now,
-          updatedAt: now,
-        })),
-      );
-    }
-
-    const importedChapters = importedNovels.flatMap(({ sourceNovel, newNovelId }) =>
-      sourceNovel.chapters.map((chapter) => ({
-        id: nanoid(),
-        novelId: newNovelId,
-        number: chapter.number,
-        title: chapter.title,
-        translatedTitle: chapter.translatedTitle,
-        rawContent: chapter.rawContent,
-        translatedContent: chapter.translatedContent,
-        status:
-          chapter.status === "queued" || chapter.status === "translating" ? "raw" : chapter.status,
-        summary: chapter.summary,
-        rawCharCount: chapter.rawCharCount || chapter.rawContent.length,
-        sourceRevision: chapter.sourceRevision,
-        translationGeneration: chapter.translationGeneration,
-        activeTranslationJobId: null,
+    const importedNovelIds: string[] = [];
+    for (const sourceNovel of backup.novels) {
+      const newNovelId = nanoid();
+      await tx.insert(novels).values({
+        id: newNovelId,
+        userId,
+        title: `${sourceNovel.title} (imported)`,
+        originalTitle: sourceNovel.originalTitle,
+        author: sourceNovel.author,
+        description: sourceNovel.description,
+        cover: sourceNovel.coverBase64 ? Buffer.from(sourceNovel.coverBase64, "base64") : null,
+        coverMime: sourceNovel.coverMime,
+        sourceLang: sourceNovel.sourceLang,
+        targetLang: sourceNovel.targetLang,
+        customPrompt: sourceNovel.customPrompt,
+        storySummary: sourceNovel.storySummary,
+        relationshipMapJson: serializeRelationshipMap(
+          sourceNovel.relationshipMap ?? emptyRelationshipMap(),
+        ),
+        chunkSize: sourceNovel.chunkSize,
+        contextTailLength: sourceNovel.contextTailLength,
         publishedAt: null,
-        translatedAt: dateOrNull(chapter.translatedAt),
-        editedAt: dateOrNull(chapter.editedAt),
         createdAt: now,
         updatedAt: now,
-      })),
-    );
-    if (importedChapters.length) {
-      await tx.insert(chapters).values(importedChapters);
-    }
+      });
+      importedNovelIds.push(newNovelId);
 
-    const importedGlossaryTerms = importedNovels.flatMap(({ sourceNovel, newNovelId }) =>
-      sourceNovel.glossaryTerms.map((term) => ({
-        id: nanoid(),
-        novelId: newNovelId,
-        source: term.source,
-        target: term.target,
-        category: term.category,
-        note: term.note,
-        status: term.status,
-        createdAt: now,
-        updatedAt: now,
-      })),
-    );
-    if (importedGlossaryTerms.length) {
-      await tx.insert(glossaryTerms).values(importedGlossaryTerms);
+      for (let offset = 0; offset < sourceNovel.chapters.length; offset += BATCH_SIZE) {
+        await tx.insert(chapters).values(
+          sourceNovel.chapters.slice(offset, offset + BATCH_SIZE).map((chapter) => ({
+            id: nanoid(),
+            novelId: newNovelId,
+            number: chapter.number,
+            title: chapter.title,
+            translatedTitle: chapter.translatedTitle,
+            rawContent: chapter.rawContent,
+            translatedContent: chapter.translatedContent,
+            status:
+              chapter.status === "queued" || chapter.status === "translating"
+                ? "raw"
+                : chapter.status,
+            summary: chapter.summary,
+            rawCharCount: chapter.rawCharCount || chapter.rawContent.length,
+            sourceRevision: chapter.sourceRevision,
+            translationGeneration: chapter.translationGeneration,
+            activeTranslationJobId: null,
+            publishedAt: null,
+            translatedAt: dateOrNull(chapter.translatedAt),
+            editedAt: dateOrNull(chapter.editedAt),
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
+      }
+
+      for (let offset = 0; offset < sourceNovel.glossaryTerms.length; offset += BATCH_SIZE) {
+        await tx.insert(glossaryTerms).values(
+          sourceNovel.glossaryTerms.slice(offset, offset + BATCH_SIZE).map((term) => ({
+            id: nanoid(),
+            novelId: newNovelId,
+            source: term.source,
+            target: term.target,
+            category: term.category,
+            note: term.note,
+            status: term.status,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
+      }
     }
 
     return importedNovelIds;

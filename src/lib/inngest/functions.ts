@@ -21,6 +21,7 @@ import { log } from "@/lib/log";
 import { dispatchPendingWorkflowOutbox } from "./outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
 import { RETRY_COUNT } from "@/lib/retry";
+import { cleanupExpiredRateLimits } from "@/lib/rate-limit";
 import {
   failTranslationEvalReport,
   runTranslationEvalReport,
@@ -175,6 +176,23 @@ export const cleanupExpiredEpubUploadsFn = inngest.createFunction(
   },
   async ({ step }) => step.run("cleanup", () => cleanupExpiredEpubUploads()),
 );
+
+export const cleanupExpiredRateLimitsFn = inngest.createFunction(
+  {
+    id: "cleanup-expired-rate-limits",
+    triggers: { cron: "0 * * * *" },
+  },
+  async ({ step }) => {
+    let deleted = 0;
+    for (let batch = 0; batch < 100; batch++) {
+      const count = await step.run(`batch-${batch}`, () => cleanupExpiredRateLimits());
+      deleted += count;
+      if (count < 1000) break;
+    }
+    return deleted;
+  },
+);
+
 export const translationEvalFn = inngest.createFunction(
   {
     id: "translation-eval",
@@ -206,5 +224,6 @@ export const functions = [
   importChaptersFn,
   importEpubChaptersFn,
   cleanupExpiredEpubUploadsFn,
+  cleanupExpiredRateLimitsFn,
   translationEvalFn,
 ];

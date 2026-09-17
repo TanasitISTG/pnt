@@ -68,6 +68,23 @@ describe("backup restore schema", () => {
     expect(parsed.novels[0]?.chapters[0]?.number).toBe("1.00");
   });
 
+  it.each([
+    ["originalTitle", 500],
+    ["author", 200],
+    ["description", 5000],
+    ["customPrompt", 10000],
+  ] as const)("preserves the required nullable %s field and its live limit", (field, limit) => {
+    const exact = backup({ [field]: "x".repeat(limit) });
+    expect(parseBackup(exact).novels[0]?.[field]).toBe("x".repeat(limit));
+    expect(assertExportableBackup(exact).novels[0]?.[field]).toBe("x".repeat(limit));
+    expect(parseBackup(backup({ [field]: null })).novels[0]?.[field]).toBeNull();
+    expect(() => parseBackup(backup({ [field]: undefined }))).toThrow(SafeServerError);
+    expect(() => parseBackup(backup({ [field]: "x".repeat(limit + 1) }))).toThrow(SafeServerError);
+    expect(() => assertExportableBackup(backup({ [field]: "x".repeat(limit + 1) }))).toThrow(
+      SafeServerError,
+    );
+  });
+
   it("rejects tail lengths the SQL slice cannot express", () => {
     expect(() => parseBackup(backup({ contextTailLength: -20 }))).toThrow(/contextTailLength/);
     expect(() => parseBackup(backup({ contextTailLength: 0 }))).toThrow(/contextTailLength/);

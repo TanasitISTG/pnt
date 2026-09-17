@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres, { type Sql } from "postgres";
+import { sql as drizzleSql } from "drizzle-orm";
+import type * as NovelLocks from "@/lib/db/novel-lock";
 import type {
   cancelImportJobForUser as CancelImportJobForUser,
   startScrapeImportForUser as StartScrapeImportForUser,
@@ -16,6 +18,63 @@ let startScrapeImportForUser: typeof StartScrapeImportForUser;
 let cancelImportJobForUser: typeof CancelImportJobForUser;
 let commitScrapeImportChapter: typeof CommitScrapeImportChapter;
 let dispatchWorkflowOutboxEvent: typeof DispatchWorkflowOutboxEvent;
+let novelLocks: typeof NovelLocks;
+
+function pauseNextNovelGate(novelId: string) {
+  const original = novelLocks.lockNovelForMutation;
+  let release!: () => void;
+  let acquired!: (pid: number) => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const locked = new Promise<number>((resolve) => {
+    acquired = resolve;
+  });
+  let claimed = false;
+  const spy = vi
+    .spyOn(novelLocks, "lockNovelForMutation")
+    .mockImplementation(async (tx, id, userId) => {
+      const result = await original(tx, id, userId);
+      if (result && id === novelId && !claimed) {
+        claimed = true;
+        const rows = await tx.execute<{ pid: number }>(drizzleSql`SELECT pg_backend_pid() AS pid`);
+        acquired(rows[0].pid);
+        await released;
+      }
+      return result;
+    });
+  return { locked, release, restore: () => spy.mockRestore() };
+}
+
+// Real database waits cannot use fake timers; this is a failure deadline, never a scheduling delay.
+async function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Novel gate barrier timed out")), 5_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function waitForNovelWaiter(blockerPid: number) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const rows = await sql`
+      SELECT pid FROM pg_stat_activity
+      WHERE ${blockerPid} = ANY(pg_blocking_pids(pid))
+        AND wait_event_type = 'Lock'
+        AND query LIKE '%for update%'
+        AND query LIKE '%novels%'
+    `;
+    if (rows.length > 0) return;
+  }
+  throw new Error("Competing mutation never waited on the novel gate");
+}
 
 const userId = `user-${randomUUID()}`;
 const novelId = `novel-${randomUUID()}`;
@@ -33,6 +92,8 @@ integrationDescribe("import workflow PostgreSQL integration", () => {
     process.env.INNGEST_DEV ||= "1";
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
 
+    // Defer server-only imports until DATABASE_URL points to the disposable database.
+    novelLocks = await import("@/lib/db/novel-lock");
     ({ startScrapeImportForUser, cancelImportJobForUser } = await import("./commands"));
     ({ commitScrapeImportChapter } = await import("./job-store"));
     ({ dispatchWorkflowOutboxEvent } = await import("@/lib/inngest/outbox"));
@@ -294,4 +355,72 @@ integrationDescribe("import workflow PostgreSQL integration", () => {
     await deleteOutboxRows([...result.outboxIds, ...cancellation.outboxIds]);
     await sql`DELETE FROM "import_jobs" WHERE "id" = ${result.jobId}`;
   });
+
+  it.each(["delete", "import"] as const)(
+    "serializes %s-first scrape commit versus novel deletion",
+    async (winner) => {
+      // Import after beforeAll has selected the disposable database.
+      const { deleteNovelForUser } = await import("@/lib/content/novel/novel-edit.service");
+      const parentId = `novel-${randomUUID()}`;
+      const jobId = `job-${randomUUID()}`;
+      await sql`INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang")
+      VALUES (${parentId}, ${userId}, 'Scrape deletion race', 'zh', 'en')`;
+      await sql`INSERT INTO "import_jobs"
+      ("id", "novel_id", "kind", "status", "base_url", "from_number", "to_number", "next_number", "scrape_provider")
+      VALUES (${jobId}, ${parentId}, 'scrape', 'running', 'https://www.quanben.io/n/book/1.html', 1, 1, 1, 'auto')`;
+      const gate = pauseNextNovelGate(parentId);
+      const pending: Promise<unknown>[] = [];
+      let committedChapter = false;
+      const commit = async () => {
+        const result = await commitScrapeImportChapter(jobId, 1, {
+          kind: "added",
+          number: "1",
+          title: "Imported",
+          content: "Imported body",
+        });
+        committedChapter = result.created;
+        return result;
+      };
+      let dispatchSnapshot: number[] | undefined;
+      const remove = () =>
+        deleteNovelForUser(userId, parentId, async () => {
+          dispatchSnapshot = [
+            (await sql`SELECT "id" FROM "novels" WHERE "id" = ${parentId}`).length,
+            (await sql`SELECT "id" FROM "import_jobs" WHERE "id" = ${jobId}`).length,
+          ];
+        });
+      try {
+        const first = winner === "delete" ? remove() : commit();
+        pending.push(first);
+        const pid = await bounded(gate.locked);
+        const second = winner === "delete" ? commit() : remove();
+        pending.push(second);
+        await waitForNovelWaiter(pid);
+        // The waiting participant has not locked the child job before its novel gate.
+        await sql.begin(async (tx) => {
+          await tx`SELECT "id" FROM "import_jobs" WHERE "id" = ${jobId} FOR UPDATE NOWAIT`;
+        });
+        gate.release();
+        const results = await bounded(Promise.all([first, second]));
+        expect(dispatchSnapshot).toEqual([0, 0]);
+        expect(results[winner === "delete" ? 1 : 0]).toEqual(
+          winner === "delete" ? { stop: true, created: false } : { stop: false, created: true },
+        );
+        expect(committedChapter).toBe(winner === "import");
+        expect(await sql`SELECT "id" FROM "chapters" WHERE "novel_id" = ${parentId}`).toHaveLength(
+          0,
+        );
+        const events = await sql`SELECT "event_name", "payload_json" FROM "workflow_outbox"
+        WHERE "payload_json"::jsonb ->> 'jobId' = ${jobId}`;
+        expect(events.map((row) => row.event_name)).toEqual(["scrape/import.cancelled"]);
+        expect(JSON.parse(events[0].payload_json)).toEqual({ jobId });
+      } finally {
+        gate.release();
+        await Promise.allSettled(pending);
+        gate.restore();
+        await sql`DELETE FROM "workflow_outbox" WHERE "payload_json"::jsonb ->> 'jobId' = ${jobId}`;
+        await sql`DELETE FROM "novels" WHERE "id" = ${parentId}`;
+      }
+    },
+  );
 });

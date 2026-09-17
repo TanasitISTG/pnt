@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, novels, translationJobs } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
@@ -31,13 +32,27 @@ export async function updateChapterForUser(
   dispatch: OutboxDispatch = dispatchWorkflowOutboxEventBestEffort,
 ): Promise<{ id: string }> {
   const outboxId = await db.transaction(async (tx) => {
+    const [parent] = await tx
+      .select({ novelId: chapters.novelId })
+      .from(chapters)
+      .where(eq(chapters.id, input.chapterId))
+      .limit(1);
+    if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
+      throw new SafeServerError("Chapter not found or unauthorized");
+    }
     const [existing] = await tx
       .select({ chapter: chapters })
       .from(chapters)
       .innerJoin(novels, eq(chapters.novelId, novels.id))
-      .where(and(eq(chapters.id, input.chapterId), eq(novels.userId, userId)))
+      .where(
+        and(
+          eq(chapters.id, input.chapterId),
+          eq(chapters.novelId, parent.novelId),
+          eq(novels.userId, userId),
+        ),
+      )
       .limit(1)
-      .for("update");
+      .for("update", { of: chapters });
 
     if (!existing) throw new SafeServerError("Chapter not found or unauthorized");
 
@@ -126,7 +141,12 @@ export async function updateChapterForUser(
           logsJson: translationJobs.logsJson,
         })
         .from(translationJobs)
-        .where(eq(translationJobs.id, chapter.activeTranslationJobId))
+        .where(
+          and(
+            eq(translationJobs.id, chapter.activeTranslationJobId),
+            eq(translationJobs.chapterId, chapter.id),
+          ),
+        )
         .for("update");
       if (activeJob) {
         const cancellation = await cancelActiveTranslationJobsInTransaction(

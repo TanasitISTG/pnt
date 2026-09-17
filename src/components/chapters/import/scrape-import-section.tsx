@@ -115,13 +115,17 @@ export function ScrapeImportSection({
             data: { url: parsed.sourceUrl, provider: parsed.provider },
           });
           onChapterFetched({
-            number: String(result.number),
+            number: result.number === null ? "" : String(result.number),
             title: result.title,
             content: result.content,
             sourceUrl: parsed.sourceUrl,
           });
           if (result.nextUrl) form.setFieldValue("sourceUrl", result.nextUrl);
-          toast.success(`Fetched chapter ${result.number}: ${result.title}`);
+          toast.success(
+            result.number === null
+              ? `Fetched chapter: ${result.title}`
+              : `Fetched chapter ${result.number}: ${result.title}`,
+          );
           return;
         }
 

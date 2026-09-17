@@ -61,14 +61,21 @@ async function cleanupEpubResources(
   tx: ImportTransaction,
   jobId: string,
   uploadId: string | null,
+  novelId: string,
 ): Promise<void> {
   await tx.delete(importJobItems).where(eq(importJobItems.jobId, jobId));
   if (!uploadId) return;
-  await tx.delete(epubUploadChunks).where(eq(epubUploadChunks.uploadId, uploadId));
-  await tx.delete(epubUploads).where(eq(epubUploads.id, uploadId));
+  await tx
+    .delete(epubUploads)
+    .where(and(eq(epubUploads.id, uploadId), eq(epubUploads.novelId, novelId)));
 }
 
-async function cancelActiveImportsInTransaction(
+/**
+ * Cancel all pending/running import jobs for a novel and record durable
+ * cancellation events. Caller MUST already hold the owned novel gate
+ * (lockNovelForMutation) within the same transaction.
+ */
+export async function cancelActiveImportsInTransaction(
   tx: ImportTransaction,
   novelId: string,
   now: Date,
@@ -94,7 +101,7 @@ async function cancelActiveImportsInTransaction(
     if (updated.length === 0) continue;
 
     if (job.kind === "epub") {
-      await cleanupEpubResources(tx, job.id, job.epubUploadId);
+      await cleanupEpubResources(tx, job.id, job.epubUploadId, novelId);
     }
 
     const outboxId = nanoid();
@@ -203,10 +210,10 @@ export async function completeEpubImportForUser(
         chunkCount: epubUploads.chunkCount,
         receivedBytes: epubUploads.receivedBytes,
         status: epubUploads.status,
-        expiresAt: epubUploads.expiresAt,
+        expired: sql<boolean>`${epubUploads.expiresAt} <= CURRENT_TIMESTAMP`,
       })
       .from(epubUploads)
-      .where(eq(epubUploads.id, uploadId))
+      .where(and(eq(epubUploads.id, uploadId), eq(epubUploads.novelId, novel.id)))
       .limit(1)
       .for("update");
     if (!lockedUpload) throw new SafeServerError("Upload not found or unauthorized");
@@ -223,7 +230,7 @@ export async function completeEpubImportForUser(
       if (existingJob) return { jobId: existingJob.id, outboxIds: [] };
       throw new SafeServerError("Upload is no longer in uploading state");
     }
-    if (lockedUpload.expiresAt < new Date()) {
+    if (lockedUpload.expired) {
       throw new SafeServerError("Upload session has expired");
     }
 
@@ -310,7 +317,7 @@ export async function cancelImportJobForUser(
         status: importJobs.status,
       })
       .from(importJobs)
-      .where(eq(importJobs.id, candidate.id))
+      .where(and(eq(importJobs.id, candidate.id), eq(importJobs.novelId, novel.id)))
       .limit(1)
       .for("update");
     if (!job || (job.status !== "pending" && job.status !== "running")) {
@@ -322,7 +329,7 @@ export async function cancelImportJobForUser(
       .update(importJobs)
       .set({ status: "cancelled", updatedAt: now })
       .where(eq(importJobs.id, job.id));
-    if (job.kind === "epub") await cleanupEpubResources(tx, job.id, job.epubUploadId);
+    if (job.kind === "epub") await cleanupEpubResources(tx, job.id, job.epubUploadId, novel.id);
 
     const outboxId = nanoid();
     await tx.insert(workflowOutbox).values({

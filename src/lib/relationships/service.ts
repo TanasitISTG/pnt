@@ -20,7 +20,7 @@ import {
   type UpsertCharacterRelationshipInput,
   type RelationshipMapV1,
 } from "./schemas";
-import { parseRelationshipMap, serializeRelationshipMap } from "./map";
+import { parseRelationshipMap, scrubEntrySpeechFields, serializeRelationshipMap } from "./map";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export async function getRelationshipWorkspaceForUser(userId: string, novelId: string) {
@@ -202,12 +202,11 @@ export async function setRelationshipEntryAutoManagedForUser(
   return db.transaction(async (tx) => {
     const { novel, map } = await lockOwnedNovel(tx, userId, data.novelId);
     const now = new Date().toISOString();
-    const next = updateEntry(map, data.entryType, data.entryId, (entry) => ({
-      ...entry,
-      enabled: true,
-      locked: false,
-      updatedAt: now,
-    }));
+    const next = updateEntry(map, data.entryType, data.entryId, (entry) => {
+      const nextEntry = { ...entry, enabled: true, locked: false, updatedAt: now };
+      if ("selfPronoun" in nextEntry) scrubEntrySpeechFields(nextEntry, now);
+      return nextEntry;
+    });
     return saveValidatedMap(tx, novel.id, next);
   });
 }

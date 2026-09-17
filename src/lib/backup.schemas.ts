@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { coverMimeSchema } from "@/lib/content/novel/novel.schemas";
+import { coverMimeSchema, createNovelSchema } from "@/lib/content/novel/novel.schemas";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { isSupportedLanguagePair } from "@/lib/language-pair";
@@ -50,16 +50,16 @@ export const backupNovelSchema = z
   .object({
     id: z.string(),
     title: z.string(),
-    originalTitle: z.string().nullable(),
-    author: z.string().nullable(),
-    description: z.string().nullable(),
+    originalTitle: createNovelSchema.shape.originalTitle.unwrap().unwrap().nullable(),
+    author: createNovelSchema.shape.author.unwrap().unwrap().nullable(),
+    description: createNovelSchema.shape.description.unwrap().unwrap().nullable(),
     // Bounded like the cover upload path; the route serves these bytes and this
     // content type to guests, so both are constrained to real image media types.
     coverBase64: z.string().max(1_400_000).nullable(),
     coverMime: coverMimeSchema.nullable(),
     sourceLang: z.string(),
     targetLang: z.string(),
-    customPrompt: z.string().nullable(),
+    customPrompt: createNovelSchema.shape.customPrompt.unwrap().unwrap().nullable(),
     storySummary: z.string().nullable(),
     relationshipMap: relationshipMapSchema.optional(),
     // Both feed translation run cost directly: a tiny chunk size explodes the

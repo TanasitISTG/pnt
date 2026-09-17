@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { eq, and, desc, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, importJobs } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
 
@@ -39,7 +40,19 @@ export async function commitScrapeImportChapter(
   outcome: ScrapeImportOutcome,
 ): Promise<{ stop: boolean; created: boolean; replayed?: boolean }> {
   return db.transaction(async (tx) => {
-    const [job] = await tx.select().from(importJobs).where(eq(importJobs.id, jobId)).for("update");
+    const [parent] = await tx
+      .select({ novelId: importJobs.novelId })
+      .from(importJobs)
+      .where(eq(importJobs.id, jobId))
+      .limit(1);
+    if (!parent || !(await lockNovelForMutation(tx, parent.novelId))) {
+      return { stop: true, created: false };
+    }
+    const [job] = await tx
+      .select()
+      .from(importJobs)
+      .where(and(eq(importJobs.id, jobId), eq(importJobs.novelId, parent.novelId)))
+      .for("update", { of: importJobs });
 
     if (!job || job.status !== "running") {
       return { stop: true, created: false };

@@ -1,8 +1,9 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, exists, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, glossaryTerms, novels, translationJobs } from "@/lib/db/schema";
 import { mapWithConcurrency } from "@/lib/async";
 import { SafeServerError } from "@/lib/server-fn-error";
@@ -125,13 +126,19 @@ export async function translateMissingTitlesForUser(
   }
 
   const missing = await db
-    .select({ id: chapters.id, title: chapters.title })
+    .select({
+      id: chapters.id,
+      title: chapters.title,
+      sourceRevision: chapters.sourceRevision,
+      translationGeneration: chapters.translationGeneration,
+    })
     .from(chapters)
     .where(
       and(
         eq(chapters.novelId, novelId),
         eq(chapters.status, "translated"),
         isNull(chapters.translatedTitle),
+        isNull(chapters.activeTranslationJobId),
       ),
     )
     .orderBy(asc(chapters.number))
@@ -167,11 +174,31 @@ export async function translateMissingTitlesForUser(
           },
         );
         if (!title) return false;
-        await db
-          .update(chapters)
-          .set({ translatedTitle: title, updatedAt: new Date() })
-          .where(eq(chapters.id, chapter.id));
-        return true;
+        return db.transaction(async (tx) => {
+          if (!(await lockNovelForMutation(tx, novelId, userId))) return false;
+          const written = await tx
+            .update(chapters)
+            .set({ translatedTitle: title, updatedAt: new Date() })
+            .where(
+              and(
+                eq(chapters.id, chapter.id),
+                eq(chapters.novelId, novelId),
+                eq(chapters.sourceRevision, chapter.sourceRevision),
+                eq(chapters.translationGeneration, chapter.translationGeneration),
+                isNull(chapters.translatedTitle),
+                isNull(chapters.activeTranslationJobId),
+                eq(chapters.status, "translated"),
+                exists(
+                  tx
+                    .select({ id: novels.id })
+                    .from(novels)
+                    .where(and(eq(novels.id, novelId), eq(novels.userId, userId))),
+                ),
+              ),
+            )
+            .returning({ id: chapters.id });
+          return written.length === 1;
+        });
       }),
     );
     translated += results.filter(Boolean).length;

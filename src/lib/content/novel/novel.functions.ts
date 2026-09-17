@@ -15,7 +15,7 @@ import {
   updateNovelSchema,
   setNovelPublishedSchema,
 } from "@/lib/content/novel/novel.schemas";
-import { updateNovelForUser } from "@/lib/content/novel/novel-edit.service";
+import { deleteNovelForUser, updateNovelForUser } from "@/lib/content/novel/novel-edit.service";
 import {
   getAdminNovelDetailCoreForUser,
   getAdminNovelDetailMetricsForUser,
@@ -275,12 +275,7 @@ export const deleteNovel = createServerFn({ method: "POST" })
     return withSafeHandler(async () => {
       const session = await ensureSession();
 
-      // Verify ownership and delete (FK constraint cascade handles chapters)
-      await db
-        .delete(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)));
-
-      return { success: true };
+      return deleteNovelForUser(session.user.id, data.novelId);
     });
   });
 
@@ -300,10 +295,14 @@ export const setNovelPublished = createServerFn({ method: "POST" })
         throw new SafeServerError("Novel not found or unauthorized");
       }
 
-      await db
+      const updated = await db
         .update(novels)
         .set({ publishedAt: data.publishedAt, updatedAt: new Date() })
-        .where(eq(novels.id, data.novelId));
+        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
+        .returning({ id: novels.id });
+      if (updated.length === 0) {
+        throw new SafeServerError("Novel not found or unauthorized");
+      }
 
       return { id: data.novelId };
     });

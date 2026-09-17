@@ -97,6 +97,8 @@ export async function importOneChapter(
     return commitScrapeImportChapter(jobId, n, { kind: "failed", error });
   }
 
+  // Range imports own their numbering: the parsed page number is advisory, so
+  // pages whose numbering cannot be determined still land at cursor position n.
   return commitScrapeImportChapter(jobId, n, {
     kind: "added",
     number: n.toString(),

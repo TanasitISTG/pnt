@@ -51,6 +51,105 @@ const stripTags = (html: string) => html.replace(/<[^>]*>/g, "");
 export const BOILERPLATE_RE =
   /(請記住.{0,12}(域名|網址|本書|本站)|請記住.{0,12}(域名|網址|本書|本站)|台灣|twkan\.com|quanben|\u0489|PROMOTED CONTENT|mgid|resultados para|iphone 17|Ordenar por|biquge)/i;
 
+// Chapter numbers are stored as numeric(8,2): at most six integer digits and
+// two fractional digits. Chapter zero is a legal stored value.
+const CHAPTER_NUMBER_MAX = 999_999.99;
+const CHAPTER_NUMBER_INTEGER_DIGITS_MAX = 6;
+const CHAPTER_NUMBER_FRACTION_DIGITS_MAX = 2;
+
+// The numeric run is matched in full, including further dot-separated segments
+// and an exponent continuation, so "1.2.3 Title" and "Chapter 1e3" are never
+// silently truncated to 1.2 / 1.
+const NUMERIC_RUN_RE = /[+-]?\d+(?:(?:\.+(?=[A-Za-z0-9.])|[A-Za-z])[A-Za-z0-9.+-]*)?/;
+const CHINESE_CHAPTER_LABEL_RE = new RegExp(`第\\s*(${NUMERIC_RUN_RE.source})\\s*[章話回節]`);
+const ENGLISH_CHAPTER_LABEL_RE = new RegExp(
+  `\\b(?:Chapter|Ch)\\.?\\s*#?\\s*(${NUMERIC_RUN_RE.source})`,
+  "i",
+);
+// Digits buried in a title (心動小島2026) are never a chapter number: a bare
+// number only counts when it opens the text and is delimited from the rest.
+const LEADING_CHAPTER_NUMBER_RE = new RegExp(
+  `^(${NUMERIC_RUN_RE.source})(?=[\\s.、,，:：\\-—–・]|$)`,
+);
+
+function isWellFormedNumericRun(raw: string): boolean {
+  return /^\d+(?:\.\d+)?$/.test(raw);
+}
+
+type ChapterNumberPattern = "chinese" | "english" | "leading";
+
+interface ChapterNumberToken {
+  raw: string;
+  pattern: ChapterNumberPattern;
+}
+
+function findChapterNumberToken(text: string): ChapterNumberToken | null {
+  const chinese = CHINESE_CHAPTER_LABEL_RE.exec(text);
+  if (chinese) return { raw: chinese[1], pattern: "chinese" };
+  const english = ENGLISH_CHAPTER_LABEL_RE.exec(text);
+  if (english) return { raw: english[1], pattern: "english" };
+  const leading = LEADING_CHAPTER_NUMBER_RE.exec(text);
+  if (leading) return { raw: leading[1], pattern: "leading" };
+  return null;
+}
+
+function parseChapterNumberToken(raw: string): number | null {
+  if (!isWellFormedNumericRun(raw)) return null;
+  const [integerPart, fractionPart = ""] = raw.split(".");
+  if (integerPart.replace(/^0+/, "").length > CHAPTER_NUMBER_INTEGER_DIGITS_MAX) return null;
+  if (fractionPart.length > CHAPTER_NUMBER_FRACTION_DIGITS_MAX) return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value > CHAPTER_NUMBER_MAX) return null;
+  return value;
+}
+
+interface ResolvedChapterNumber {
+  value: number;
+  pattern: ChapterNumberPattern;
+}
+
+// Resolve numbering from a heading and its page-title fallback. The first
+// recognizable token wins; a token outside the stored numeric(8,2) range or
+// scale fails the page instead of silently guessing another chapter.
+function resolveChapterNumber(texts: readonly string[]): ResolvedChapterNumber | null {
+  for (const text of texts) {
+    const token = findChapterNumberToken(text);
+    if (!token) continue;
+    const value = parseChapterNumberToken(token.raw);
+    if (value === null) {
+      throw new SafeServerError("Could not determine a valid chapter number from the source page");
+    }
+    return { value, pattern: token.pattern };
+  }
+  return null;
+}
+
+const CHINESE_LABEL_PREFIX_RE = new RegExp(
+  `^第\\s*${NUMERIC_RUN_RE.source}\\s*[章話回節]\\s*[:：、,，.。\\s]*`,
+);
+const ENGLISH_LABEL_PREFIX_RE = new RegExp(
+  `^(?:Chapter|Ch)\\.?\\s*#?\\s*${NUMERIC_RUN_RE.source}\\s*[:：、,，.。\\s-]*`,
+  "i",
+);
+const LEADING_NUMBER_PREFIX_RE = new RegExp(
+  `^${NUMERIC_RUN_RE.source}(?=[\\s.、,，:：\\-—–・]|$)[\\s.、,，:：\\-—–・]*\\s*`,
+);
+
+// Heading text with the recognized chapter label removed, falling back to the
+// original heading when stripping would leave nothing.
+function chapterTitleFromHeading(heading: string, pattern: ChapterNumberPattern | null): string {
+  const stripped = (
+    pattern === "chinese"
+      ? heading.replace(CHINESE_LABEL_PREFIX_RE, "")
+      : pattern === "english"
+        ? heading.replace(ENGLISH_LABEL_PREFIX_RE, "")
+        : pattern === "leading"
+          ? heading.replace(LEADING_NUMBER_PREFIX_RE, "")
+          : heading
+  ).trim();
+  return stripped || heading;
+}
+
 // quanben.io: server-rendered, title in h1.headline ("第030章 <title>"),
 // paragraphs as plain <p> between div#content and div.list_page (multi-page
 // chapters are inlined, separated by <!--PAGE N--> comments).
@@ -235,33 +334,14 @@ export function parseTwkan(html: string, url: string): ScrapedChapter {
   }
 
   if (!h1Text) {
-    h1Text = "Chapter";
+    throw new SafeServerError("Could not find chapter title on page");
   }
 
-  let numMatch = /第\s*(\d+(?:\.\d+)?)\s*[章話回節]/.exec(h1Text);
-
-  if (!numMatch && pageTitle) {
-    numMatch = /第\s*(\d+(?:\.\d+)?)\s*[章話回節]/.exec(pageTitle);
-  }
-
-  if (!numMatch) {
-    numMatch = /(?:Chapter|Ch|ch|^)\s*(\d+(?:\.\d+)?)/i.exec(h1Text);
-  }
-
-  if (!numMatch) {
-    numMatch = /(\d+(?:\.\d+)?)/.exec(h1Text);
-  }
-
-  const number = numMatch ? Number(numMatch[1]) : 1;
-
-  let title = h1Text
-    .replace(/^第\s*\d+(?:\.\d+)?\s*[章話回節]\s*[:：\s]*/, "")
-    .replace(/^(?:Chapter|Ch|ch|\d+)\s*[:：.\s]*/i, "")
-    .trim();
-
-  if (!title) {
-    title = h1Text;
-  }
+  // Numbering and title come from the heading, falling back to the page title;
+  // an unrecognizable page keeps its content but reports an unknown number.
+  const resolved = resolveChapterNumber(pageTitle ? [h1Text, pageTitle] : [h1Text]);
+  const number = resolved ? resolved.value : null;
+  const title = chapterTitleFromHeading(h1Text, resolved ? resolved.pattern : null);
 
   // Multi-stage content container search
   let start = html.indexOf('id="txtcontent0"');
@@ -372,7 +452,7 @@ export function parseBiqugeToc(html: string, tocUrl: string): Record<number, str
   }
 
   // Strictly match reader URLs of form /book/NOVEL_ID/CHAPTER_ID.html
-  const linkRegex = /<a[^>]*href="([^"]*\/book\/\d+\/\d+\.html)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const linkRegex = /<a[^>]*href="([^"]*\/book\/\d+\/\d+\.html)"[^>]*>[\s\S]*?<\/a>/gi;
   let match: RegExpExecArray | null;
   let sequentialIndex = 1;
 
@@ -381,61 +461,36 @@ export function parseBiqugeToc(html: string, tocUrl: string): Record<number, str
     if (seenHrefs.has(fullUrl)) continue;
     seenHrefs.add(fullUrl);
 
-    const text = decodeEntities(stripTags(match[2])).trim();
-
-    let num: number | null = null;
-    const numMatch = /第\s*(\d+(?:\.\d+)?)\s*[章話回節]/.exec(text);
-    if (numMatch) {
-      num = Number(numMatch[1]);
-    } else {
-      const leadingMatch = /^(\d+)\s*[.\s:：]/.exec(text);
-      if (leadingMatch) {
-        num = Number(leadingMatch[1]);
-      }
-    }
-
-    // 1. Store under 1-based sequential position index (handles multi-volume re-numbering seamlessly)
+    // Keys are 1-based sequential positions only: multi-volume pages restart
+    // their printed numbering, so the import cursor is the reliable index.
     chapterUrls[sequentialIndex] = fullUrl;
-
-    // 2. Store under parsed chapter number if not already present
-    if (num !== null && !chapterUrls[num]) {
-      chapterUrls[num] = fullUrl;
-    }
-
     sequentialIndex++;
   }
 
   // Fallback to full page if main section slice found nothing
   if (Object.keys(chapterUrls).length === 0 && searchHtml !== html) {
-    const fullRegex = /<a[^>]*href="([^"]*\/book\/\d+\/\d+\.html)"[^>]*>([\s\S]*?)<\/a>/gi;
+    const fullRegex = /<a[^>]*href="([^"]*\/book\/\d+\/\d+\.html)"[^>]*>[\s\S]*?<\/a>/gi;
     let idx = 1;
     while ((match = fullRegex.exec(html)) !== null) {
       const fullUrl = new URL(match[1], tocUrl).toString();
       if (seenHrefs.has(fullUrl)) continue;
       seenHrefs.add(fullUrl);
 
-      const text = decodeEntities(stripTags(match[2])).trim();
-      let num: number | null = null;
-      const numMatch = /第\s*(\d+(?:\.\d+)?)\s*[章話回節]/.exec(text);
-      if (numMatch) num = Number(numMatch[1]);
-
       chapterUrls[idx] = fullUrl;
-      if (num !== null && !chapterUrls[num]) {
-        chapterUrls[num] = fullUrl;
-      }
       idx++;
     }
   }
 
+  const chapterCount = Object.keys(chapterUrls).length;
+
   log("info", "parseBiqugeToc completed", {
     tocUrl,
-    count: Object.keys(chapterUrls).length,
-    parsedNumbers: Object.keys(chapterUrls).slice(0, 15),
-    sample4: chapterUrls[4],
-    sample325: chapterUrls[325],
+    count: chapterCount,
+    firstChapterUrl: chapterUrls[1],
+    lastChapterUrl: chapterUrls[chapterCount],
   });
 
-  if (Object.keys(chapterUrls).length === 0) {
+  if (chapterCount === 0) {
     if (
       html.includes("cf-browser-verification") ||
       html.includes("challenge-platform") ||
@@ -532,30 +587,11 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
   // Strip pagination suffix like （1 / 1） or (1/1)
   h1Text = h1Text.replace(/[（(]\s*\d+\s*[/分]\s*\d+\s*[）)]/g, "").trim();
 
-  let numMatch = /第\s*(\d+(?:\.\d+)?)\s*[章話回節]/.exec(h1Text);
-
-  if (!numMatch && pageTitle) {
-    numMatch = /第\s*(\d+(?:\.\d+)?)\s*[章話回節]/.exec(pageTitle);
-  }
-
-  if (!numMatch) {
-    numMatch = /(?:Chapter|Ch|ch|^)\s*(\d+(?:\.\d+)?)/i.exec(h1Text);
-  }
-
-  if (!numMatch) {
-    numMatch = /(\d+(?:\.\d+)?)/.exec(h1Text);
-  }
-
-  const number = numMatch ? Number(numMatch[1]) : 1;
-
-  let title = h1Text
-    .replace(/^第\s*\d+(?:\.\d+)?\s*[章話回節]\s*[:：\s]*/, "")
-    .replace(/^(?:Chapter|Ch|ch|\d+)\s*[:：.\s]*/i, "")
-    .trim();
-
-  if (!title) {
-    title = h1Text;
-  }
+  // Numbering and title come from the heading, falling back to the page title;
+  // an unrecognizable page keeps its content but reports an unknown number.
+  const resolved = resolveChapterNumber(pageTitle ? [h1Text, pageTitle] : [h1Text]);
+  const number = resolved ? resolved.value : null;
+  const title = chapterTitleFromHeading(h1Text, resolved ? resolved.pattern : null);
 
   let start = html.indexOf('id="chaptercontent"');
   if (start === -1) start = html.indexOf('class="read-content"');
@@ -669,5 +705,7 @@ export function parseChapter(html: string, url: string): ScrapedChapter {
 
 // Swap the chapter number in a source URL (used by range import).
 export function chapterUrlFor(url: string, n: number): string {
-  return url.replace(/(\d+(?:\.\d+)?)\.html([?#].*)?$/, `${n}.html`);
+  const parsed = new URL(url);
+  parsed.pathname = parsed.pathname.replace(/\/(\d+(?:\.\d+)?)\.html$/, `/${n}.html`);
+  return parsed.toString();
 }

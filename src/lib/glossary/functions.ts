@@ -3,6 +3,7 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
 import { novels, chapters, glossaryTerms, termCategoryEnum } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
@@ -25,6 +26,25 @@ import {
   updateGlossaryTermAtomic,
 } from "@/lib/glossary/service";
 
+async function lockOwnedTerm(tx: NovelMutationTransaction, userId: string, termId: string) {
+  const [parent] = await tx
+    .select({ novelId: glossaryTerms.novelId })
+    .from(glossaryTerms)
+    .where(eq(glossaryTerms.id, termId))
+    .limit(1);
+  if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
+    throw new SafeServerError("Glossary term not found or unauthorized");
+  }
+  const [term] = await tx
+    .select({ id: glossaryTerms.id })
+    .from(glossaryTerms)
+    .where(and(eq(glossaryTerms.id, termId), eq(glossaryTerms.novelId, parent.novelId)))
+    .limit(1)
+    .for("update", { of: glossaryTerms });
+  if (!term) throw new SafeServerError("Glossary term not found or unauthorized");
+  return term;
+}
+
 export const listGlossaryTerms = createServerFn({ method: "GET" })
   .validator(listTermsSchema)
   .handler(async ({ data }) =>
@@ -40,43 +60,39 @@ export const createGlossaryTerm = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      const [novel] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
-        .limit(1);
+      return db.transaction(async (tx) => {
+        if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
+          throw new SafeServerError("Novel not found or unauthorized");
+        }
 
-      if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
-      }
+        const [existing] = await tx
+          .select({ id: glossaryTerms.id })
+          .from(glossaryTerms)
+          .where(
+            and(
+              eq(glossaryTerms.novelId, data.novelId),
+              eq(glossaryTerms.source, data.source.trim()),
+            ),
+          )
+          .limit(1);
 
-      const [existing] = await db
-        .select({ id: glossaryTerms.id })
-        .from(glossaryTerms)
-        .where(
-          and(
-            eq(glossaryTerms.novelId, data.novelId),
-            eq(glossaryTerms.source, data.source.trim()),
-          ),
-        )
-        .limit(1);
+        if (existing) {
+          throw new SafeServerError(`Term with source "${data.source.trim()}" already exists`);
+        }
 
-      if (existing) {
-        throw new SafeServerError(`Term with source "${data.source.trim()}" already exists`);
-      }
+        const termId = nanoid();
+        await tx.insert(glossaryTerms).values({
+          id: termId,
+          novelId: data.novelId,
+          source: data.source.trim(),
+          target: data.target.trim(),
+          category: data.category ?? "other",
+          note: data.note?.trim() || null,
+          status: "approved",
+        });
 
-      const termId = nanoid();
-      await db.insert(glossaryTerms).values({
-        id: termId,
-        novelId: data.novelId,
-        source: data.source.trim(),
-        target: data.target.trim(),
-        category: data.category ?? "other",
-        note: data.note?.trim() || null,
-        status: "approved",
+        return { id: termId };
       });
-
-      return { id: termId };
     }),
   );
 
@@ -129,20 +145,11 @@ export const deleteGlossaryTerm = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      const [term] = await db
-        .select({ id: glossaryTerms.id })
-        .from(glossaryTerms)
-        .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
-        .where(and(eq(glossaryTerms.id, data.termId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!term) {
-        throw new SafeServerError("Glossary term not found or unauthorized");
-      }
-
-      await db.delete(glossaryTerms).where(eq(glossaryTerms.id, data.termId));
-
-      return { success: true };
+      return db.transaction(async (tx) => {
+        const term = await lockOwnedTerm(tx, session.user.id, data.termId);
+        await tx.delete(glossaryTerms).where(eq(glossaryTerms.id, term.id));
+        return { success: true };
+      });
     }),
   );
 
@@ -219,26 +226,8 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
         return { imported: 0, updated: 0, totalProcessed: 0, errors };
       }
 
-      const existingTerms = await db
-        .select({ source: glossaryTerms.source })
-        .from(glossaryTerms)
-        .where(
-          and(
-            eq(glossaryTerms.novelId, data.novelId),
-            inArray(glossaryTerms.source, uniqueSources),
-          ),
-        );
-
-      const existingSourceSet = new Set(existingTerms.map((t) => t.source));
       let updated = 0;
       let imported = 0;
-      for (const src of uniqueSources) {
-        if (existingSourceSet.has(src)) {
-          updated++;
-        } else {
-          imported++;
-        }
-      }
 
       const rowsToInsert = Array.from(parsedMap.values()).map((row) => ({
         id: nanoid(),
@@ -252,31 +241,42 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
       }));
 
       const CHUNK_SIZE = 500;
-      // 500-row chunks keep statements small; 2 in flight bounds the
-      // serverless DB burst while still overlapping round trips.
-      const INSERT_CONCURRENCY = 2;
-      const insertChunks: (typeof rowsToInsert)[] = [];
+      // Each batch commits independently, sequentially under the novel gate.
       for (let i = 0; i < rowsToInsert.length; i += CHUNK_SIZE) {
-        insertChunks.push(rowsToInsert.slice(i, i + CHUNK_SIZE));
-      }
-      for (let i = 0; i < insertChunks.length; i += INSERT_CONCURRENCY) {
-        await Promise.all(
-          insertChunks.slice(i, i + INSERT_CONCURRENCY).map((chunk) =>
-            db
-              .insert(glossaryTerms)
-              .values(chunk)
-              .onConflictDoUpdate({
-                target: [glossaryTerms.novelId, glossaryTerms.source],
-                set: {
-                  target: sql`excluded.target`,
-                  category: sql`excluded.category`,
-                  note: sql`coalesce(excluded.note, ${glossaryTerms.note})`,
-                  status: "approved",
-                  updatedAt: new Date(),
-                },
-              }),
-          ),
-        );
+        const chunk = rowsToInsert.slice(i, i + CHUNK_SIZE);
+        const existingCount = await db.transaction(async (tx) => {
+          if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
+            throw new SafeServerError("Novel not found or unauthorized");
+          }
+          const existingTerms = await tx
+            .select({ source: glossaryTerms.source })
+            .from(glossaryTerms)
+            .where(
+              and(
+                eq(glossaryTerms.novelId, data.novelId),
+                inArray(
+                  glossaryTerms.source,
+                  chunk.map((row) => row.source),
+                ),
+              ),
+            );
+          await tx
+            .insert(glossaryTerms)
+            .values(chunk)
+            .onConflictDoUpdate({
+              target: [glossaryTerms.novelId, glossaryTerms.source],
+              set: {
+                target: sql`excluded.target`,
+                category: sql`excluded.category`,
+                note: sql`coalesce(excluded.note, ${glossaryTerms.note})`,
+                status: "approved",
+                updatedAt: new Date(),
+              },
+            });
+          return existingTerms.length;
+        });
+        updated += existingCount;
+        imported += chunk.length - existingCount;
       }
 
       return { imported, updated, totalProcessed: imported + updated, errors };
@@ -289,23 +289,14 @@ export const approveGlossaryTerm = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      const [term] = await db
-        .select({ id: glossaryTerms.id })
-        .from(glossaryTerms)
-        .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
-        .where(and(eq(glossaryTerms.id, data.termId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!term) {
-        throw new SafeServerError("Glossary term not found or unauthorized");
-      }
-
-      await db
-        .update(glossaryTerms)
-        .set({ status: "approved", updatedAt: new Date() })
-        .where(eq(glossaryTerms.id, data.termId));
-
-      return { success: true };
+      return db.transaction(async (tx) => {
+        const term = await lockOwnedTerm(tx, session.user.id, data.termId);
+        await tx
+          .update(glossaryTerms)
+          .set({ status: "approved", updatedAt: new Date() })
+          .where(eq(glossaryTerms.id, term.id));
+        return { success: true };
+      });
     }),
   );
 
@@ -315,22 +306,16 @@ export const approveAllPendingTerms = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      const [novel] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
-      }
-
-      await db
-        .update(glossaryTerms)
-        .set({ status: "approved", updatedAt: new Date() })
-        .where(and(eq(glossaryTerms.novelId, data.novelId), eq(glossaryTerms.status, "pending")));
-
-      return { success: true };
+      return db.transaction(async (tx) => {
+        if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
+          throw new SafeServerError("Novel not found or unauthorized");
+        }
+        await tx
+          .update(glossaryTerms)
+          .set({ status: "approved", updatedAt: new Date() })
+          .where(and(eq(glossaryTerms.novelId, data.novelId), eq(glossaryTerms.status, "pending")));
+        return { success: true };
+      });
     }),
   );
 
@@ -358,23 +343,14 @@ export const rejectGlossaryTerm = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      const [term] = await db
-        .select({ id: glossaryTerms.id })
-        .from(glossaryTerms)
-        .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
-        .where(and(eq(glossaryTerms.id, data.termId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!term) {
-        throw new SafeServerError("Glossary term not found or unauthorized");
-      }
-
-      await db
-        .update(glossaryTerms)
-        .set({ status: "rejected", updatedAt: new Date() })
-        .where(eq(glossaryTerms.id, data.termId));
-
-      return { success: true };
+      return db.transaction(async (tx) => {
+        const term = await lockOwnedTerm(tx, session.user.id, data.termId);
+        await tx
+          .update(glossaryTerms)
+          .set({ status: "rejected", updatedAt: new Date() })
+          .where(eq(glossaryTerms.id, term.id));
+        return { success: true };
+      });
     }),
   );
 

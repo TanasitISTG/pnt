@@ -9,7 +9,12 @@ export interface ScrapeProviderMeta {
 }
 
 export interface ScrapedChapter {
-  number: number;
+  /**
+   * Chapter number parsed from the page, or null when the page carries a usable
+   * title/content but no determinable numbering. Import paths reject null;
+   * range imports persist at their authoritative cursor position instead.
+   */
+  number: number | null;
   title: string;
   content: string;
   nextUrl: string | null;

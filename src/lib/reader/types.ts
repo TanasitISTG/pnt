@@ -41,9 +41,22 @@ export interface ReaderBookmarkInput {
   note?: string | null;
 }
 
+// Keyset continuation for the global bookmark list. `createdAt` is the database's own
+// timestamp text, so it round-trips fractional precision without a JS Date conversion.
+export interface ReaderBookmarkCursor {
+  createdAt: string;
+  id: string;
+}
+
+export interface ReaderBookmarkPage {
+  bookmarks: ReaderBookmark[];
+  nextCursor: ReaderBookmarkCursor | null;
+}
+
 export interface ReaderNovelState {
   lastChapterId: string | null;
   scrollFraction: number | null;
   readChapterIds: string[];
   bookmarks: ReaderBookmark[];
+  bookmarkNextCursor: ReaderBookmarkCursor | null;
 }

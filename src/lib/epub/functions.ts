@@ -1,16 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
-import { novels, epubUploads, epubUploadChunks } from "@/lib/db/schema";
+import { novels, epubUploads, epubUploadChunks, user } from "@/lib/db/schema";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { completeEpubImportForUser } from "@/lib/import/commands";
+import { checkRateLimitForSubject } from "@/lib/rate-limit";
 
 const CHUNK_SIZE = 1024 * 1024; // 1 MiB
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MiB
+const MAX_RETAINED_UPLOADS = 2;
+const MAX_RESERVED_BYTES = 100 * 1024 * 1024;
 const MAX_BASE64_CHUNK_LENGTH = Math.ceil(CHUNK_SIZE / 3) * 4;
 const STRICT_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
@@ -33,6 +37,7 @@ export const createEpubUpload = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
+      await checkRateLimitForSubject("epub-upload-create", session.user.id, 6);
 
       if (!data.fileName.toLowerCase().endsWith(".epub")) {
         throw new SafeServerError("Only .epub files are supported");
@@ -43,31 +48,66 @@ export const createEpubUpload = createServerFn({ method: "POST" })
         throw new SafeServerError("Invalid chunkCount for fileSize");
       }
 
-      const [novel] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
-        .limit(1);
+      // Account admission precedes the novel gate; no other upload path locks the user.
+      return await db.transaction(async (tx) => {
+        const [owner] = await tx
+          .select({ id: user.id })
+          .from(user)
+          .where(eq(user.id, session.user.id))
+          .limit(1)
+          .for("update", { of: user });
+        if (!owner) throw new SafeServerError("Novel not found or unauthorized");
+        if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
+          throw new SafeServerError("Novel not found or unauthorized");
+        }
 
-      if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
-      }
+        const [retained] = await tx
+          .select({
+            slots: sql<number>`count(*)::integer`,
+            reservedBytes: sql<string>`coalesce(sum(CASE
+              WHEN ${epubUploads.status} IN ('uploading', 'queued') THEN ${epubUploads.fileSize}
+              ELSE 0 END), 0)::text`,
+          })
+          .from(epubUploads)
+          .innerJoin(novels, eq(epubUploads.novelId, novels.id))
+          .where(
+            and(
+              eq(novels.userId, session.user.id),
+              inArray(epubUploads.status, ["uploading", "queued", "staged"]),
+            ),
+          );
+        const slots = Number(retained?.slots);
+        const reservedBytes = Number(retained?.reservedBytes);
+        if (
+          !Number.isSafeInteger(slots) ||
+          slots < 0 ||
+          !Number.isSafeInteger(reservedBytes) ||
+          reservedBytes < 0
+        ) {
+          throw new Error("Could not determine upload admission capacity");
+        }
+        if (slots >= MAX_RETAINED_UPLOADS) {
+          throw new SafeServerError("Too many active EPUB uploads");
+        }
+        if (reservedBytes + data.fileSize > MAX_RESERVED_BYTES) {
+          throw new SafeServerError("EPUB upload storage limit reached");
+        }
 
-      const uploadId = nanoid();
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        const uploadId = nanoid();
 
-      await db.insert(epubUploads).values({
-        id: uploadId,
-        novelId: data.novelId,
-        fileName: data.fileName,
-        fileSize: data.fileSize,
-        chunkCount: data.chunkCount,
-        receivedBytes: 0,
-        status: "uploading",
-        expiresAt,
+        await tx.insert(epubUploads).values({
+          id: uploadId,
+          novelId: data.novelId,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          chunkCount: data.chunkCount,
+          receivedBytes: 0,
+          status: "uploading",
+          expiresAt: sql`CURRENT_TIMESTAMP + INTERVAL '24 hours'`,
+        });
+
+        return { uploadId };
       });
-
-      return { uploadId };
     }),
   );
 
@@ -76,51 +116,30 @@ export const uploadEpubChunk = createServerFn({ method: "POST" })
     z.object({
       uploadId: z.string().min(1),
       chunkIndex: z.number().int().min(0),
-      dataBase64: z.string().min(1),
+      dataBase64: z.string().min(1).max(MAX_BASE64_CHUNK_LENGTH),
     }),
   )
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
+      await checkRateLimitForSubject("epub-upload-chunk", session.user.id, 120);
 
-      const [upload] = await db
-        .select({
-          id: epubUploads.id,
-          fileSize: epubUploads.fileSize,
-          chunkCount: epubUploads.chunkCount,
-          receivedBytes: epubUploads.receivedBytes,
-          status: epubUploads.status,
-          expiresAt: epubUploads.expiresAt,
-        })
-        .from(epubUploads)
-        .innerJoin(novels, eq(epubUploads.novelId, novels.id))
-        .where(and(eq(epubUploads.id, data.uploadId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!upload) {
-        throw new SafeServerError("Upload not found or unauthorized");
-      }
-      if (upload.status !== "uploading") {
-        throw new SafeServerError("Upload is no longer in uploading state");
-      }
-      if (upload.expiresAt < new Date()) {
-        throw new SafeServerError("Upload session has expired");
-      }
-      if (data.chunkIndex >= upload.chunkCount) {
-        throw new SafeServerError("Chunk index is out of bounds");
-      }
       const chunkBuffer = decodeStrictBase64(data.dataBase64);
-      const isLastChunk = data.chunkIndex === upload.chunkCount - 1;
-      const expectedSize = isLastChunk
-        ? upload.fileSize - data.chunkIndex * CHUNK_SIZE
-        : CHUNK_SIZE;
-      if (chunkBuffer.length !== expectedSize) {
-        throw new SafeServerError(
-          `Chunk size mismatch: expected ${expectedSize} bytes, got ${chunkBuffer.length} bytes`,
-        );
-      }
 
       return await db.transaction(async (tx) => {
+        const [upload] = await tx
+          .select({ id: epubUploads.id, novelId: epubUploads.novelId })
+          .from(epubUploads)
+          .innerJoin(novels, eq(epubUploads.novelId, novels.id))
+          .where(and(eq(epubUploads.id, data.uploadId), eq(novels.userId, session.user.id)))
+          .limit(1);
+        if (!upload) {
+          throw new SafeServerError("Upload not found or unauthorized");
+        }
+        if (!(await lockNovelForMutation(tx, upload.novelId, session.user.id))) {
+          throw new SafeServerError("Upload not found or unauthorized");
+        }
+
         const [lockedUpload] = await tx
           .select({
             id: epubUploads.id,
@@ -128,10 +147,11 @@ export const uploadEpubChunk = createServerFn({ method: "POST" })
             chunkCount: epubUploads.chunkCount,
             receivedBytes: epubUploads.receivedBytes,
             status: epubUploads.status,
-            expiresAt: epubUploads.expiresAt,
+            expired: sql<boolean>`${epubUploads.expiresAt} <= CURRENT_TIMESTAMP`,
           })
           .from(epubUploads)
-          .where(eq(epubUploads.id, data.uploadId))
+          .where(and(eq(epubUploads.id, data.uploadId), eq(epubUploads.novelId, upload.novelId)))
+          .limit(1)
           .for("update");
 
         if (!lockedUpload) {
@@ -140,7 +160,7 @@ export const uploadEpubChunk = createServerFn({ method: "POST" })
         if (lockedUpload.status !== "uploading") {
           throw new SafeServerError("Upload is no longer in uploading state");
         }
-        if (lockedUpload.expiresAt < new Date()) {
+        if (lockedUpload.expired) {
           throw new SafeServerError("Upload session has expired");
         }
         if (data.chunkIndex >= lockedUpload.chunkCount) {
@@ -212,17 +232,27 @@ export const abortEpubUpload = createServerFn({ method: "POST" })
     withSafeHandler(async () => {
       const session = await ensureSession();
 
-      const [upload] = await db
-        .select({ id: epubUploads.id, status: epubUploads.status })
-        .from(epubUploads)
-        .innerJoin(novels, eq(epubUploads.novelId, novels.id))
-        .where(and(eq(epubUploads.id, data.uploadId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (upload && upload.status === "uploading") {
-        await db.delete(epubUploads).where(eq(epubUploads.id, upload.id));
-      }
-
+      await db.transaction(async (tx) => {
+        const [upload] = await tx
+          .select({ id: epubUploads.id, novelId: epubUploads.novelId })
+          .from(epubUploads)
+          .innerJoin(novels, eq(epubUploads.novelId, novels.id))
+          .where(and(eq(epubUploads.id, data.uploadId), eq(novels.userId, session.user.id)))
+          .limit(1);
+        if (!upload) return;
+        if (!(await lockNovelForMutation(tx, upload.novelId, session.user.id))) {
+          return;
+        }
+        await tx
+          .delete(epubUploads)
+          .where(
+            and(
+              eq(epubUploads.id, upload.id),
+              eq(epubUploads.novelId, upload.novelId),
+              eq(epubUploads.status, "uploading"),
+            ),
+          );
+      });
       return { success: true };
     }),
   );

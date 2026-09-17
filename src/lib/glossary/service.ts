@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, glossaryTerms, novels, translationJobs } from "@/lib/db/schema";
 import { mapWithConcurrency } from "@/lib/async";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
@@ -116,10 +117,20 @@ type UpdateTermData = z.infer<typeof updateTermSchema>;
 
 export async function updateGlossaryTermAtomic(
   userId: string,
-  data: UpdateTermData,
+  rawData: UpdateTermData,
   dispatch: (outboxId: string) => Promise<void> = dispatchWorkflowOutboxEventBestEffort,
 ) {
+  const data = updateTermSchema.parse(rawData);
   const outboxIds = await db.transaction(async (tx) => {
+    const [parent] = await tx
+      .select({ novelId: glossaryTerms.novelId })
+      .from(glossaryTerms)
+      .where(eq(glossaryTerms.id, data.termId))
+      .limit(1);
+    if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
+      throw new SafeServerError("Glossary term not found or unauthorized");
+    }
+
     const [term] = await tx
       .select({
         id: glossaryTerms.id,
@@ -127,10 +138,9 @@ export async function updateGlossaryTermAtomic(
         target: glossaryTerms.target,
       })
       .from(glossaryTerms)
-      .innerJoin(novels, eq(glossaryTerms.novelId, novels.id))
-      .where(and(eq(glossaryTerms.id, data.termId), eq(novels.userId, userId)))
+      .where(and(eq(glossaryTerms.id, data.termId), eq(glossaryTerms.novelId, parent.novelId)))
       .limit(1)
-      .for("update");
+      .for("update", { of: glossaryTerms });
 
     if (!term) throw new SafeServerError("Glossary term not found or unauthorized");
 
@@ -162,7 +172,12 @@ export async function updateGlossaryTermAtomic(
     let propagationOutboxIds: string[] = [];
     const oldTarget = term.target;
     const newTarget = data.target?.trim();
-    if (data.applyToChapters && newTarget !== undefined && newTarget !== oldTarget) {
+    if (
+      data.applyToChapters &&
+      newTarget &&
+      newTarget !== oldTarget &&
+      oldTarget.trim().length > 0
+    ) {
       const affectedChapters = await tx
         .select({
           id: chapters.id,
@@ -195,8 +210,21 @@ export async function updateGlossaryTermAtomic(
                 logsJson: translationJobs.logsJson,
               })
               .from(translationJobs)
-              .where(inArray(translationJobs.id, activeJobIds))
-              .for("update");
+              .innerJoin(
+                chapters,
+                and(
+                  eq(translationJobs.chapterId, chapters.id),
+                  eq(chapters.activeTranslationJobId, translationJobs.id),
+                ),
+              )
+              .where(
+                and(
+                  inArray(translationJobs.id, activeJobIds),
+                  inArray(chapters.id, chapterIds),
+                  eq(chapters.novelId, term.novelId),
+                ),
+              )
+              .for("update", { of: translationJobs });
       const cancellation = await cancelActiveTranslationJobsInTransaction(
         tx,
         activeJobs.map((job) => ({

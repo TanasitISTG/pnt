@@ -37,7 +37,12 @@ export async function dispatchWorkflowOutboxEvent(
     await send({ name: row.eventName, data });
     await db
       .update(workflowOutbox)
-      .set({ status: "sent", sentAt: new Date(), lastError: null, updatedAt: new Date() })
+      .set({
+        status: "sent",
+        sentAt: sql`CURRENT_TIMESTAMP`,
+        lastError: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
       .where(and(eq(workflowOutbox.id, row.id), eq(workflowOutbox.status, "pending")));
     return true;
   } catch (error) {
@@ -48,8 +53,8 @@ export async function dispatchWorkflowOutboxEvent(
       .set({
         attempts: sql`${workflowOutbox.attempts} + 1`,
         lastError: message.slice(0, 2000),
-        availableAt: new Date(Date.now() + delayMs),
-        updatedAt: new Date(),
+        availableAt: sql`CURRENT_TIMESTAMP + (${delayMs} * INTERVAL '1 millisecond')`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(workflowOutbox.id, row.id), eq(workflowOutbox.status, "pending")));
     log("warn", "Workflow outbox dispatch deferred", { outboxId, error: message });

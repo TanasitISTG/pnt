@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres, { type Sql } from "postgres";
+import { sql as drizzleSql } from "drizzle-orm";
+import type * as NovelLocks from "@/lib/db/novel-lock";
 import * as fflate from "fflate";
 import type {
   prepareEpubImportJob as PrepareEpubImportJob,
@@ -21,6 +23,63 @@ let importEpubChapterBatch: typeof ImportEpubChapterBatch;
 let finishEpubImportJob: typeof FinishEpubImportJob;
 let cleanupExpiredEpubUploads: typeof CleanupExpiredEpubUploads;
 let cancelImportJobForUser: typeof CancelImportJobForUser;
+let novelLocks: typeof NovelLocks;
+
+function pauseNextNovelGate(novelId: string) {
+  const original = novelLocks.lockNovelForMutation;
+  let release!: () => void;
+  let acquired!: (pid: number) => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const locked = new Promise<number>((resolve) => {
+    acquired = resolve;
+  });
+  let claimed = false;
+  const spy = vi
+    .spyOn(novelLocks, "lockNovelForMutation")
+    .mockImplementation(async (tx, id, userId) => {
+      const result = await original(tx, id, userId);
+      if (result && id === novelId && !claimed) {
+        claimed = true;
+        const rows = await tx.execute<{ pid: number }>(drizzleSql`SELECT pg_backend_pid() AS pid`);
+        acquired(rows[0].pid);
+        await released;
+      }
+      return result;
+    });
+  return { locked, release, restore: () => spy.mockRestore() };
+}
+
+// Real database waits cannot use fake timers; this is a failure deadline, never a scheduling delay.
+async function bounded<T>(promise: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Novel gate barrier timed out")), 5_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function waitForNovelWaiter(blockerPid: number) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const rows = await sql`
+      SELECT pid FROM pg_stat_activity
+      WHERE ${blockerPid} = ANY(pg_blocking_pids(pid))
+        AND wait_event_type = 'Lock'
+        AND query LIKE '%for update%'
+        AND query LIKE '%novels%'
+    `;
+    if (rows.length > 0) return;
+  }
+  throw new Error("Competing mutation never waited on the novel gate");
+}
 
 function createTestEpubBuffer(): Uint8Array {
   const containerXml = `<?xml version="1.0"?>
@@ -75,6 +134,8 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     process.env.INNGEST_DEV ||= "1";
 
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    // Defer server-only imports until DATABASE_URL points to the disposable database.
+    novelLocks = await import("@/lib/db/novel-lock");
 
     ({
       prepareEpubImportJob,
@@ -293,5 +354,190 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     const checkChunks =
       await sql`SELECT * FROM "epub_upload_chunks" WHERE "upload_id" = ${expiredUploadId}`;
     expect(checkChunks.length).toBe(0);
+  });
+
+  it("rejects a staging upload from a different novel without touching either resource", async () => {
+    const { stageImportJobItems } = await import("./job-store");
+    const otherNovelId = `novel-${randomUUID()}`;
+    const ownUploadId = `upload-${randomUUID()}`;
+    const foreignUploadId = `upload-${randomUUID()}`;
+    const stagingJobId = `job-${randomUUID()}`;
+    await sql`INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang")
+      VALUES (${otherNovelId}, ${userId}, 'Other EPUB', 'zh', 'en')`;
+    try {
+      for (const [id, parent] of [
+        [ownUploadId, novelId],
+        [foreignUploadId, otherNovelId],
+      ]) {
+        await sql`INSERT INTO "epub_uploads"
+          ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at")
+          VALUES (${id}, ${parent}, 'source.epub', 3, 1, 3, 'queued', now() + interval '1 day')`;
+        await sql`INSERT INTO "epub_upload_chunks" ("upload_id", "chunk_index", "data")
+          VALUES (${id}, 0, ${Buffer.from([1, 2, 3])})`;
+      }
+      await sql`INSERT INTO "import_jobs"
+        ("id", "novel_id", "kind", "status", "base_url", "epub_upload_id", "from_number", "to_number", "next_number", "scrape_provider")
+        VALUES (${stagingJobId}, ${novelId}, 'epub', 'running', 'epub://source', ${ownUploadId}, 1, 0, 1, 'epub')`;
+      await expect(
+        stageImportJobItems(stagingJobId, foreignUploadId, [
+          {
+            sequence: 1,
+            chapterNumber: "30",
+            title: "Chapter",
+            rawContent: "Body",
+            rawCharCount: 4,
+          },
+        ]),
+      ).rejects.toThrow("EPUB staging upload does not match import job");
+      expect(
+        await sql`SELECT "id" FROM "import_job_items" WHERE "job_id" = ${stagingJobId}`,
+      ).toHaveLength(0);
+      for (const id of [ownUploadId, foreignUploadId]) {
+        const [upload] = await sql`SELECT "status" FROM "epub_uploads" WHERE "id" = ${id}`;
+        expect(upload.status).toBe("queued");
+        const [chunk] =
+          await sql`SELECT "data" FROM "epub_upload_chunks" WHERE "upload_id" = ${id}`;
+        expect(Buffer.from(chunk.data)).toEqual(Buffer.from([1, 2, 3]));
+      }
+    } finally {
+      await sql`DELETE FROM "import_jobs" WHERE "id" = ${stagingJobId}`;
+      await sql`DELETE FROM "epub_uploads" WHERE "id" = ${ownUploadId}`;
+      await sql`DELETE FROM "novels" WHERE "id" = ${otherNovelId}`;
+    }
+  });
+
+  it.each([
+    ["stage", "delete"],
+    ["stage", "import"],
+    ["chapter", "delete"],
+    ["chapter", "import"],
+  ] as const)("serializes EPUB %s with %s winning the novel gate", async (operation, winner) => {
+    // These server-only modules must load after the disposable DATABASE_URL is set.
+    const { stageImportJobItems, importOneStagedChapter } = await import("./job-store");
+    const { deleteNovelForUser } = await import("@/lib/content/novel/novel-edit.service");
+    const parentId = `novel-${randomUUID()}`;
+    const resourceId = `upload-${randomUUID()}`;
+    const activeJobId = `job-${randomUUID()}`;
+    await sql`INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang")
+      VALUES (${parentId}, ${userId}, 'EPUB deletion race', 'zh', 'en')`;
+    await sql`INSERT INTO "epub_uploads"
+      ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at")
+      VALUES (${resourceId}, ${parentId}, 'source.epub', 3, 1, 3, ${operation === "stage" ? "queued" : "staged"}, now() + interval '1 day')`;
+    await sql`INSERT INTO "epub_upload_chunks" ("upload_id", "chunk_index", "data")
+      VALUES (${resourceId}, 0, ${Buffer.from([1, 2, 3])})`;
+    await sql`INSERT INTO "import_jobs"
+      ("id", "novel_id", "kind", "status", "base_url", "epub_upload_id", "from_number", "to_number", "next_number", "scrape_provider")
+      VALUES (${activeJobId}, ${parentId}, 'epub', 'running', 'epub://source', ${resourceId}, 1, 1, 1, 'epub')`;
+    if (operation === "chapter") {
+      await sql`INSERT INTO "import_job_items"
+        ("id", "job_id", "sequence", "chapter_number", "title", "raw_content", "raw_char_count", "status")
+        VALUES (${`item-${randomUUID()}`}, ${activeJobId}, 1, 1, 'Imported', 'Body', 4, 'pending')`;
+    }
+    const gate = pauseNextNovelGate(parentId);
+    const pending: Promise<unknown>[] = [];
+    const advance = () =>
+      operation === "stage"
+        ? stageImportJobItems(activeJobId, resourceId, [
+            {
+              sequence: 1,
+              chapterNumber: "1",
+              title: "Imported",
+              rawContent: "Body",
+              rawCharCount: 4,
+            },
+          ])
+        : importOneStagedChapter(activeJobId, 1);
+    let dispatchSnapshot: number[] | undefined;
+    const remove = () =>
+      deleteNovelForUser(userId, parentId, async () => {
+        dispatchSnapshot = [
+          (await sql`SELECT "id" FROM "novels" WHERE "id" = ${parentId}`).length,
+          (await sql`SELECT "id" FROM "epub_uploads" WHERE "id" = ${resourceId}`).length,
+          (await sql`SELECT "id" FROM "import_job_items" WHERE "job_id" = ${activeJobId}`).length,
+          (
+            await sql`SELECT "chunk_index" FROM "epub_upload_chunks" WHERE "upload_id" = ${resourceId}`
+          ).length,
+        ];
+        // Eager failure must not undo the committed cascade or lose its durable intent.
+        throw new Error("Dispatch unavailable");
+      });
+    try {
+      const first = winner === "delete" ? remove() : advance();
+      pending.push(first);
+      const pid = await bounded(gate.locked);
+      const second = winner === "delete" ? advance() : remove();
+      pending.push(second);
+      await waitForNovelWaiter(pid);
+      await sql.begin(async (tx) => {
+        await tx`SELECT "id" FROM "import_jobs" WHERE "id" = ${activeJobId} FOR UPDATE NOWAIT`;
+        await tx`SELECT "id" FROM "epub_uploads" WHERE "id" = ${resourceId} FOR UPDATE NOWAIT`;
+      });
+      gate.release();
+      const results = await bounded(Promise.all([first, second]));
+      expect(dispatchSnapshot).toEqual([0, 0, 0, 0]);
+      expect(results[winner === "delete" ? 1 : 0]).toEqual(
+        operation === "stage"
+          ? winner === "delete"
+            ? 0
+            : 1
+          : winner === "delete"
+            ? { stop: true }
+            : { stop: false, action: "added" },
+      );
+      expect(await sql`SELECT "id" FROM "chapters" WHERE "novel_id" = ${parentId}`).toHaveLength(0);
+      const events = await sql`SELECT "event_name", "status", "payload_json" FROM "workflow_outbox"
+        WHERE "payload_json"::jsonb ->> 'jobId' = ${activeJobId}`;
+      expect(events.map((row) => [row.event_name, row.status])).toEqual([
+        ["epub/import.cancelled", "pending"],
+      ]);
+      expect(JSON.parse(events[0].payload_json)).toEqual({ jobId: activeJobId });
+    } finally {
+      gate.release();
+      await Promise.allSettled(pending);
+      gate.restore();
+      await sql`DELETE FROM "workflow_outbox" WHERE "payload_json"::jsonb ->> 'jobId' = ${activeJobId}`;
+      await sql`DELETE FROM "novels" WHERE "id" = ${parentId}`;
+    }
+  });
+
+  it("rechecks uploading status after expiry cleanup waits for a novel gate", async () => {
+    // Server-only connection must be initialized against the disposable database first.
+    const { db } = await import("@/lib/db");
+    const parentId = `novel-${randomUUID()}`;
+    const resourceId = `upload-${randomUUID()}`;
+    await sql`INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang")
+      VALUES (${parentId}, ${userId}, 'Expiry race', 'zh', 'en')`;
+    await sql`INSERT INTO "epub_uploads"
+      ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at")
+      VALUES (${resourceId}, ${parentId}, 'source.epub', 3, 1, 3, 'uploading', now() - interval '1 day')`;
+    await sql`INSERT INTO "epub_upload_chunks" ("upload_id", "chunk_index", "data")
+      VALUES (${resourceId}, 0, ${Buffer.from([1, 2, 3])})`;
+    const gate = pauseNextNovelGate(parentId);
+    const pending: Promise<unknown>[] = [];
+    try {
+      const queue = db.transaction(async (tx) => {
+        await novelLocks.lockNovelForMutation(tx, parentId, userId);
+        await tx.execute(
+          drizzleSql`UPDATE "epub_uploads" SET "status" = 'queued' WHERE "id" = ${resourceId}`,
+        );
+      });
+      pending.push(queue);
+      const pid = await bounded(gate.locked);
+      const cleanup = cleanupExpiredEpubUploads();
+      pending.push(cleanup);
+      await waitForNovelWaiter(pid);
+      gate.release();
+      await bounded(Promise.all([queue, cleanup]));
+      const [upload] = await sql`SELECT "status" FROM "epub_uploads" WHERE "id" = ${resourceId}`;
+      expect(upload.status).toBe("queued");
+      const [chunk] =
+        await sql`SELECT "data" FROM "epub_upload_chunks" WHERE "upload_id" = ${resourceId}`;
+      expect(Buffer.from(chunk.data)).toEqual(Buffer.from([1, 2, 3]));
+    } finally {
+      gate.release();
+      await Promise.allSettled(pending);
+      gate.restore();
+      await sql`DELETE FROM "novels" WHERE "id" = ${parentId}`;
+    }
   });
 });

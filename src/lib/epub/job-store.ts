@@ -1,8 +1,9 @@
 import "@tanstack/react-start/server-only";
 
-import { eq, and, asc, count, lt, inArray } from "drizzle-orm";
+import { eq, and, asc, count, sql, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
 import {
   chapters,
   importJobs,
@@ -28,6 +29,23 @@ export async function loadOrderedUploadChunks(uploadId: string) {
     .orderBy(asc(epubUploadChunks.chunkIndex));
 }
 
+async function lockEpubImportJob(tx: NovelMutationTransaction, jobId: string) {
+  const [parent] = await tx
+    .select({ novelId: importJobs.novelId })
+    .from(importJobs)
+    .where(eq(importJobs.id, jobId))
+    .limit(1);
+  if (!parent || !(await lockNovelForMutation(tx, parent.novelId))) return null;
+
+  const [job] = await tx
+    .select()
+    .from(importJobs)
+    .where(and(eq(importJobs.id, jobId), eq(importJobs.novelId, parent.novelId)))
+    .limit(1)
+    .for("update", { of: importJobs });
+  return job ?? null;
+}
+
 export async function stageImportJobItems(
   jobId: string,
   uploadId: string,
@@ -40,14 +58,20 @@ export async function stageImportJobItems(
   }>,
 ): Promise<number> {
   return await db.transaction(async (tx) => {
-    const [job] = await tx
-      .select({ status: importJobs.status })
-      .from(importJobs)
-      .where(eq(importJobs.id, jobId))
-      .for("update");
+    const job = await lockEpubImportJob(tx, jobId);
     if (!job || (job.status !== "pending" && job.status !== "running")) {
       return 0;
     }
+    if (job.kind !== "epub" || job.epubUploadId !== uploadId) {
+      throw new Error("EPUB staging upload does not match import job");
+    }
+    const [upload] = await tx
+      .select({ id: epubUploads.id })
+      .from(epubUploads)
+      .where(and(eq(epubUploads.id, uploadId), eq(epubUploads.novelId, job.novelId)))
+      .limit(1)
+      .for("update", { of: epubUploads });
+    if (!upload) return 0;
 
     // Check if items are already staged (for retry idempotency)
     const [existingCount] = await tx
@@ -101,19 +125,7 @@ export async function importOneStagedChapter(
   sequence: number,
 ): Promise<{ stop: boolean; action?: "added" | "skipped" }> {
   return await db.transaction(async (tx) => {
-    // Lock job row to ensure it is still running
-    const [job] = await tx
-      .select({
-        id: importJobs.id,
-        novelId: importJobs.novelId,
-        status: importJobs.status,
-        added: importJobs.added,
-        skipped: importJobs.skipped,
-        nextNumber: importJobs.nextNumber,
-      })
-      .from(importJobs)
-      .where(eq(importJobs.id, jobId))
-      .for("update");
+    const job = await lockEpubImportJob(tx, jobId);
 
     if (!job || job.status !== "running") {
       return { stop: true };
@@ -201,24 +213,18 @@ async function cleanupEpubResources(
   tx: EpubTransaction,
   jobId: string,
   uploadId: string | null,
+  novelId: string,
 ): Promise<void> {
   await tx.delete(importJobItems).where(eq(importJobItems.jobId, jobId));
   if (!uploadId) return;
-  await tx.delete(epubUploadChunks).where(eq(epubUploadChunks.uploadId, uploadId));
-  await tx.delete(epubUploads).where(eq(epubUploads.id, uploadId));
+  await tx
+    .delete(epubUploads)
+    .where(and(eq(epubUploads.id, uploadId), eq(epubUploads.novelId, novelId)));
 }
 
 export async function markEpubImportJobDone(jobId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    const [job] = await tx
-      .select({
-        id: importJobs.id,
-        status: importJobs.status,
-        epubUploadId: importJobs.epubUploadId,
-      })
-      .from(importJobs)
-      .where(eq(importJobs.id, jobId))
-      .for("update");
+    const job = await lockEpubImportJob(tx, jobId);
 
     if (!job || job.status !== "running") return;
 
@@ -226,25 +232,17 @@ export async function markEpubImportJobDone(jobId: string): Promise<void> {
       .update(importJobs)
       .set({ status: "done", updatedAt: new Date() })
       .where(eq(importJobs.id, jobId));
-    await cleanupEpubResources(tx, job.id, job.epubUploadId);
+    await cleanupEpubResources(tx, job.id, job.epubUploadId, job.novelId);
   });
 }
 
 export async function markEpubImportJobError(jobId: string, message: string): Promise<void> {
   await db.transaction(async (tx) => {
-    const [job] = await tx
-      .select({
-        id: importJobs.id,
-        status: importJobs.status,
-        epubUploadId: importJobs.epubUploadId,
-      })
-      .from(importJobs)
-      .where(eq(importJobs.id, jobId))
-      .for("update");
+    const job = await lockEpubImportJob(tx, jobId);
 
     if (!job) return;
     if (job.status === "cancelled" || job.status === "done" || job.status === "error") {
-      await cleanupEpubResources(tx, job.id, job.epubUploadId);
+      await cleanupEpubResources(tx, job.id, job.epubUploadId, job.novelId);
       return;
     }
 
@@ -252,22 +250,38 @@ export async function markEpubImportJobError(jobId: string, message: string): Pr
       .update(importJobs)
       .set({ status: "error", error: message, updatedAt: new Date() })
       .where(eq(importJobs.id, jobId));
-    await cleanupEpubResources(tx, job.id, job.epubUploadId);
+    await cleanupEpubResources(tx, job.id, job.epubUploadId, job.novelId);
   });
 }
 
 export async function cleanupExpiredUploads(): Promise<number> {
   return await db.transaction(async (tx) => {
-    const now = new Date();
     const expired = await tx
-      .select({ id: epubUploads.id })
+      .select({ novelId: epubUploads.novelId })
       .from(epubUploads)
-      .where(and(lt(epubUploads.expiresAt, now), eq(epubUploads.status, "uploading")));
-    const uploadIds = expired.map((upload) => upload.id);
-    if (uploadIds.length === 0) return 0;
+      .where(
+        and(
+          sql`${epubUploads.expiresAt} <= CURRENT_TIMESTAMP`,
+          eq(epubUploads.status, "uploading"),
+        ),
+      );
+    const novelIds = [...new Set(expired.map((upload) => upload.novelId))].sort();
+    const lockedNovelIds: string[] = [];
+    for (const novelId of novelIds) {
+      if (await lockNovelForMutation(tx, novelId)) lockedNovelIds.push(novelId);
+    }
+    if (lockedNovelIds.length === 0) return 0;
 
-    await tx.delete(epubUploadChunks).where(inArray(epubUploadChunks.uploadId, uploadIds));
-    await tx.delete(epubUploads).where(inArray(epubUploads.id, uploadIds));
-    return uploadIds.length;
+    const deleted = await tx
+      .delete(epubUploads)
+      .where(
+        and(
+          inArray(epubUploads.novelId, lockedNovelIds),
+          sql`${epubUploads.expiresAt} <= CURRENT_TIMESTAMP`,
+          eq(epubUploads.status, "uploading"),
+        ),
+      )
+      .returning({ id: epubUploads.id });
+    return deleted.length;
   });
 }

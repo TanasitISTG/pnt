@@ -423,21 +423,26 @@ function mergeAutomaticRelationship(
   return changed;
 }
 
+export function scrubEntrySpeechFields(entry: CharacterRelationship, updatedAt: string): void {
+  if (
+    entry.selfPronoun === null &&
+    entry.addresseeTerm === null &&
+    entry.sentenceParticles === null
+  )
+    return;
+  entry.selfPronoun = null;
+  entry.addresseeTerm = null;
+  entry.sentenceParticles = null;
+  entry.updatedAt = updatedAt;
+}
+
 function scrubAutomaticSpeechFields(
   relationships: CharacterRelationship[],
   updatedAt: string,
 ): void {
   for (const relationship of relationships) {
     if (relationship.locked) continue;
-    const changed =
-      relationship.selfPronoun !== null ||
-      relationship.addresseeTerm !== null ||
-      relationship.sentenceParticles !== null;
-    if (!changed) continue;
-    relationship.selfPronoun = null;
-    relationship.addresseeTerm = null;
-    relationship.sentenceParticles = null;
-    relationship.updatedAt = updatedAt;
+    scrubEntrySpeechFields(relationship, updatedAt);
   }
 }
 

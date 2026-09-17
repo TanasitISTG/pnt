@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
 import {
   chapters,
   glossaryTerms,
@@ -61,16 +62,29 @@ export async function loadJobChunks(jobId: string) {
     .orderBy(asc(translationJobChunks.index));
 }
 
+async function lockJobContext(tx: NovelMutationTransaction, jobId: string) {
+  const [parent] = await tx
+    .select({ novelId: chapters.novelId })
+    .from(translationJobs)
+    .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+    .where(eq(translationJobs.id, jobId))
+    .limit(1);
+  if (!parent || !(await lockNovelForMutation(tx, parent.novelId))) return null;
+
+  const [row] = await tx
+    .select({ job: translationJobs, chapter: chapters, novel: novels })
+    .from(translationJobs)
+    .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+    .innerJoin(novels, eq(chapters.novelId, novels.id))
+    .where(and(eq(translationJobs.id, jobId), eq(chapters.novelId, parent.novelId)))
+    .limit(1)
+    .for("update", { of: [translationJobs, chapters] });
+  return row ?? null;
+}
+
 export async function beginJob(jobId: string, generation: number) {
   return db.transaction(async (tx) => {
-    const [row] = await tx
-      .select({ job: translationJobs, chapter: chapters, novel: novels })
-      .from(translationJobs)
-      .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-      .innerJoin(novels, eq(chapters.novelId, novels.id))
-      .where(eq(translationJobs.id, jobId))
-      .limit(1)
-      .for("update");
+    const row = await lockJobContext(tx, jobId);
 
     if (!row || !canRunJob(row.job, row.chapter, generation)) return null;
 
@@ -111,19 +125,12 @@ export async function beginJob(jobId: string, generation: number) {
 }
 
 async function lockRunnableJob(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: NovelMutationTransaction,
   jobId: string,
   generation: number,
   expectedDoneChunks: number,
 ) {
-  const [row] = await tx
-    .select({ job: translationJobs, chapter: chapters, novel: novels })
-    .from(translationJobs)
-    .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-    .innerJoin(novels, eq(chapters.novelId, novels.id))
-    .where(eq(translationJobs.id, jobId))
-    .limit(1)
-    .for("update");
+  const row = await lockJobContext(tx, jobId);
 
   if (
     !row ||
@@ -220,14 +227,7 @@ export interface CompleteJobInput {
 
 export async function completeJob(input: CompleteJobInput) {
   return db.transaction(async (tx) => {
-    const [row] = await tx
-      .select({ job: translationJobs, chapter: chapters, novel: novels })
-      .from(translationJobs)
-      .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-      .innerJoin(novels, eq(chapters.novelId, novels.id))
-      .where(eq(translationJobs.id, input.jobId))
-      .limit(1)
-      .for("update");
+    const row = await lockJobContext(tx, input.jobId);
 
     if (
       !row ||
@@ -236,6 +236,10 @@ export async function completeJob(input: CompleteJobInput) {
       !canRunJob(row.job, row.chapter, input.generation)
     ) {
       return false;
+    }
+
+    if (input.glossaryRows.some((term) => term.novelId !== row.novel.id)) {
+      throw new Error("Finalization glossary terms must belong to the job's novel");
     }
 
     const chapterUpdated = await tx
@@ -301,13 +305,7 @@ export async function failActiveJob(
   logsJson: string,
 ) {
   return db.transaction(async (tx) => {
-    const [row] = await tx
-      .select({ job: translationJobs, chapter: chapters })
-      .from(translationJobs)
-      .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
-      .where(eq(translationJobs.id, jobId))
-      .limit(1)
-      .for("update");
+    const row = await lockJobContext(tx, jobId);
 
     if (!row || !canRunJob(row.job, row.chapter, generation)) return false;
 

@@ -3,6 +3,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { novels, chapters } from "@/lib/db/schema";
 import { ensureSession, getSession } from "@/lib/auth/functions";
 import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
@@ -174,30 +175,22 @@ export const createChapter = createServerFn({ method: "POST" })
     return withSafeHandler(async () => {
       const session = await ensureSession();
 
-      // Verify novel ownership
-      const [novel] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
-        .limit(1);
-
-      if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
-      }
-
-      const chapterId = nanoid();
-
-      await db.insert(chapters).values({
-        id: chapterId,
-        novelId: data.novelId,
-        number: data.number.toString(),
-        title: data.title,
-        rawContent: data.rawContent,
-        rawCharCount: data.rawContent.length,
-        status: "raw",
+      return db.transaction(async (tx) => {
+        if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
+          throw new SafeServerError("Novel not found or unauthorized");
+        }
+        const chapterId = nanoid();
+        await tx.insert(chapters).values({
+          id: chapterId,
+          novelId: data.novelId,
+          number: data.number.toString(),
+          title: data.title,
+          rawContent: data.rawContent,
+          rawCharCount: data.rawContent.length,
+          status: "raw",
+        });
+        return { id: chapterId };
       });
-
-      return { id: chapterId };
     });
   });
 

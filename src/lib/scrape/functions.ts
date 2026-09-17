@@ -3,6 +3,7 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { novels, chapters, importJobs } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
@@ -48,24 +49,35 @@ export const importChapter = createServerFn({ method: "POST" })
 
       const scraped = await fetchAndParse(data.url, data.provider);
 
-      const id = nanoid();
-      const [inserted] = await db
-        .insert(chapters)
-        .values({
-          id,
-          novelId: data.novelId,
-          number: scraped.number.toString(),
-          title: scraped.title,
-          rawContent: scraped.content,
-          rawCharCount: scraped.content.length,
-          status: "raw",
-        })
-        .onConflictDoNothing({ target: [chapters.novelId, chapters.number] })
-        .returning({ id: chapters.id });
+      // Unknown numbering is usable for preview and TOC-driven range imports,
+      // but a single import has no authoritative position to fall back on.
+      const chapterNumber = scraped.number;
+      if (chapterNumber === null) {
+        throw new SafeServerError("Could not determine a chapter number from the source page");
+      }
 
-      if (!inserted) return { created: false as const, ...scraped };
+      return db.transaction(async (tx) => {
+        if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
+          throw new SafeServerError("Novel not found or unauthorized");
+        }
+        const id = nanoid();
+        const [inserted] = await tx
+          .insert(chapters)
+          .values({
+            id,
+            novelId: data.novelId,
+            number: chapterNumber.toString(),
+            title: scraped.title,
+            rawContent: scraped.content,
+            rawCharCount: scraped.content.length,
+            status: "raw",
+          })
+          .onConflictDoNothing({ target: [chapters.novelId, chapters.number] })
+          .returning({ id: chapters.id });
 
-      return { created: true as const, id: inserted.id, ...scraped };
+        if (!inserted) return { created: false as const, ...scraped, number: chapterNumber };
+        return { created: true as const, id: inserted.id, ...scraped, number: chapterNumber };
+      });
     }),
   );
 

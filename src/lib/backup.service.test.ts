@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/lib/db";
+import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
+import { SafeServerError } from "@/lib/server-fn-error";
 import { exportBackupForUser, importBackupForUser } from "./backup.service";
 
 vi.mock("@/lib/db", () => ({
@@ -166,6 +168,37 @@ describe("backup export", () => {
 
     await expect(exportBackupForUser("user-1")).rejects.toThrow(/cover image without a media type/);
   });
+  it.each([
+    "{",
+    JSON.stringify({ version: 2, characters: [], relationships: [] }),
+    JSON.stringify({
+      version: 1,
+      characters: [],
+      relationships: [
+        {
+          id: "missing-pair",
+          speakerId: "missing-a",
+          listenerId: "missing-b",
+          relationship: "friend",
+          speakerStatus: "peer",
+          familiarity: "close",
+          selfPronoun: null,
+          addresseeTerm: null,
+          sentenceParticles: null,
+          register: null,
+          notes: null,
+          enabled: true,
+          locked: true,
+          evidence: null,
+          lastSeenChapter: null,
+          updatedAt: exportedAt,
+        },
+      ],
+    }),
+  ])("refuses an unreadable stored relationship map: %s", async (relationshipMapJson) => {
+    selectQueue = [[novelRow({ relationshipMapJson })], [], []];
+    await expect(exportBackupForUser("user-1")).rejects.toBeInstanceOf(SafeServerError);
+  });
 });
 
 describe("backup import", () => {
@@ -202,19 +235,23 @@ describe("backup import", () => {
       novelIds: [expect.any(String)],
     });
 
-    expect(insertedValues).toHaveLength(3);
-    expect(insertedValues[0]?.rows).toEqual([
+    const savedRows = (table: unknown) =>
+      insertedValues
+        .filter((entry) => entry.table === table)
+        .flatMap((entry) => (Array.isArray(entry.rows) ? entry.rows : [entry.rows]));
+    expect(savedRows(novels)).toEqual([
       expect.objectContaining({
         userId: "user-1",
         title: "Novel (imported)",
         coverMime: "image/png",
         publishedAt: null,
+        relationshipMapJson: '{"version":1,"characters":[],"relationships":[]}',
       }),
     ]);
-    expect(insertedValues[1]?.rows).toEqual([
+    expect(savedRows(chapters)).toEqual([
       expect.objectContaining({ number: "1.00", title: "Chapter 1" }),
     ]);
-    expect(insertedValues[2]?.rows).toEqual([
+    expect(savedRows(glossaryTerms)).toEqual([
       expect.objectContaining({ source: "许野", target: "สวี่เหยี่ย" }),
     ]);
   });
@@ -224,4 +261,25 @@ describe("backup import", () => {
 
     await expect(importBackupForUser("user-1", backup)).rejects.toThrow(/contextTailLength/);
   });
+  it.each([
+    ["originalTitle", 500],
+    ["author", 200],
+    ["description", 5000],
+    ["customPrompt", 10000],
+  ] as const)("rejects oversized %s before opening a transaction", async (field, limit) => {
+    await expect(
+      importBackupForUser("user-1", backupPayload({ [field]: "x".repeat(limit + 1) })),
+    ).rejects.toBeInstanceOf(SafeServerError);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it.each([null, { version: 2, characters: [], relationships: [] }])(
+    "rejects an explicitly invalid relationship map before opening a transaction",
+    async (relationshipMap) => {
+      await expect(
+        importBackupForUser("user-1", backupPayload({ relationshipMap })),
+      ).rejects.toBeInstanceOf(SafeServerError);
+      expect(db.transaction).not.toHaveBeenCalled();
+    },
+  );
 });

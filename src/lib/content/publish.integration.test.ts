@@ -102,6 +102,29 @@ integrationDescribe("translation-aware publication PostgreSQL invariants", () =>
     if (sql) await sql.end({ timeout: 1 });
   });
 
+  it("rejects foreign and deleted chapter publication without changing other rows", async () => {
+    const fixture = await seedFixture();
+    try {
+      await expect(
+        setChapterPublishedForUser(fixture.otherUserId, {
+          chapterId: fixture.chapterIds[6],
+          publishedAt: null,
+        }),
+      ).rejects.toThrow("Chapter not found or unauthorized");
+      expect(await guestVisibleChapterIds(fixture.novelId)).toEqual([fixture.chapterIds[6]]);
+      await sql`DELETE FROM "chapters" WHERE "id" = ${fixture.chapterIds[6]}`;
+      await expect(
+        setChapterPublishedForUser(fixture.ownerUserId, {
+          chapterId: fixture.chapterIds[6],
+          publishedAt: new Date(PAST),
+        }),
+      ).rejects.toThrow("Chapter not found or unauthorized");
+      expect(await guestVisibleChapterIds(fixture.novelId)).toEqual([]);
+    } finally {
+      await cleanupFixture(fixture);
+    }
+  });
+
   it("keeps guest visibility and admin access aligned across every chapter state", async () => {
     const fixture = await seedFixture();
     try {

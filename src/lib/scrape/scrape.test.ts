@@ -101,6 +101,35 @@ const BIQUGE_TOC_FIXTURE = `<!DOCTYPE html>
 </div>
 </body></html>`;
 
+// Minimal reader pages whose heading (and page title) vary while content stays
+// fixed, so numbering behavior can be probed without repeating full fixtures.
+function twkanChapterHtml(heading: string | null, pageTitle?: string): string {
+  return `<!DOCTYPE html>
+<html><head>${pageTitle ? `<title>${pageTitle}</title>` : ""}</head><body>
+<div class="read_main">
+${heading === null ? "" : `<h1>${heading}</h1>`}
+<div id="txtcontent0">
+第一段正文內容。<br>
+第二段正文內容。
+</div>
+</div>
+</body></html>`;
+}
+
+function biqugeChapterHtml(heading: string, pageTitle?: string): string {
+  return `<!DOCTYPE html>
+<html><head>${pageTitle ? `<title>${pageTitle}</title>` : ""}</head><body>
+<div class="container autoheight">
+	<div class="book read">
+		<h1>${heading}</h1>
+		<div class="read-content" id="chaptercontent">
+			<p>正文內容。</p>
+		</div>
+	</div>
+</div>
+</body></html>`;
+}
+
 describe("parseChapter (quanben)", () => {
   it("extracts number, title, content, nextUrl", () => {
     const r = parseChapter(QUANBEN_FIXTURE, QUANBEN_URL);
@@ -127,6 +156,32 @@ describe("parseChapter (twkan)", () => {
     expect(r.content).toBe("第一段正文內容。\n\n第二段正文內容。\n\n第三段正文內容。");
     expect(r.nextUrl).toBe("https://twkan.com/txt/93984/52204813");
   });
+
+  it("keeps content with a null number when the heading carries no numbering", () => {
+    const r = parseChapter(twkanChapterHtml("心動小島2026"), TWKAN_URL);
+    expect(r.number).toBeNull();
+    expect(r.title).toBe("心動小島2026");
+    expect(r.content).toBe("第一段正文內容。\n\n第二段正文內容。");
+
+    const proseOnly = parseChapter(twkanChapterHtml("風起的地方"), TWKAN_URL);
+    expect(proseOnly.number).toBeNull();
+    expect(proseOnly.title).toBe("風起的地方");
+  });
+
+  it("falls back to the page title for the chapter number", () => {
+    const r = parseChapter(
+      twkanChapterHtml("心動小島2026", "第7章 心動小島2026_twkan 小說"),
+      TWKAN_URL,
+    );
+    expect(r.number).toBe(7);
+    expect(r.title).toBe("心動小島2026");
+  });
+
+  it("throws instead of fabricating a heading when no title source exists", () => {
+    expect(() => parseChapter(twkanChapterHtml(null), TWKAN_URL)).toThrow(
+      "Could not find chapter title on page",
+    );
+  });
 });
 
 describe("parseChapter (biquge)", () => {
@@ -137,17 +192,78 @@ describe("parseChapter (biquge)", () => {
     expect(r.content).toBe("趙思思離開出租屋後，第一件事就是把相冊里的合照撕了個粉碎。\n\n混蛋！");
     expect(r.nextUrl).toBe("https://www.biquge.tw/book/8143360/82204464.html");
   });
+
+  it("keeps content with a null number when the title carries no numbering", () => {
+    const proseOnly = parseChapter(biqugeChapterHtml("讓人短命的工作"), BIQUGE_URL);
+    expect(proseOnly.number).toBeNull();
+    expect(proseOnly.title).toBe("讓人短命的工作");
+
+    const digitsInTitle = parseChapter(biqugeChapterHtml("心動小島2026"), BIQUGE_URL);
+    expect(digitsInTitle.number).toBeNull();
+    expect(digitsInTitle.title).toBe("心動小島2026");
+    expect(digitsInTitle.content).toBe("正文內容。");
+  });
+
+  it("falls back to the page title for the chapter number", () => {
+    const r = parseChapter(
+      biqugeChapterHtml("讓人短命的工作", "第8章 讓人短命的工作_心動小島2026_小說"),
+      BIQUGE_URL,
+    );
+    expect(r.number).toBe(8);
+    expect(r.title).toBe("讓人短命的工作");
+  });
+
+  it("parses decimal, zero, and leading-zero chapter labels", () => {
+    expect(parseChapter(biqugeChapterHtml("第1.5章 番外"), BIQUGE_URL)).toMatchObject({
+      number: 1.5,
+      title: "番外",
+    });
+    expect(parseChapter(biqugeChapterHtml("第007章 上岸第一劍"), BIQUGE_URL).number).toBe(7);
+    expect(parseChapter(biqugeChapterHtml("第000章 楔子"), BIQUGE_URL).number).toBe(0);
+  });
+
+  it("parses English Chapter/Ch labels and delimited leading numbers", () => {
+    expect(parseChapter(biqugeChapterHtml("Chapter 12 - 訓練"), BIQUGE_URL)).toMatchObject({
+      number: 12,
+      title: "訓練",
+    });
+    expect(parseChapter(biqugeChapterHtml("Ch.5 訓練"), BIQUGE_URL)).toMatchObject({
+      number: 5,
+      title: "訓練",
+    });
+    expect(parseChapter(biqugeChapterHtml("12、結局"), BIQUGE_URL)).toMatchObject({
+      number: 12,
+      title: "結局",
+    });
+  });
+
+  it("rejects explicit numbers outside the stored numeric(8,2) range or scale", () => {
+    const invalid = "Could not determine a valid chapter number from the source page";
+    expect(() => parseChapter(biqugeChapterHtml("第1000000章 溢出"), BIQUGE_URL)).toThrow(invalid);
+    expect(() => parseChapter(biqugeChapterHtml("第1.234章 精度"), BIQUGE_URL)).toThrow(invalid);
+    expect(() => parseChapter(biqugeChapterHtml("1234567 心動小島"), BIQUGE_URL)).toThrow(invalid);
+    expect(parseChapter(biqugeChapterHtml("第999999章 頂點"), BIQUGE_URL).number).toBe(999999);
+  });
+
+  it("rejects malformed explicit chapter tokens without prefix truncation", () => {
+    for (const heading of ["Chapter 1e3", "1.2.3 Title", "第-1章 標題"]) {
+      expect(() => parseChapter(biqugeChapterHtml(heading), BIQUGE_URL)).toThrow(
+        "Could not determine a valid chapter number from the source page",
+      );
+    }
+  });
 });
 
 describe("parseBiqugeToc", () => {
-  it("parses TOC links into a map of chapter numbers to full URLs", () => {
+  it("parses TOC links into a map of 1-based positions to full URLs", () => {
     const toc = parseBiqugeToc(BIQUGE_TOC_FIXTURE, "https://www.biquge.tw/book/8143360/");
+    expect(Object.keys(toc)).toEqual(["1", "2", "3"]);
     expect(toc[1]).toBe("https://www.biquge.tw/book/8143360/82204461.html");
     expect(toc[2]).toBe("https://www.biquge.tw/book/8143360/82204462.html");
     expect(toc[3]).toBe("https://www.biquge.tw/book/8143360/82204463.html");
   });
 
-  it("handles multi-volume renumbering after chapter 324 using sequential indices", () => {
+  it("keys multi-volume TOCs by position only, never by printed chapter number", () => {
     const multiVolFixture = `<!DOCTYPE html>
 <html><body>
 <div class="book-list">
@@ -158,10 +274,44 @@ describe("parseBiqugeToc", () => {
 </div>
 </body></html>`;
     const toc = parseBiqugeToc(multiVolFixture, "https://www.biquge.tw/book/8143360/");
+    expect(Object.keys(toc)).toEqual(["1", "2", "3"]);
     expect(toc[1]).toBe("https://www.biquge.tw/book/8143360/82204461.html");
     expect(toc[2]).toBe("https://www.biquge.tw/book/8143360/82204462.html");
     expect(toc[3]).toBe("https://www.biquge.tw/book/8143360/82204463.html");
-    expect(toc[324]).toBe("https://www.biquge.tw/book/8143360/82204461.html");
+    expect(toc[324]).toBeUndefined();
+  });
+
+  it("deduplicates repeated links without leaving position gaps", () => {
+    const duplicateFixture = `<!DOCTYPE html>
+<html><body>
+<div class="book-list">
+<dt>正文</dt>
+<a href="/book/8143360/82204461.html">第1章 上岸第一劍</a>
+<a href="/book/8143360/82204461.html">第1章 上岸第一劍</a>
+<a href="/book/8143360/82204462.html">第2章 心動小島2026</a>
+</div>
+</body></html>`;
+    const toc = parseBiqugeToc(duplicateFixture, "https://www.biquge.tw/book/8143360/");
+    expect(Object.keys(toc)).toEqual(["1", "2"]);
+    expect(toc[1]).toBe("https://www.biquge.tw/book/8143360/82204461.html");
+    expect(toc[2]).toBe("https://www.biquge.tw/book/8143360/82204462.html");
+  });
+
+  it("traverses the whole page when the main section holds no chapter links", () => {
+    const lateSectionFixture = `<!DOCTYPE html>
+<html><body>
+<div class="book-list">
+<a href="/book/8143360/82204461.html">第5章 上岸第一劍</a>
+<a href="/book/8143360/82204462.html">第6章 心動小島2026</a>
+<dt>正文</dt>
+</div>
+</body></html>`;
+    const toc = parseBiqugeToc(lateSectionFixture, "https://www.biquge.tw/book/8143360/");
+    expect(Object.keys(toc)).toEqual(["1", "2"]);
+    expect(toc[1]).toBe("https://www.biquge.tw/book/8143360/82204461.html");
+    expect(toc[2]).toBe("https://www.biquge.tw/book/8143360/82204462.html");
+    expect(toc[5]).toBeUndefined();
+    expect(toc[6]).toBeUndefined();
   });
 });
 
@@ -219,6 +369,39 @@ describe("findSource", () => {
 describe("chapterUrlFor", () => {
   it("swaps the chapter number", () => {
     expect(chapterUrlFor(QUANBEN_URL, 31)).toBe("https://www.quanben.io/n/some-novel/31.html");
+  });
+
+  it("preserves query and fragment", () => {
+    expect(chapterUrlFor("https://www.quanben.io/n/book/30.html?lang=zh#text", 31)).toBe(
+      "https://www.quanben.io/n/book/31.html?lang=zh#text",
+    );
+    expect(chapterUrlFor(`${QUANBEN_URL}?lang=zh`, 31)).toBe(
+      "https://www.quanben.io/n/some-novel/31.html?lang=zh",
+    );
+    expect(chapterUrlFor(`${QUANBEN_URL}#text`, 31)).toBe(
+      "https://www.quanben.io/n/some-novel/31.html#text",
+    );
+  });
+
+  it("supports decimal chapter numbers", () => {
+    expect(chapterUrlFor(QUANBEN_URL, 1.5)).toBe("https://www.quanben.io/n/some-novel/1.5.html");
+  });
+
+  it("leaves a pathname without a numeric suffix unchanged", () => {
+    expect(chapterUrlFor("https://www.quanben.io/n/some-novel/", 31)).toBe(
+      "https://www.quanben.io/n/some-novel/",
+    );
+  });
+
+  it("does not rewrite numeric suffixes inside nonnumeric filename components", () => {
+    const url = "https://www.quanben.io/n/book/chapter30.html?lang=zh#text";
+    expect(chapterUrlFor(url, 31)).toBe(url);
+  });
+
+  it("does not rewrite an .html-looking query value", () => {
+    expect(chapterUrlFor(`${QUANBEN_URL}?file=9.html`, 31)).toBe(
+      "https://www.quanben.io/n/some-novel/31.html?file=9.html",
+    );
   });
 });
 

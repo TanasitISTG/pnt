@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { and, eq, sql } from "drizzle-orm";
 
-import { db } from "@/lib/db";
+import type { db } from "@/lib/db";
 import { translationJobs, workflowOutbox } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
 import { appendLogEntry, createLog } from "./log-entry";

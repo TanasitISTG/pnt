@@ -7,6 +7,7 @@ import {
   assertNovelOwnedByUser,
   createReaderBookmarkForUser,
   deleteReaderBookmarkForUser,
+  getReaderBookmarksForUser,
   getReaderNovelStateForUser,
   markReaderChapterReadForUser,
   saveReaderPositionForUser,
@@ -16,6 +17,7 @@ import {
 import {
   createBookmarkSchema,
   deleteBookmarkSchema,
+  listReaderBookmarksSchema,
   readerChapterSchema,
   readerNovelSchema,
   saveReaderPositionSchema,
@@ -29,6 +31,16 @@ export const getReaderNovelState = createServerFn({ method: "GET" })
       const session = await ensureSession();
       await assertNovelOwnedByUser(session.user.id, data.novelId);
       return getReaderNovelStateForUser(session.user.id, data.novelId);
+    });
+  });
+
+export const getReaderBookmarks = createServerFn({ method: "GET" })
+  .validator(listReaderBookmarksSchema)
+  .handler(async ({ data }) => {
+    return withSafeHandler(async () => {
+      const session = await ensureSession();
+      await assertNovelOwnedByUser(session.user.id, data.novelId);
+      return getReaderBookmarksForUser(session.user.id, data.novelId, data.cursor);
     });
   });
 
@@ -48,6 +60,7 @@ export const saveReaderPosition = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
+      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
       await saveReaderPositionForUser(
         session.user.id,
         data.novelId,

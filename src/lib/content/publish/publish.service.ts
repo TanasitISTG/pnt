@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 
@@ -24,6 +25,14 @@ export async function setChapterPublishedForUser(
   input: ChapterPublicationInput,
 ): Promise<{ id: string }> {
   await db.transaction(async (tx) => {
+    const [parent] = await tx
+      .select({ novelId: chapters.novelId })
+      .from(chapters)
+      .where(eq(chapters.id, input.chapterId))
+      .limit(1);
+    if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
+      throw new SafeServerError("Chapter not found or unauthorized");
+    }
     const [existing] = await tx
       .select({
         id: chapters.id,
@@ -32,9 +41,15 @@ export async function setChapterPublishedForUser(
       })
       .from(chapters)
       .innerJoin(novels, eq(chapters.novelId, novels.id))
-      .where(and(eq(chapters.id, input.chapterId), eq(novels.userId, userId)))
+      .where(
+        and(
+          eq(chapters.id, input.chapterId),
+          eq(chapters.novelId, parent.novelId),
+          eq(novels.userId, userId),
+        ),
+      )
       .limit(1)
-      .for("update");
+      .for("update", { of: chapters });
 
     if (!existing) {
       throw new SafeServerError("Chapter not found or unauthorized");
