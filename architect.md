@@ -39,8 +39,38 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 18. Job history and stats are retained reads, not activity sources. Active progress comes from the lean owned activity query; terminal transitions invalidate retained history/stats once.
 19. Evaluation version 2 findings are bounded, immutable snapshot evidence with stable classifications, one-based paragraph locations when known, capped excerpts, and reader-anchor links. Corrections require a new report.
 20. Reader manifests contain only navigation metadata. Full chapter bodies are loaded through the full chapter query, and reader anchors take precedence over saved scroll restoration.
-21. Chapter deletion observes and locks the pointed translation job before locking the chapter, then revalidates the pointer. Active work is terminalized with an exact-generation cancellation outbox event before the chapter and cascaded job rows are deleted.
+21. Chapter deletion first acquires the owned novel gate, then observes and locks the pointed translation job before locking the chapter and revalidating the pointer. Active work is terminalized with an exact-generation cancellation outbox event before the chapter and cascaded job rows are deleted; matching reader positions are cleared in the same transaction.
 22. Signed-in reader state is account-scoped and single-writer per `(user, novel)`. Opening a chapter preserves the stored fraction only for that chapter and resets it otherwise; a scroll sample for any other chapter is dropped rather than overwriting the newer position; read marks are idempotent. Guests keep the browser-local equivalent, and reader settings stay browser-local for everyone.
+
+## Novel-first mutation protocol
+
+Participating mutations acquire all required novel rows before any descendant locks or
+writes. Parent discovery is a plain read used only to locate the gate, not a mutation
+snapshot. `db/novel-lock.ts` provides the single-row `FOR UPDATE OF novels` gate; request
+callers include the authenticated owner, while workers derive the novel from persisted
+job linkage. Existing domain-specific novel-only gates remain valid.
+
+After waiting for the gate, reread child state and revalidate parent linkage, ownership,
+active pointers, source revision, generation, status, and chunk cursor as applicable.
+The gate does not replace worker CAS checks. Operations spanning multiple novels discover,
+deduplicate, sort IDs, and await one novel lock at a time in ascending order before touching
+descendants; they never acquire an additional novel after a descendant lock. There is no
+global child-table lock order and no generic contention retry substitute for this protocol.
+
+The gate covers translation enqueue/retry/cancellation and worker commits, chapter changes
+and deletion, publication, glossary and relationship writes, import chapter commits and
+resource cleanup, and reader position/read-mark/bookmark creation. Provider I/O remains
+outside transactions; missing-title generation takes a short gated persistence transaction
+with revision/generation/eligibility guards only after the provider returns. Bookmark
+note/deletion and import status-only writes are leaf exceptions: they acquire no later
+parent locks. New-novel backup inserts do not lock preexisting novels.
+
+EPUB admission alone locks the account row before its owned novel gate to serialize
+cross-novel capacity checks; no participant may acquire an account lock after a novel gate.
+Novel deletion cancels active translation and import jobs and writes cancellation intents
+before cascading descendants in the same transaction. Best-effort dispatch occurs after
+commit; durable outbox intents survive the cascade, and late worker writes cannot recreate
+deleted resources.
 
 ## State transitions
 
@@ -74,6 +104,15 @@ Migration 0022 idempotently expands legacy `translation_jobs.chunks_json` arrays
 
 The active-job column intentionally has no foreign key. Translation jobs already cascade when a chapter is deleted, while avoiding a circular foreign-key lifecycle lets the transaction clear ownership before or while terminalizing a job.
 
+Reader bookmark spot uniqueness is enforced by `reader_bookmarks_spot_uidx` over user,
+chapter, paragraph, and `coalesce(source_column, '')`. Migration preflight refuses existing
+duplicates with a nonzero exit code before applying migrations; it never deletes or merges
+bookmarks. The unique index is the race-safe backstop, not permission to discard notes.
+Release operators must back up the database, stop writers in maintenance mode, and keep
+maintenance until migration and the matching deployment succeed. A duplicate preflight
+failure aborts the release; restore service with the existing app/schema and resolve the
+data deliberately before retrying. See README deployment migrations for the release boundary.
+
 ## Relationship-map continuity
 
 Each novel stores one bounded version-1 relationship document in `novels.relationship_map_json`. The protected relationship editor applies one atomic, ownership-checked mutation at a time; an invalid persisted document is never silently overwritten.
@@ -90,6 +129,7 @@ Unlocked exact speech fields are scrubbed and never reach the translator as auth
 - Nonempty retained translations are evaluated regardless of chapter job status. Untranslated/whitespace-only content is skipped, not counted as clean or failed quality checks.
 - Version-1 snapshots retain chapter timestamps and a fingerprint of the language pair and approved source/target mappings. Version-2 snapshots additionally retain at most 20 typed findings, one-based paragraph locations when known, capped source/translation excerpts, and glossary terms. Detail reads compare these with current data; publication-only timestamp changes conservatively mark findings changed. Deleted chapters have no navigation action, including in legacy reports.
 - Stored JSON is validated before rendering. Malformed or inconsistent evidence is unavailable, not a clean result. Legacy reports preserve recorded metrics with unknown freshness and classification; new checks provide the missing metadata.
+- Glossary finding terms retain the full imported values; the report schema does not impose a separate 500-character limit. Excerpt limits remain independent.
 - Owner-only summaries omit raw JSON; detail responses return 10/25/50 rows. Review URLs preserve report/filter/page across reader edits and browser Back. Guest pages never request review data.
 
 ## Reader state
@@ -97,6 +137,63 @@ Unlocked exact speech fields are scrubbed and never reach the translator as auth
 Signed-in reading position, read chapters, and bookmarks live in `reader_progress`, `reader_chapter_reads`, and `reader_bookmarks`, one row set per user and novel, and are read through `getReaderNovelState`. The route loader prefetches `["readerState", novelId]` for signed-in readers so the restore path reads it synchronously; guests read the `pnt-reader-progress` and `pnt-reader-bookmarks` browser stores instead and never issue the request. The two sources are intentionally not merged.
 
 Client writes go through one store per `(novel, user)`: writes are serialized in order, and throttled scroll samples flush at most every 4 s or 2% of the chapter, with an immediate flush on chapter change and unmount; an unload-time flush is skipped because the browser aborts that request. The SQL guards above make out-of-order arrivals harmless. Scroll samples never enter the React snapshot, so reading does not re-render the chapter. Bookmarks store a paragraph index plus an excerpt; navigation re-locates the excerpt in the target chapter (falling back to the stored index) so re-translation and edits do not break them. One bookmark exists per paragraph and column: re-bookmarking a spot returns the existing row rather than inserting a twin, and the client drops its optimistic entry when the server reports the duplicate. In-chapter search, typography controls, and reader page themes are client-only and do not persist beyond `pnt-reader-settings`.
+
+Account bookmarks use 200-row keyset pages ordered by `(created_at DESC, id DESC)` across
+the novel, not a 200-bookmark storage quota. `getReaderNovelState` returns the first page
+and `bookmarkNextCursor`; `getReaderBookmarks` returns subsequent pages. The opaque cursor
+retains exact database timestamp text plus ID, so ties and deletion of its original row do
+not break continuation. Creation is atomic under the novel/chapter locks and uniqueness
+constraint; duplicates return the existing ID without replacing its note or excerpt.
+The paging index includes `(user_id, novel_id, created_at, id)`, including the tie-breaker.
+Migration 0035 corrects that index forward-only; previously applied 0033/0034 are preserved.
+
+Loaded pages append into the existing reader-state Query cache, with stale responses
+discarded after an intervening cache update. An authoritative refetch resets the collection
+to the first page and its cursor. The dialog keeps loaded rows on paging failure and offers
+retry; **Load more**, `N loaded`, and `N+` distinguish a partial list from a complete count.
+Continuation remains available after all loaded bookmarks are removed. Paging loading/error
+state is scoped to the current reader identity, so requests from an old novel/account cannot
+block or surface errors in its replacement.
+Guest bookmarks remain browser-local and do not use account paging.
+
+## Export streaming
+
+Owned TXT/EPUB exports select nonblank retained translations independently of publication
+or current job status, ordered by the qualified numeric chapter column with `.cursor(1)`.
+`HEAD` checks novel ownership and translation existence only; it never opens the body cursor.
+Pull-based production consumes at most one chapter per production step and respects the
+64 KiB byte-queue high-water mark. This is not a hard total-memory cap: a chapter's output,
+ZIP finalization output, and compact EPUB title metadata can exceed it; chapter bodies do
+not accumulate for the whole novel.
+
+EPUB writes chapter entries first and derives nav/OPF/spine from the chapters actually
+consumed, then finalizes the ZIP. The earlier existence check is not a database snapshot:
+if all eligible chapters disappear before cursor iteration, a valid empty EPUB is allowed.
+Cancellation stops production, closes iteration, and terminates compression. Iteration or
+compression failures remain stream errors rather than successful truncated archives.
+
+## Provider transport and upload admission
+
+Both OpenAI and Gemini use the server-only provider network boundary and a shared Undici
+Agent. Default endpoints are public HTTPS; local/private endpoints require administrator
+opt-in through exact canonical `LOCAL_PROVIDER_ORIGINS`. All DNS answers are validated and
+pinned for each new socket while original Host/SNI and TLS verification are retained.
+Exceptions do not authorize other origins, redirects, URL credentials, or TLS bypasses.
+Gemini uses `v1beta` `generateContent` REST under the configured base path, with API-key
+header authentication; no thinking configuration is synthesized and thought parts are
+excluded from visible text. Provider errors expose fixed messages rather than upstream bodies.
+
+EPUB admission allows two retained uploading/queued/staged resources per account and
+100 MiB declared raw reservation. Uploading/queued rows reserve file size; staged rows
+release raw reservation only with transactional raw-chunk removal but retain their slot.
+Files remain limited to 50 MiB and 1 MiB chunks. Uploading expiry uses database time plus
+24 hours; expired undeleted rows still count. Abort/reaping rechecks uploading state under
+the novel gate, so queued/staged work is not removed by stale cleanup candidates. These
+quotas are atomic and never fail open, but do not bound expanded archive/request memory.
+Account create/chunk rate limits are 6/120 per minute and remain availability-first on
+limiter failure, unlike storage admission. Guest IP limits require explicit trusted proxy
+hops (default zero); missing identity or limiter failure logs and allows. README and
+`.env.example` describe deployment configuration.
 
 ## Boundaries
 
