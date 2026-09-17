@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 
 import { buildEpub, createEpubStream } from "./epub";
 
+afterEach(() => vi.useRealTimers());
 const META = {
   title: "Test Novel <&>",
   author: "Author Name",
@@ -32,17 +33,98 @@ describe("buildEpub", () => {
       }
 
       const bytes = new Uint8Array(
-        await new Response(
-          createEpubStream(
-            META,
-            CHAPTERS.map((chapter) => chapter.title),
-            chapters(),
-          ),
-        ).arrayBuffer(),
+        await new Response(createEpubStream(META, chapters())).arrayBuffer(),
       );
       const streamedEntries = unzipSync(bytes);
       expect(strFromU8(streamedEntries["mimetype"])).toBe("application/epub+zip");
-      expect(strFromU8(entries["OEBPS/chapter-2.xhtml"])).toContain("Only para.");
+      expect(strFromU8(streamedEntries["OEBPS/chapter-2.xhtml"])).toContain("Only para.");
+    });
+
+    it("emits nav/spine matching consumed chapters even when iteration stops early", async () => {
+      async function* truncated() {
+        yield CHAPTERS[0];
+      }
+
+      const entries = unzipSync(
+        new Uint8Array(await new Response(createEpubStream(META, truncated())).arrayBuffer()),
+      );
+      const nav = strFromU8(entries["OEBPS/nav.xhtml"]);
+      expect(nav).toContain("Start");
+      expect(nav).not.toContain("Next");
+      const opf = strFromU8(entries["OEBPS/content.opf"]);
+      expect(opf).toContain('idref="ch1"');
+      expect(opf).not.toContain('idref="ch2"');
+      expect(strFromU8(entries["OEBPS/chapter-1.xhtml"])).toContain("First para.");
+      expect(Object.keys(entries).some((name) => name.includes("chapter-2"))).toBe(false);
+    });
+
+    it("propagates iteration errors as stream errors", async () => {
+      async function* throwing() {
+        yield CHAPTERS[0];
+        throw new Error("iteration failed");
+      }
+
+      await expect(new Response(createEpubStream(META, throwing())).arrayBuffer()).rejects.toThrow(
+        "iteration failed",
+      );
+    });
+
+    it("propagates a zero-chapter stream as a valid empty archive", async () => {
+      async function* empty() {
+        // yields nothing
+      }
+
+      const entries = unzipSync(
+        new Uint8Array(await new Response(createEpubStream(META, empty())).arrayBuffer()),
+      );
+      const opf = strFromU8(entries["OEBPS/content.opf"]);
+      expect(opf).not.toContain('idref="ch1"');
+      expect(entries["OEBPS/chapter-1.xhtml"]).toBeUndefined();
+      expect(strFromU8(entries["OEBPS/nav.xhtml"])).not.toContain("chapter-1.xhtml");
+    });
+
+    it("applies backpressure so unread data halts producer advancement", async () => {
+      vi.useFakeTimers();
+      let consumed = 0;
+      let seed = 123456;
+      const body = Array.from({ length: 300_000 }, () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return String.fromCharCode(33 + ((seed >>> 16) % 90));
+      }).join("");
+      async function* chapters() {
+        for (let index = 0; index < 20; index++) {
+          consumed++;
+          yield { title: String(index), paragraphs: [body] };
+        }
+      }
+      const reader = createEpubStream(META, chapters()).getReader();
+      while (consumed === 0) await reader.read();
+      await vi.runAllTimersAsync();
+      const pausedAt = consumed;
+      expect(pausedAt).toBe(1);
+      await vi.runAllTimersAsync();
+      expect(consumed).toBe(pausedAt);
+      await reader.cancel();
+    });
+
+    it("runs iterator cleanup on consumer cancellation", async () => {
+      let finallyRan = false;
+      let started = false;
+      async function* cancellable() {
+        try {
+          started = true;
+          for (const chapter of CHAPTERS) yield chapter;
+          while (true) yield { title: "extra", paragraphs: [] };
+        } finally {
+          finallyRan = true;
+        }
+      }
+
+      const reader = createEpubStream(META, cancellable()).getReader();
+      while (!started) await reader.read();
+      await reader.cancel();
+      await Promise.resolve();
+      expect(finallyRan).toBe(true);
     });
   });
 

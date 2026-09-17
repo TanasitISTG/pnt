@@ -107,58 +107,106 @@ function addTextFile(
   file.push(strToU8(content), true);
 }
 
+// One chapter's compressed output may exceed the queue mark; the bound is
+// "highWaterMark plus at most one pending chapter unit", never a whole novel.
+const STREAM_HIGH_WATER_MARK = 64 * 1024;
+
 export function createEpubStream(
   meta: EpubMetadata,
-  chapterTitles: readonly string[],
   chapters: AsyncIterable<EpubChapter>,
 ): ReadableStream<Uint8Array> {
-  let cancelled = false;
-  let zip: Zip | null = null;
-
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      zip = new Zip((error, chunk, final) => {
-        if (cancelled) return;
-        if (error) {
-          controller.error(error);
-          return;
-        }
-        controller.enqueue(chunk);
-        if (final) controller.close();
-      });
-
-      void (async () => {
-        try {
-          const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-          addTextFile(zip!, "mimetype", "application/epub+zip", 0);
-          addTextFile(zip!, "META-INF/container.xml", containerXml());
-          addTextFile(zip!, "OEBPS/content.opf", packageXml(meta, chapterTitles, modified));
-          addTextFile(zip!, "OEBPS/nav.xhtml", navigationXml(meta, chapterTitles));
-
-          let index = 0;
-          for await (const chapter of chapters) {
-            if (cancelled) return;
-            index += 1;
-            addTextFile(
-              zip!,
-              `OEBPS/chapter-${index}.xhtml`,
-              chapterXhtml(chapter.title, chapter.paragraphs),
-            );
-          }
-          if (index !== chapterTitles.length) {
-            throw new Error(`Expected ${chapterTitles.length} EPUB chapters, received ${index}`);
-          }
-          zip!.end();
-        } catch (error) {
-          if (!cancelled) controller.error(error);
-        }
-      })();
-    },
-    cancel() {
-      cancelled = true;
-      zip?.terminate();
-    },
+  let iterator: AsyncIterator<EpubChapter> | null = null;
+  let closed = false;
+  let initialized = false;
+  let finished = false;
+  const pending: Uint8Array[] = [];
+  let pendingIndex = 0;
+  const titles: string[] = [];
+  let compressionError: Error | null = null;
+  const zip = new Zip((error, chunk, final) => {
+    if (closed) return;
+    if (error) compressionError = error;
+    else pending.push(chunk);
+    if (final) finished = true;
   });
+
+  async function closeIterator() {
+    const current = iterator;
+    iterator = null;
+    await current?.return?.();
+  }
+
+  function drain(controller: ReadableStreamDefaultController<Uint8Array>) {
+    while (pendingIndex < pending.length) {
+      controller.enqueue(pending[pendingIndex++]);
+      if ((controller.desiredSize ?? 0) <= 0) break;
+    }
+    if (pendingIndex === pending.length) {
+      pending.length = 0;
+      pendingIndex = 0;
+      if (finished) {
+        closed = true;
+        controller.close();
+      }
+    }
+  }
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        if (closed) return;
+        try {
+          if (pending.length > 0) {
+            drain(controller);
+            return;
+          }
+          if (!initialized) {
+            initialized = true;
+            addTextFile(zip, "mimetype", "application/epub+zip", 0);
+            addTextFile(zip, "META-INF/container.xml", containerXml());
+          } else {
+            iterator ??= chapters[Symbol.asyncIterator]();
+            const next = await iterator.next();
+            if (closed) return;
+            if (next.done) {
+              iterator = null;
+              const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+              addTextFile(zip, "OEBPS/content.opf", packageXml(meta, titles, modified));
+              addTextFile(zip, "OEBPS/nav.xhtml", navigationXml(meta, titles));
+              zip.end();
+            } else {
+              titles.push(next.value.title);
+              addTextFile(
+                zip,
+                `OEBPS/chapter-${titles.length}.xhtml`,
+                chapterXhtml(next.value.title, next.value.paragraphs),
+              );
+            }
+          }
+          if (compressionError) throw compressionError;
+          drain(controller);
+        } catch (error) {
+          if (closed) return;
+          closed = true;
+          zip.terminate();
+          pending.length = 0;
+          try {
+            await closeIterator();
+          } catch {
+            // Preserve the producer error if iterator cleanup also fails.
+          }
+          controller.error(error);
+        }
+      },
+      async cancel() {
+        closed = true;
+        pending.length = 0;
+        zip.terminate();
+        await closeIterator();
+      },
+    },
+    new ByteLengthQueuingStrategy({ highWaterMark: STREAM_HIGH_WATER_MARK }),
+  );
 }
 
 // Minimal valid EPUB 3: mimetype (stored, first), container, opf, nav, chapters.

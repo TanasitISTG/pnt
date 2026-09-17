@@ -1,10 +1,11 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db, queryClient } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { contentDisposition, sanitizeFilename } from "@/lib/filename";
+import { chapterTranslationPresent } from "@/lib/content/publish/publish";
 import { splitParagraphs } from "@/lib/translation/text/paragraphs";
 import { createEpubStream, type EpubChapter, type EpubMetadata } from "./epub";
 
@@ -19,7 +20,7 @@ function chapterTitle(chapter: Pick<ExportChapterRow, "number" | "title" | "tran
   return `Chapter ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`;
 }
 
-async function loadExportManifest(novelId: string, userId: string) {
+async function loadExportMetadata(novelId: string, userId: string) {
   const [novel] = await db
     .select({
       id: novels.id,
@@ -32,18 +33,16 @@ async function loadExportManifest(novelId: string, userId: string) {
     .limit(1);
   if (!novel) return null;
 
-  const chapterRows = await db
-    .select({
-      number: chapters.number,
-      title: chapters.title,
-      translatedTitle: chapters.translatedTitle,
-    })
+  // Existence-only check with the exact nonblank predicate the body cursor uses,
+  // so HEAD and body responses agree on whether any exportable chapter exists.
+  const [present] = await db
+    .select({ id: chapters.id })
     .from(chapters)
-    .where(and(eq(chapters.novelId, novelId), isNotNull(chapters.translatedContent)))
-    .orderBy(asc(chapters.number));
-  if (chapterRows.length === 0) return null;
+    .where(and(eq(chapters.novelId, novelId), chapterTranslationPresent()))
+    .limit(1);
+  if (!present) return null;
 
-  return { novel, chapterTitles: chapterRows.map(chapterTitle) };
+  return { novel };
 }
 
 async function* chapterCursor(novelId: string): AsyncGenerator<ExportChapterRow> {
@@ -54,8 +53,10 @@ async function* chapterCursor(novelId: string): AsyncGenerator<ExportChapterRow>
       "translated_title" AS "translatedTitle",
       "translated_content" AS "translatedContent"
     FROM "chapters"
-    WHERE "novel_id" = ${novelId} AND "translated_content" IS NOT NULL
-    ORDER BY "number"
+    WHERE "novel_id" = ${novelId}
+      AND "translated_content" IS NOT NULL
+      AND regexp_replace("translated_content", '[[:space:]]', '', 'g') <> ''
+    ORDER BY "chapters"."number"
   `.cursor(1);
 
   for await (const rows of cursor) {
@@ -63,34 +64,68 @@ async function* chapterCursor(novelId: string): AsyncGenerator<ExportChapterRow>
   }
 }
 
+// One chapter's serialization output may exceed the queue mark; the bound is
+// "highWaterMark plus at most one pending unit", never a whole novel.
+const STREAM_HIGH_WATER_MARK = 64 * 1024;
+
 function textStream(title: string, author: string | null, novelId: string) {
   const encoder = new TextEncoder();
-  let cancelled = false;
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      void (async () => {
+  let iterator: AsyncIterator<ExportChapterRow> | null = null;
+  let closed = false;
+  let headerEmitted = false;
+  let emittedAny = false;
+
+  async function closeIterator() {
+    try {
+      await iterator?.return?.();
+    } catch {
+      // Cleanup failure must not mask the original producer/consumer failure.
+    } finally {
+      iterator = null;
+    }
+  }
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`${title}\n${author ? `by ${author}\n` : ""}\n`));
-          let first = true;
-          for await (const chapter of chapterCursor(novelId)) {
-            if (cancelled) return;
-            controller.enqueue(
-              encoder.encode(
-                `${first ? "" : "\n"}\n${chapterTitle(chapter)}\n\n${chapter.translatedContent}\n`,
-              ),
-            );
-            first = false;
+          if (!headerEmitted) {
+            // Lazily open the cursor on the first body pull; HEAD never gets here.
+            iterator = chapterCursor(novelId);
+            controller.enqueue(encoder.encode(`${title}\n${author ? `by ${author}\n` : ""}\n`));
+            headerEmitted = true;
+            return;
           }
-          controller.close();
+          iterator ??= chapterCursor(novelId);
+          const next = await iterator.next();
+          if (closed) return;
+          if (next.done) {
+            closed = true;
+            controller.close();
+            return;
+          }
+          const chapter = next.value;
+          controller.enqueue(
+            encoder.encode(
+              `${emittedAny ? "\n" : ""}\n${chapterTitle(chapter)}\n\n${chapter.translatedContent}\n`,
+            ),
+          );
+          emittedAny = true;
         } catch (error) {
-          controller.error(error);
+          if (closed) return;
+          closed = true;
+          await closeIterator();
+          throw error;
         }
-      })();
+      },
+      async cancel() {
+        closed = true;
+        await closeIterator();
+      },
     },
-    cancel() {
-      cancelled = true;
-    },
-  });
+    new ByteLengthQueuingStrategy({ highWaterMark: STREAM_HIGH_WATER_MARK }),
+  );
 }
 
 async function* epubChapters(novelId: string): AsyncGenerator<EpubChapter> {
@@ -108,7 +143,7 @@ export async function createNovelExportResponse(
   format: "txt" | "epub",
   includeBody = true,
 ): Promise<Response> {
-  const manifest = await loadExportManifest(novelId, userId);
+  const manifest = await loadExportMetadata(novelId, userId);
   if (!manifest)
     return new Response("Novel not found or has no translated chapters", { status: 404 });
 
@@ -134,8 +169,5 @@ export async function createNovelExportResponse(
     language: manifest.novel.targetLang || "en",
     identifier: `urn:pnt:${manifest.novel.id}`,
   };
-  return new Response(
-    createEpubStream(metadata, manifest.chapterTitles, epubChapters(manifest.novel.id)),
-    { headers },
-  );
+  return new Response(createEpubStream(metadata, epubChapters(manifest.novel.id)), { headers });
 }

@@ -26,15 +26,25 @@ async function seedExportFixture() {
       "id", "user_id", "title", "author", "source_lang", "target_lang", "created_at", "updated_at"
     ) VALUES (${novelId}, ${userId}, 'A/B: Novel', 'Test Author', 'zh', 'en', now(), now())
   `;
-  await sql`
-    INSERT INTO "chapters" (
-      "id", "novel_id", "number", "title", "translated_title", "raw_content",
-      "translated_content", "raw_char_count", "status"
-    ) VALUES
-      (${`chapter-${randomUUID()}`}, ${novelId}, 2, 'Raw second', 'Second', 'raw 2', 'Second body.', 5, 'translated'),
-      (${`chapter-${randomUUID()}`}, ${novelId}, 1, 'Raw first', 'First', 'raw 1', 'First body.\n\nNext paragraph.', 5, 'translated'),
-      (${`chapter-${randomUUID()}`}, ${novelId}, 3, 'Raw only', null, 'raw 3', null, 5, 'raw')
-  `;
+  for (const number of [12, 2, 10, 1, 7, 3, 11, 5, 9, 4, 8, 6]) {
+    await sql`
+      INSERT INTO "chapters" (
+        "id", "novel_id", "number", "title", "translated_title", "raw_content",
+        "translated_content", "raw_char_count", "status"
+      ) VALUES (
+        ${`chapter-${randomUUID()}`}, ${novelId}, ${number}, ${`Raw ${number}`},
+        ${`Title ${number}`}, 'raw', ${`Unique body ${number}.`}, 3, 'translated'
+      )
+    `;
+  }
+  for (const [index, content] of [null, "", " \t\n "].entries()) {
+    await sql`
+      INSERT INTO "chapters" ("id", "novel_id", "number", "title", "raw_content",
+        "translated_content", "raw_char_count", "status")
+      VALUES (${`chapter-${randomUUID()}`}, ${novelId}, ${13 + index}, 'Ineligible',
+        'raw', ${content}, 3, 'raw')
+    `;
+  }
 
   return { userId, otherUserId, novelId };
 }
@@ -66,8 +76,16 @@ integrationDescribe("streaming novel exports", () => {
 
       const body = await response.text();
       expect(body).toContain("A/B: Novel\nby Test Author");
-      expect(body.indexOf("Chapter 1 — First")).toBeLessThan(body.indexOf("Chapter 2 — Second"));
-      expect(body).not.toContain("Raw only");
+      expect(
+        [...body.matchAll(/Chapter (\d+) — Title (\d+)/g)].map((match) => [
+          Number(match[1]),
+          Number(match[2]),
+        ]),
+      ).toEqual(Array.from({ length: 12 }, (_, index) => [index + 1, index + 1]));
+      for (let number = 1; number <= 12; number++) {
+        expect(body.split(`Unique body ${number}.`)).toHaveLength(2);
+      }
+      expect(body).not.toContain("Ineligible");
     } finally {
       await sql`DELETE FROM "user" WHERE "id" IN (${fixture.userId}, ${fixture.otherUserId})`;
     }
@@ -107,9 +125,22 @@ integrationDescribe("streaming novel exports", () => {
       const response = await createNovelExportResponse(fixture.novelId, fixture.userId, "epub");
       const entries = unzipSync(new Uint8Array(await response.arrayBuffer()));
       expect(strFromU8(entries.mimetype)).toBe("application/epub+zip");
-      expect(strFromU8(entries["OEBPS/chapter-1.xhtml"])).toContain("First body.");
-      expect(strFromU8(entries["OEBPS/chapter-2.xhtml"])).toContain("Second body.");
-      expect(Object.keys(entries).some((name) => name.endsWith("chapter-3.xhtml"))).toBe(false);
+      const nav = strFromU8(entries["OEBPS/nav.xhtml"]);
+      const opf = strFromU8(entries["OEBPS/content.opf"]);
+      const numbers = Array.from({ length: 12 }, (_, index) => index + 1);
+      expect([...nav.matchAll(/href="chapter-(\d+)\.xhtml"/g)].map((m) => Number(m[1]))).toEqual(
+        numbers,
+      );
+      expect([...opf.matchAll(/idref="ch(\d+)"/g)].map((m) => Number(m[1]))).toEqual(numbers);
+      for (const number of numbers) {
+        expect(nav).toContain(`Chapter ${number} — Title ${number}</a>`);
+        const chapter = strFromU8(entries[`OEBPS/chapter-${number}.xhtml`]);
+        expect(chapter).toContain(`Chapter ${number} — Title ${number}`);
+        expect(chapter).toContain(`Unique body ${number}.`);
+      }
+      expect(Object.keys(entries).filter((name) => /chapter-\d+\.xhtml$/.test(name))).toHaveLength(
+        12,
+      );
     } finally {
       await sql`DELETE FROM "user" WHERE "id" IN (${fixture.userId}, ${fixture.otherUserId})`;
     }
