@@ -232,6 +232,27 @@
       "when": 1789576812332,
       "tag": "0032_windy_wasp",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789630312636,
+      "tag": "0033_wooden_patch",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789630395891,
+      "tag": "0034_lethal_vivisector",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1789643445641,
+      "tag": "0035_mature_storm",
+      "breakpoints": true
     }
   ]
 }

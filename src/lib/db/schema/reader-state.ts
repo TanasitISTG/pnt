@@ -1,4 +1,14 @@
-import { pgTable, text, integer, real, timestamp, primaryKey, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  pgTable,
+  text,
+  integer,
+  real,
+  timestamp,
+  primaryKey,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { novels, chapters } from "./novels";
 
@@ -16,7 +26,10 @@ export const readerProgress = pgTable(
     scrollFraction: real("scroll_fraction").notNull().default(0),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.novelId] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.novelId] }),
+    index("reader_progress_novel_id_idx").on(table.novelId),
+  ],
 );
 
 export const readerChapterReads = pgTable(
@@ -36,6 +49,8 @@ export const readerChapterReads = pgTable(
   (table) => [
     primaryKey({ columns: [table.userId, table.chapterId] }),
     index("reader_chapter_reads_novel_idx").on(table.userId, table.novelId),
+    index("reader_chapter_reads_chapter_id_idx").on(table.chapterId),
+    index("reader_chapter_reads_novel_id_idx").on(table.novelId),
   ],
 );
 
@@ -60,6 +75,19 @@ export const readerBookmarks = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
-    index("reader_bookmarks_user_novel_idx").on(table.userId, table.novelId, table.createdAt),
+    index("reader_bookmarks_user_novel_idx").on(
+      table.userId,
+      table.novelId,
+      table.createdAt,
+      table.id,
+    ),
+    uniqueIndex("reader_bookmarks_spot_uidx").on(
+      table.userId,
+      table.chapterId,
+      table.paragraphIndex,
+      sql`coalesce(${table.column}, '')`,
+    ),
+    index("reader_bookmarks_chapter_id_idx").on(table.chapterId),
+    index("reader_bookmarks_novel_id_idx").on(table.novelId),
   ],
 );

@@ -122,6 +122,24 @@ async function reconcileLegacyActiveImportJobs(client: Sql): Promise<void> {
   });
 }
 
+async function assertReaderBookmarkSpotsUnique(client: Sql): Promise<void> {
+  const [{ exists }] = await client<{ exists: boolean }[]>`
+    SELECT to_regclass('public.reader_bookmarks') IS NOT NULL AS "exists"
+  `;
+  if (!exists) return;
+
+  const duplicates = await client`
+    SELECT 1
+    FROM "reader_bookmarks"
+    GROUP BY "user_id", "chapter_id", "paragraph_index", coalesce("source_column", '')
+    HAVING COUNT(*) > 1
+    LIMIT 1
+  `;
+  if (duplicates.length > 0) {
+    throw new Error("Reader bookmark duplicates must be resolved before migration");
+  }
+}
+
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
@@ -136,6 +154,7 @@ async function run() {
   });
 
   try {
+    await assertReaderBookmarkSpotsUnique(client);
     console.log("Ensuring drizzle migration table structure...");
     await client`CREATE SCHEMA IF NOT EXISTS drizzle`;
     await client`
@@ -154,10 +173,14 @@ async function run() {
     console.log("Database migrations applied successfully!");
   } catch (err) {
     console.error("Migration failed:", err);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
-    await client.end({ timeout: 1 });
-    process.exit(0);
+    try {
+      await client.end({ timeout: 1 });
+    } catch (err) {
+      console.error("Migration connection cleanup failed:", err);
+      process.exitCode = 1;
+    }
   }
 }
 
