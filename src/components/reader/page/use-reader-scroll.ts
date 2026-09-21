@@ -58,9 +58,12 @@ export function useReaderScroll({
   const userTookOverRef = useRef(false);
   const readMarkedRef = useRef(false);
   // Read through a ref so a caller that rebuilds its store object per render cannot
-  // retrigger these effects and loop.
+  // retrigger the reader effects and loop. Update only after commit so discarded renders
+  // cannot change the store used by the mounted reader.
   const storeRef = useRef(store);
-  storeRef.current = store;
+  useEffect(() => {
+    storeRef.current = store;
+  }, [store]);
 
   useEffect(() => {
     ownerRef.current = { novelId, chapterId };

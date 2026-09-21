@@ -88,6 +88,38 @@ describe("reader bookmarks (guest store)", () => {
     expect(listReaderBookmarks("novel-b")).toEqual([]);
   });
 
+  it("replaces top-level array storage on the next mutation", () => {
+    localStorage.setItem(
+      READER_BOOKMARKS_STORAGE_KEY,
+      JSON.stringify([
+        [
+          {
+            id: "corrupt",
+            chapterId: "chapter-corrupt",
+            paragraphIndex: 0,
+            column: null,
+            excerpt: "corrupt",
+            note: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+    expect(listReaderBookmarks("0")).toEqual([]);
+
+    localStorage.setItem(READER_BOOKMARKS_STORAGE_KEY, "[]");
+    const created = addReaderBookmark("novel-a", {
+      chapterId: "chapter-1",
+      paragraphIndex: 3,
+      column: null,
+      excerpt: "first",
+    });
+
+    const stored = JSON.parse(localStorage.getItem(READER_BOOKMARKS_STORAGE_KEY) ?? "null");
+    expect(Array.isArray(stored)).toBe(false);
+    expect(stored).toEqual({ "novel-a": [created] });
+  });
+
   it("does not duplicate a bookmark for the same paragraph and column", () => {
     const first = addReaderBookmark("novel-a", {
       chapterId: "chapter-1",

@@ -125,6 +125,27 @@ describe("reader-progress", () => {
     });
   });
 
+  it("replaces top-level array storage on the next mutation", () => {
+    localStorage.setItem(
+      "pnt-reader-progress",
+      JSON.stringify([{ lastChapterId: "corrupt", readChapterIds: ["corrupt"] }]),
+    );
+    expect(getReaderProgress("0")).toEqual({
+      lastChapterId: null,
+      readChapterIds: [],
+    });
+
+    localStorage.setItem("pnt-reader-progress", "[]");
+    markChapterRead("novel-1", "chap-1");
+
+    expect(JSON.parse(localStorage.getItem("pnt-reader-progress") ?? "null")).toEqual({
+      "novel-1": {
+        lastChapterId: "chap-1",
+        readChapterIds: ["chap-1"],
+      },
+    });
+  });
+
   it("preserves a zero scroll position and clamps finite values", () => {
     markChapterRead("novel-1", "chap-1");
     saveScrollPosition("novel-1", 0);

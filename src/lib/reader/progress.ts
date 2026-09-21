@@ -12,7 +12,7 @@ export function getReaderProgress(novelId: string): ReaderProgress {
     if (!raw) return { lastChapterId: null, readChapterIds: [] };
 
     const data = JSON.parse(raw);
-    if (typeof data !== "object" || data === null) {
+    if (typeof data !== "object" || data === null || Array.isArray(data)) {
       return { lastChapterId: null, readChapterIds: [] };
     }
 
@@ -46,7 +46,7 @@ function writeNovelProgress(storage: Storage, novelId: string, progress: ReaderP
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
-      if (typeof parsed === "object" && parsed !== null) {
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
         allData = parsed;
       }
     } catch {

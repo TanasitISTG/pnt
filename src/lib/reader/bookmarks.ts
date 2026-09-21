@@ -26,7 +26,7 @@ function readAll(): Record<string, unknown> {
     const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return {};
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
     return parsed as Record<string, unknown>;
   } catch {
     return {};
