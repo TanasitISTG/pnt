@@ -5,9 +5,18 @@ import { isSupportedLanguagePair } from "@/lib/language-pair";
 export const sourceLangSchema = z.enum(["en", "zh"]);
 export const targetLangSchema = z.enum(["en", "th"]);
 export const coverMimeSchema = z.enum(["image/jpeg", "image/png", "image/webp"]);
+export const chapterNumberSchema = z
+  .number()
+  .positive("Chapter number must be positive")
+  .max(999_999.99, "Chapter number must be at most 999999.99")
+  .multipleOf(0.01, "Chapter number must have at most two decimal places");
 
 const baseNovelFields = {
-  title: z.string().min(1, "Title is required").max(500),
+  title: z
+    .string()
+    .min(1, "Title is required")
+    .max(500)
+    .refine((value) => value.length === 0 || value.trim().length > 0, "Title is required"),
   originalTitle: z.string().max(500).optional().nullable(),
   author: z.string().max(200).optional().nullable(),
   description: z.string().max(5000).optional().nullable(),
@@ -45,16 +54,32 @@ export const updateNovelSchema = z
 
 export const createChapterSchema = z.object({
   novelId: z.string().min(1),
-  number: z.number().positive("Chapter number must be positive"),
-  title: z.string().min(1, "Title is required").max(500),
-  rawContent: z.string().min(1, "Content is required"),
+  number: chapterNumberSchema,
+  title: z
+    .string()
+    .min(1, "Title is required")
+    .max(500)
+    .refine((value) => value.length === 0 || value.trim().length > 0, "Title is required"),
+  rawContent: z
+    .string()
+    .min(1, "Content is required")
+    .refine((value) => value.length === 0 || value.trim().length > 0, "Content is required"),
 });
 
 export const updateChapterSchema = z.object({
   chapterId: z.string().min(1),
-  number: z.number().positive("Chapter number must be positive").optional(),
-  title: z.string().min(1).max(500).optional(),
-  rawContent: z.string().min(1).optional(),
+  number: chapterNumberSchema.optional(),
+  title: z
+    .string()
+    .min(1)
+    .max(500)
+    .refine((value) => value.length === 0 || value.trim().length > 0, "Title is required")
+    .optional(),
+  rawContent: z
+    .string()
+    .min(1)
+    .refine((value) => value.length === 0 || value.trim().length > 0, "Content is required")
+    .optional(),
 });
 
 export const updateChapterTranslationSchema = z.object({

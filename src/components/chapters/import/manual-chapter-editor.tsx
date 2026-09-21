@@ -17,7 +17,11 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { createChapter } from "@/lib/content/chapter/chapter.functions";
-import { createChapterSchema, type CreateChapterInput } from "@/lib/content/novel/novel.schemas";
+import {
+  chapterNumberSchema,
+  createChapterSchema,
+  type CreateChapterInput,
+} from "@/lib/content/novel/novel.schemas";
 
 export interface FetchedChapterDraft {
   number: string;
@@ -26,12 +30,11 @@ export interface FetchedChapterDraft {
   sourceUrl: string;
 }
 
-const manualChapterFormSchema = z.object({
-  number: z.string().refine((value) => Number.isFinite(Number(value)) && Number(value) > 0, {
-    message: "Chapter number must be positive",
-  }),
-  title: z.string().min(1, "Title is required").max(500),
-  rawContent: z.string().min(1, "Content is required"),
+const manualChapterFormSchema = createChapterSchema.omit({ novelId: true }).extend({
+  number: z
+    .string()
+    .transform((value) => Number(value))
+    .pipe(chapterNumberSchema),
 });
 interface ManualChapterFormValues {
   number: string;
@@ -128,12 +131,10 @@ export function useManualChapterEditor({
     onSubmit: async ({ value }) => {
       setSubmitError(null);
       const parsed = manualChapterFormSchema.parse(value);
-      const input = createChapterSchema.parse({
+      const input: CreateChapterInput = {
         novelId,
-        number: Number(parsed.number),
-        title: parsed.title,
-        rawContent: parsed.rawContent,
-      });
+        ...parsed,
+      };
 
       try {
         await mutateAsync(input);
@@ -273,6 +274,7 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
                       type="number"
                       step="0.01"
                       min="0.01"
+                      max="999999.99"
                       autoComplete="off"
                       placeholder="e.g. 1"
                       value={field.state.value}

@@ -315,6 +315,30 @@ describe("AddChapterSection", () => {
     expect(screen.getByText("Chapter number must be positive")).toBeTruthy();
   });
 
+  it.each([
+    ["Chapter number *", "1.234", "Chapter number must have at most two decimal places"],
+    ["Chapter number *", "1000000", "Chapter number must be at most 999999.99"],
+    ["Chapter title *", " \t ", "Title is required"],
+    ["Source text *", "\n ", "Content is required"],
+  ])("surfaces invalid manual %s values before mutation", async (label, value, message) => {
+    renderAddChapter();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Chapter number *" }), {
+      target: { value: "1.25" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Chapter title *" }), {
+      target: { value: "Chapter title" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Source text *" }), {
+      target: { value: "Chapter content" },
+    });
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add chapter" }));
+
+    await waitFor(() => expect(screen.getByText(message)).toBeTruthy());
+    expect(createChapter).not.toHaveBeenCalled();
+  });
+
   it("does not replace a manually edited or URL-preview chapter number after invalidation", () => {
     const { rerender, queryClient } = renderAddChapter([{ number: "1" }]);
     expect(getChapterNumberInput().value).toBe("2");
