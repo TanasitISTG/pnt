@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { eq, and, lte } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { novels, chapters } from "@/lib/db/schema";
+import { chapterVisibleToGuests, novelLive } from "@/lib/content/publish/publish";
 import { RateLimitError } from "@/lib/server-fn-error";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/api/sitemap")({
           await checkRateLimit("sitemap", 30);
 
           const now = new Date();
+
           const baseUrl =
             process.env.APP_URL || import.meta.env.VITE_APP_URL || new URL(request.url).origin;
 
@@ -31,7 +33,7 @@ export const Route = createFileRoute("/api/sitemap")({
               updatedAt: novels.updatedAt,
             })
             .from(novels)
-            .where(lte(novels.publishedAt, now));
+            .where(novelLive(now));
 
           const liveChapters = await db
             .select({
@@ -41,7 +43,7 @@ export const Route = createFileRoute("/api/sitemap")({
             })
             .from(chapters)
             .innerJoin(novels, eq(chapters.novelId, novels.id))
-            .where(and(lte(novels.publishedAt, now), lte(chapters.publishedAt, now)));
+            .where(and(novelLive(now), chapterVisibleToGuests(now)));
 
           const urls: string[] = [
             `  <url>

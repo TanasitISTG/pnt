@@ -18,11 +18,11 @@ export const chapterTranslationPresent = () =>
   sql<boolean>`${
     chapters.translatedContent
   } IS NOT NULL AND regexp_replace(${chapters.translatedContent}, '[[:space:]]', '', 'g') <> ''`;
-export const novelLive = () => lte(novels.publishedAt, new Date());
-export const chapterLive = () =>
+export const novelLive = (now: Date = new Date()) => lte(novels.publishedAt, now);
+export const chapterLive = (now: Date = new Date()) =>
   and(
-    lte(chapters.publishedAt, new Date()),
+    lte(chapters.publishedAt, now),
     eq(chapters.status, "translated"),
     chapterTranslationPresent(),
   );
-export const chapterVisibleToGuests = () => chapterLive();
+export const chapterVisibleToGuests = (now: Date = new Date()) => chapterLive(now);
