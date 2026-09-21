@@ -366,8 +366,11 @@ export async function loadJobStats(userId: string, timing: ServerTiming) {
       db
         .select({
           avgLatencyMs: sql<number>`COALESCE(ROUND(AVG(${translationJobChunks.latencyMs})), 0)::int`,
-          promptTokens: sql<number>`COALESCE(SUM(${translationJobChunks.promptTokens}), 0)::int`,
-          completionTokens: sql<number>`COALESCE(SUM(${translationJobChunks.completionTokens}), 0)::int`,
+          promptTokens: sql<number>`COALESCE(SUM(${translationJobChunks.promptTokens}), 0)`.mapWith(
+            Number,
+          ),
+          completionTokens:
+            sql<number>`COALESCE(SUM(${translationJobChunks.completionTokens}), 0)`.mapWith(Number),
         })
         .from(translationJobChunks)
         .innerJoin(translationJobs, eq(translationJobChunks.jobId, translationJobs.id))

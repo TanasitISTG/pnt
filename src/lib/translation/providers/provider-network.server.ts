@@ -12,6 +12,7 @@ import {
   resolveHostAddresses,
 } from "@/lib/scrape/network-policy.server";
 import { normalizeOpenCodeBaseUrl } from "./provider-compatibility";
+const PROVIDER_RESPONSE_SIZE_LIMIT_BYTES = 8 * 1024 * 1024;
 
 export function parseLocalProviderOrigins(raw: string): ReadonlySet<string> {
   return new Set(parseOriginList(raw));
@@ -30,7 +31,13 @@ export class ProviderRequestError extends Error {
 }
 
 export function assertProviderUrl(url: URL, expectedOrigin?: string): void {
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) {
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
     throw new ProviderRequestError("Provider URL is invalid", "INVALID_URL");
   }
   if (expectedOrigin !== undefined && url.origin !== expectedOrigin) {
@@ -167,7 +174,43 @@ const connector: buildConnector.connector = (options, callback) => {
     ),
   );
 };
-const agent = new Agent({ connect: connector });
+const agent = new Agent({
+  connect: connector,
+  maxResponseSize: PROVIDER_RESPONSE_SIZE_LIMIT_BYTES,
+});
+
+function limitDecodedResponseBody(response: Response): Response {
+  if (!response.body) return response;
+  let bytesRead = 0;
+  const body = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        bytesRead += chunk.byteLength;
+        if (bytesRead > PROVIDER_RESPONSE_SIZE_LIMIT_BYTES) {
+          controller.error(
+            new ProviderRequestError(
+              "Provider response exceeded the size limit",
+              "RESPONSE_TOO_LARGE",
+            ),
+          );
+          return;
+        }
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  const limited = new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+  Object.defineProperties(limited, {
+    url: { value: response.url },
+    redirected: { value: response.redirected },
+    type: { value: response.type },
+  });
+  return limited;
+}
 
 export function createProviderFetch(baseUrl: string): typeof globalThis.fetch {
   const expectedOrigin = new URL(baseUrl).origin;
@@ -218,8 +261,9 @@ export function createProviderFetch(baseUrl: string): typeof globalThis.fetch {
       await response.body?.cancel().catch(() => undefined);
       throw new ProviderRequestError("Provider redirect is not allowed", "REDIRECT_NOT_ALLOWED");
     }
-    // Both implementations provide the Fetch response contract; their Blob/stream declarations differ.
-    return response as unknown as Response;
+    // Undici's agent limit applies before content decoding. Count the decoded
+    // Fetch body as well so compressed responses cannot expand without bound.
+    return limitDecodedResponseBody(response as unknown as Response);
   };
   // Bun adds a preconnect extension; SDK consumers use only the standard fetch call.
   return fetch as typeof globalThis.fetch;

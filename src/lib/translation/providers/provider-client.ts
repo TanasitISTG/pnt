@@ -13,6 +13,7 @@ import type {
   ProviderType,
   ReasoningEffort,
 } from "@/lib/providers/types";
+import { MAX_PERSISTED_TOKEN_COUNT } from "@/lib/translation/token-count";
 import { OPEN_CODE_GO_BASE_URL, isOpenCodeLunaModel } from "./provider-compatibility";
 import {
   assertProviderBaseUrl,
@@ -33,6 +34,132 @@ export class ProviderSnapshotMismatchError extends Error {
     super("The configured AI provider changed after this job was queued; retry the job.");
     this.name = "ProviderSnapshotMismatchError";
   }
+}
+const tokenCountSchema = z.number().int().nonnegative().max(MAX_PERSISTED_TOKEN_COUNT);
+const openAIChatResponseSchema = z.object({
+  choices: z
+    .array(
+      z.object({
+        message: z.object({ content: z.string().nullable() }),
+      }),
+    )
+    .min(1),
+  usage: z
+    .object({
+      prompt_tokens: tokenCountSchema,
+      completion_tokens: tokenCountSchema,
+    })
+    .nullish(),
+});
+const openAIResponseSchema = z.object({
+  output_text: z.string(),
+  usage: z
+    .object({
+      input_tokens: tokenCountSchema,
+      output_tokens: tokenCountSchema,
+    })
+    .nullish(),
+});
+
+const providerFailureMessages = {
+  AUTH_FAILED: "Provider authentication failed. Check the API key.",
+  NOT_FOUND: "Provider endpoint or model was not found.",
+  RATE_LIMITED: "Provider rate limit reached. Try again later.",
+  TIMEOUT: "Provider request timed out.",
+  CONNECTION_FAILED: "Could not connect to the provider. Check the settings and try again.",
+  JSON_MODE_UNSUPPORTED: "Provider does not support JSON response mode.",
+} as const;
+
+function providerErrorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = error as Record<string, unknown>;
+  return [candidate.status, candidate.statusCode].find(
+    (value): value is number => typeof value === "number" && Number.isInteger(value),
+  );
+}
+
+function isUnsupportedJsonModeError(error: unknown, status: number | undefined): boolean {
+  if ((status !== 400 && status !== 422) || !error || typeof error !== "object") return false;
+  try {
+    const candidate = error as Record<string, unknown>;
+    const nested =
+      candidate.error && typeof candidate.error === "object"
+        ? (candidate.error as Record<string, unknown>)
+        : undefined;
+    const text = [
+      candidate.message,
+      candidate.code,
+      candidate.param,
+      candidate.type,
+      nested?.message,
+      nested?.code,
+      nested?.param,
+      nested?.type,
+    ]
+      .filter((value): value is string => typeof value === "string")
+      .join(" ")
+      .toLowerCase();
+    const responseFormat = String.raw`(?:response[_ ]?format|json[_ ]?object|json response mode)`;
+    const unsupported = String.raw`(?:unsupported|not supported|does not support|unknown|unrecognized|not allowed)`;
+    return (
+      new RegExp(`${responseFormat}.{0,100}${unsupported}`).test(text) ||
+      new RegExp(`${unsupported}.{0,100}${responseFormat}`).test(text)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isTimeoutError(error: unknown): boolean {
+  const seen = new Set<object>();
+  let current = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {
+    if (seen.has(current)) break;
+    seen.add(current);
+    const candidate = current as Error & { cause?: unknown };
+    const constructorName = candidate.constructor?.name;
+    if (
+      candidate.name === "TimeoutError" ||
+      candidate.name === "ConnectTimeoutError" ||
+      candidate.name === "APIConnectionTimeoutError" ||
+      constructorName === "TimeoutError" ||
+      constructorName === "ConnectTimeoutError" ||
+      constructorName === "APIConnectionTimeoutError"
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
+function mapOpenAIError(error: unknown, jsonModeRequested: boolean): ProviderRequestError {
+  if (error instanceof ProviderRequestError) return error;
+  const status = providerErrorStatus(error);
+  if (jsonModeRequested && isUnsupportedJsonModeError(error, status)) {
+    return new ProviderRequestError(
+      providerFailureMessages.JSON_MODE_UNSUPPORTED,
+      "JSON_MODE_UNSUPPORTED",
+      status,
+    );
+  }
+  if (status === 401 || status === 403) {
+    return new ProviderRequestError(providerFailureMessages.AUTH_FAILED, "AUTH_FAILED", status);
+  }
+  if (status === 404) {
+    return new ProviderRequestError(providerFailureMessages.NOT_FOUND, "NOT_FOUND", status);
+  }
+  if (status === 429) {
+    return new ProviderRequestError(providerFailureMessages.RATE_LIMITED, "RATE_LIMITED", status);
+  }
+  if (isTimeoutError(error)) {
+    return new ProviderRequestError(providerFailureMessages.TIMEOUT, "TIMEOUT");
+  }
+  return new ProviderRequestError(
+    providerFailureMessages.CONNECTION_FAILED,
+    "CONNECTION_FAILED",
+    status,
+  );
 }
 
 export class OpenAIProviderClient implements AIProviderClient {
@@ -77,43 +204,55 @@ export class OpenAIProviderClient implements AIProviderClient {
   async generateChatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
     const model = options.model ?? this.model;
 
-    if (isOpenCodeLunaModel(model, this.baseUrl)) {
-      const response = await this.client.responses.create({
+    try {
+      if (isOpenCodeLunaModel(model, this.baseUrl)) {
+        const response = await this.client.responses.create({
+          model,
+          input: options.messages,
+          max_output_tokens: options.maxTokens,
+          reasoning: this.reasoningEffort ? { effort: this.reasoningEffort } : undefined,
+          text: options.responseFormat ? { format: options.responseFormat } : undefined,
+          stream: false,
+        });
+        const parsed = openAIResponseSchema.safeParse(response);
+        if (!parsed.success) {
+          throw new ProviderRequestError("Invalid provider response", "INVALID_RESPONSE");
+        }
+
+        return {
+          content: parsed.data.output_text,
+          usage: {
+            promptTokens: parsed.data.usage?.input_tokens ?? 0,
+            completionTokens: parsed.data.usage?.output_tokens ?? 0,
+          },
+        };
+      }
+
+      const isOpenCodeGoFlash =
+        model === "deepseek-v4-flash" && this.baseUrl === OPEN_CODE_GO_BASE_URL;
+      const completion = await this.client.chat.completions.create({
         model,
-        input: options.messages,
-        max_output_tokens: options.maxTokens,
-        reasoning: this.reasoningEffort ? { effort: this.reasoningEffort } : undefined,
-        text: options.responseFormat ? { format: options.responseFormat } : undefined,
-        stream: false,
+        temperature: options.temperature ?? this.temperature,
+        max_tokens: options.maxTokens ?? (isOpenCodeGoFlash ? 8192 : undefined),
+        messages: options.messages,
+        response_format: options.responseFormat,
+        reasoning_effort: this.reasoningEffort ?? (isOpenCodeGoFlash ? "low" : undefined),
       });
+      const parsed = openAIChatResponseSchema.safeParse(completion);
+      if (!parsed.success) {
+        throw new ProviderRequestError("Invalid provider response", "INVALID_RESPONSE");
+      }
 
       return {
-        content: response.output_text || "",
+        content: parsed.data.choices[0].message.content ?? "",
         usage: {
-          promptTokens: response.usage?.input_tokens || 0,
-          completionTokens: response.usage?.output_tokens || 0,
+          promptTokens: parsed.data.usage?.prompt_tokens ?? 0,
+          completionTokens: parsed.data.usage?.completion_tokens ?? 0,
         },
       };
+    } catch (error) {
+      throw mapOpenAIError(error, options.responseFormat?.type === "json_object");
     }
-
-    const isOpenCodeGoFlash =
-      model === "deepseek-v4-flash" && this.baseUrl === OPEN_CODE_GO_BASE_URL;
-    const completion = await this.client.chat.completions.create({
-      model,
-      temperature: options.temperature ?? this.temperature,
-      max_tokens: options.maxTokens ?? (isOpenCodeGoFlash ? 8192 : undefined),
-      messages: options.messages,
-      response_format: options.responseFormat,
-      reasoning_effort: this.reasoningEffort ?? (isOpenCodeGoFlash ? "low" : undefined),
-    });
-
-    return {
-      content: completion.choices[0]?.message?.content || "",
-      usage: {
-        promptTokens: completion.usage?.prompt_tokens || 0,
-        completionTokens: completion.usage?.completion_tokens || 0,
-      },
-    };
   }
 }
 
@@ -133,8 +272,8 @@ const geminiResponseSchema = z.object({
     .optional(),
   usageMetadata: z
     .object({
-      promptTokenCount: z.number().finite().nonnegative().optional(),
-      candidatesTokenCount: z.number().finite().nonnegative().optional(),
+      promptTokenCount: tokenCountSchema.optional(),
+      candidatesTokenCount: tokenCountSchema.optional(),
     })
     .optional(),
 });
@@ -237,7 +376,15 @@ export class GeminiProviderClient implements AIProviderClient {
           (response.status === 400 || response.status === 422) &&
           options.responseFormat?.type === "json_object"
         ) {
-          const envelope: unknown = await response.json().catch(() => null);
+          let envelope: unknown;
+          try {
+            envelope = await response.json();
+          } catch (error) {
+            if (signal.aborted || error instanceof ProviderRequestError || isTimeoutError(error)) {
+              throw error;
+            }
+            envelope = null;
+          }
           const parsed = geminiErrorSchema.safeParse(envelope);
           if (parsed.success) {
             const text = [parsed.data.error?.message, parsed.data.error?.status]
@@ -285,11 +432,7 @@ export class GeminiProviderClient implements AIProviderClient {
       };
     } catch (error) {
       if (error instanceof ProviderRequestError) throw error;
-      if (
-        signal.aborted ||
-        (error instanceof Error &&
-          (error.name === "TimeoutError" || error.name === "APIConnectionTimeoutError"))
-      ) {
+      if (signal.aborted || isTimeoutError(error)) {
         throw new ProviderRequestError("Provider request timed out.", "TIMEOUT");
       }
       throw new ProviderRequestError(

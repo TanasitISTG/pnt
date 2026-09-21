@@ -370,6 +370,13 @@ integrationDescribe("job observability PostgreSQL contracts", () => {
         activeImportJobs: 1,
         failedImportJobs: 2,
       });
+      await sql`
+        UPDATE "translation_job_chunks"
+        SET "prompt_tokens" = 1500000000
+        WHERE "job_id" IN (${translationJobIds[24]}, ${translationJobIds[25]})
+      `;
+      const largeTokenStats = await loadJobStats(ownerUserId, timing);
+      expect(largeTokenStats.promptTokens).toBe(3_000_000_000);
       expect(metrics).toContain("job-history-count");
       expect(metrics).toContain("job-history-rows");
       expect(metrics).toContain("translation-job-stats");

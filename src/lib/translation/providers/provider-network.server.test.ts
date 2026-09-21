@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   build: vi.fn(),
   connect: undefined as unknown,
+  agentOptions: undefined as unknown,
 }));
 vi.mock("node:dns/promises", () => ({ lookup: mocks.lookup }));
 vi.mock("@/lib/env", () => ({
@@ -15,8 +16,9 @@ vi.mock("@/lib/env", () => ({
 }));
 vi.mock("undici", () => ({
   Agent: class {
-    constructor(options: { connect: unknown }) {
+    constructor(options: { connect: unknown; maxResponseSize: number }) {
       mocks.connect = options.connect;
+      mocks.agentOptions = options;
     }
   },
   buildConnector: mocks.build,
@@ -130,6 +132,9 @@ describe("provider connection policy", () => {
     expect(() => normalizeProviderBaseUrl("https://user:secret@example.com", "gemini")).toThrow(
       "Provider URL is invalid",
     );
+    expect(() =>
+      normalizeProviderBaseUrl("https://provider.example/v1?tenant=secret", "openai"),
+    ).toThrow("Provider URL is invalid");
     mocks.lookup.mockRejectedValue(new Error("secret DNS details"));
     await expect(
       assertProviderBaseUrl("https://provider.example/base", "gemini"),
@@ -141,6 +146,35 @@ describe("provider connection policy", () => {
 });
 
 describe("scoped fetch", () => {
+  it("bounds all provider response bodies at the shared Undici agent", () => {
+    expect(mocks.agentOptions).toMatchObject({
+      connect: mocks.connect,
+      maxResponseSize: 8 * 1024 * 1024,
+    });
+  });
+  it("also bounds the decoded Fetch body after content decompression", async () => {
+    mocks.fetch.mockResolvedValueOnce(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(4 * 1024 * 1024));
+            controller.enqueue(new Uint8Array(4 * 1024 * 1024));
+            controller.enqueue(new Uint8Array(1));
+            controller.close();
+          },
+        }),
+        { headers: { "content-encoding": "gzip" } },
+      ),
+    );
+
+    const response = await createProviderFetch("https://provider.example")(
+      "https://provider.example/completion",
+    );
+    await expect(response.arrayBuffer()).rejects.toMatchObject({
+      code: "RESPONSE_TOO_LARGE",
+      message: "Provider response exceeded the size limit",
+    });
+  });
   it("rejects cross-origin input before credentials reach transport", async () => {
     await expect(
       createProviderFetch("https://provider.example/base")("https://other.example", {

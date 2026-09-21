@@ -47,6 +47,12 @@ beforeEach(() => {
     }),
   );
 });
+const openAIConfig = {
+  apiKey: "test-key",
+  baseUrl: "https://api.openai.com/v1",
+  model: "gpt-4o",
+  temperature: 0.4,
+};
 
 describe("provider-client module", () => {
   it("handles Gemini system instructions and response format", async () => {
@@ -228,6 +234,142 @@ describe("provider-client module", () => {
       }),
     );
   });
+  it.each([
+    [{ choices: [] }],
+    [{ choices: [{ message: { content: 12 } }] }],
+    [
+      {
+        choices: [{ message: { content: "translated" } }],
+        usage: { prompt_tokens: -1, completion_tokens: 2 },
+      },
+    ],
+    [
+      {
+        choices: [{ message: { content: "translated" } }],
+        usage: { prompt_tokens: 1, completion_tokens: Number.NaN },
+      },
+    ],
+    [
+      {
+        choices: [{ message: { content: "translated" } }],
+        usage: { prompt_tokens: 1.5, completion_tokens: 2 },
+      },
+    ],
+    [
+      {
+        choices: [{ message: { content: "translated" } }],
+        usage: { prompt_tokens: 2_147_483_648, completion_tokens: 2 },
+      },
+    ],
+  ])("rejects malformed Chat Completions responses with a fixed error", async (payload) => {
+    createCompletion.mockResolvedValueOnce(payload);
+    const client = new OpenAIProviderClient(openAIConfig);
+
+    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
+      code: "INVALID_RESPONSE",
+      message: "Invalid provider response",
+    });
+  });
+
+  it.each([
+    [{ usage: { input_tokens: 1, output_tokens: 2 } }],
+    [{ output_text: 17, usage: { input_tokens: 1, output_tokens: 2 } }],
+    [{ output_text: "translated", usage: { input_tokens: -1, output_tokens: 2 } }],
+    [{ output_text: "translated", usage: { input_tokens: 1, output_tokens: "2" } }],
+    [{ output_text: "translated", usage: { input_tokens: 2_147_483_648, output_tokens: 2 } }],
+  ])("rejects malformed Responses API values with a fixed error", async (payload) => {
+    createResponse.mockResolvedValueOnce(payload);
+    const client = new OpenAIProviderClient({
+      ...openAIConfig,
+      baseUrl: "https://opencode.ai/zen/v1",
+      model: "gpt-5.6-luna",
+    });
+
+    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
+      code: "INVALID_RESPONSE",
+      message: "Invalid provider response",
+    });
+  });
+
+  it("accepts valid nullable Chat Completions content and absent usage", async () => {
+    createCompletion.mockResolvedValueOnce({
+      choices: [{ message: { content: null } }],
+    });
+    const client = new OpenAIProviderClient(openAIConfig);
+
+    await expect(client.generateChatCompletion({ messages: [] })).resolves.toEqual({
+      content: "",
+      usage: { promptTokens: 0, completionTokens: 0 },
+    });
+  });
+
+  it.each([
+    [401, "AUTH_FAILED", "Provider authentication failed. Check the API key."],
+    [403, "AUTH_FAILED", "Provider authentication failed. Check the API key."],
+    [404, "NOT_FOUND", "Provider endpoint or model was not found."],
+    [429, "RATE_LIMITED", "Provider rate limit reached. Try again later."],
+    [
+      500,
+      "CONNECTION_FAILED",
+      "Could not connect to the provider. Check the settings and try again.",
+    ],
+  ])("maps OpenAI HTTP %s without exposing upstream details", async (status, code, message) => {
+    createCompletion.mockRejectedValueOnce(
+      Object.assign(new Error("secret-key in upstream body"), {
+        status,
+        error: { message: "secret-key in upstream body" },
+      }),
+    );
+    const client = new OpenAIProviderClient(openAIConfig);
+
+    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
+      code,
+      status,
+      message,
+    });
+  });
+
+  it("maps secret-bearing transport failures and timeouts to fixed errors", async () => {
+    const client = new OpenAIProviderClient(openAIConfig);
+    createCompletion.mockRejectedValueOnce(new Error("https://user:secret@upstream.example"));
+    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
+      code: "CONNECTION_FAILED",
+      message: "Could not connect to the provider. Check the settings and try again.",
+    });
+
+    createCompletion.mockRejectedValueOnce(
+      Object.assign(new Error("secret timeout body"), { name: "APIConnectionTimeoutError" }),
+    );
+    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
+      code: "TIMEOUT",
+      message: "Provider request timed out.",
+    });
+  });
+
+  it("uses plain fallback only for clear OpenAI JSON-mode rejection", async () => {
+    const client = new OpenAIProviderClient(openAIConfig);
+    createCompletion.mockRejectedValueOnce(
+      Object.assign(new Error("secret: response_format is not supported by this model"), {
+        status: 400,
+        param: "response_format",
+      }),
+    );
+
+    await expect(generateJsonCompletion(client, 0, [])).resolves.toMatchObject({
+      content: "translated",
+      usedPlainFallback: true,
+    });
+    expect(createCompletion).toHaveBeenCalledTimes(2);
+
+    createCompletion.mockRejectedValueOnce(
+      Object.assign(new Error("secret: invalid model"), { status: 400 }),
+    );
+    await expect(generateJsonCompletion(client, 0, [])).rejects.toMatchObject({
+      code: "CONNECTION_FAILED",
+      message: "Could not connect to the provider. Check the settings and try again.",
+    });
+    expect(createCompletion).toHaveBeenCalledTimes(3);
+  });
 
   it("retains custom base paths and model resources without exposing thought output", async () => {
     createGeminiContent.mockResolvedValueOnce(
@@ -302,6 +444,8 @@ describe("provider-client module", () => {
     { candidates: [{ content: { parts: [{ text: 1 }] } }] },
     { usageMetadata: { promptTokenCount: -1 } },
     { usageMetadata: { candidatesTokenCount: "3" } },
+    { usageMetadata: { promptTokenCount: 1.5 } },
+    { usageMetadata: { candidatesTokenCount: 2_147_483_648 } },
   ])("rejects malformed response fields safely", async (payload) => {
     createGeminiContent.mockResolvedValueOnce(Response.json(payload));
     const client = new GeminiProviderClient({ apiKey: "key", model: "test", temperature: 0 });
@@ -351,6 +495,25 @@ describe("provider-client module", () => {
     });
     createGeminiContent.mockRejectedValueOnce(new DOMException("upstream secret", "TimeoutError"));
     await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
+      code: "TIMEOUT",
+      message: "Provider request timed out.",
+    });
+  });
+
+  it("preserves timeouts while reading a Gemini JSON-mode error body", async () => {
+    const response = new Response(null, { status: 400 });
+    vi.spyOn(response, "json").mockRejectedValueOnce(
+      new DOMException("secret upstream timeout", "TimeoutError"),
+    );
+    createGeminiContent.mockResolvedValueOnce(response);
+    const client = new GeminiProviderClient({ apiKey: "key", model: "test", temperature: 0 });
+
+    await expect(
+      client.generateChatCompletion({
+        messages: [],
+        responseFormat: { type: "json_object" },
+      }),
+    ).rejects.toMatchObject({
       code: "TIMEOUT",
       message: "Provider request timed out.",
     });

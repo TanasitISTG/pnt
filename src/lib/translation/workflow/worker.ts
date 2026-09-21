@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { loadProviderRuntimeForJob } from "../providers/provider-client";
+import { sumPersistableTokenCounts } from "@/lib/translation/token-count";
 import type { AIProviderClient } from "@/lib/providers/types";
 import { splitAtParagraphBoundary } from "../text/chunker";
 import {
@@ -524,8 +525,11 @@ export async function translateChunk(
           );
           return {
             translation: `${res1.translation}\n\n${res2.translation}`,
-            promptTokens: res1.promptTokens + res2.promptTokens,
-            completionTokens: res1.completionTokens + res2.completionTokens,
+            promptTokens: sumPersistableTokenCounts(res1.promptTokens, res2.promptTokens),
+            completionTokens: sumPersistableTokenCounts(
+              res1.completionTokens,
+              res2.completionTokens,
+            ),
           };
         }
       }
@@ -554,8 +558,14 @@ export async function translateChunk(
 
   const elapsedMs = Date.now() - startTime;
   const translation = result.translation;
-  const promptTokens = result.promptTokens + relationshipAnalysis.promptTokens;
-  const completionTokens = result.completionTokens + relationshipAnalysis.completionTokens;
+  const promptTokens = sumPersistableTokenCounts(
+    result.promptTokens,
+    relationshipAnalysis.promptTokens,
+  );
+  const completionTokens = sumPersistableTokenCounts(
+    result.completionTokens,
+    relationshipAnalysis.completionTokens,
+  );
 
   logs.push(
     createLog(

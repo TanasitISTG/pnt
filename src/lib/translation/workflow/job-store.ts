@@ -11,6 +11,7 @@ import {
   translationJobChunks,
   translationJobs,
 } from "@/lib/db/schema";
+import { assertPersistableTokenCount } from "@/lib/translation/token-count";
 import { canRunJob } from "./job-state";
 import {
   mergeAutomaticRelationshipAnalysis,
@@ -177,6 +178,8 @@ export async function completeChunk(
     logsJson: string;
   },
 ) {
+  assertPersistableTokenCount(result.promptTokens);
+  assertPersistableTokenCount(result.completionTokens);
   return db.transaction(async (tx) => {
     const row = await lockRunnableJob(tx, jobId, generation, index);
     if (!row) return false;
