@@ -7,7 +7,7 @@ import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { novels, chapters, importJobs } from "@/lib/db/schema";
 import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
-import { findSource } from "@/lib/scrape";
+import { chapterUrlFor, findSource } from "@/lib/scrape";
 import { fetchAndParse } from "@/lib/scrape/server";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { cancelImportJobForUser, startScrapeImportForUser } from "@/lib/import/commands";
@@ -94,6 +94,18 @@ export const startImportJobSchema = z
   .refine(({ from, to }) => from <= to && to - from + 1 <= MAX_IMPORT_RANGE_LENGTH, {
     path: ["to"],
     message: "Invalid range (from ≤ to, max 500 chapters)",
+  })
+  .superRefine((data, context) => {
+    try {
+      const source = findSource(data.baseUrl);
+      if (source.name === "quanben") chapterUrlFor(data.baseUrl, data.from);
+    } catch (error) {
+      context.addIssue({
+        code: "custom",
+        path: ["baseUrl"],
+        message: error instanceof Error ? error.message : "Invalid source URL",
+      });
+    }
   });
 
 export const startImportJob = createServerFn({ method: "POST" })

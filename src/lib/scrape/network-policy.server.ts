@@ -2,7 +2,10 @@ import "@tanstack/react-start/server-only";
 
 import { lookup } from "node:dns/promises";
 import type { LookupAddress } from "node:dns";
+import type { LookupFunction } from "node:net";
 import { BlockList, isIP } from "node:net";
+import { Agent, buildConnector, fetch as undiciFetch } from "undici";
+import type { RequestInit as UndiciRequestInit } from "undici";
 import { findSource } from "@/lib/scrape";
 
 export type HostAddress = { address: string; family: 4 | 6 };
@@ -131,4 +134,90 @@ export async function resolvePublicHost(hostname: string): Promise<readonly Host
 export async function assertPublicHost(url: string): Promise<void> {
   findSource(url);
   await resolvePublicHost(new URL(url).hostname);
+}
+
+const publicHostConnector: buildConnector.connector = (options, callback) => {
+  let settled = false;
+  const finish: buildConnector.Callback = (...args) => {
+    if (settled) {
+      if (args[1]) args[1].destroy();
+      return;
+    }
+    settled = true;
+    if (args[0]) callback(args[0], null);
+    else callback(null, args[1]);
+  };
+
+  void (async () => {
+    if (options.socketPath || options.httpSocket || options.protocol !== "https:") {
+      throw new HostResolutionError("NON_PUBLIC");
+    }
+
+    const hostname = options.hostname.replace(/^\[|\]$/g, "");
+    const addresses = await resolvePublicHost(hostname);
+    const expectedHostname = hostname.toLowerCase();
+    const pinnedLookup: LookupFunction = (requestedHostname, lookupOptions, done) => {
+      if (requestedHostname.replace(/^\[|\]$/g, "").toLowerCase() !== expectedHostname) {
+        done(new HostResolutionError("NON_PUBLIC"), "", 0);
+        return;
+      }
+      if (lookupOptions.all) {
+        done(
+          null,
+          addresses.map((answer) => ({ ...answer })),
+        );
+        return;
+      }
+      const answer = addresses.find(
+        (item) => !lookupOptions.family || item.family === lookupOptions.family,
+      );
+      if (!answer) {
+        done(new HostResolutionError("DNS_FAILED"), "", 0);
+        return;
+      }
+      done(null, answer.address, answer.family);
+    };
+    const connect = buildConnector({
+      lookup: pinnedLookup,
+      autoSelectFamily: true,
+      timeout: 10_000,
+    });
+    connect(options, (error, socket) => {
+      if (error) {
+        finish(error, null);
+        return;
+      }
+      const remote = socket.remoteAddress && normalizeIpAddress(socket.remoteAddress);
+      if (!remote || !addresses.some((answer) => answer.address === remote.address)) {
+        socket.destroy();
+        finish(new HostResolutionError("NON_PUBLIC"), null);
+        return;
+      }
+      finish(null, socket);
+    });
+  })().catch((error: unknown) =>
+    finish(error instanceof Error ? error : new HostResolutionError("DNS_FAILED"), null),
+  );
+};
+
+const publicHostAgent = new Agent({ connect: publicHostConnector });
+
+export async function fetchFromPublicHost(url: string, init: RequestInit = {}): Promise<Response> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new HostResolutionError("NON_PUBLIC");
+  }
+  try {
+    const response = await undiciFetch(parsed, {
+      ...init,
+      dispatcher: publicHostAgent,
+      redirect: "manual",
+    } as UndiciRequestInit);
+    return response as unknown as Response;
+  } catch (error) {
+    if (error instanceof Error && error.cause instanceof HostResolutionError) {
+      throw error.cause;
+    }
+    throw error;
+  }
 }

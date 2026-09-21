@@ -13,7 +13,7 @@ import {
 } from "@/lib/db/schema";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { findSource } from "@/lib/scrape";
+import { chapterUrlFor, findSource } from "@/lib/scrape";
 import type { ScrapeProvider } from "@/lib/scrape/types";
 import { nanoid } from "@/lib/utils";
 import { MAX_IMPORT_CHAPTER_NUMBER, MAX_IMPORT_RANGE_LENGTH } from "@/lib/import/range";
@@ -127,7 +127,8 @@ export async function startScrapeImportForUser(
   dispatch: ImportOutboxDispatch = dispatchWorkflowOutboxEventBestEffort,
 ): Promise<{ jobId: string; outboxIds: string[] }> {
   assertValidScrapeImportRange(input.from, input.to);
-  findSource(input.baseUrl);
+  const source = findSource(input.baseUrl);
+  if (source.name === "quanben") chapterUrlFor(input.baseUrl, input.from);
 
   const result = await db.transaction(async (tx) => {
     const [novel] = await tx

@@ -13,6 +13,19 @@ export const SCRAPE_PROVIDERS: ScrapeProviderMeta[] = [
   { id: "firecrawl", label: "Firecrawl", description: "Firecrawl scrape endpoint" },
 ];
 
+export function sourceUrlForLog(value: string): string;
+export function sourceUrlForLog(value: undefined): undefined;
+export function sourceUrlForLog(value: string | undefined): string | undefined;
+export function sourceUrlForLog(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return "(invalid URL)";
+  }
+}
+
 interface Source {
   name: string;
   hosts: string[];
@@ -484,10 +497,10 @@ export function parseBiqugeToc(html: string, tocUrl: string): Record<number, str
   const chapterCount = Object.keys(chapterUrls).length;
 
   log("info", "parseBiqugeToc completed", {
-    tocUrl,
+    tocUrl: sourceUrlForLog(tocUrl),
     count: chapterCount,
-    firstChapterUrl: chapterUrls[1],
-    lastChapterUrl: chapterUrls[chapterCount],
+    firstChapterUrl: sourceUrlForLog(chapterUrls[1]),
+    lastChapterUrl: sourceUrlForLog(chapterUrls[chapterCount]),
   });
 
   if (chapterCount === 0) {
@@ -525,11 +538,10 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
     html.includes('id="content"');
 
   log("info", "parseBiquge inspecting HTML", {
-    url,
+    url: sourceUrlForLog(url),
     length: html.length,
     pageTitle,
     hasBiqugeContent,
-    sample: html.slice(0, 300).replace(/\s+/g, " "),
   });
 
   if (
@@ -560,9 +572,8 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
       /amazon\.[a-z]{2,3}/i.test(pageTitle))
   ) {
     log("warn", "biquge bot detection redirect detected", {
-      url,
+      url: sourceUrlForLog(url),
       pageTitle,
-      sample: html.slice(0, 300),
     });
     throw new SafeServerError(
       "biquge bot detection redirected to an ad page. Set SCRAPER_PREMIUM_PROXY=true in .env.local to use residential proxies.",
@@ -603,10 +614,9 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
 
   if (start === -1) {
     log("warn", "biquge content container not found", {
-      url,
+      url: sourceUrlForLog(url),
       pageTitle,
       length: html.length,
-      sample: html.slice(0, 300),
     });
     if (html.length < 1000 || !/[\u4e00-\u9fa5]/.test(html)) {
       throw new SafeServerError(
@@ -686,6 +696,12 @@ export function findSource(url: string): Source {
   try {
     const u = new URL(url);
     if (u.protocol !== "https:") throw new Error("Only https URLs are supported");
+    if (u.username || u.password) {
+      throw new SafeServerError("Credentials in source URLs are not allowed");
+    }
+    if (u.hash) {
+      throw new SafeServerError("Fragments in source URLs are not allowed");
+    }
     host = u.hostname;
   } catch (e) {
     if (e instanceof TypeError) throw new Error("Invalid URL", { cause: e });
@@ -706,6 +722,11 @@ export function parseChapter(html: string, url: string): ScrapedChapter {
 // Swap the chapter number in a source URL (used by range import).
 export function chapterUrlFor(url: string, n: number): string {
   const parsed = new URL(url);
-  parsed.pathname = parsed.pathname.replace(/\/(\d+(?:\.\d+)?)\.html$/, `/${n}.html`);
+  if (!/\/\d+(?:\.\d+)?\.html$/.test(parsed.pathname)) {
+    throw new SafeServerError(
+      "Quanben range imports require a chapter URL ending in /<number>.html",
+    );
+  }
+  parsed.pathname = parsed.pathname.replace(/\/\d+(?:\.\d+)?\.html$/, `/${n}.html`);
   return parsed.toString();
 }

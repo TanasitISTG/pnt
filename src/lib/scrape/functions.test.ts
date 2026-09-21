@@ -22,4 +22,14 @@ describe("startImportJobSchema", () => {
       startImportJobSchema.safeParse({ ...baseInput, from: 1_000_000, to: 1_000_000 }).success,
     ).toBe(false);
   });
+
+  it.each([
+    "https://www.quanben.io/n/example/",
+    "https://alice:secret@www.quanben.io/n/example/1.html",
+    "https://unsupported.example/1.html",
+  ])("rejects an invalid source URL before job creation: %s", (baseUrl) => {
+    const result = startImportJobSchema.safeParse({ ...baseInput, baseUrl, from: 1, to: 2 });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]?.path).toEqual(["baseUrl"]);
+  });
 });

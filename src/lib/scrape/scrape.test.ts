@@ -10,6 +10,7 @@ import {
   parseBiqugeToc,
   biqugeTocUrlFromReader,
   isBiqugeTocUrl,
+  sourceUrlForLog,
 } from "@/lib/scrape";
 import { assertPublicHost, isPrivateIp } from "@/lib/scrape/network-policy.server";
 
@@ -364,6 +365,24 @@ describe("findSource", () => {
     expect(() => findSource("http://www.quanben.io/n/x/1.html")).toThrow("https");
     expect(() => findSource("not a url")).toThrow("Invalid URL");
   });
+
+  it("rejects embedded source credentials before transport", () => {
+    expect(() => findSource("https://alice:secret@twkan.com/txt/93984/52204812")).toThrow(
+      "Credentials in source URLs are not allowed",
+    );
+  });
+
+  it("rejects source URL fragments before logging or proxying", () => {
+    expect(() => findSource("https://twkan.com/txt/93984/52204812#access_token=secret")).toThrow(
+      "Fragments in source URLs are not allowed",
+    );
+  });
+
+  it("removes query values from source URLs used in diagnostics", () => {
+    expect(
+      sourceUrlForLog("https://twkan.com/txt/93984/52204812?access_token=sentinel#anchor"),
+    ).toBe("https://twkan.com/txt/93984/52204812");
+  });
 });
 
 describe("chapterUrlFor", () => {
@@ -387,15 +406,13 @@ describe("chapterUrlFor", () => {
     expect(chapterUrlFor(QUANBEN_URL, 1.5)).toBe("https://www.quanben.io/n/some-novel/1.5.html");
   });
 
-  it("leaves a pathname without a numeric suffix unchanged", () => {
-    expect(chapterUrlFor("https://www.quanben.io/n/some-novel/", 31)).toBe(
-      "https://www.quanben.io/n/some-novel/",
+  it.each([
+    "https://www.quanben.io/n/some-novel/",
+    "https://www.quanben.io/n/book/chapter30.html?lang=zh#text",
+  ])("rejects a range URL without a replaceable chapter suffix", (url) => {
+    expect(() => chapterUrlFor(url, 31)).toThrow(
+      "Quanben range imports require a chapter URL ending in /<number>.html",
     );
-  });
-
-  it("does not rewrite numeric suffixes inside nonnumeric filename components", () => {
-    const url = "https://www.quanben.io/n/book/chapter30.html?lang=zh#text";
-    expect(chapterUrlFor(url, 31)).toBe(url);
   });
 
   it("does not rewrite an .html-looking query value", () => {

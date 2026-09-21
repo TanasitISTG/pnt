@@ -3,8 +3,8 @@ import "@tanstack/react-start/server-only";
 import { z } from "zod";
 
 import { env } from "@/lib/env";
-import { findSource, parseChapter } from "@/lib/scrape";
-import { assertPublicHost } from "@/lib/scrape/network-policy.server";
+import { findSource, parseChapter, sourceUrlForLog } from "@/lib/scrape";
+import { assertPublicHost, fetchFromPublicHost } from "@/lib/scrape/network-policy.server";
 import type { ScrapedChapter, ScrapeProvider } from "@/lib/scrape/types";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
@@ -12,14 +12,13 @@ import { log } from "@/lib/log";
 const DIRECT_FETCH_TIMEOUT_MS = 10_000;
 const SCRAPER_FETCH_TIMEOUT_MS = 30_000;
 const MAX_HTML_BYTES = 5_000_000;
-const MAX_ERROR_BYTES = 64_000;
 
 async function readResponseText(res: Response, maxBytes = MAX_HTML_BYTES): Promise<string> {
   const contentLength = res.headers.get("content-length");
   if (contentLength) {
     const declaredBytes = Number(contentLength);
     if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
-      await res.body?.cancel();
+      await res.body?.cancel().catch(() => undefined);
       throw new SafeServerError("Page too large");
     }
   }
@@ -37,7 +36,7 @@ async function readResponseText(res: Response, maxBytes = MAX_HTML_BYTES): Promi
       if (done) break;
       bytesRead += value.byteLength;
       if (bytesRead > maxBytes) {
-        await reader.cancel();
+        await reader.cancel().catch(() => undefined);
         throw new SafeServerError("Page too large");
       }
       text += decoder.decode(value, { stream: true });
@@ -53,15 +52,20 @@ async function fetchWithoutRedirects(
   init: RequestInit,
   timeoutMs: number,
   context: string,
+  logUrl?: string,
+  request: (url: string, init: RequestInit) => Promise<Response> = globalThis.fetch,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  const res = await request(url, {
     ...init,
     redirect: "manual",
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (res.status >= 300 && res.status < 400) {
-    await res.body?.cancel();
-    log("warn", `${context} fetch blocked redirect`, { url, status: res.status });
+    await res.body?.cancel().catch(() => undefined);
+    log("warn", `${context} fetch blocked redirect`, {
+      ...(logUrl ? { url: logUrl } : {}),
+      status: res.status,
+    });
     throw new SafeServerError(`${context} attempted a redirect (HTTP ${res.status}) - blocked`, {
       cause: res.status,
     });
@@ -70,6 +74,8 @@ async function fetchWithoutRedirects(
 }
 
 export async function directFetch(url: string): Promise<string> {
+  findSource(url);
+  const sourceLogUrl = sourceUrlForLog(url);
   const res = await fetchWithoutRedirects(
     url,
     {
@@ -82,9 +88,12 @@ export async function directFetch(url: string): Promise<string> {
     },
     DIRECT_FETCH_TIMEOUT_MS,
     "Source site",
+    sourceLogUrl,
+    fetchFromPublicHost,
   );
   if (!res.ok) {
-    log("warn", "Direct scrape fetch failed", { url, status: res.status });
+    await res.body?.cancel().catch(() => undefined);
+    log("warn", "Direct scrape fetch failed", { url: sourceLogUrl, status: res.status });
     throw new SafeServerError(`Source site returned HTTP ${res.status}`, { cause: res.status });
   }
   return readResponseText(res);
@@ -119,15 +128,6 @@ interface ProxyProviderSpec {
   retryWithJsRenderStatuses?: number[];
 }
 
-async function parseErrorDetail(res: Response): Promise<string> {
-  try {
-    const errJson = JSON.parse(await readResponseText(res, MAX_ERROR_BYTES));
-    return errJson.error || errJson.message || JSON.stringify(errJson);
-  } catch {
-    return res.statusText;
-  }
-}
-
 async function proxiedFetch(
   spec: ProxyProviderSpec,
   url: string,
@@ -143,6 +143,7 @@ async function proxiedFetch(
   // twkan requires js_render=true for Cloudflare challenge; biquge is static
   // HTML so js_render=false prevents ad JS redirects.
   const source = findSource(url);
+  const sourceLogUrl = sourceUrlForLog(url);
   const defaultJsRender = source.name === "twkan" ? "true" : "false";
   const jsRender = forceJsRender ? "true" : (env.SCRAPER_RENDER_JS ?? defaultJsRender);
   const premiumProxy = env.SCRAPER_PREMIUM_PROXY ?? "false";
@@ -150,7 +151,7 @@ async function proxiedFetch(
   const req = spec.buildRequest(url, { jsRender, premiumProxy }, apiKey);
 
   log("info", `Executing ${spec.name} fetch`, {
-    url,
+    url: sourceLogUrl,
     jsRender,
     premiumProxy,
     ...(req.logUrl ? { requestUrl: req.logUrl } : {}),
@@ -161,10 +162,11 @@ async function proxiedFetch(
     req.init ?? {},
     SCRAPER_FETCH_TIMEOUT_MS,
     spec.name,
+    req.logUrl,
   );
 
   if (!res.ok) {
-    const errorDetail = await parseErrorDetail(res);
+    await res.body?.cancel().catch(() => undefined);
 
     if (
       spec.retryWithJsRenderStatuses?.includes(res.status) &&
@@ -172,18 +174,16 @@ async function proxiedFetch(
       jsRender !== "true"
     ) {
       log("warn", `${spec.name} returned HTTP ${res.status}, retrying with forceJsRender=true`, {
-        url,
-        error: errorDetail,
+        url: sourceLogUrl,
       });
       return proxiedFetch(spec, url, true);
     }
 
     log("error", `${spec.name} scrape fetch failed`, {
-      url,
+      url: sourceLogUrl,
       status: res.status,
-      error: errorDetail,
     });
-    throw new SafeServerError(`${spec.name} returned HTTP ${res.status}: ${errorDetail}`, {
+    throw new SafeServerError(`${spec.name} returned HTTP ${res.status}`, {
       cause: res.status,
     });
   }
@@ -207,9 +207,12 @@ const zenrowsSpec: ProxyProviderSpec = {
     if (premiumProxy === "true") {
       targetUrl.searchParams.set("premium_proxy", "true");
     }
+    const logUrl = new URL(targetUrl);
+    logUrl.searchParams.set("apikey", "HIDDEN_KEY");
+    logUrl.searchParams.set("url", sourceUrlForLog(url));
     return {
       url: targetUrl.toString(),
-      logUrl: targetUrl.toString().replace(apiKey, "HIDDEN_KEY"),
+      logUrl: logUrl.toString(),
     };
   },
 };
@@ -219,10 +222,9 @@ export async function scraperFetch(url: string, forceJsRender?: boolean): Promis
 
   const pageTitleMatch = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text);
   log("info", "ZenRows scrape fetch completed", {
-    url,
+    url: sourceUrlForLog(url),
     length: text.length,
     pageTitle: pageTitleMatch ? pageTitleMatch[1].trim() : "(no title)",
-    sample: text.slice(0, 300).replace(/\s+/g, " "),
   });
 
   return text;
@@ -278,14 +280,20 @@ const firecrawlSpec: ProxyProviderSpec = {
     };
   },
   async parseResponse(res) {
-    const json = JSON.parse(await readResponseText(res));
+    const text = await readResponseText(res);
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      log("error", "Firecrawl response validation failed", { reason: "invalid JSON" });
+      throw new SafeServerError("Firecrawl returned an invalid response");
+    }
     const parsed = firecrawlResponseSchema.safeParse(json);
     if (!parsed.success || !parsed.data.data?.rawHtml) {
-      const errMessage = parsed.success
-        ? parsed.data?.error || "Missing rawHtml in response data"
-        : "Invalid Firecrawl response payload";
-      log("error", "Firecrawl response validation failed", { error: errMessage });
-      throw new SafeServerError(`Firecrawl scrape failed: ${errMessage}`);
+      log("error", "Firecrawl response validation failed", {
+        reason: parsed.success ? "missing rawHtml" : "invalid response payload",
+      });
+      throw new SafeServerError("Firecrawl returned an invalid response");
     }
     return parsed.data.data.rawHtml;
   },
@@ -311,7 +319,9 @@ export async function fetchHtml(url: string, provider: ScrapeProvider = "auto"):
         const msg = e instanceof Error ? e.message : "";
         const cause = e instanceof Error ? e.cause : undefined;
         if (env.SCRAPER_API_KEY && (cause === 403 || msg.includes("HTTP 403"))) {
-          log("info", "Direct fetch got 403, falling back to scraperFetch via ZenRows", { url });
+          log("info", "Direct fetch got 403, falling back to scraperFetch via ZenRows", {
+            url: sourceUrlForLog(url),
+          });
           html = await scraperFetch(url);
         } else if (cause === 403 || msg.includes("HTTP 403")) {
           throw new SafeServerError(

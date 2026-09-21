@@ -27,6 +27,20 @@ export function parseLocalProviderOrigins(raw: string): readonly string[] {
   ]);
 }
 
+export function parseScraperBase(value: string): string {
+  const url = new URL(value);
+  if (
+    url.origin !== "https://api.zenrows.com" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error("SCRAPER_BASE must use the canonical ZenRows origin");
+  }
+  return url.toString();
+}
+
 const baseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   BETTER_AUTH_SECRET: z.string().min(32),
@@ -51,10 +65,19 @@ const baseEnvSchema = z.object({
   // ZenRows scraper configuration (optional, app boots keyless).
   SCRAPER_API_KEY: z.string().optional(),
   SCRAPER_BASE: z
-    .url()
+    .string()
     .optional()
-    .refine((v) => !v || v.startsWith("https://api.zenrows.com"), {
-      message: "must start with https://api.zenrows.com",
+    .transform((value, ctx) => {
+      if (value === undefined) return undefined;
+      try {
+        return parseScraperBase(value);
+      } catch {
+        ctx.addIssue({
+          code: "custom",
+          message: "must use https://api.zenrows.com without credentials, query, hash, or port",
+        });
+        return z.NEVER;
+      }
     }),
   SCRAPER_RENDER_JS: z.string().optional(),
   SCRAPER_PREMIUM_PROXY: z.string().optional(),

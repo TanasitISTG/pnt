@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+vi.mock("@/lib/scrape/network-policy.server", () => ({
+  assertPublicHost: vi.fn(),
+  fetchFromPublicHost: (url: string, init?: RequestInit) => globalThis.fetch(url, init),
+}));
+
 import { directFetch, fetchHtml } from "@/lib/scrape/server";
 import { SafeServerError } from "@/lib/server-fn-error";
 
@@ -41,14 +46,16 @@ describe("scrape.server", () => {
     expect(err.message).toContain("302");
   });
 
-  it("uses the shared no-redirect boundary for proxy requests", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./server.ts", import.meta.url), "utf8"),
-    );
+  it("preserves fixed HTTP handling when response cancellation fails", async () => {
+    const body = new ReadableStream({
+      cancel: () => Promise.reject(new Error("secret cancellation detail")),
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 403 })));
 
-    expect(source).toContain("const res = await fetchWithoutRedirects(");
-    expect(source).toContain("req.init ?? {},");
-    expect(source.match(/await fetch\(/g)).toHaveLength(1);
+    await expect(directFetch("https://www.quanben.io/n/test/1.html")).rejects.toMatchObject({
+      message: "Source site returned HTTP 403",
+      cause: 403,
+    });
   });
 
   it("directFetch does not misclassify network failures as redirects", async () => {
