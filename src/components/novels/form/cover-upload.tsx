@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +13,20 @@ interface CoverUploadProps {
   onRemoveCover?: () => void;
 }
 
+interface ActiveImage {
+  image: HTMLImageElement;
+  onLoad: () => void;
+  onError: () => void;
+}
+
+function clearActiveImage(ref: { current: ActiveImage | null }): void {
+  const active = ref.current;
+  if (!active) return;
+  active.image.removeEventListener("load", active.onLoad);
+  active.image.removeEventListener("error", active.onError);
+  ref.current = null;
+}
+
 export function CoverUpload({
   existingNovelId,
   hasExistingCover = false,
@@ -24,6 +38,16 @@ export function CoverUpload({
   // Set on explicit remove so a cached existing cover never reappears.
   const [removed, setRemoved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const operationRef = useRef(0);
+  const activeImageRef = useRef<ActiveImage | null>(null);
+
+  useEffect(
+    () => () => {
+      operationRef.current += 1;
+      clearActiveImage(activeImageRef);
+    },
+    [],
+  );
 
   // useQuery owns the fetch: dedupes mounts, no manual race guard.
   // retry: false — a missing cover just shows the upload button.
@@ -48,6 +72,9 @@ export function CoverUpload({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const operation = ++operationRef.current;
+    clearActiveImage(activeImageRef);
+
     if (file.size > 2 * 1024 * 1024) {
       toast.error("Cover image must be smaller than 2MB");
       return;
@@ -55,36 +82,63 @@ export function CoverUpload({
 
     // Downscale + re-encode once at upload so every guest fetch is a small WebP.
     const img = new Image();
-    // once: true — listeners self-remove after firing, nothing to clean up.
-    img.addEventListener(
-      "load",
-      () => {
-        const scale = Math.min(1, 800 / img.naturalWidth);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.naturalWidth * scale);
-        canvas.height = Math.round(img.naturalHeight * scale);
-        canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const result = canvas.toDataURL("image/webp", 0.8);
-        // Old Safari silently falls back to PNG when it can't encode WebP.
-        const mime = result.startsWith("data:image/webp") ? "image/webp" : "image/png";
-        setLocalPreview(result);
-        onChange(result.slice(result.indexOf(",") + 1), mime);
-      },
-      { once: true },
-    );
-    img.addEventListener(
-      "error",
-      () => {
+    const releaseImage = () => {
+      img.removeEventListener("load", onLoad);
+      img.removeEventListener("error", onError);
+      if (activeImageRef.current?.image === img) {
+        activeImageRef.current = null;
+      }
+    };
+    const onLoad = () => {
+      if (operationRef.current !== operation) {
+        releaseImage();
+        return;
+      }
+
+      const scale = Math.min(1, 800 / img.naturalWidth);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const result = canvas.toDataURL("image/webp", 0.8);
+      // Old Safari silently falls back to PNG when it can't encode WebP.
+      const mime = result.startsWith("data:image/webp") ? "image/webp" : "image/png";
+      releaseImage();
+      setRemoved(false);
+      setLocalPreview(result);
+      onChange(result.slice(result.indexOf(",") + 1), mime);
+    };
+    const onError = () => {
+      releaseImage();
+      if (operationRef.current === operation) {
         toast.error("Could not read that image file");
-      },
-      { once: true },
-    );
-    img.src = await blobToDataUrl(file);
+      }
+    };
+
+    activeImageRef.current = { image: img, onLoad, onError };
+    img.addEventListener("load", onLoad);
+    img.addEventListener("error", onError);
+
+    try {
+      const source = await blobToDataUrl(file);
+      if (operationRef.current !== operation) {
+        releaseImage();
+        return;
+      }
+      img.src = source;
+    } catch {
+      releaseImage();
+      if (operationRef.current === operation) {
+        toast.error("Could not read that image file");
+      }
+    }
   };
 
   const handleRemove = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    operationRef.current += 1;
+    clearActiveImage(activeImageRef);
     setLocalPreview(null);
     setRemoved(true);
     onChange(null, null);
