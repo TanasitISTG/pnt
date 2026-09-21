@@ -15,7 +15,9 @@ async function getPostHogClient() {
   if (client) return client;
   if (clientPromise) return clientPromise;
 
-  clientPromise = import("posthog-js").then((module) => {
+  const pendingClient = import("posthog-js").then((module) => {
+    if (!canUsePostHog()) return null;
+
     const key =
       import.meta.env.VITE_PUBLIC_POSTHOG_KEY ?? import.meta.env.VITE_POSTHOG_PROJECT_TOKEN;
     if (!key) return null;
@@ -49,7 +51,14 @@ async function getPostHogClient() {
     return posthog;
   });
 
-  return clientPromise;
+  clientPromise = pendingClient;
+  try {
+    return await pendingClient;
+  } finally {
+    if (clientPromise === pendingClient) {
+      clientPromise = null;
+    }
+  }
 }
 
 export async function updatePostHogConsent(consent: ConsentState) {
@@ -57,7 +66,9 @@ export async function updatePostHogConsent(consent: ConsentState) {
 
   if (consent === "granted") {
     const posthog = await getPostHogClient();
-    posthog?.opt_in_capturing();
+    if (getConsent() === "granted") {
+      posthog?.opt_in_capturing();
+    }
     return;
   }
 
@@ -68,5 +79,9 @@ export async function updatePostHogConsent(consent: ConsentState) {
 
 export function captureException(error: unknown) {
   if (getConsent() !== "granted") return;
-  void getPostHogClient().then((posthog) => posthog?.captureException(error));
+  void getPostHogClient().then((posthog) => {
+    if (getConsent() === "granted") {
+      posthog?.captureException(error);
+    }
+  });
 }
