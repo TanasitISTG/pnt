@@ -125,6 +125,34 @@ describe("backup restore schema", () => {
     );
   });
 
+  it.each([
+    [
+      "blank translated content",
+      { translatedContent: "   ", status: "queued" },
+      /translatedContent/,
+    ],
+    ["translated status without content", { status: "translated" }, /status/],
+    [
+      "raw status with translated content",
+      { status: "raw", translatedContent: "Translated content" },
+      /status/,
+    ],
+  ])("rejects %s", (_name, overrides, expectedField) => {
+    expect(() => parseBackup(backup({ chapters: [chapter(overrides)] }))).toThrow(expectedField);
+  });
+
+  it("requires rawCharCount to equal JavaScript rawContent.length", () => {
+    const rawContent = "A🙂";
+
+    expect(
+      parseBackup(backup({ chapters: [chapter({ rawContent, rawCharCount: rawContent.length })] }))
+        .novels[0]?.chapters[0]?.rawCharCount,
+    ).toBe(3);
+    expect(() =>
+      parseBackup(backup({ chapters: [chapter({ rawContent, rawCharCount: 2 })] })),
+    ).toThrow(/rawCharCount/);
+  });
+
   it("rejects dates the restore would parse into an invalid timestamp", () => {
     expect(() =>
       parseBackup(backup({ chapters: [chapter({ translatedAt: "yesterday" })] })),

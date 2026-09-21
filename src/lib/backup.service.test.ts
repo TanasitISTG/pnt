@@ -212,6 +212,85 @@ describe("backup import", () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["a mismatched raw character count", { rawCharCount: 0 }],
+    ["blank translated content", { status: "queued", translatedContent: "   " }],
+    ["translated status without content", { status: "translated", translatedContent: null }],
+    ["raw status with translated content", { status: "raw", translatedContent: "Stale" }],
+  ])("rejects %s before opening a transaction", async (_name, chapterOverrides) => {
+    const sourceChapter = backupPayload().novels[0]!.chapters[0]!;
+    const backup = backupPayload({
+      chapters: [{ ...sourceChapter, ...chapterOverrides }],
+    });
+
+    await expect(importBackupForUser("user-1", backup)).rejects.toBeInstanceOf(SafeServerError);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("normalizes interrupted chapter statuses according to retained content", async () => {
+    const sourceChapter = backupPayload().novels[0]!.chapters[0]!;
+    const backup = backupPayload({
+      chapters: [
+        {
+          ...sourceChapter,
+          id: "queued-with-content",
+          number: "1",
+          rawContent: "",
+          rawCharCount: 0,
+          translatedContent: "Retained translation",
+          status: "queued",
+        },
+        {
+          ...sourceChapter,
+          id: "queued-without-content",
+          number: "2",
+          translatedContent: null,
+          status: "queued",
+        },
+        {
+          ...sourceChapter,
+          id: "translating-with-content",
+          number: "3",
+          translatedContent: "Retained while translating",
+          status: "translating",
+        },
+        {
+          ...sourceChapter,
+          id: "translating-without-content",
+          number: "4",
+          translatedContent: null,
+          status: "translating",
+        },
+      ],
+    });
+
+    await importBackupForUser("user-1", backup);
+
+    const restoredChapters = insertedValues
+      .filter((entry) => entry.table === chapters)
+      .flatMap((entry) => (Array.isArray(entry.rows) ? entry.rows : [entry.rows]));
+    expect(restoredChapters).toEqual([
+      expect.objectContaining({
+        status: "translated",
+        translatedContent: "Retained translation",
+        rawContent: "",
+        rawCharCount: 0,
+      }),
+      expect.objectContaining({
+        status: "raw",
+        translatedContent: null,
+      }),
+      expect.objectContaining({
+        status: "translated",
+        translatedContent: "Retained while translating",
+      }),
+      expect.objectContaining({
+        status: "raw",
+        translatedContent: null,
+      }),
+    ]);
+  });
+
   it("writes a valid cover, chapters and terms", async () => {
     const backup = backupPayload({
       coverBase64: PNG_BYTES.toString("base64"),

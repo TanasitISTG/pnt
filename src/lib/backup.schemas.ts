@@ -15,25 +15,59 @@ const isoDateStringSchema = z
   .string()
   .refine((value) => !Number.isNaN(Date.parse(value)), "Expected an ISO date string");
 
-const backupChapterSchema = z.object({
-  id: z.string(),
-  number: chapterNumberSchema,
-  title: z.string(),
-  translatedTitle: z.string().nullable(),
-  rawContent: z.string(),
-  translatedContent: z.string().nullable(),
-  status: z.enum(["raw", "queued", "translating", "translated", "error"]),
-  summary: z.string().nullable(),
-  rawCharCount: z.number().int().nonnegative(),
-  sourceRevision: z.number().int().nonnegative(),
-  translationGeneration: z.number().int().nonnegative(),
-  publishedAt: z.string().nullable(),
-  // Only the dates the restore consumes are validated; the rest are replaced on import.
-  translatedAt: isoDateStringSchema.nullable(),
-  editedAt: isoDateStringSchema.nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
+const backupChapterSchema = z
+  .object({
+    id: z.string(),
+    number: chapterNumberSchema,
+    title: z.string(),
+    translatedTitle: z.string().nullable(),
+    rawContent: z.string(),
+    translatedContent: z.string().nullable(),
+    status: z.enum(["raw", "queued", "translating", "translated", "error"]),
+    summary: z.string().nullable(),
+    rawCharCount: z.number().int().nonnegative(),
+    sourceRevision: z.number().int().nonnegative(),
+    translationGeneration: z.number().int().nonnegative(),
+    publishedAt: z.string().nullable(),
+    // Only the dates the restore consumes are validated; the rest are replaced on import.
+    translatedAt: isoDateStringSchema.nullable(),
+    editedAt: isoDateStringSchema.nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .superRefine((chapter, context) => {
+    const hasTranslatedContent =
+      chapter.translatedContent !== null && chapter.translatedContent.trim().length > 0;
+
+    if (chapter.translatedContent !== null && !hasTranslatedContent) {
+      context.addIssue({
+        code: "custom",
+        message: "Translated content must be null or nonblank",
+        path: ["translatedContent"],
+      });
+    }
+    if (chapter.status === "translated" && !hasTranslatedContent) {
+      context.addIssue({
+        code: "custom",
+        message: "Translated chapters require nonblank translated content",
+        path: ["status"],
+      });
+    }
+    if (chapter.status === "raw" && chapter.translatedContent !== null) {
+      context.addIssue({
+        code: "custom",
+        message: "Raw chapters require null translated content",
+        path: ["status"],
+      });
+    }
+    if (chapter.rawCharCount !== chapter.rawContent.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Raw character count must equal raw content length",
+        path: ["rawCharCount"],
+      });
+    }
+  });
 
 const backupTermSchema = z.object({
   id: z.string(),

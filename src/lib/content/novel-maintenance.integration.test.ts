@@ -517,19 +517,23 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
         description: "d".repeat(5000),
         customPrompt: "p".repeat(10000),
         storySummary: longText,
-        chapters: Array.from({ length: 51 }, (_, index) => ({
-          ...chapter,
-          id: `chapter-${label}-${index}`,
-          number: String(index + 1),
-          title: `${label}-${index}-${longText}`,
-          translatedTitle: longText,
-          rawContent: index === 50 ? "" : `${label}-raw-${index}-${longText}`,
-          translatedContent: `${label}-translated-${index}-${longText}`,
-          summary: longText,
-          status: index === 0 ? "queued" : "translated",
-          translatedAt: "2024-02-03T00:00:00.000Z",
-          editedAt: "2024-02-04T00:00:00.000Z",
-        })),
+        chapters: Array.from({ length: 51 }, (_, index) => {
+          const rawContent = index === 50 ? "" : `${label}-raw-${index}-${longText}`;
+          return {
+            ...chapter,
+            id: `chapter-${label}-${index}`,
+            number: String(index + 1),
+            title: `${label}-${index}-${longText}`,
+            translatedTitle: longText,
+            rawContent,
+            translatedContent: `${label}-translated-${index}-${longText}`,
+            summary: longText,
+            status: index === 0 ? "queued" : "translated",
+            rawCharCount: rawContent.length,
+            translatedAt: "2024-02-03T00:00:00.000Z",
+            editedAt: "2024-02-04T00:00:00.000Z",
+          };
+        }),
         glossaryTerms: Array.from({ length: 51 }, (_, index) => ({
           id: `term-${label}-${index}`,
           source: `${label}-${index}-${longText}`,
@@ -573,14 +577,14 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
             editedAt: row.editedAt,
           })),
         ).toEqual(
-          original.chapters.map((row, position) => ({
+          original.chapters.map((row) => ({
             number: Number(row.number),
             title: row.title,
             translatedTitle: row.translatedTitle,
             rawContent: row.rawContent,
             translatedContent: row.translatedContent,
             summary: row.summary,
-            status: position === 0 ? "raw" : "translated",
+            status: "translated",
             publishedAt: null,
             translatedAt: row.translatedAt,
             editedAt: row.editedAt,
@@ -634,7 +638,7 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
             id: `restore-${index}`,
             number: String(index + 1),
             // Valid V1 backup integer, but intentionally exceeds PostgreSQL int4 in batch two.
-            rawCharCount: index === 50 ? 2_147_483_648 : 1,
+            sourceRevision: index === 50 ? 2_147_483_648 : 1,
           })),
         },
       ];

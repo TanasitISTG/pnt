@@ -201,10 +201,12 @@ export async function importBackupForUser(userId: string, value: unknown) {
             translatedContent: chapter.translatedContent,
             status:
               chapter.status === "queued" || chapter.status === "translating"
-                ? "raw"
+                ? chapter.translatedContent !== null
+                  ? "translated"
+                  : "raw"
                 : chapter.status,
             summary: chapter.summary,
-            rawCharCount: chapter.rawCharCount || chapter.rawContent.length,
+            rawCharCount: chapter.rawCharCount,
             sourceRevision: chapter.sourceRevision,
             translationGeneration: chapter.translationGeneration,
             activeTranslationJobId: null,
