@@ -7,7 +7,7 @@ config({ path: ".env.local" });
 config();
 
 import { hashPassword } from "better-auth/crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 const args = process.argv.slice(2).reduce(
   (acc, arg) => {
@@ -38,36 +38,64 @@ if (password.length < 8) {
 const { db } = await import("../src/lib/db/index.ts");
 const { user, account } = await import("../src/lib/db/schema/index.ts");
 
-const existing = await db.select().from(user).where(eq(user.email, email)).limit(1);
-
-if (existing.length > 0) {
-  console.log(`User with email "${email}" already exists, skipping.`);
-  process.exit(0);
-}
-
 const now = new Date();
 const userId = crypto.randomUUID();
 const hashedPassword = await hashPassword(password);
 
-await db.insert(user).values({
-  id: userId,
-  name,
-  email,
-  emailVerified: true,
-  image: null,
-  createdAt: now,
-  updatedAt: now,
+const result = await db.transaction(async (tx) => {
+  const [existing] = await tx
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email))
+    .limit(1)
+    .for("update");
+
+  if (existing) {
+    const [credential] = await tx
+      .select({ id: account.id })
+      .from(account)
+      .where(and(eq(account.userId, existing.id), eq(account.providerId, "credential")))
+      .limit(1);
+    if (credential) return "existing" as const;
+
+    await tx.insert(account).values({
+      id: crypto.randomUUID(),
+      accountId: existing.id,
+      providerId: "credential",
+      userId: existing.id,
+      password: hashedPassword,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return "repaired" as const;
+  }
+
+  await tx.insert(user).values({
+    id: userId,
+    name,
+    email,
+    emailVerified: true,
+    image: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await tx.insert(account).values({
+    id: crypto.randomUUID(),
+    accountId: userId,
+    providerId: "credential",
+    userId,
+    password: hashedPassword,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return "created" as const;
 });
 
-await db.insert(account).values({
-  id: crypto.randomUUID(),
-  accountId: userId,
-  providerId: "credential",
-  userId,
-  password: hashedPassword,
-  createdAt: now,
-  updatedAt: now,
-});
-
-console.log(`Admin user created: ${email}`);
+if (result === "existing") {
+  console.log(`User with email "${email}" already exists, skipping.`);
+} else if (result === "repaired") {
+  console.log(`Credential account added for existing admin: ${email}`);
+} else {
+  console.log(`Admin user created: ${email}`);
+}
 process.exit(0);
