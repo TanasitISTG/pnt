@@ -189,7 +189,7 @@ export function useRelationshipsPageController(novelId: string) {
   };
 
   const { mutate: toggleEntryMutate } = toggleEntry;
-  const { mutate: useAutoUpdatesMutate } = useAutoUpdates;
+  const { mutate: enableAutoUpdates } = useAutoUpdates;
   const onToggle = useCallback(
     (entryType: "character" | "relationship", entryId: string, enabled: boolean) =>
       toggleEntryMutate({ novelId, entryType, entryId, enabled }),
@@ -197,8 +197,8 @@ export function useRelationshipsPageController(novelId: string) {
   );
   const onAuto = useCallback(
     (entryType: "character" | "relationship", entryId: string) =>
-      useAutoUpdatesMutate({ novelId, entryType, entryId }),
-    [novelId, useAutoUpdatesMutate],
+      enableAutoUpdates({ novelId, entryType, entryId }),
+    [enableAutoUpdates, novelId],
   );
   const pending =
     saveCharacter.isPending ||
