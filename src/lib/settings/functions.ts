@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { eq } from "drizzle-orm";
 
@@ -12,16 +12,13 @@ import {
   OpenAIProviderClient,
   GeminiProviderClient,
 } from "@/lib/translation/providers/provider-client";
-import {
-  assertProviderBaseUrl,
-  ProviderRequestError,
-} from "@/lib/translation/providers/provider-network.server";
 import type { ProviderType, ReasoningEffort } from "@/lib/providers/types";
 import {
   saveProviderSettingsSchema,
   testProviderConnectionSchema,
   changePasswordSchema,
   type ProviderSettings,
+  type SaveProviderSettingsInput,
 } from "@/lib/settings/schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 
@@ -121,7 +118,12 @@ function providerFailureCode(fields: TrustedErrorFields): ProviderFailureCode | 
  * Maps a provider client failure to a fixed public message using only trusted structured fields
  * (numeric status, error code, class name). Upstream bodies, messages, URLs and keys never escape.
  */
-function providerConnectionFailure(error: unknown): { code: string; message: string } {
+const providerConnectionFailure = createServerOnlyFn(async function providerConnectionFailure(
+  error: unknown,
+): Promise<{ code: string; message: string }> {
+  // Dynamic import is required so this `.server` transport never enters the client graph.
+  const { ProviderRequestError } =
+    await import("@/lib/translation/providers/provider-network.server");
   // The transport policy classifies unsupported JSON response mode itself; keep its fixed literal.
   if (error instanceof ProviderRequestError && error.code === "JSON_MODE_UNSUPPORTED") {
     return { code: error.code, message: error.message };
@@ -131,7 +133,7 @@ function providerConnectionFailure(error: unknown): { code: string; message: str
   // Transport policy failures already carry fixed, non-forwarding literals (URL, DNS, redirect).
   if (error instanceof ProviderRequestError) return { code: error.code, message: error.message };
   return { code: "CONNECTION_FAILED", message: PROVIDER_FAILURE_MESSAGES.CONNECTION_FAILED };
-}
+});
 
 const PASSWORD_INCORRECT_MESSAGE = "Current password is incorrect.";
 const PASSWORD_GENERIC_MESSAGE = "Could not change password. Try again.";
@@ -147,7 +149,13 @@ export function passwordChangeFailureMessage(error: unknown): string {
 }
 
 /** Rejects provider URLs the runtime transport would refuse to dial, reporting the fixed policy message. */
-async function assertProviderSettingsUrl(baseUrl: string, provider: ProviderType): Promise<void> {
+const assertProviderSettingsUrl = createServerOnlyFn(async function assertProviderSettingsUrl(
+  baseUrl: string,
+  provider: ProviderType,
+): Promise<void> {
+  // Dynamic import is required so this `.server` transport never enters the client graph.
+  const { assertProviderBaseUrl, ProviderRequestError } =
+    await import("@/lib/translation/providers/provider-network.server");
   try {
     await assertProviderBaseUrl(baseUrl, provider);
   } catch (error) {
@@ -162,7 +170,7 @@ async function assertProviderSettingsUrl(baseUrl: string, provider: ProviderType
     log("warn", "Provider URL validation failed", { provider });
     throw new SafeServerError("Provider URL is invalid");
   }
-}
+});
 
 export const getProviderSettings = createServerFn({ method: "GET" }).handler(async () =>
   withSafeHandler(async (): Promise<ProviderSettings> => {
@@ -220,64 +228,63 @@ export const getProviderSettings = createServerFn({ method: "GET" }).handler(asy
   }),
 );
 
+export const saveProviderSettingsForUser = createServerOnlyFn(
+  async function saveProviderSettingsForUser(
+    userId: string,
+    data: SaveProviderSettingsInput,
+  ): Promise<{ success: true }> {
+    await assertProviderSettingsUrl(data.baseUrl, data.provider);
+
+    const [existing] = await db
+      .select()
+      .from(providerSettings)
+      .where(eq(providerSettings.userId, userId))
+      .limit(1);
+
+    const suppliedApiKey = data.apiKey?.trim();
+    const newApiKeyEnc = suppliedApiKey ? encrypt(suppliedApiKey) : undefined;
+
+    const insertApiKeyEnc = newApiKeyEnc ?? existing?.apiKeyEnc;
+    if (!insertApiKeyEnc) {
+      throw new SafeServerError("API key is required for initial configuration");
+    }
+
+    const updatedAt = new Date();
+    const conflictUpdates = {
+      provider: data.provider,
+      baseUrl: data.baseUrl,
+      model: data.model,
+      fastModel: data.fastModel ?? null,
+      temperature: data.temperature,
+      reasoningEffort: data.reasoningEffort ?? null,
+      requestTimeoutSec: data.requestTimeoutSec ?? null,
+      inputPricePer1M: data.inputPricePer1M ?? null,
+      outputPricePer1M: data.outputPricePer1M ?? null,
+      updatedAt,
+    };
+
+    await db
+      .insert(providerSettings)
+      .values({
+        userId,
+        ...conflictUpdates,
+        apiKeyEnc: insertApiKeyEnc,
+      })
+      .onConflictDoUpdate({
+        target: providerSettings.userId,
+        set: newApiKeyEnc ? { ...conflictUpdates, apiKeyEnc: newApiKeyEnc } : conflictUpdates,
+      });
+
+    return { success: true };
+  },
+);
+
 export const saveProviderSettings = createServerFn({ method: "POST" })
   .validator(saveProviderSettingsSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-
-      await assertProviderSettingsUrl(data.baseUrl, data.provider);
-
-      const [existing] = await db
-        .select()
-        .from(providerSettings)
-        .where(eq(providerSettings.userId, session.user.id))
-        .limit(1);
-
-      let apiKeyEnc = "";
-
-      if (data.apiKey && data.apiKey.trim().length > 0) {
-        apiKeyEnc = encrypt(data.apiKey.trim());
-      } else if (existing?.apiKeyEnc) {
-        apiKeyEnc = existing.apiKeyEnc;
-      } else {
-        throw new SafeServerError("API key is required for initial configuration");
-      }
-
-      await db
-        .insert(providerSettings)
-        .values({
-          userId: session.user.id,
-          provider: data.provider,
-          baseUrl: data.baseUrl,
-          apiKeyEnc,
-          model: data.model,
-          fastModel: data.fastModel ?? null,
-          temperature: data.temperature,
-          reasoningEffort: data.reasoningEffort ?? null,
-          requestTimeoutSec: data.requestTimeoutSec ?? null,
-          inputPricePer1M: data.inputPricePer1M ?? null,
-          outputPricePer1M: data.outputPricePer1M ?? null,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: providerSettings.userId,
-          set: {
-            provider: data.provider,
-            baseUrl: data.baseUrl,
-            apiKeyEnc,
-            model: data.model,
-            fastModel: data.fastModel ?? null,
-            temperature: data.temperature,
-            reasoningEffort: data.reasoningEffort ?? null,
-            requestTimeoutSec: data.requestTimeoutSec ?? null,
-            inputPricePer1M: data.inputPricePer1M ?? null,
-            outputPricePer1M: data.outputPricePer1M ?? null,
-            updatedAt: new Date(),
-          },
-        });
-
-      return { success: true };
+      return saveProviderSettingsForUser(session.user.id, data);
     }),
   );
 
@@ -309,7 +316,7 @@ export const testProviderConnection = createServerFn({ method: "POST" })
       }
 
       try {
-        await assertProviderBaseUrl(data.baseUrl, data.provider);
+        await assertProviderSettingsUrl(data.baseUrl, data.provider);
 
         const client =
           data.provider === "gemini"
@@ -351,7 +358,10 @@ export const testProviderConnection = createServerFn({ method: "POST" })
           sample,
         };
       } catch (error: unknown) {
-        const failure = providerConnectionFailure(error);
+        const failure =
+          error instanceof SafeServerError
+            ? { code: "INVALID_URL", message: error.message }
+            : await providerConnectionFailure(error);
         const fields = readTrustedErrorFields(error);
         log("warn", "Provider connection test failed", {
           provider: data.provider,
