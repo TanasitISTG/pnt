@@ -29,7 +29,7 @@ export function ChapterTitleRow({
         )}
       </div>
       {editedAt && (
-        <Badge variant="secondary" className="shrink-0 text-[10px]">
+        <Badge variant="secondary" className="shrink-0 text-badge-count">
           Edited
         </Badge>
       )}

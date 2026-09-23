@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
 import type { ChapterTableProps } from "@/components/chapters/table/chapter-table";
 import { useChapterTitleEdit } from "@/components/chapters/table/use-chapter-title-edit";
@@ -16,6 +16,55 @@ import {
   novelQueryOptions,
 } from "@/lib/content/novel/novel.query";
 import { useReaderState } from "@/lib/reader/use-reader-state";
+
+let currentTimeSnapshot = 0;
+const clockSubscribers = new Set<{
+  notify: () => void;
+  boundaries: readonly number[];
+}>();
+let clockTimer: NodeJS.Timeout | undefined;
+
+function updateClockSnapshot() {
+  currentTimeSnapshot = Date.now();
+  for (const subscriber of clockSubscribers) subscriber.notify();
+  scheduleClockUpdate();
+}
+
+function scheduleClockUpdate() {
+  clearTimeout(clockTimer);
+  clockTimer = undefined;
+  let nextBoundary = Infinity;
+  for (const subscriber of clockSubscribers) {
+    for (const boundary of subscriber.boundaries) {
+      if (boundary > currentTimeSnapshot && boundary < nextBoundary) {
+        nextBoundary = boundary;
+      }
+    }
+  }
+  if (nextBoundary !== Infinity) {
+    clockTimer = setTimeout(updateClockSnapshot, nextBoundary - currentTimeSnapshot);
+  }
+}
+
+function subscribeToClock(notify: () => void, boundaries: readonly number[]): () => void {
+  const subscriber = { notify, boundaries };
+  clockSubscribers.add(subscriber);
+  currentTimeSnapshot = Date.now();
+  notify();
+  scheduleClockUpdate();
+  return () => {
+    clockSubscribers.delete(subscriber);
+    scheduleClockUpdate();
+  };
+}
+
+function getClockSnapshot() {
+  return currentTimeSnapshot;
+}
+
+function getServerClockSnapshot() {
+  return 0;
+}
 
 const EMPTY_CHAPTERS: never[] = [];
 const EMPTY_RESIDUAL_SCRIPTS: never[] = [];
@@ -179,8 +228,27 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
     queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
   }, [queryClient, novelId]);
+
+  const publicationBoundaries = useMemo(() => {
+    const boundaries: number[] = [];
+    for (const chapter of chapters) {
+      if (chapter.status === "translated" && chapter.hasTranslation && chapter.publishedAt) {
+        const boundary = new Date(chapter.publishedAt).getTime();
+        if (Number.isFinite(boundary)) boundaries.push(boundary);
+      }
+    }
+    return boundaries;
+  }, [chapters]);
+  const subscribeToRelevantClock = useCallback(
+    (notify: () => void) => subscribeToClock(notify, publicationBoundaries),
+    [publicationBoundaries],
+  );
+  const now = useSyncExternalStore(
+    subscribeToRelevantClock,
+    getClockSnapshot,
+    getServerClockSnapshot,
+  );
   const { readyUnpublishedCount, unreadyCount } = useMemo(() => {
-    const now = Date.now();
     let readyCount = 0;
     let unreadyChapterCount = 0;
     for (const chapter of chapters) {
@@ -192,7 +260,8 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
       }
     }
     return { readyUnpublishedCount: readyCount, unreadyCount: unreadyChapterCount };
-  }, [chapters]);
+  }, [chapters, now]);
+
   const { exporting, handleExportTxt, handleExportEpub } = useNovelExport(novelId);
 
   const tableProps: Omit<ChapterTableProps, "chapters"> = {

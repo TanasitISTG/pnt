@@ -89,13 +89,14 @@ export function TranslationEvalReportDialog({
         }
         className="flex max-h-[90dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-4 overflow-hidden p-4 sm:max-w-5xl sm:gap-5 sm:p-6 [&_[data-slot=dialog-close]]:size-11"
       >
-        <DialogHeader className="shrink-0 border-b border-border pb-4 pr-8">
+        <DialogHeader variant="divided" className="shrink-0 pb-4 pr-8">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <DialogTitle
                 ref={headingRef}
                 tabIndex={-1}
-                className="break-words text-card-title font-semibold tracking-tight outline-none"
+                initialFocus
+                className="break-words text-card-title font-semibold tracking-tight"
               >
                 Quality check
               </DialogTitle>

@@ -88,17 +88,13 @@ export function AddChapterSection({
       </header>
 
       <Tabs value={mode} onValueChange={(value) => setMode(value as AddChapterMode)}>
-        <TabsList className="grid w-full grid-cols-1 gap-2 rounded-none border-0 bg-transparent p-0 min-[640px]:grid-cols-3">
+        <TabsList variant="choice">
           {(Object.keys(modeDetails) as AddChapterMode[]).map((method) => {
             const detail = modeDetails[method];
             const Icon = detail.icon;
             const running = method === "url" ? urlImportActive : epubImportActive;
             return (
-              <TabsTrigger
-                key={method}
-                value={method}
-                className="min-h-28 items-start justify-start rounded-xl border border-border bg-background px-4 py-4 text-left text-foreground hover:bg-muted data-active:border-primary data-active:bg-surface-2 data-active:text-foreground data-active:shadow-none"
-              >
+              <TabsTrigger key={method} value={method} variant="choice">
                 <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="flex items-center gap-2 text-base font-semibold">
@@ -118,19 +114,11 @@ export function AddChapterSection({
           })}
         </TabsList>
 
-        <TabsContent
-          value="manual"
-          keepMounted
-          className="rounded-2xl border border-border bg-surface p-4 sm:p-6"
-        >
+        <TabsContent value="manual" keepMounted variant="surface">
           <ManualChapterEditor controller={manualEditor} />
         </TabsContent>
 
-        <TabsContent
-          value="url"
-          keepMounted
-          className="rounded-2xl border border-border bg-surface p-4 sm:p-6"
-        >
+        <TabsContent value="url" keepMounted variant="surface">
           <ScrapeImportSection
             novelId={novelId}
             invalidateChapters={invalidateChapters}
@@ -141,11 +129,7 @@ export function AddChapterSection({
           />
         </TabsContent>
 
-        <TabsContent
-          value="epub"
-          keepMounted
-          className="rounded-2xl border border-border bg-surface p-4 sm:p-6"
-        >
+        <TabsContent value="epub" keepMounted variant="surface">
           <EpubImportSection
             novelId={novelId}
             importController={epubImportController}

@@ -148,7 +148,7 @@ Solar Slash\tเพลงดาบสุริยะ\tskill`}
                         onBlur={field.handleBlur}
                         onChange={(event) => field.handleChange(event.target.value)}
                         aria-invalid={invalid}
-                        className="font-mono text-xs"
+                        variant="code"
                       />
                       {invalid && <FieldError errors={field.state.meta.errors} />}
                     </Field>

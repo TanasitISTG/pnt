@@ -262,16 +262,13 @@ function UserDropdown({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        render={<Button variant="ghost" className="gap-2" />}
-        disabled={signingOut}
-      >
+      <DropdownMenuTrigger render={<Button variant="ghost" />} disabled={signingOut}>
         {displayName}
         <ChevronDown className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="font-normal">
+          <DropdownMenuLabel>
             <div className="text-card-title text-foreground">{user.name}</div>
             <div className="text-caption text-muted-foreground">{user.email}</div>
           </DropdownMenuLabel>

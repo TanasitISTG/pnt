@@ -240,7 +240,7 @@ export function ReaderBookmarksDialog({
         )}
         {readerState.bookmarksLoadError ? (
           <div className="flex items-center justify-between gap-2">
-            <p className="text-caption text-destructive">Could not load more bookmarks.</p>
+            <p className="text-caption text-destructive-text">Could not load more bookmarks.</p>
             <Button
               size="sm"
               variant="outline"

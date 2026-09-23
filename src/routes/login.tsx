@@ -147,7 +147,7 @@ function LoginPage() {
               </form.Field>
 
               {error && (
-                <p role="alert" className="text-caption text-destructive">
+                <p role="alert" className="text-caption text-destructive-text">
                   {error}
                 </p>
               )}

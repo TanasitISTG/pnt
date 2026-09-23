@@ -437,15 +437,21 @@ export function DataTableToolbar({
   query,
   busyMessage,
 }: DataTableToolbarProps) {
-  const [queryInput, setQueryInput] = useState(searchValue);
+  const [queryInputState, setQueryInputState] = useState({
+    searchValue,
+    input: searchValue,
+  });
+  let queryInput = queryInputState.input;
+  if (queryInputState.searchValue !== searchValue) {
+    queryInput = searchValue;
+    setQueryInputState({ searchValue, input: searchValue });
+  }
   const onSearchChangeRef = useRef(onSearchChange);
 
   useEffect(() => {
     onSearchChangeRef.current = onSearchChange;
   });
-  useEffect(() => {
-    setQueryInput(searchValue);
-  }, [searchValue]);
+
   useEffect(() => {
     if (queryInput === searchValue) return;
     const timeoutId = window.setTimeout(() => onSearchChangeRef.current(queryInput), 300);
@@ -463,7 +469,7 @@ export function DataTableToolbar({
           />
           <Input
             value={queryInput}
-            onChange={(event) => setQueryInput(event.target.value)}
+            onChange={(event) => setQueryInputState({ searchValue, input: event.target.value })}
             placeholder={searchPlaceholder}
             aria-label={searchLabel}
             className="h-10 pl-9"
@@ -503,7 +509,7 @@ export function DataTableToolbar({
               size="sm"
               className="h-10"
               onClick={() => {
-                setQueryInput("");
+                setQueryInputState({ searchValue, input: "" });
                 onClearFilters();
               }}
             >

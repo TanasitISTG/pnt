@@ -12,8 +12,16 @@ const buttonVariants = cva(
         default: "bg-primary text-primary-foreground shadow-button-inset",
         // Ghost / Outline — transparent, interactive 40% border
         outline: "border-foreground/40 bg-transparent text-foreground",
+        outlineWarning: "border-warning/40 bg-transparent text-foreground",
+        outlineDestructive: "border-foreground/40 bg-transparent text-destructive-text",
+        outlineDestructiveStrong:
+          "border-destructive/40 bg-transparent text-destructive-text hover:bg-destructive/10",
         // Borderless — subtle charcoal tint on hover
         ghost: "text-foreground hover:bg-foreground/4",
+        ghostWarning: "text-warning hover:bg-foreground/4 hover:text-warning",
+        ghostDestructive: "text-destructive-text hover:bg-foreground/4 hover:text-destructive-text",
+        ghostPrimary: "text-primary hover:bg-foreground/4 hover:text-primary",
+        ghostMuted: "text-muted-foreground hover:bg-foreground/4 hover:text-foreground",
         // Cream Surface — tertiary, toolbar
         cream: "bg-surface text-foreground",
         // Pill / Icon — 9999px, inset shadow, opacity-driven
@@ -28,6 +36,8 @@ const buttonVariants = cva(
         lg: "h-11 px-5",
         icon: "size-10 rounded-full",
         "icon-sm": "size-8 rounded-full",
+        chapterOption: "h-auto min-h-11 px-4 py-2",
+        readerNav: "h-auto min-h-11 gap-1.5 px-2.5 py-1 sm:gap-2 sm:px-3",
       },
     },
     defaultVariants: {

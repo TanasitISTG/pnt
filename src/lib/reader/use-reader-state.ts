@@ -441,19 +441,30 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
   const state = isAdmin ? accountState : snapshot;
   const ready = isAdmin ? query.isSuccess || query.isError : hydrated;
 
-  const [bookmarksLoadingMore, setBookmarksLoadingMore] = useState(false);
-  const [bookmarksLoadError, setBookmarksLoadError] = useState<unknown>(null);
-  const loadingMoreRef = useRef(false);
+  const [pagingState, setPagingState] = useState<{
+    identity: string;
+    loading: boolean;
+    error: unknown;
+  } | null>(null);
   const pagingGenerationRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const identity = `${novelId}\u0000${isAdmin ? "admin" : "local"}`;
+  const pagingIdentityRef = useRef(identity);
+
+  if (pagingState && pagingState.identity !== identity) setPagingState(null);
 
   useEffect(() => {
-    setBookmarksLoadError(null);
-    setBookmarksLoadingMore(false);
-    loadingMoreRef.current = false;
+    if (pagingIdentityRef.current !== identity) {
+      pagingIdentityRef.current = identity;
+      pagingGenerationRef.current += 1;
+      loadingMoreRef.current = false;
+    }
     return () => {
       pagingGenerationRef.current += 1;
     };
-  }, [novelId, isAdmin]);
+  }, [identity]);
+
+  const currentPagingState = pagingState?.identity === identity ? pagingState : null;
 
   // Continuation stays in the authoritative reader-state cache. A response only lands while
   // that cache still holds the cursor it was requested for and no refetch intervened, so a
@@ -468,8 +479,7 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
     const generation = queryClient.getQueryState(readerStateQueryKey(novelId))?.dataUpdatedAt ?? 0;
     const pagingGeneration = pagingGenerationRef.current;
     loadingMoreRef.current = true;
-    setBookmarksLoadingMore(true);
-    setBookmarksLoadError(null);
+    setPagingState({ identity, loading: true, error: null });
     try {
       const page = await queryClient.fetchQuery(readerBookmarkPageQueryOptions(novelId, cursor));
       if (pagingGenerationRef.current !== pagingGeneration) return;
@@ -493,14 +503,18 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
         bookmarkNextCursor: page.nextCursor,
       });
     } catch (error) {
-      if (pagingGenerationRef.current === pagingGeneration) setBookmarksLoadError(error);
+      if (pagingGenerationRef.current === pagingGeneration) {
+        setPagingState({ identity, loading: true, error });
+      }
     } finally {
       if (pagingGenerationRef.current === pagingGeneration) {
         loadingMoreRef.current = false;
-        setBookmarksLoadingMore(false);
+        setPagingState((previous) =>
+          previous?.identity === identity ? { ...previous, loading: false } : previous,
+        );
       }
     }
-  }, [isAdmin, novelId, queryClient]);
+  }, [identity, isAdmin, novelId, queryClient]);
 
   // `store` keeps its identity for a given (novel, reader) so effects can depend on it safely.
   return useMemo(
@@ -511,8 +525,8 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
       progress: toProgress(state),
       bookmarks: state.bookmarks,
       bookmarksHasMore: isAdmin && state.bookmarkNextCursor !== null,
-      bookmarksLoadingMore: isAdmin && bookmarksLoadingMore,
-      bookmarksLoadError: isAdmin ? bookmarksLoadError : null,
+      bookmarksLoadingMore: isAdmin && (currentPagingState?.loading ?? false),
+      bookmarksLoadError: isAdmin ? (currentPagingState?.error ?? null) : null,
       loadMoreBookmarks,
       getProgress: store.getProgress,
       markOpened: store.markOpened,
@@ -523,15 +537,6 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
       updateBookmarkNote: store.updateBookmarkNote,
       removeBookmark: store.removeBookmark,
     }),
-    [
-      bookmarksLoadError,
-      bookmarksLoadingMore,
-      isAdmin,
-      loadMoreBookmarks,
-      novelId,
-      ready,
-      state,
-      store,
-    ],
+    [currentPagingState, isAdmin, loadMoreBookmarks, novelId, ready, state, store],
   );
 }

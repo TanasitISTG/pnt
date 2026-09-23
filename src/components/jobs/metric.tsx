@@ -13,13 +13,13 @@ export function Metric({ label, value, detail }: MetricProps) {
     <Card size="sm">
       <CardContent>
         <div
-          className="truncate font-semibold tabular-nums text-foreground text-[clamp(1.75rem,4vw,2.5rem)]"
+          className="truncate font-semibold tabular-nums text-foreground text-metric"
           title={String(value)}
         >
           {value}
         </div>
         <div className="mt-1 text-caption text-muted-foreground">{label}</div>
-        {detail && <div className="mt-2 truncate text-[11px] text-muted-foreground">{detail}</div>}
+        {detail && <div className="mt-2 truncate text-micro text-muted-foreground">{detail}</div>}
       </CardContent>
     </Card>
   );

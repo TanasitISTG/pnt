@@ -115,7 +115,8 @@ export function ReaderChapterDialog({
                           key={chapter.id}
                           type="button"
                           variant={chapter.id === chapterId ? "outline" : "ghost"}
-                          className="h-auto min-h-11 w-full min-w-0 items-start justify-start py-2 text-left"
+                          size="chapterOption"
+                          className="w-full min-w-0 items-start justify-start text-left"
                           aria-current={chapter.id === chapterId ? "page" : undefined}
                           onClick={() => {
                             setQuery("");

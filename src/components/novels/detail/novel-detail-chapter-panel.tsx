@@ -57,16 +57,17 @@ function ChapterSearchToolbar({
   disabled,
   onChange,
 }: ChapterSearchToolbarProps) {
-  const [queryInput, setQueryInput] = useState(query);
+  const [queryInputState, setQueryInputState] = useState({ query, input: query });
+  let queryInput = queryInputState.input;
+  if (queryInputState.query !== query) {
+    queryInput = query;
+    setQueryInputState({ query, input: query });
+  }
   const onChangeRef = useRef(onChange);
 
   useEffect(() => {
     onChangeRef.current = onChange;
   });
-
-  useEffect(() => {
-    setQueryInput(query);
-  }, [query]);
 
   useEffect(() => {
     if (disabled || queryInput === query) return;
@@ -75,7 +76,7 @@ function ChapterSearchToolbar({
   }, [disabled, query, queryInput]);
 
   const handleClear = () => {
-    setQueryInput("");
+    setQueryInputState({ query, input: "" });
     onChangeRef.current("");
   };
 
@@ -88,7 +89,7 @@ function ChapterSearchToolbar({
         />
         <Input
           value={queryInput}
-          onChange={(event) => setQueryInput(event.target.value)}
+          onChange={(event) => setQueryInputState({ query, input: event.target.value })}
           placeholder="Search chapter number or title"
           aria-label="Search chapters"
           disabled={disabled}

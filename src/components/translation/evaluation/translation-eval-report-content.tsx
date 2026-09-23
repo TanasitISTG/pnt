@@ -272,7 +272,7 @@ export function TranslationEvalReportContent(props: TranslationEvalReportContent
   if (props.isPending && !props.detail) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-        <Spinner className="mb-3 size-8 text-primary" aria-hidden="true" />
+        <Spinner variant="primary" className="mb-3 size-8" aria-hidden="true" />
         <p className="text-body">Loading quality check…</p>
       </div>
     );

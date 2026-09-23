@@ -20,7 +20,7 @@ export function QueryErrorState({
       className={`flex flex-col items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center ${className}`}
     >
       <h3 className="text-card-title font-semibold text-foreground">{title}</h3>
-      <p className="mt-2 max-w-sm text-sm text-destructive font-medium">{message}</p>
+      <p className="mt-2 max-w-sm text-sm text-destructive-text font-medium">{message}</p>
       <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
         Retry
       </Button>

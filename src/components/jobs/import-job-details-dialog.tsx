@@ -98,7 +98,7 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
         <Counter label="Failed" value={job.failed} />
       </div>
       {job.error ? (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-caption text-destructive">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-caption text-destructive-text">
           <p className="font-semibold">Worker error</p>
           <p className="mt-1 whitespace-pre-wrap break-words">{job.error}</p>
         </div>
@@ -220,7 +220,7 @@ function Detail({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="text-micro font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
       <dd
@@ -236,7 +236,7 @@ function Counter({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-border bg-muted/20 px-2 py-3">
       <div className="font-semibold tabular-nums text-foreground">{value.toLocaleString()}</div>
-      <div className="mt-1 text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-micro text-muted-foreground">{label}</div>
     </div>
   );
 }

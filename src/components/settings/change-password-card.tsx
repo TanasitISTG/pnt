@@ -50,7 +50,7 @@ export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
   const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
 
   return (
-    <Card className="rounded-xl border border-border bg-card">
+    <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <Key className="size-5 text-muted-foreground" />

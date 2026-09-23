@@ -35,7 +35,12 @@ export function LibraryToolbar({
   totalCount,
   onSearchChange,
 }: LibraryToolbarProps) {
-  const [queryInput, setQueryInput] = useState(search.q);
+  const [queryInputState, setQueryInputState] = useState({ query: search.q, input: search.q });
+  let queryInput = queryInputState.input;
+  if (queryInputState.query !== search.q) {
+    queryInput = search.q;
+    setQueryInputState({ query: search.q, input: search.q });
+  }
   const onSearchChangeRef = useRef(onSearchChange);
   const languageItems = useMemo(() => {
     const items: Record<string, string> = { all: LIBRARY_LANGUAGE_ALL_LABEL };
@@ -48,17 +53,13 @@ export function LibraryToolbar({
   });
 
   useEffect(() => {
-    setQueryInput(search.q);
-  }, [search.q]);
-
-  useEffect(() => {
     if (queryInput === search.q) return;
     const timeoutId = window.setTimeout(() => onSearchChangeRef.current({ q: queryInput }), 300);
     return () => window.clearTimeout(timeoutId);
   }, [queryInput, search.q]);
 
   const clear = () => {
-    setQueryInput("");
+    setQueryInputState({ query: search.q, input: "" });
     onSearchChangeRef.current({ q: "", language: "all", publication: "all" });
   };
 
@@ -105,7 +106,7 @@ export function LibraryToolbar({
             name="q"
             autoComplete="off"
             value={queryInput}
-            onChange={(event) => setQueryInput(event.target.value)}
+            onChange={(event) => setQueryInputState({ query: search.q, input: event.target.value })}
             placeholder="Search title, author, or original title…"
             aria-label="Search novels"
             className="h-10 pl-9"

@@ -76,11 +76,11 @@ export function ChapterImportStatus({
         </dl>
       ) : null}
 
-      {job?.error ? <p className="text-sm text-destructive">{job.error}</p> : null}
+      {job?.error ? <p className="text-sm text-destructive-text">{job.error}</p> : null}
 
       {statusError ? (
         <div
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive-text"
           role="alert"
         >
           <span>{statusError.message}</span>

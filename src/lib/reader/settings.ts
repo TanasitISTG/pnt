@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 import type {
   ReaderFontSize,
@@ -87,26 +87,47 @@ function load(): ReaderSettings {
 
 let cached: ReaderSettings | null = null;
 
-export function useReaderSettings() {
-  const [settings, setSettings] = useState<ReaderSettings>(() => cached ?? DEFAULTS);
-  const [ready, setReady] = useState(() => cached !== null);
+interface ReaderSettingsSnapshot {
+  settings: ReaderSettings;
+  ready: boolean;
+}
 
-  useEffect(() => {
-    if (!cached) cached = load();
-    setSettings(cached);
-    setReady(true);
-  }, []);
+const serverSnapshot: ReaderSettingsSnapshot = { settings: DEFAULTS, ready: false };
+let snapshot = serverSnapshot;
+const subscribers = new Set<() => void>();
+
+function ensureLoaded() {
+  if (cached !== null) return;
+  cached = load();
+  snapshot = { settings: cached, ready: true };
+  for (const subscriber of subscribers) subscriber();
+}
+
+function subscribe(onChange: () => void) {
+  subscribers.add(onChange);
+  ensureLoaded();
+  return () => subscribers.delete(onChange);
+}
+
+export function useReaderSettings() {
+  const current = useSyncExternalStore(
+    subscribe,
+    () => snapshot,
+    () => serverSnapshot,
+  );
 
   const update = useCallback((patch: Partial<ReaderSettings>) => {
+    ensureLoaded();
     const next = { ...(cached ?? DEFAULTS), ...patch };
     cached = next;
+    snapshot = { settings: next, ready: true };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch {
       // storage full/blocked — settings just won't persist
     }
-    setSettings(next);
+    for (const subscriber of subscribers) subscriber();
   }, []);
 
-  return { settings, update, ready };
+  return { settings: current.settings, update, ready: current.ready };
 }

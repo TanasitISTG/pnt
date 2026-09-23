@@ -77,7 +77,7 @@ export function ReaderChapterProgress({
       aria-valuenow={progress.percent}
     >
       <div
-        className="h-full bg-primary/30 transition-[width] duration-200 ease-out"
+        className="h-full bg-primary/30 transition-width duration-200 ease-out"
         style={{ width: `${progress.percent}%` }}
       />
     </div>

@@ -267,6 +267,7 @@
   --color-input: var(--border);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-text: var(--destructive-text);
 
   /* Status colors — muted olive/umber/warm slate, flip in .dark and reader themes */
   --color-success: var(--success);
@@ -316,10 +317,20 @@
   --text-body-lg--line-height: 1.38;
   --text-caption: 0.875rem;
   --text-caption--line-height: 1.5;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5;
+  --text-micro: 0.6875rem;
+  --text-badge-count: 0.625rem;
+  --text-metric: clamp(1.75rem, 4vw, 2.5rem);
+  --tracking-overline: 0.16em;
 
   /* Fonts — Thai fallback is mandatory */
   --font-sans: "Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
   --font-reader: "Sarabun", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+}
+
+@utility transition-width {
+  transition-property: width;
 }
 
 :root {
@@ -334,6 +345,7 @@
   --primary: #1c1c1c;
   --primary-foreground: #fcfbf8;
   --destructive: #a8442f;
+  --destructive-text: var(--destructive);
   --destructive-foreground: #fcfbf8;
   --success: #53604b;
   --warning: #735735;
@@ -353,6 +365,7 @@
   --primary: #f7f4ed;
   --primary-foreground: #1c1c1c;
   --destructive: #a8442f;
+  --destructive-text: #e6a18f;
   --destructive-foreground: #fcfbf8;
   --success: #bcc7b5;
   --warning: #d5b991;
@@ -374,6 +387,7 @@
   --primary: #5b4636;
   --primary-foreground: #f9f2e2;
   --destructive: #8f4630;
+  --destructive-text: var(--destructive);
   --destructive-foreground: #f9f2e2;
   --success: #566047;
   --warning: #705333;
@@ -393,6 +407,7 @@
   --primary: #1f1f1c;
   --primary-foreground: #fcfcfa;
   --destructive: #9c4530;
+  --destructive-text: var(--destructive);
   --destructive-foreground: #fcfcfa;
   --success: #53604b;
   --warning: #735735;

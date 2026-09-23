@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "unicorn"],
+  "jsPlugins": ["@shadcn/lint"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
@@ -8,8 +9,43 @@
   "rules": {
     "no-unused-vars": "error",
     "typescript/no-explicit-any": "error",
-    "react/react-in-jsx-scope": "off"
+    "react/react-in-jsx-scope": "off",
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": ["layout"],
+        "contracts": [
+          { "pattern": "^Badge$", "allow": ["layout", "typography", "animate-pulse"] },
+          { "pattern": "^(CardTitle|DialogTitle)$", "allow": ["layout", "typography", "color"] },
+          {
+            "pattern": "^(Card|CardHeader|CardContent|CardFooter|DialogContent|DialogHeader|DialogFooter|Field|FieldGroup|Input|Textarea|SelectTrigger|Progress|TabsList|ToggleGroup)$",
+            "allow": ["layout", "spacing"]
+          },
+          {
+            "pattern": "^(Table|TableHeader|TableRow|TableHead|TableCell)$",
+            "allow": ["layout", "spacing", "typography", "color"]
+          }
+        ]
+      }
+    ],
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-arbitrary-values": ["error", { "allow": ["layout"] }]
   },
+  "overrides": [
+    {
+      "files": ["src/components/ui/**"],
+      "rules": {
+        "shadcn/no-restyle": "off",
+        "shadcn/no-arbitrary-values": "off"
+      }
+    },
+    {
+      "files": ["src/components/novels/novel-cover.tsx"],
+      "rules": {
+        "shadcn/no-arbitrary-values": ["error", { "allow": ["layout", "rounded-[inherit]"] }]
+      }
+    }
+  ],
   "ignorePatterns": [
     "node_modules",
     ".output",

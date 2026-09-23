@@ -97,14 +97,14 @@ export function useManualChapterEditor({
     mutationFn: (input: CreateChapterInput) => createChapter({ data: input }),
   });
   const nextNumber = Math.max(autoNextNumber, minimumNextNumber);
-  const initialValuesRef = useRef<ManualChapterFormValues>({
+  const [initialValues] = useState<ManualChapterFormValues>(() => ({
     number: String(nextNumber),
     title: "",
     rawContent: "",
-  });
+  }));
 
   const form = useForm({
-    defaultValues: initialValuesRef.current,
+    defaultValues: initialValues,
     validators: {
       onSubmit: manualChapterFormSchema,
     },
@@ -364,7 +364,7 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
 
         {submitError ? (
           <div
-            className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+            className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive-text"
             role="alert"
           >
             {submitError}

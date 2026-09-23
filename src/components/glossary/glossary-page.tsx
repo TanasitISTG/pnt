@@ -44,7 +44,7 @@ function PendingSuggestionsNotice({
           Review extracted mappings before they influence future translations.
         </p>
       </div>
-      <Button variant="outline" size="sm" className="border-warning/40" onClick={onReview}>
+      <Button variant="outlineWarning" size="sm" onClick={onReview}>
         Review suggestions
       </Button>
     </section>
@@ -84,9 +84,8 @@ function PendingBulkActions({
           {approvingAll ? "Approving…" : `Approve all ${pendingCount} pending`}
         </Button>
         <Button
-          variant="outline"
+          variant="outlineDestructive"
           size="sm"
-          className="text-destructive"
           onClick={onRejectAll}
           disabled={hasPendingActions}
         >

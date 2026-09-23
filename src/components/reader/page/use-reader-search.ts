@@ -49,9 +49,23 @@ export function useReaderSearch({
 }: UseReaderSearchOptions): ReaderSearchApi {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [focusRequest, setFocusRequest] = useState(0);
   const deferredQuery = useDeferredValue(query);
+  const [activeMatchState, setActiveMatchState] = useState<{
+    chapterKey: string;
+    viewMode: ReaderViewMode;
+    deferredQuery: string;
+    index: number;
+  }>({ chapterKey, viewMode, deferredQuery: "", index: 0 });
+  const [focusRequest, setFocusRequest] = useState(0);
+  const scopeChanged =
+    activeMatchState.chapterKey !== chapterKey ||
+    activeMatchState.viewMode !== viewMode ||
+    activeMatchState.deferredQuery !== deferredQuery;
+  if (scopeChanged) {
+    setActiveMatchState({ chapterKey, viewMode, deferredQuery, index: 0 });
+  }
+  const activeIndex = scopeChanged ? 0 : activeMatchState.index;
+  if (!enabled && open) setOpen(false);
 
   const targets = useMemo(
     () =>
@@ -71,13 +85,24 @@ export function useReaderSearch({
   );
   const truncated = matches.length >= READER_SEARCH_MATCH_LIMIT;
 
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [chapterKey, viewMode, deferredQuery]);
-
-  useEffect(() => {
-    if (!enabled) setOpen(false);
-  }, [enabled]);
+  const setActiveIndex = useCallback(
+    (updater: number | ((index: number) => number)) => {
+      setActiveMatchState((current) => {
+        const isCurrent =
+          current.chapterKey === chapterKey &&
+          current.viewMode === viewMode &&
+          current.deferredQuery === deferredQuery;
+        const index = isCurrent ? current.index : 0;
+        return {
+          chapterKey,
+          viewMode,
+          deferredQuery,
+          index: typeof updater === "function" ? updater(index) : updater,
+        };
+      });
+    },
+    [chapterKey, viewMode, deferredQuery],
+  );
 
   const openFind = useCallback(() => {
     setOpen(true);
@@ -93,7 +118,7 @@ export function useReaderSearch({
         return (index + delta + matches.length) % matches.length;
       });
     },
-    [matches.length],
+    [matches.length, setActiveIndex],
   );
 
   const next = useCallback(() => step(1), [step]);

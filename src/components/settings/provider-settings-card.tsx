@@ -251,7 +251,7 @@ export function ProviderSettingsCard({
   };
 
   return (
-    <Card className="rounded-xl border border-border bg-card">
+    <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <Cpu className="size-5 text-muted-foreground" />

@@ -112,7 +112,7 @@ function AdminActions({
         <BookOpen className="size-4" />
         <span className="hidden sm:inline">Glossary</span>
         {glossaryStats && glossaryStats.total > 0 ? (
-          <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] font-mono">
+          <Badge variant="secondary" size="count" className="ml-1">
             {glossaryStats.total}
           </Badge>
         ) : null}
@@ -187,14 +187,7 @@ function NovelDescription({ description }: { description: string }) {
         <p className={descriptionClassName}>{description}</p>
       </CollapsibleContent>
       <CollapsibleTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="-ml-3 mt-1 min-h-11 px-3 text-foreground"
-          />
-        }
+        render={<Button type="button" variant="ghost" size="sm" className="-ml-3 mt-1 min-h-11" />}
       >
         {expanded ? "Show less" : "Show more"}
         <ChevronDown
@@ -216,7 +209,7 @@ function NovelMeta({ novel }: Pick<NovelHeaderProps, "novel">) {
         <h1 className="text-card-title font-semibold tracking-tight text-foreground sm:text-sub md:text-section">
           {novel.title}
         </h1>
-        <Badge variant="outline" className="border-foreground/40 text-xs font-semibold uppercase">
+        <Badge variant="strongOutline" className="text-xs font-semibold uppercase">
           {novel.sourceLang} → {novel.targetLang}
         </Badge>
       </div>

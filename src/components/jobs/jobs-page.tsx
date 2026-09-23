@@ -230,7 +230,7 @@ export function JobsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-caption font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <p className="text-caption font-semibold uppercase tracking-overline text-muted-foreground">
             Operations
           </p>
           <h1 className="mt-1 text-display-alt font-semibold text-foreground">Job activity</h1>
@@ -245,7 +245,7 @@ export function JobsPage() {
       </div>
       {activityQuery.isError ? (
         <div
-          className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text"
           role="alert"
         >
           <span>Live job progress is unavailable; retained history is still shown.</span>

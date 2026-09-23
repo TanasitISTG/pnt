@@ -35,13 +35,7 @@ export function NovelCard({
       params={{ novelId: novel.id }}
       className="group/card-link block h-full no-underline"
     >
-      <Card
-        className={
-          isList
-            ? "h-full transition-colors hover:border-foreground/40"
-            : "h-full pt-0 transition-colors hover:border-foreground/40"
-        }
-      >
+      <Card interactive className={isList ? "h-full" : "h-full pt-0"}>
         <div
           className={
             isList

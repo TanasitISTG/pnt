@@ -200,10 +200,7 @@ function ChapterTitleLink({
         <span className="text-caption text-muted-foreground">Opened</span>
       ) : null}
       {residualScriptCount ? (
-        <Badge
-          variant="outline"
-          className="border-warning/50 bg-warning/10 text-warning font-mono text-xs"
-        >
+        <Badge variant="warningStrong" className="font-mono text-xs">
           {residualScriptCount} foreign-script letters
         </Badge>
       ) : null}
@@ -329,9 +326,9 @@ function TranslationActionButton({
   if (translationState === "translating" && activeJob) {
     return (
       <Button
-        variant="ghost"
+        variant="ghostWarning"
         size="icon"
-        className="size-8 text-warning hover:text-warning"
+        className="size-8"
         onClick={() => onCancelTranslate(activeJob.jobId, chapter.id)}
         aria-label="Cancel translation"
         title="Cancel translation"
@@ -344,9 +341,9 @@ function TranslationActionButton({
   if (chapter.status === "error" || activeJob?.status === "error") {
     return (
       <Button
-        variant="ghost"
+        variant="ghostDestructive"
         size="icon"
-        className="size-8 text-destructive hover:text-destructive"
+        className="size-8"
         onClick={() => {
           if (activeJob) {
             onRetryTranslate(activeJob.jobId, chapter.id);
@@ -367,9 +364,9 @@ function TranslationActionButton({
   if (chapter.hasTranslation) {
     return (
       <Button
-        variant="ghost"
+        variant="ghostPrimary"
         size="icon"
-        className="size-8 text-primary hover:text-primary"
+        className="size-8"
         onClick={() => onRequestRetranslate(chapter.id)}
         aria-label="Re-translate chapter"
         title="Re-translate chapter"
@@ -381,9 +378,9 @@ function TranslationActionButton({
 
   return (
     <Button
-      variant="ghost"
+      variant="ghostPrimary"
       size="icon"
-      className="size-8 text-primary hover:text-primary"
+      className="size-8"
       onClick={() => onStartTranslate(chapter.id, "missing")}
       aria-label="Translate chapter"
       title="Translate chapter"
@@ -417,9 +414,9 @@ function AdminActionsCell(props: ChapterTableRowProps) {
         />
         {activeJob || chapter.status !== "raw" ? (
           <Button
-            variant="ghost"
+            variant="ghostMuted"
             size="icon"
-            className="size-8 text-muted-foreground hover:text-foreground"
+            className="size-8"
             onClick={() => props.onViewLogs(chapter.id)}
             aria-label="View translation logs"
             title="View translation logs"
@@ -449,7 +446,7 @@ function AdminActionsCell(props: ChapterTableRowProps) {
           onClick={() => props.onDeleteChapter(chapter.id)}
           aria-label="Delete chapter"
         >
-          <Trash2 className="size-4 text-destructive" />
+          <Trash2 className="size-4 text-destructive-text" />
         </Button>
       </div>
     </TableCell>

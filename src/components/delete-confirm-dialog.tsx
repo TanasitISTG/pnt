@@ -21,7 +21,7 @@ export function DeleteConfirmDialog({
     <ConfirmDialog
       title={title}
       description={description}
-      titleClassName="text-destructive font-semibold"
+      titleClassName="text-destructive-text font-semibold"
       confirmText={pending ? "Deleting..." : "Delete"}
       variant="destructive"
       open={open}

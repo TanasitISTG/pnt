@@ -195,7 +195,7 @@ function JobHistoryMobileRows({
                 Updated <DateCell value={job.updatedAt} />
               </span>
               {job.error ? (
-                <span className="max-w-full truncate text-destructive" title={job.error}>
+                <span className="max-w-full truncate text-destructive-text" title={job.error}>
                   {job.error}
                 </span>
               ) : null}

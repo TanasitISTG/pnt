@@ -109,10 +109,10 @@ export function createJobHistoryColumns(actions: JobHistoryColumnActions) {
             <Badge variant="outline" className="font-medium">
               {typeLabels[job.type]}
             </Badge>
-            <p className="mt-1 text-[11px] text-muted-foreground">{typeDetail(job)}</p>
+            <p className="mt-1 text-micro text-muted-foreground">{typeDetail(job)}</p>
             {job.type === "translation" ? (
               <p
-                className="mt-0.5 max-w-[180px] truncate text-[11px] text-muted-foreground"
+                className="mt-0.5 max-w-[180px] truncate text-micro text-muted-foreground"
                 title={`Runtime · ${translationRuntime(job)}`}
               >
                 Runtime · {translationRuntime(job)}
@@ -170,7 +170,7 @@ export function createJobHistoryColumns(actions: JobHistoryColumnActions) {
       cell: ({ row }) =>
         row.original.error ? (
           <span
-            className="block max-w-[240px] truncate text-caption text-destructive"
+            className="block max-w-[240px] truncate text-caption text-destructive-text"
             title={row.original.error}
           >
             {row.original.error}

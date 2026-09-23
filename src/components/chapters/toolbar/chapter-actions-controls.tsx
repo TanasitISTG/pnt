@@ -80,7 +80,7 @@ export function ChapterActionsControls({
           ) : null}
           {chapterCount > 0 ? (
             <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
+              variant="destructive"
               onClick={onDeleteAllTranslations}
               disabled={deletingAllTranslations}
             >

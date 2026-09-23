@@ -102,7 +102,10 @@ interface JobLogsDialogHeaderProps {
 function JobLogsDialogHeader({ jobData, status }: JobLogsDialogHeaderProps) {
   const running = isRunningStatus(status);
   return (
-    <DialogHeader className="flex shrink-0 flex-col items-start gap-3 border-b border-border pb-4 pr-8 sm:flex-row sm:items-center sm:justify-between">
+    <DialogHeader
+      variant="divided"
+      className="flex shrink-0 flex-col items-start gap-3 pb-4 pr-8 sm:flex-row sm:items-center sm:justify-between"
+    >
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10">
           <Terminal className="size-5 text-primary" />
@@ -121,7 +124,7 @@ function JobLogsDialogHeader({ jobData, status }: JobLogsDialogHeaderProps) {
       {status ? (
         <div className="flex shrink-0 items-center gap-2">
           <ChapterStatusBadge status={status as ChapterStatus} />
-          {running ? <Spinner className="size-4 text-muted-foreground" /> : null}
+          {running ? <Spinner variant="muted" className="size-4" /> : null}
         </div>
       ) : null}
     </DialogHeader>
@@ -215,10 +218,7 @@ function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
                 </TableCell>
                 <TableCell>
                   {chunk.hasTranslation ? (
-                    <Badge
-                      variant="outline"
-                      className="text-xs text-success border-success/30 bg-success/10 font-medium"
-                    >
+                    <Badge variant="success" className="text-xs font-medium">
                       Completed
                     </Badge>
                   ) : chunk.error ? (
@@ -344,12 +344,12 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
           />
         ) : progressQuery.isPending && !progress && !jobData ? (
           <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-            <Spinner className="mb-3 size-8 text-primary" />
+            <Spinner variant="primary" className="mb-3 size-8" />
             <p className="text-body">Loading job progress…</p>
           </div>
         ) : detailsQuery.isPending && !jobData ? (
           <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-            <Spinner className="mb-3 size-8 text-primary" />
+            <Spinner variant="primary" className="mb-3 size-8" />
             <p className="text-body">Loading job details and logs…</p>
           </div>
         ) : detailsQuery.data === null ? (
@@ -384,7 +384,7 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
               completionTokens={liveCompletionTokens}
             />
             {jobData.error ? (
-              <div className="flex shrink-0 items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-body font-medium text-destructive">
+              <div className="flex shrink-0 items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-body font-medium text-destructive-text">
                 <XCircle className="mt-0.5 size-5 shrink-0" />
                 <span className="break-all">{jobData.error}</span>
               </div>

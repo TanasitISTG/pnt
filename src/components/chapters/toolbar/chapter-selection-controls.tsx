@@ -128,10 +128,7 @@ export function ChapterSelectionControls({
           const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
           return (
             <Field data-invalid={invalid || undefined} className="w-24 gap-1">
-              <FieldLabel
-                htmlFor="chapter-range-from"
-                className="text-caption text-muted-foreground"
-              >
+              <FieldLabel htmlFor="chapter-range-from" variant="mutedCaption">
                 From chapter
               </FieldLabel>
               <Input
@@ -139,7 +136,7 @@ export function ChapterSelectionControls({
                 name={field.name}
                 type="number"
                 min="1"
-                className="h-8 text-xs"
+                variant="compact"
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(event) => field.handleChange(event.target.value)}
@@ -158,7 +155,7 @@ export function ChapterSelectionControls({
           const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
           return (
             <Field data-invalid={invalid || undefined} className="w-24 gap-1">
-              <FieldLabel htmlFor="chapter-range-to" className="text-caption text-muted-foreground">
+              <FieldLabel htmlFor="chapter-range-to" variant="mutedCaption">
                 To chapter
               </FieldLabel>
               <Input
@@ -166,7 +163,7 @@ export function ChapterSelectionControls({
                 name={field.name}
                 type="number"
                 min="1"
-                className="h-8 text-xs"
+                variant="compact"
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(event) => field.handleChange(event.target.value)}

@@ -55,9 +55,8 @@ export function GlossaryHeader({
             Bulk Import (TSV)
           </Button>
           <Button
-            variant="outline"
+            variant="outlineDestructiveStrong"
             size="sm"
-            className="text-destructive border-destructive/40 hover:bg-destructive/10"
             onClick={onDeleteAllTerms}
             disabled={(stats?.total ?? 0) === 0 || deletingAllTerms}
           >
@@ -73,10 +72,7 @@ export function GlossaryHeader({
             <h1 className="text-card-title sm:text-sub md:text-section font-semibold text-foreground tracking-tight">
               {title} Glossary
             </h1>
-            <Badge
-              variant="outline"
-              className="uppercase font-semibold text-xs border-foreground/40"
-            >
+            <Badge variant="strongOutline" className="uppercase font-semibold text-xs">
               {sourceLang} → {targetLang}
             </Badge>
           </div>
@@ -86,28 +82,19 @@ export function GlossaryHeader({
         </div>
 
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="px-3 py-1 text-xs font-mono">
+          <Badge variant="secondary" size="stat">
             Total: {stats?.total ?? 0}
           </Badge>
-          <Badge
-            variant="outline"
-            className="px-3 py-1 text-xs font-mono text-success border-success/30"
-          >
+          <Badge variant="successOutline" size="stat">
             Approved: {stats?.approved ?? 0}
           </Badge>
           {(stats?.pending ?? 0) > 0 && (
-            <Badge
-              variant="outline"
-              className="px-3 py-1 text-xs font-mono text-warning border-warning/40 bg-warning/10"
-            >
+            <Badge variant="warningOutline" size="stat">
               Pending: {stats?.pending}
             </Badge>
           )}
           {(stats?.rejected ?? 0) > 0 && (
-            <Badge
-              variant="outline"
-              className="px-3 py-1 text-xs font-mono text-destructive border-destructive/40 bg-destructive/10"
-            >
+            <Badge variant="destructiveOutline" size="stat">
               Rejected: {stats?.rejected}
             </Badge>
           )}

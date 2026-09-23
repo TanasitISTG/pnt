@@ -80,7 +80,8 @@ export function ProviderSelectionSection({
             <ToggleGroupItem
               key={option.value}
               value={option.value}
-              className="h-auto min-w-0 flex-1 basis-0 flex-col items-start gap-0.5 whitespace-normal rounded-lg border border-border bg-background p-3 text-left font-normal text-muted-foreground hover:bg-muted/50 aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:ring-1 aria-pressed:ring-primary"
+              appearance="provider"
+              className="h-auto min-w-0 flex-1 basis-0 flex-col whitespace-normal"
             >
               <span className="w-full font-medium text-foreground">{option.label}</span>
               <span className="w-full text-caption text-muted-foreground">
@@ -92,9 +93,7 @@ export function ProviderSelectionSection({
       </FieldSet>
 
       <FieldSet>
-        <FieldLegend variant="label" className="text-caption text-muted-foreground">
-          Quick Presets
-        </FieldLegend>
+        <FieldLegend variant="mutedCaption">Quick Presets</FieldLegend>
         <div className="flex flex-wrap gap-2">
           {PROVIDER_PRESETS[provider].map((preset) => (
             <Button

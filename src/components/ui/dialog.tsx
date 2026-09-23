@@ -70,9 +70,21 @@ function DialogContent({
   );
 }
 
-function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+function DialogHeader({
+  className,
+  variant = "default",
+  ...props
+}: React.ComponentProps<"div"> & { variant?: "default" | "divided" }) {
   return (
-    <div data-slot="dialog-header" className={cn("flex flex-col gap-2", className)} {...props} />
+    <div
+      data-slot="dialog-header"
+      className={cn(
+        "flex flex-col gap-2",
+        variant === "divided" && "border-b border-border",
+        className,
+      )}
+      {...props}
+    />
   );
 }
 
@@ -101,11 +113,19 @@ function DialogFooter({
   );
 }
 
-function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+function DialogTitle({
+  className,
+  initialFocus = false,
+  ...props
+}: DialogPrimitive.Title.Props & { initialFocus?: boolean }) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-base leading-none font-semibold", className)}
+      className={cn(
+        "text-base leading-none font-semibold",
+        initialFocus && "outline-none",
+        className,
+      )}
       {...props}
     />
   );

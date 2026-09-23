@@ -9,34 +9,25 @@ export function ChapterStatusBadge({ status }: ChapterStatusBadgeProps) {
   switch (status) {
     case "raw":
       return (
-        <Badge variant="outline" className="border-border text-muted-foreground capitalize">
+        <Badge variant="mutedOutline" className="capitalize">
           Raw
         </Badge>
       );
     case "queued":
       return (
-        <Badge
-          variant="outline"
-          className="bg-info/10 text-info border-info/20 capitalize font-medium"
-        >
+        <Badge variant="info" className="capitalize font-medium">
           Queued
         </Badge>
       );
     case "translating":
       return (
-        <Badge
-          variant="outline"
-          className="bg-warning/10 text-warning border-warning/20 capitalize font-medium animate-pulse"
-        >
+        <Badge variant="warningSubtle" className="capitalize font-medium animate-pulse">
           Translating
         </Badge>
       );
     case "translated":
       return (
-        <Badge
-          variant="outline"
-          className="bg-success/10 text-success border-success/20 capitalize font-medium"
-        >
+        <Badge variant="successSubtle" className="capitalize font-medium">
           Translated
         </Badge>
       );

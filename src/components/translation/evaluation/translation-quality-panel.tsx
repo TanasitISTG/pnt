@@ -73,7 +73,7 @@ function LatestSummary({
       </div>
 
       {report.status === "error" ? (
-        <p className="mt-3 text-sm text-destructive">{report.error}</p>
+        <p className="mt-3 text-sm text-destructive-text">{report.error}</p>
       ) : report.status !== "done" ? (
         <p className="mt-3 text-sm text-muted-foreground">
           This check updates automatically. You can leave and return while it runs.

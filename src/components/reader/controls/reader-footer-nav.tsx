@@ -24,7 +24,8 @@ export function ReaderFooterNav({
         {prevChapter ? (
           <Button
             variant="outline"
-            className="h-auto min-h-11 w-full min-w-0 max-w-full justify-start gap-1.5 overflow-hidden px-2.5 py-1 text-left sm:gap-2 sm:px-3"
+            size="readerNav"
+            className="w-full min-w-0 max-w-full justify-start overflow-hidden text-left"
             onClick={() => onGoToChapter(prevChapter.id)}
             title={`Previous: ${chapterLabel(prevChapter)}`}
           >
@@ -37,8 +38,9 @@ export function ReaderFooterNav({
         ) : null}
         {nextChapter ? (
           <Button
+            size="readerNav"
             className={cn(
-              "h-auto min-h-11 w-full min-w-0 max-w-full justify-end gap-1.5 overflow-hidden px-2.5 py-1 text-right sm:gap-2 sm:px-3",
+              "w-full min-w-0 max-w-full justify-end overflow-hidden text-right",
               !prevChapter && "sm:col-start-2",
             )}
             onClick={() => onGoToChapter(nextChapter.id)}

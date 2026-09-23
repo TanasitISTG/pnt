@@ -287,7 +287,7 @@ export function EpubImportSection({
                 ) : (
                   <button
                     type="button"
-                    className={`flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 py-8 text-center text-foreground outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 ${
+                    className={`flex min-h-40 flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 py-8 text-center text-foreground outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 ${
                       dragActive
                         ? "border-primary bg-surface-2"
                         : "border-border bg-background hover:bg-muted"
@@ -353,7 +353,7 @@ export function EpubImportSection({
           </Button>
           {uploadError ? (
             <div
-              className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+              className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive-text"
               role="alert"
             >
               {uploadError}
