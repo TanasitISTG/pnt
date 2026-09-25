@@ -30,6 +30,7 @@ function maskApiKey(key: string): string {
 
 type ProviderFailureCode =
   | "AUTH_FAILED"
+  | "ACCESS_DENIED"
   | "NOT_FOUND"
   | "RATE_LIMITED"
   | "TIMEOUT"
@@ -37,6 +38,8 @@ type ProviderFailureCode =
 
 const PROVIDER_FAILURE_MESSAGES: Record<ProviderFailureCode, string> = {
   AUTH_FAILED: "Provider authentication failed. Check the API key.",
+  ACCESS_DENIED:
+    "Provider denied access. Check account/model permissions and deployment IP restrictions.",
   NOT_FOUND: "Provider endpoint or model was not found.",
   RATE_LIMITED: "Provider rate limit reached. Try again later.",
   TIMEOUT: "Provider request timed out.",
@@ -106,7 +109,8 @@ function readTrustedErrorFields(error: unknown): TrustedErrorFields {
 }
 
 function providerFailureCode(fields: TrustedErrorFields): ProviderFailureCode | null {
-  if (fields.status === 401 || fields.status === 403) return "AUTH_FAILED";
+  if (fields.status === 401) return "AUTH_FAILED";
+  if (fields.status === 403) return "ACCESS_DENIED";
   if (fields.status === 404) return "NOT_FOUND";
   if (fields.status === 429) return "RATE_LIMITED";
   if (fields.timeout) return "TIMEOUT";
@@ -118,22 +122,24 @@ function providerFailureCode(fields: TrustedErrorFields): ProviderFailureCode | 
  * Maps a provider client failure to a fixed public message using only trusted structured fields
  * (numeric status, error code, class name). Upstream bodies, messages, URLs and keys never escape.
  */
-const providerConnectionFailure = createServerOnlyFn(async function providerConnectionFailure(
-  error: unknown,
-): Promise<{ code: string; message: string }> {
-  // Dynamic import is required so this `.server` transport never enters the client graph.
-  const { ProviderRequestError } =
-    await import("@/lib/translation/providers/provider-network.server");
-  // The transport policy classifies unsupported JSON response mode itself; keep its fixed literal.
-  if (error instanceof ProviderRequestError && error.code === "JSON_MODE_UNSUPPORTED") {
-    return { code: error.code, message: error.message };
-  }
-  const failure = providerFailureCode(readTrustedErrorFields(error));
-  if (failure) return { code: failure, message: PROVIDER_FAILURE_MESSAGES[failure] };
-  // Transport policy failures already carry fixed, non-forwarding literals (URL, DNS, redirect).
-  if (error instanceof ProviderRequestError) return { code: error.code, message: error.message };
-  return { code: "CONNECTION_FAILED", message: PROVIDER_FAILURE_MESSAGES.CONNECTION_FAILED };
-});
+export const providerConnectionFailure = createServerOnlyFn(
+  async function providerConnectionFailure(
+    error: unknown,
+  ): Promise<{ code: string; message: string }> {
+    // Dynamic import is required so this `.server` transport never enters the client graph.
+    const { ProviderRequestError } =
+      await import("@/lib/translation/providers/provider-network.server");
+    // The transport policy classifies unsupported JSON response mode itself; keep its fixed literal.
+    if (error instanceof ProviderRequestError && error.code === "JSON_MODE_UNSUPPORTED") {
+      return { code: error.code, message: error.message };
+    }
+    const failure = providerFailureCode(readTrustedErrorFields(error));
+    if (failure) return { code: failure, message: PROVIDER_FAILURE_MESSAGES[failure] };
+    // Transport policy failures already carry fixed, non-forwarding literals (URL, DNS, redirect).
+    if (error instanceof ProviderRequestError) return { code: error.code, message: error.message };
+    return { code: "CONNECTION_FAILED", message: PROVIDER_FAILURE_MESSAGES.CONNECTION_FAILED };
+  },
+);
 
 const PASSWORD_INCORRECT_MESSAGE = "Current password is incorrect.";
 const PASSWORD_GENERIC_MESSAGE = "Could not change password. Try again.";

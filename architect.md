@@ -182,6 +182,8 @@ Exceptions do not authorize other origins, redirects, URL credentials, or TLS by
 Gemini uses `v1beta` `generateContent` REST under the configured base path, with API-key
 header authentication; no thinking configuration is synthesized and thought parts are
 excluded from visible text. Provider errors expose fixed messages rather than upstream bodies.
+HTTP 401 reports invalid credentials; HTTP 403 reports provider access denied and prompts
+checking account/model permissions and deployment IP restrictions rather than assuming a bad key.
 
 EPUB admission allows two retained uploading/queued/staged resources per account and
 100 MiB declared raw reservation. Uploading/queued rows reserve file size; staged rows

@@ -45,8 +45,24 @@ vi.mock("@/lib/translation/providers/provider-network.server", () => ({
 
 import {
   passwordChangeFailureMessage,
+  providerConnectionFailure,
   saveProviderSettingsForUser,
 } from "@/lib/settings/functions";
+
+describe("providerConnectionFailure", () => {
+  it.each([
+    [401, "AUTH_FAILED", "Provider authentication failed. Check the API key."],
+    [
+      403,
+      "ACCESS_DENIED",
+      "Provider denied access. Check account/model permissions and deployment IP restrictions.",
+    ],
+  ])("distinguishes HTTP %s from the provider", async (status, code, message) => {
+    await expect(
+      providerConnectionFailure(Object.assign(new Error("sensitive upstream details"), { status })),
+    ).resolves.toEqual({ code, message });
+  });
+});
 
 function errorWith(extra: Record<string, unknown>): Error {
   return Object.assign(new Error("upstream detail"), extra);

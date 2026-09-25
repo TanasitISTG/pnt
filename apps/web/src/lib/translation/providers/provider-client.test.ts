@@ -305,7 +305,11 @@ describe("provider-client module", () => {
 
   it.each([
     [401, "AUTH_FAILED", "Provider authentication failed. Check the API key."],
-    [403, "AUTH_FAILED", "Provider authentication failed. Check the API key."],
+    [
+      403,
+      "ACCESS_DENIED",
+      "Provider denied access. Check account/model permissions and deployment IP restrictions.",
+    ],
     [404, "NOT_FOUND", "Provider endpoint or model was not found."],
     [429, "RATE_LIMITED", "Provider rate limit reached. Try again later."],
     [
@@ -457,7 +461,10 @@ describe("provider-client module", () => {
 
   it.each([
     [401, "Provider authentication failed. Check the API key."],
-    [403, "Provider authentication failed. Check the API key."],
+    [
+      403,
+      "Provider denied access. Check account/model permissions and deployment IP restrictions.",
+    ],
     [404, "Provider endpoint or model was not found."],
     [429, "Provider rate limit reached. Try again later."],
     [500, "Could not connect to the provider. Check the settings and try again."],

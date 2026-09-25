@@ -63,6 +63,8 @@ const openAIResponseSchema = z.object({
 
 const providerFailureMessages = {
   AUTH_FAILED: "Provider authentication failed. Check the API key.",
+  ACCESS_DENIED:
+    "Provider denied access. Check account/model permissions and deployment IP restrictions.",
   NOT_FOUND: "Provider endpoint or model was not found.",
   RATE_LIMITED: "Provider rate limit reached. Try again later.",
   TIMEOUT: "Provider request timed out.",
@@ -143,8 +145,11 @@ function mapOpenAIError(error: unknown, jsonModeRequested: boolean): ProviderReq
       status,
     );
   }
-  if (status === 401 || status === 403) {
+  if (status === 401) {
     return new ProviderRequestError(providerFailureMessages.AUTH_FAILED, "AUTH_FAILED", status);
+  }
+  if (status === 403) {
+    return new ProviderRequestError(providerFailureMessages.ACCESS_DENIED, "ACCESS_DENIED", status);
   }
   if (status === 404) {
     return new ProviderRequestError(providerFailureMessages.NOT_FOUND, "NOT_FOUND", status);
@@ -398,14 +403,22 @@ export class GeminiProviderClient implements AIProviderClient {
           await response.body?.cancel().catch(() => undefined);
         }
         throw new ProviderRequestError(
-          response.status === 401 || response.status === 403
-            ? "Provider authentication failed. Check the API key."
-            : response.status === 404
-              ? "Provider endpoint or model was not found."
-              : response.status === 429
-                ? "Provider rate limit reached. Try again later."
-                : "Could not connect to the provider. Check the settings and try again.",
-          unsupportedJson ? "JSON_MODE_UNSUPPORTED" : "HTTP_ERROR",
+          response.status === 401
+            ? providerFailureMessages.AUTH_FAILED
+            : response.status === 403
+              ? providerFailureMessages.ACCESS_DENIED
+              : response.status === 404
+                ? providerFailureMessages.NOT_FOUND
+                : response.status === 429
+                  ? providerFailureMessages.RATE_LIMITED
+                  : providerFailureMessages.CONNECTION_FAILED,
+          unsupportedJson
+            ? "JSON_MODE_UNSUPPORTED"
+            : response.status === 401
+              ? "AUTH_FAILED"
+              : response.status === 403
+                ? "ACCESS_DENIED"
+                : "HTTP_ERROR",
           response.status,
         );
       }
