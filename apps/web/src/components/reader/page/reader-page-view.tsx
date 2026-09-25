@@ -225,11 +225,8 @@ export function ReaderPageView({
             targetLang={novel.targetLang}
             isAdmin={isAdmin}
             translationStatus={translationStatus}
-            jobRunning={jobRunning}
             highlightsFor={search.open ? search.highlightsFor : undefined}
             proseRef={onProseNodeChange ?? proseRef}
-            onTranslateRequest={onTranslateRequest}
-            onEditRequest={onEditRequest}
           />
         </div>
       )}

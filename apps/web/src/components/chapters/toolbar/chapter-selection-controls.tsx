@@ -121,7 +121,7 @@ export function ChapterSelectionControls({
         event.preventDefault();
         void form.handleSubmit();
       }}
-      className="flex items-start gap-2"
+      className="flex flex-wrap items-end gap-2"
     >
       <form.Field name="from">
         {(field) => {
@@ -179,13 +179,7 @@ export function ChapterSelectionControls({
       </form.Field>
       <form.Subscribe selector={(state) => state.isSubmitting}>
         {(isSubmitting) => (
-          <Button
-            variant="outline"
-            size="sm"
-            type="submit"
-            disabled={isSubmitting}
-            className="mt-5"
-          >
+          <Button variant="outline" size="sm" type="submit" disabled={isSubmitting}>
             {isSubmitting && <Spinner />}
             Select range
           </Button>

@@ -48,7 +48,7 @@ export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: R
         contentClassName="z-[60]"
       />
       <Dialog open={sourceEdit.open} onOpenChange={sourceEdit.onOpenChange}>
-        <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain">
+        <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto overscroll-contain sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Source Changed</DialogTitle>
             <DialogDescription>

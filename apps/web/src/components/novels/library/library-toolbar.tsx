@@ -74,10 +74,10 @@ export function LibraryToolbar({
         if (value) onSearchChange({ sort: value as LibrarySearch["sort"] });
       }}
     >
-      <SelectTrigger aria-label="Sort by" className="h-10 min-w-0 w-full lg:min-w-36">
+      <SelectTrigger aria-label="Sort by" className="h-10 min-w-0 w-full lg:min-w-48">
         <SelectValue placeholder={LIBRARY_SORT_LABELS.newest} />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="min-w-48">
         {Object.entries(LIBRARY_SORT_LABELS).map(([value, label]) => (
           <SelectItem key={value} value={value}>
             {label}

@@ -104,7 +104,7 @@ function StatusBadge({ status }: { status: TermStatus }) {
         status === "approved" ? "secondary" : status === "pending" ? "outline" : "destructive"
       }
     >
-      {status}
+      {statusItems[status]}
     </Badge>
   );
 }

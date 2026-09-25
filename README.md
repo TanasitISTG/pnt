@@ -18,7 +18,7 @@ A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin 
 - **Chapter CRUD** — paste raw text or bulk-import from supported sites (`quanben.io`, `twkan.com`, `biquge.tw`); decimal numbering for re-ordering
 - **Inngest-driven translation** — serverless-safe, chunked at paragraph boundaries, resumable, cancellable, per-chunk retry
 - **Consistency engine** — per-novel glossary (approved terms injected per chunk) + rolling chapter summaries for stable names/tone
-- **Reader** — side-by-side raw/translated, paragraph-aligned synced scroll, font size/typeface controls, inline edit, re-translate
+- **Reader** — side-by-side raw/translated, paragraph-aligned synced scroll, font size/typeface controls, chapter editing and translation from the reader actions menu
 - **Translation review** — admin-only script, paragraph-count, and approved-glossary checks with per-chapter findings. Check `first3`, `all`, or decimal ranges such as `1,1.5,5-8`; open a chapter to edit, then run a new check. Reports remain immutable snapshots, mark changed/deleted chapters, and explicitly skip untranslated content. These heuristics do not verify translation accuracy.
 - **Guest access** — published content visible to anyone; scheduled publishing (`publishedAt` null/draft/future); best-effort rate-limited reads when trusted ingress is configured
 - **Dark mode** — app-wide via `next-themes`, warm charcoal surfaces

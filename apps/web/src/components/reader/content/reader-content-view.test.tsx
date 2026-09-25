@@ -1,67 +1,62 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { ReaderContentView } from "./reader-content-view";
 
 afterEach(cleanup);
 
 describe("ReaderContentView", () => {
-  it("keeps failed translation recovery and manual editing in the content area", () => {
-    const onTranslateRequest = vi.fn();
-    const onEditRequest = vi.fn();
+  it.each(["idle", "running", "error"] as const)(
+    "keeps untranslated chapter text free of actions when translation is %s",
+    (translationStatus) => {
+      render(
+        <ReaderContentView
+          hasTranslation={false}
+          viewMode="translated"
+          aligned={[]}
+          rawParagraphs={["Raw chapter text"]}
+          translatedParagraphs={[]}
+          fontSizePx={18}
+          lineHeight={1.75}
+          measureRem={42}
+          sourceLang="en"
+          isAdmin
+          translationStatus={translationStatus}
+        />,
+      );
 
+      expect(screen.getByText("Not translated yet — showing raw text.")).toBeTruthy();
+      expect(screen.getByText("Raw chapter text")).toBeTruthy();
+      expect(screen.queryByRole("button")).toBeNull();
+    },
+  );
+
+  it("preserves failed translation status without adding actions to the reading area", () => {
     render(
       <ReaderContentView
-        hasTranslation={false}
+        hasTranslation
         viewMode="translated"
         aligned={[]}
         rawParagraphs={["Raw chapter text"]}
-        translatedParagraphs={[]}
+        translatedParagraphs={["Translated chapter text"]}
         fontSizePx={18}
         lineHeight={1.75}
         measureRem={42}
-        sourceLang="en"
         isAdmin
         translationStatus="error"
-        onTranslateRequest={onTranslateRequest}
-        onEditRequest={onEditRequest}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Retry translation" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit chapter" }));
-
-    expect(onTranslateRequest).toHaveBeenCalledTimes(1);
-    expect(onEditRequest).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("The last translation attempt did not finish.")).toBeTruthy();
+    expect(
+      screen.getByText("Use chapter actions to retry translation or edit the chapter."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("shows no admin recovery controls to guests", () => {
-    render(
-      <ReaderContentView
-        hasTranslation={false}
-        viewMode="raw"
-        aligned={[]}
-        rawParagraphs={["Raw chapter text"]}
-        translatedParagraphs={[]}
-        fontSizePx={18}
-        lineHeight={1.75}
-        measureRem={42}
-        sourceLang="en"
-        translationStatus="error"
-        onTranslateRequest={vi.fn()}
-        onEditRequest={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByRole("button", { name: "Retry translation" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Edit chapter" })).toBeNull();
-  });
-
-  it("offers admins a visible edit action when the chapter has no readable text", () => {
-    const onEditRequest = vi.fn();
-
+  it("shows an empty chapter without a duplicate edit action", () => {
     render(
       <ReaderContentView
         hasTranslation={false}
@@ -73,33 +68,10 @@ describe("ReaderContentView", () => {
         lineHeight={1.75}
         measureRem={42}
         isAdmin
-        onEditRequest={onEditRequest}
       />,
     );
 
     expect(screen.getByText("This chapter has no readable text.")).toBeTruthy();
-    const editButton = screen.getByRole("button", { name: "Edit chapter" });
-    expect(editButton.className).toContain("min-h-11");
-    fireEvent.click(editButton);
-    expect(onEditRequest).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the empty-source state neutral and action-free for guests", () => {
-    render(
-      <ReaderContentView
-        hasTranslation={false}
-        viewMode="translated"
-        aligned={[]}
-        rawParagraphs={[]}
-        translatedParagraphs={[]}
-        fontSizePx={18}
-        lineHeight={1.75}
-        measureRem={42}
-        onEditRequest={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("This chapter has no readable text.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Edit chapter" })).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

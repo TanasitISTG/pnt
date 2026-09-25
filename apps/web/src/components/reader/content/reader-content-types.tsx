@@ -24,10 +24,7 @@ export interface ReaderContentProps {
   targetLang?: string;
   isAdmin?: boolean;
   translationStatus?: ReaderTranslationStatus;
-  jobRunning?: boolean;
   highlightsFor?: ReaderHighlightsLookup;
   // The outer prose node, measured for reader progress and restore.
   proseRef?: Ref<HTMLDivElement>;
-  onTranslateRequest?: () => void;
-  onEditRequest?: () => void;
 }
