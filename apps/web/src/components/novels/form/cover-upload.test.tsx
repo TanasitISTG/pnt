@@ -58,16 +58,20 @@ class ControlledImage {
   }
 }
 
-function renderCover(onChange = vi.fn(), cover?: string) {
+function renderCover(
+  onChange: (base64: string | null, mimeType: string | null) => void = vi.fn(),
+  cover?: string,
+  coverMime?: string | null,
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <CoverUpload cover={cover} onChange={onChange} />
+      <CoverUpload cover={cover} coverMime={coverMime} onChange={onChange} />
     </QueryClientProvider>,
   );
   const input = view.container.querySelector('input[type="file"]');
   if (!(input instanceof HTMLInputElement)) throw new Error("Missing cover input");
-  return { ...view, input, onChange };
+  return { ...view, input, onChange, queryClient };
 }
 
 beforeEach(() => {
@@ -86,6 +90,45 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+describe("CoverUpload previews", () => {
+  it("renders raw cover data with its MIME type", () => {
+    const { container } = renderCover(vi.fn(), "encoded-cover", "image/png");
+
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "data:image/png;base64,encoded-cover",
+    );
+  });
+
+  it("retains the processed preview when the form stores raw base64", async () => {
+    mocks.blobToDataUrl.mockResolvedValue("data:image/png;base64,source");
+    const formState: { cover: string | null; coverMime: string | null } = {
+      cover: null,
+      coverMime: null,
+    };
+    const onChange = vi.fn((base64: string | null, mimeType: string | null) => {
+      formState.cover = base64;
+      formState.coverMime = mimeType;
+    });
+    const { input, container, queryClient, rerender } = renderCover(onChange);
+
+    fireEvent.change(input, {
+      target: { files: [new File(["cover"], "cover.png", { type: "image/png" })] },
+    });
+    const image = ControlledImage.instances[0];
+    await waitFor(() => expect(image.src).toBe("data:image/png;base64,source"));
+    act(() => image.emit("load"));
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CoverUpload cover={formState.cover} coverMime={formState.coverMime} onChange={onChange} />
+      </QueryClientProvider>,
+    );
+
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "data:image/webp;base64,processed-b",
+    );
+  });
 });
 
 describe("CoverUpload operation ordering", () => {
@@ -135,7 +178,7 @@ describe("CoverUpload operation ordering", () => {
 
   it("invalidates pending image callbacks when the cover is removed", async () => {
     mocks.blobToDataUrl.mockResolvedValue("data:image/png;base64,pending");
-    const { input, onChange, getByRole } = renderCover(vi.fn(), "data:image/webp;base64,existing");
+    const { input, onChange, getByRole } = renderCover(vi.fn(), "existing", "image/webp");
 
     fireEvent.change(input, {
       target: { files: [new File(["next"], "next.png", { type: "image/png" })] },

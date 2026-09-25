@@ -9,6 +9,7 @@ interface CoverUploadProps {
   existingNovelId?: string | null;
   hasExistingCover?: boolean;
   cover?: string | null;
+  coverMime?: string | null;
   onChange: (base64: string | null, mimeType: string | null) => void;
   onRemoveCover?: () => void;
 }
@@ -31,6 +32,7 @@ export function CoverUpload({
   existingNovelId,
   hasExistingCover = false,
   cover,
+  coverMime,
   onChange,
   onRemoveCover,
 }: CoverUploadProps) {
@@ -65,7 +67,8 @@ export function CoverUpload({
     retry: false,
     staleTime: 0, // refetch on mount, matching the old per-mount effect
   });
-  const preview = cover || localPreview || (wantsExisting ? (existingCover ?? null) : null);
+  const encodedCover = cover && coverMime ? `data:${coverMime};base64,${cover}` : null;
+  const preview = localPreview || encodedCover || (wantsExisting ? (existingCover ?? null) : null);
   const loading = wantsExisting && isPending;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

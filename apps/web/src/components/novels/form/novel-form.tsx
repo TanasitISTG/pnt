@@ -131,6 +131,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
     (previous, next) => previous[0] === next[0] && previous[1] === next[1],
   );
   const sourceLang = useStore(form.store, (state) => state.values.sourceLang);
+  const coverMime = useStore(form.store, (state) => state.values.coverMime);
 
   return (
     <form
@@ -220,6 +221,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
                 <CoverUpload
                   existingNovelId={defaultValues?.id}
                   hasExistingCover={defaultValues?.hasCover}
+                  coverMime={coverMime}
                   cover={field.state.value}
                   onChange={(base64, mimeType) => {
                     const validatedMime = coverMimeSchema.safeParse(mimeType);
