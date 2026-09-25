@@ -14,8 +14,14 @@ __unconfig*
 todos.json
 evals/results/
 .tura/e2e/
+apps/web/.tura/e2e/
 playwright-report/
 test-results/
 .commandcode/
+
+# Expo and native build output
+**/.expo/
+apps/mobile/android/
+apps/mobile/ios/
 
 .vercel

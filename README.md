@@ -43,7 +43,7 @@ TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@the
 bun install
 
 # Copy env template and fill in values
-cp .env.example .env.local
+cp .env.example apps/web/.env.local
 
 # Generate secrets
 bun -e "console.log(crypto.getRandomValues(new Uint8Array(32)).toBase64())"  # BETTER_AUTH_SECRET + APP_ENCRYPTION_KEY
@@ -54,7 +54,7 @@ bun run db:migrate
 # Create and migrate the isolated integration-test database (TEST_DATABASE_URL)
 bun run db:migrate:test
 
-# Seed admin user (requires SEED_ADMIN_* in .env.local)
+# Seed admin user (requires SEED_ADMIN_* in apps/web/.env.local)
 bun run seed:user
 
 # Start dev server (port 3000)
@@ -167,27 +167,15 @@ Create/chunk requests also have best-effort account limits of 6/120 per minute.
 ## Project Structure
 
 ```
-src/
-  routes/
-    __root.tsx                  # App shell, theme provider, auth context
-    _public/                    # Guest-accessible routes
-      index.tsx                 # Library (novel grid)
-      novels/$novelId/          # Novel detail + chapter list
-      novels/$novelId/chapters/$chapterId.tsx  # Reader
-    _protected/                 # Admin-only (redirects to /login)
-      novels/new.tsx            # Create novel
-      novels/$novelId/edit.tsx  # Edit novel
-      novels/$novelId/glossary.tsx  # Glossary CRUD
-      settings.tsx              # Provider config + account
-    login.tsx                   # Login page
-  lib/
-    auth.ts / auth-client.ts    # Better Auth setup
-    translation/                # Chunker, prompts, glossary filter, worker
-    scrape.ts / scrape.server.ts # Chapter parser + scraper fetch engine
-    scrape.worker.ts            # Inngest bulk chapter import worker
-    inngest/functions.ts        # Inngest durable functions
-  components/ui/                # Restyled shadcn/Base UI primitives
-  styles/globals.css            # Design tokens (@theme)
+apps/web/
+  src/
+    routes/
+    components/
+    lib/
+    styles/
+  e2e/
+  scripts/
+  drizzle/
 ```
 
 The `postgres` driver uses a maximum pool size of three connections per application process.
@@ -216,13 +204,13 @@ sizing the database connection limit or external pooler.
 - Account bookmarks load in 200-row keyset pages with explicit **Load more** and a partial
   count while more remain; 200 is not a storage quota. A reader-state refetch replaces
   accumulated pages with the first page and its continuation. Guests retain local storage.
-- `src/lib/scrape/index.ts` is a client-safe facade over pure parsers. DNS resolution and private-IP
-  rejection live in the server-only `src/lib/scrape/network-policy.server.ts` boundary.
+- `apps/web/src/lib/scrape/index.ts` is a client-safe facade over pure parsers. DNS resolution and private-IP
+  rejection live in the server-only `apps/web/src/lib/scrape/network-policy.server.ts` boundary.
 
 ## Local verification
 
 `bun run test` runs unit tests only. `bun run test:integration` reads the isolated
-`TEST_DATABASE_URL` from `.env.local` — it must never be the application database — and
+`TEST_DATABASE_URL` from `apps/web/.env.local` — it must never be the application database — and
 `bun run db:migrate:test` creates that database when missing and applies migrations to it. The
 suites skip themselves when the variable is unset. `bun run test:e2e` owns a guarded `*_e2e`
 database, app, Inngest dev server, and deterministic OpenAI-compatible stub, then drives login,
@@ -238,7 +226,7 @@ or Edge browser. Every child process is bounded and torn down on success or fail
 
 ### Vercel
 
-Push to your repo and connect in Vercel. Set all required env vars. The Nitro adapter produces a self-contained Node server.
+Connect the repository in Vercel and set the project's **Root Directory** to `apps/web` so Vercel uses the root Bun workspace lockfile and `apps/web/vercel.json`. Set all required environment variables. The Nitro adapter produces a self-contained Node server; the configured build also runs the postbuild function-duration patch.
 
 ### Inngest (production)
 

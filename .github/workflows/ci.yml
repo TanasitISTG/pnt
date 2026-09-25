@@ -65,8 +65,10 @@ jobs:
         run: bun run test:integration 2>&1 | tee .ci-logs/integration.log
       - name: Run local browser workflow
         run: bun run test:e2e 2>&1 | tee .ci-logs/e2e.log
-      - name: Build
+      - name: Build web application
         run: bun run build 2>&1 | tee .ci-logs/build.log
+      - name: Smoke-check Vercel server function output
+        run: node -e "if (require('./apps/web/.vercel/output/functions/__server.func/.vc-config.json').maxDuration !== 300) process.exit(1)"
       - name: Audit production dependencies
         run: bun run audit:release 2>&1 | tee .ci-logs/audit.log
       - name: Upload failure logs
@@ -76,7 +78,7 @@ jobs:
           name: ci-failure-logs
           path: |
             .ci-logs
-            .tura/e2e/logs
-            .tura/e2e/test-results
+            apps/web/.tura/e2e/logs
+            apps/web/.tura/e2e/test-results
           if-no-files-found: ignore
           retention-days: 7

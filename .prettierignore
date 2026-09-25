@@ -1,5 +1,5 @@
 # Generated files
-src/routeTree.gen.ts
+apps/web/src/routeTree.gen.ts
 
 # Build output
 .output

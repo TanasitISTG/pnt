@@ -33,14 +33,14 @@
   },
   "overrides": [
     {
-      "files": ["src/components/ui/**"],
+      "files": ["apps/web/src/components/ui/**"],
       "rules": {
         "shadcn/no-restyle": "off",
         "shadcn/no-arbitrary-values": "off"
       }
     },
     {
-      "files": ["src/components/novels/novel-cover.tsx"],
+      "files": ["apps/web/src/components/novels/novel-cover.tsx"],
       "rules": {
         "shadcn/no-arbitrary-values": ["error", { "allow": ["layout", "rounded-[inherit]"] }]
       }
@@ -52,7 +52,7 @@
     ".nitro",
     ".tanstack",
     "dist",
-    "src/routeTree.gen.ts",
+    "apps/web/src/routeTree.gen.ts",
     "bun.lock"
   ]
 }
