@@ -8,7 +8,7 @@ import type {
   ReaderSettings,
   ReaderTypeface,
   ReaderViewMode,
-} from "./types";
+} from "@pnt/contracts/reader";
 
 const STORAGE_KEY = "pnt-reader-settings";
 

@@ -6,7 +6,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 import { getReaderProgress } from "@/lib/reader/progress";
 import { readerStateQueryKey } from "@/lib/reader/query";
-import type { ReaderNovelState } from "@/lib/reader/types";
+import type { ReaderNovelState } from "@pnt/contracts/reader";
 import type { AccountReaderPersistence, ReaderProgressStore } from "@/lib/reader/use-reader-state";
 import { createAccountReaderStore, createLocalReaderStore } from "@/lib/reader/use-reader-state";
 import { useReaderScroll } from "./use-reader-scroll";

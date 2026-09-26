@@ -69,7 +69,7 @@ integrationDescribe("PostgreSQL rate limits", () => {
     expect(failures).toHaveLength(1);
     expect(failures[0]?.reason).toBeInstanceOf(RateLimitError);
     expect(failures[0]?.reason.message).toBe("Too many requests");
-    expect(setResponseStatus).toHaveBeenCalledWith(429);
+    expect(setResponseStatus).not.toHaveBeenCalled();
     const [row] = await client`SELECT count FROM rate_limits WHERE key = ${`quota:${subject}`}`;
     expect(row?.count).toBe(61);
   });
@@ -96,7 +96,7 @@ integrationDescribe("PostgreSQL rate limits", () => {
           FROM rate_limits WHERE key = 'boundary:subject'
         `);
         expect(row).toEqual({ count: 1, renewed: true });
-        expect(setResponseStatus).toHaveBeenCalledTimes(1);
+        expect(setResponseStatus).not.toHaveBeenCalled();
       });
     } finally {
       database.current = pooled;

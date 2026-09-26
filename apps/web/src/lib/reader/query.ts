@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
 import { getReaderBookmarks, getReaderNovelState } from "@/lib/reader/reader.functions";
-import type { ReaderBookmarkCursor } from "@/lib/reader/types";
+import type { ReaderBookmarkCursor } from "@pnt/contracts/reader";
 
 // Signed-in reader state lives on the server; callers gate the query on the session.
 export const readerStateQueryOptions = (novelId: string) =>

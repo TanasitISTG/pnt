@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { readerStateQueryKey } from "./query";
 import type * as ReaderQuery from "./query";
-import type { ReaderBookmarkPage, ReaderNovelState } from "./types";
+import type { ReaderBookmarkPage, ReaderNovelState } from "@pnt/contracts/reader";
 import {
   createAccountReaderStore,
   createLocalReaderStore,

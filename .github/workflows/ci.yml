@@ -49,6 +49,8 @@ jobs:
           bun-version: 1.3.14
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
+      - name: Check generated design tokens
+        run: bun run tokens:check
       - name: Prepare logs
         run: mkdir -p .ci-logs
       - name: Apply migrations to isolated PostgreSQL

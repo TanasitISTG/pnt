@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { downloadText, sanitizeFilename } from "@/lib/download";
-import type { ReaderSettings } from "@/lib/reader/types";
+import type { ReaderSettings } from "@pnt/contracts/reader";
 import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import type { ActiveJobState } from "@/lib/translation/types/api";
 import type { ReaderSearchApi } from "@/components/reader/page/use-reader-search";

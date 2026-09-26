@@ -15,7 +15,7 @@ import {
   createEvalContextFingerprint,
   EVAL_FAILURE_ERROR,
 } from "@/lib/translation/evaluation/eval.service";
-import { splitParagraphs } from "@/lib/translation/text/paragraphs";
+import { splitParagraphs } from "@pnt/reader-core/paragraphs";
 import { scanResidualScripts } from "@/lib/translation/text/residual";
 
 const REPORT_STATUSES_IN_PROGRESS = ["pending", "running"] as const;

@@ -1,6 +1,6 @@
-import { splitParagraphs } from "@/lib/translation/text/paragraphs";
-import { findExcerptParagraphIndex, normalizeExcerpt } from "@/lib/reader/search";
-import type { ReaderBookmark, ReaderColumn } from "@/lib/reader/types";
+import { findExcerptParagraphIndex, normalizeExcerpt } from "@pnt/reader-core/excerpts";
+import { splitParagraphs } from "@pnt/reader-core/paragraphs";
+import type { ReaderBookmark, ReaderColumn } from "@pnt/contracts/reader";
 
 export const READER_BOOKMARK_EXCERPT_LENGTH = 160;
 

@@ -2,7 +2,7 @@ import type { ActiveJobState } from "@/lib/translation/types/api";
 import type { RefObject } from "react";
 import type { ReaderTranslationStatus } from "@/components/reader/content/reader-content-types";
 import { QueryErrorState } from "@/components/query-error-state";
-import type { ReaderSettings } from "@/lib/reader/types";
+import type { ReaderSettings } from "@pnt/contracts/reader";
 import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import { ReaderContent } from "@/components/reader/content/chapter-content";
 import { ChapterEditor } from "@/components/reader/editor/chapter-editor";

@@ -6,7 +6,7 @@ import { db, queryClient } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { contentDisposition, sanitizeFilename } from "@/lib/filename";
 import { chapterTranslationPresent } from "@/lib/content/publish/publish";
-import { splitParagraphs } from "@/lib/translation/text/paragraphs";
+import { splitParagraphs } from "@pnt/reader-core/paragraphs";
 import { createEpubStream, type EpubChapter, type EpubMetadata } from "./epub";
 
 interface ExportChapterRow {

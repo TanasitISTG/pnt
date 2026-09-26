@@ -1,0 +1,13 @@
+{
+  "name": "@pnt/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./content": "./src/content.ts",
+    "./reader": "./src/reader.ts",
+    "./reader-inputs": "./src/reader-inputs.ts"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

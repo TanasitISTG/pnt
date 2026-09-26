@@ -1,20 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, asc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
-import { novels, chapters } from "@/lib/db/schema";
+import { chapters } from "@/lib/db/schema";
 import { ensureSession, getSession } from "@/lib/auth/functions";
 import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
-import {
-  chapterTranslationPresent,
-  novelLive,
-  chapterVisibleToGuests,
-} from "@/lib/content/publish/publish";
-import { normalizePunctuation } from "@/lib/translation/text/paragraphs";
 import {
   createChapterSchema,
   editChapterSchema,
@@ -33,6 +26,11 @@ import {
   updateChapterForUser,
 } from "@/lib/content/chapter/chapter-edit.service";
 import { deleteChapterForUser } from "@/lib/content/chapter/chapter-delete.service";
+import {
+  listReadableChapters,
+  getReadableChapterManifest,
+  getReadableChapter,
+} from "@/lib/content/chapter/chapter-read.service";
 
 export const listChapters = createServerFn({ method: "GET" })
   .validator(z.object({ novelId: z.string() }))
@@ -41,46 +39,7 @@ export const listChapters = createServerFn({ method: "GET" })
       const session = await getSession();
       if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
-      // Admin: verify ownership. Guest: novel must be live.
-      const [novel] = await db
-        .select({ id: novels.id })
-        .from(novels)
-        .where(
-          session
-            ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
-            : and(eq(novels.id, data.novelId), novelLive()),
-        )
-        .limit(1);
-
-      if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
-      }
-
-      const chapterList = await db
-        .select({
-          id: chapters.id,
-          novelId: chapters.novelId,
-          number: chapters.number,
-          title: chapters.title,
-          translatedTitle: chapters.translatedTitle,
-          hasTranslation: chapterTranslationPresent(),
-          rawCharCount: chapters.rawCharCount,
-          status: chapters.status,
-          publishedAt: chapters.publishedAt,
-          translatedAt: chapters.translatedAt,
-          editedAt: chapters.editedAt,
-          createdAt: chapters.createdAt,
-          updatedAt: chapters.updatedAt,
-        })
-        .from(chapters)
-        .where(
-          session
-            ? eq(chapters.novelId, data.novelId)
-            : and(eq(chapters.novelId, data.novelId), chapterVisibleToGuests()),
-        )
-        .orderBy(asc(chapters.number));
-
-      return chapterList;
+      return listReadableChapters(session?.user.id ?? null, data.novelId);
     });
   });
 
@@ -91,36 +50,7 @@ export const getReaderChapterManifest = createServerFn({ method: "GET" })
       const session = await getSession();
       if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
-      const rows = await db
-        .select({
-          id: chapters.id,
-          number: chapters.number,
-          title: chapters.title,
-          translatedTitle: chapters.translatedTitle,
-        })
-        .from(chapters)
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(
-          session
-            ? and(eq(chapters.novelId, data.novelId), eq(novels.userId, session.user.id))
-            : and(eq(chapters.novelId, data.novelId), novelLive(), chapterVisibleToGuests()),
-        )
-        .orderBy(asc(chapters.number));
-
-      if (rows.length === 0) {
-        const [novel] = await db
-          .select({ id: novels.id })
-          .from(novels)
-          .where(
-            session
-              ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
-              : and(eq(novels.id, data.novelId), novelLive()),
-          )
-          .limit(1);
-        if (!novel) throw new SafeServerError("Novel not found or unauthorized");
-      }
-
-      return rows;
+      return getReadableChapterManifest(session?.user.id ?? null, data.novelId);
     });
   });
 
@@ -131,41 +61,7 @@ export const getChapter = createServerFn({ method: "GET" })
       const session = await getSession();
       if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
-      const [chapter] = await db
-        .select({
-          id: chapters.id,
-          novelId: chapters.novelId,
-          number: chapters.number,
-          title: chapters.title,
-          translatedTitle: chapters.translatedTitle,
-          rawContent: chapters.rawContent,
-          translatedContent: chapters.translatedContent,
-          status: chapters.status,
-          summary: chapters.summary,
-          rawCharCount: chapters.rawCharCount,
-          publishedAt: chapters.publishedAt,
-          translatedAt: chapters.translatedAt,
-          editedAt: chapters.editedAt,
-          createdAt: chapters.createdAt,
-          updatedAt: chapters.updatedAt,
-        })
-        .from(chapters)
-        .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(
-          session
-            ? and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id))
-            : and(eq(chapters.id, data.chapterId), chapterVisibleToGuests(), novelLive()),
-        )
-        .limit(1);
-
-      if (!chapter) return null;
-
-      return {
-        ...chapter,
-        translatedContent: chapter.translatedContent
-          ? normalizePunctuation(chapter.translatedContent)
-          : chapter.translatedContent,
-      };
+      return getReadableChapter(session?.user.id ?? null, data.chapterId);
     });
   });
 

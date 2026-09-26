@@ -9,7 +9,7 @@ import { ensureSession } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { completeEpubImportForUser } from "@/lib/import/commands";
-import { checkRateLimitForSubject } from "@/lib/rate-limit";
+import { checkServerFnRateLimitForSubject } from "@/lib/rate-limit";
 
 const CHUNK_SIZE = 1024 * 1024; // 1 MiB
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MiB
@@ -37,7 +37,7 @@ export const createEpubUpload = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-      await checkRateLimitForSubject("epub-upload-create", session.user.id, 6);
+      await checkServerFnRateLimitForSubject("epub-upload-create", session.user.id, 6);
 
       if (!data.fileName.toLowerCase().endsWith(".epub")) {
         throw new SafeServerError("Only .epub files are supported");
@@ -122,7 +122,7 @@ export const uploadEpubChunk = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
       const session = await ensureSession();
-      await checkRateLimitForSubject("epub-upload-chunk", session.user.id, 120);
+      await checkServerFnRateLimitForSubject("epub-upload-chunk", session.user.id, 120);
 
       const chunkBuffer = decodeStrictBase64(data.dataBase64);
 

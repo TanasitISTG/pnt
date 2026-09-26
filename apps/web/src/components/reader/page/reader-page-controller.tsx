@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
-import type { ReaderSettings } from "@/lib/reader/types";
+import type { ReaderSettings } from "@pnt/contracts/reader";
 import { READER_LINE_HEIGHT, READER_MEASURE_REM } from "@/lib/reader/settings";
 import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import { useTranslationJob } from "@/components/translation/job/use-translation-job";
-import { alignParagraphArrays, splitParagraphs } from "@/lib/translation/text/paragraphs";
+import { alignParagraphArrays, splitParagraphs } from "@pnt/reader-core/paragraphs";
 import type { ReaderTranslationStatus } from "@/components/reader/content/reader-content-types";
 import { useChapterEditor } from "@/components/reader/editor/use-chapter-editor";
 import { useChapterNav } from "@/components/reader/editor/use-chapter-nav";

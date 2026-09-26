@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildReaderSearchTargets,
   collectReaderSearchMatches,
-  findExcerptParagraphIndex,
   findTextMatches,
   highlightsForParagraph,
-  normalizeExcerpt,
   READER_SEARCH_MATCH_LIMIT,
   type ReaderSearchMatch,
 } from "./search";
+
+import { findExcerptParagraphIndex, normalizeExcerpt } from "@pnt/reader-core/excerpts";
 
 describe("findTextMatches", () => {
   it("returns every non-overlapping occurrence with its range", () => {

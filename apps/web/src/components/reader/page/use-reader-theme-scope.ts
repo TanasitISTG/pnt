@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import type { ReaderPageTheme } from "@/lib/reader/types";
+import type { ReaderPageTheme } from "@pnt/contracts/reader";
 
 // Scoping the page theme on <html> repaints the shell, the body and portalled dialogs alike.
 export function useReaderThemeScope(theme: ReaderPageTheme, ready: boolean): void {

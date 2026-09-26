@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+
 import {
-  alignParagraphs,
   alignParagraphArrays,
+  alignParagraphs,
   splitParagraphs,
+} from "@pnt/reader-core/paragraphs";
+import {
   injectParagraphMarkers,
   restoreParagraphMarkers,
   countParagraphMarkers,
@@ -30,7 +33,7 @@ describe("splitParagraphs", () => {
   });
 });
 
-describe("alignParagraphs", () => {
+describe("paragraph alignment", () => {
   it("zips equal counts by index", () => {
     expect(alignParagraphs("a\n\nb", "A\n\nB")).toEqual([
       { raw: "a", translated: "A" },
@@ -45,6 +48,7 @@ describe("alignParagraphs", () => {
       { raw: "c", translated: undefined },
     ]);
   });
+
   it("aligns already split paragraphs without re-parsing their source text", () => {
     expect(alignParagraphArrays(["a", "b"], ["A"])).toEqual([
       { raw: "a", translated: "A" },

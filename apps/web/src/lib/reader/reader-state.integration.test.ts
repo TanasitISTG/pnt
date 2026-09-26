@@ -8,7 +8,7 @@ import { sql as drizzleSql } from "drizzle-orm";
 import {
   READER_BOOKMARK_CURSOR_TIMESTAMP_PATTERN,
   listReaderBookmarksSchema,
-} from "@/lib/reader/reader.schemas";
+} from "@pnt/contracts/reader-inputs";
 
 import type {
   createReaderBookmarkForUser as CreateReaderBookmarkForUser,

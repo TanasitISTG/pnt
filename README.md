@@ -66,21 +66,22 @@ bun run inngest
 
 ### Commands
 
-| Task                  | Command                                      |
-| --------------------- | -------------------------------------------- |
-| Dev server            | `bun dev`                                    |
-| Inngest dev           | `bun run inngest`                            |
-| Production build      | `bun run build`                              |
-| Lint / fix            | `bun run lint` / `bun run lint:fix`          |
-| Format / check        | `bun run format` / `bun run format:check`    |
-| Tests                 | `bun run test`                               |
-| PostgreSQL invariants | `bun run test:integration`                   |
-| Browser workflow      | `bun run test:e2e`                           |
-| Release audit         | `bun run audit:release`                      |
-| DB generate / migrate | `bun run db:generate` / `bun run db:migrate` |
-| Migrate test database | `bun run db:migrate:test`                    |
-| Seed admin user       | `bun run seed:user`                          |
-| Regenerate route tree | `bun run generate-routes`                    |
+| Task                       | Command                                            |
+| -------------------------- | -------------------------------------------------- |
+| Dev server                 | `bun dev`                                          |
+| Inngest dev                | `bun run inngest`                                  |
+| Production build           | `bun run build`                                    |
+| Lint / fix                 | `bun run lint` / `bun run lint:fix`                |
+| Format / check             | `bun run format` / `bun run format:check`          |
+| Tests                      | `bun run test`                                     |
+| PostgreSQL invariants      | `bun run test:integration`                         |
+| Browser workflow           | `bun run test:e2e`                                 |
+| Release audit              | `bun run audit:release`                            |
+| DB generate / migrate      | `bun run db:generate` / `bun run db:migrate`       |
+| Migrate test database      | `bun run db:migrate:test`                          |
+| Seed admin user            | `bun run seed:user`                                |
+| Regenerate route tree      | `bun run generate-routes`                          |
+| Generate / check theme CSS | `bun run tokens:generate` / `bun run tokens:check` |
 
 ### Deployment migrations
 
@@ -162,21 +163,30 @@ in the same transaction, but keeps the slot until resource cleanup. Uploading re
 expire after 24 hours by database time; expired rows still consume capacity until removed.
 Abort an unfinished upload or wait for cleanup to release capacity. Admission is atomic
 and never fails open; these limits do not bound expanded EPUB size or request buffering.
-Create/chunk requests also have best-effort account limits of 6/120 per minute.
+Create/chunk requests also have best-effort account limits of 6/120 per minute;
+exceeding either limit returns HTTP 429 from its server function.
 
 ## Project Structure
 
 ```
-apps/web/
-  src/
-    routes/
-    components/
-    lib/
-    styles/
-  e2e/
-  scripts/
-  drizzle/
+apps/web/                   TanStack Start web app and server-only services
+  src/lib/content/          Shared readable novel/chapter DB services
+  src/lib/reader/           Account reader service and transactional state
+  src/styles/               Web theme CSS generated from design tokens
+packages/contracts/         Portable reader inputs/types and v1 content DTO schemas
+packages/reader-core/       Pure paragraph alignment and excerpt relocation
+packages/design-tokens/     Semantic theme palette and CSS generator
 ```
+
+The portable packages have no server/database dependency. Web server functions authenticate
+and enforce guest limits before calling the readable-content or account-reader services;
+the guest-IP limiter also accepts raw request headers without a TanStack response context.
+Account-scoped upload limits map excesses to HTTP 429 at the server-function boundary.
+V1 content DTO schemas reject extra owner-only fields and unconverted database dates/cover flags;
+the later HTTP handlers must project only the declared public fields.
+`bun run tokens:generate` updates `apps/web/src/styles/theme.generated.css` from the typed
+light/dark/sepia/paper palette. Web dev/build/test regenerate it; CI runs
+`bun run tokens:check` to reject drift. Native HTTP routes and app are later phases.
 
 The `postgres` driver uses a maximum pool size of three connections per application process.
 That bound is intentional for serverless instances; account for `3 x active instances` when

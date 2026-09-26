@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { chapterQueryOptions } from "@/lib/content/chapter/chapter.query";
-import type { ReaderBookmark } from "@/lib/reader/types";
+import type { ReaderBookmark } from "@pnt/contracts/reader";
 import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import {
   bookmarkAnchorId,

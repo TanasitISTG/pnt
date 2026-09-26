@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ReaderBookmark } from "@/lib/reader/types";
+import type { ReaderBookmark } from "@pnt/contracts/reader";
 import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import { ReaderBookmarksDialog } from "./reader-bookmarks-dialog";
 

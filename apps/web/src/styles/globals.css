@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./theme.generated.css";
 /* Fontsource declarations use optional display to keep fallback text paintable. */
 @font-face {
   font-family: "Sofia Sans Variable";
@@ -238,8 +239,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Design tokens — single source of truth: DESIGN.md
- * Semantic tokens (background/foreground/muted/border/primary) flip in .dark.
+ * Semantic palette source: packages/design-tokens/src/tokens.ts; CSS is generated.
+ * Layout, typography and component guidance live in DESIGN.md.
  * Constant palette (cream/charcoal/off-white) never flips — use for fixed values.
  * All grays derive from foreground at opacity (charcoal light / cream dark).
  */
@@ -331,88 +332,6 @@
 
 @utility transition-width {
   transition-property: width;
-}
-
-:root {
-  color-scheme: light;
-  --background: #f7f4ed;
-  --foreground: #1c1c1c;
-  --muted: rgba(28, 28, 28, 0.04);
-  --muted-foreground: #5f5f5d;
-  --border: #eceae4;
-  --surface: #f7f4ed;
-  --surface-2: #fcfbf8;
-  --primary: #1c1c1c;
-  --primary-foreground: #fcfbf8;
-  --destructive: #a8442f;
-  --destructive-text: var(--destructive);
-  --destructive-foreground: #fcfbf8;
-  --success: #53604b;
-  --warning: #735735;
-  --info: #505f65;
-  --focus-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
-}
-
-.dark {
-  color-scheme: dark;
-  --background: #1c1c1c;
-  --foreground: #f7f4ed;
-  --muted: rgba(247, 244, 237, 0.06);
-  --muted-foreground: #a3a3a0;
-  --border: rgba(247, 244, 237, 0.1);
-  --surface: #232320;
-  --surface-2: #2a2a27;
-  --primary: #f7f4ed;
-  --primary-foreground: #1c1c1c;
-  --destructive: #a8442f;
-  --destructive-text: #e6a18f;
-  --destructive-foreground: #fcfbf8;
-  --success: #bcc7b5;
-  --warning: #d5b991;
-  --info: #b8c5ca;
-  --focus-shadow: rgba(247, 244, 237, 0.15) 0px 4px 12px;
-}
-
-/* Reader page themes. Declared after .dark so they win on equal specificity, and
-   `color-scheme` needs !important because next-themes writes it inline on <html>. */
-[data-reader-theme="sepia"] {
-  color-scheme: light !important;
-  --background: #f4ecd8;
-  --foreground: #5b4636;
-  --muted: rgba(91, 70, 54, 0.06);
-  --muted-foreground: #856f57;
-  --border: #e2d5b8;
-  --surface: #f4ecd8;
-  --surface-2: #f9f2e2;
-  --primary: #5b4636;
-  --primary-foreground: #f9f2e2;
-  --destructive: #8f4630;
-  --destructive-text: var(--destructive);
-  --destructive-foreground: #f9f2e2;
-  --success: #566047;
-  --warning: #705333;
-  --info: #525d61;
-  --focus-shadow: rgba(91, 70, 54, 0.12) 0px 4px 12px;
-}
-
-[data-reader-theme="paper"] {
-  color-scheme: light !important;
-  --background: #f6f6f2;
-  --foreground: #1f1f1c;
-  --muted: rgba(31, 31, 28, 0.05);
-  --muted-foreground: #63635c;
-  --border: #e6e6df;
-  --surface: #f6f6f2;
-  --surface-2: #fcfcfa;
-  --primary: #1f1f1c;
-  --primary-foreground: #fcfcfa;
-  --destructive: #9c4530;
-  --destructive-text: var(--destructive);
-  --destructive-foreground: #fcfcfa;
-  --success: #53604b;
-  --warning: #735735;
-  --info: #505f65;
-  --focus-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
 }
 
 @layer base {

@@ -57,7 +57,6 @@ async function checkSubjectLimit(
     throw new Error("Invalid rate limit result");
   }
   if (isOverLimit(count, limit)) {
-    setResponseStatus(429);
     throw new RateLimitError();
   }
 }
@@ -77,6 +76,23 @@ export async function checkRateLimitForSubject(
     });
   }
 }
+// Account-scoped server functions also need the HTTP quota status. Keep the
+// subject counter transport-neutral for callers outside TanStack.
+export async function checkServerFnRateLimitForSubject(
+  bucket: string,
+  subject: string,
+  limit: number,
+  windowMs = 60_000,
+): Promise<void> {
+  try {
+    await checkRateLimitForSubject(bucket, subject, limit, windowMs);
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      setResponseStatus(429);
+    }
+    throw err;
+  }
+}
 
 export async function cleanupExpiredRateLimits(): Promise<number> {
   const result = await db.execute(sql`
@@ -91,10 +107,14 @@ export async function cleanupExpiredRateLimits(): Promise<number> {
   `);
   return result.length;
 }
-
-export async function checkRateLimit(bucket: string, limit: number, windowMs = 60_000) {
+// Transport-neutral guest limiter: HTTP routes pass their request headers directly.
+export async function checkGuestRateLimit(
+  bucket: string,
+  limit: number,
+  headers: Headers,
+  windowMs = 60_000,
+): Promise<void> {
   try {
-    const headers = getRequestHeaders();
     const ip = extractIp(headers);
     if (!ip) {
       log("warn", "rate-limit skipped without trusted client IP", {});
@@ -103,6 +123,20 @@ export async function checkRateLimit(bucket: string, limit: number, windowMs = 6
     await checkRateLimitForSubject(bucket, ip, limit, windowMs);
   } catch (err) {
     if (err instanceof RateLimitError) throw err;
+    log("error", "rate-limit check failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+export async function checkRateLimit(bucket: string, limit: number, windowMs = 60_000) {
+  try {
+    await checkGuestRateLimit(bucket, limit, getRequestHeaders(), windowMs);
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      setResponseStatus(429);
+      throw err;
+    }
     log("error", "rate-limit check failed", {
       error: err instanceof Error ? err.message : String(err),
     });

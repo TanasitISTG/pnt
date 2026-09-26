@@ -6,7 +6,7 @@ import type {
   ReaderBookmarkInput,
   ReaderNovelState,
   ReaderProgress,
-} from "./types";
+} from "@pnt/contracts/reader";
 import {
   readerBookmarkPageQueryOptions,
   readerBookmarkPagesQueryKey,

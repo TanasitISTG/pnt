@@ -22,7 +22,14 @@ vi.mock("@/lib/env", () => ({
 }));
 vi.mock("@/lib/log", () => ({ log }));
 
-import { checkRateLimit, checkRateLimitForSubject, extractIp, isOverLimit } from "@/lib/rate-limit";
+import {
+  checkGuestRateLimit,
+  checkRateLimit,
+  checkRateLimitForSubject,
+  checkServerFnRateLimitForSubject,
+  extractIp,
+  isOverLimit,
+} from "@/lib/rate-limit";
 import { RateLimitError } from "@/lib/server-fn-error";
 
 beforeEach(() => {
@@ -109,6 +116,34 @@ describe("rate-limit request behavior", () => {
     );
     expect(events).toEqual(["status:429", "rejected"]);
     expect(log).not.toHaveBeenCalled();
+  });
+
+  it("limits raw HTTP headers without touching the TanStack response context", async () => {
+    envState.RATE_LIMIT_TRUSTED_PROXY_HOPS = 1;
+    execute.mockResolvedValueOnce([{ count: 60 }]).mockResolvedValueOnce([{ count: 61 }]);
+    const headers = new Headers({ "x-forwarded-for": "192.0.2.10" });
+
+    await expect(checkGuestRateLimit("read", 60, headers)).resolves.toBeUndefined();
+    await expect(checkGuestRateLimit("read", 60, headers)).rejects.toBeInstanceOf(RateLimitError);
+    expect(getRequestHeaders).not.toHaveBeenCalled();
+    expect(setResponseStatus).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["epub-upload-create", 6],
+    ["epub-upload-chunk", 120],
+  ])("returns HTTP 429 when the %s account quota is exceeded", async (bucket, limit) => {
+    execute.mockResolvedValueOnce([{ count: limit }]).mockResolvedValueOnce([{ count: limit + 1 }]);
+
+    await expect(
+      checkServerFnRateLimitForSubject(bucket, "user-1", limit),
+    ).resolves.toBeUndefined();
+    expect(setResponseStatus).not.toHaveBeenCalled();
+    await expect(checkServerFnRateLimitForSubject(bucket, "user-1", limit)).rejects.toBeInstanceOf(
+      RateLimitError,
+    );
+    expect(setResponseStatus).toHaveBeenCalledTimes(1);
+    expect(setResponseStatus).toHaveBeenCalledWith(429);
+    expect(getRequestHeaders).not.toHaveBeenCalled();
   });
 
   it("accepts wrapped driver rows without treating an ordinary count as a storage failure", async () => {

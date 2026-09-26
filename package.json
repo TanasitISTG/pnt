@@ -7,6 +7,8 @@
   ],
   "type": "module",
   "scripts": {
+    "tokens:generate": "bun packages/design-tokens/scripts/generate-css.ts",
+    "tokens:check": "bun packages/design-tokens/scripts/generate-css.ts --check",
     "dev": "bun run --cwd apps/web dev",
     "generate-routes": "bun run --cwd apps/web generate-routes",
     "build": "bun run --cwd apps/web build",

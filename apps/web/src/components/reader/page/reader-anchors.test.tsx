@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 
-import { normalizeExcerpt } from "@/lib/reader/search";
-import type { ReaderBookmark } from "@/lib/reader/types";
+import { normalizeExcerpt } from "@pnt/reader-core/excerpts";
+import type { ReaderBookmark } from "@pnt/contracts/reader";
 import {
   bookmarkAnchorId,
   buildBookmarkExcerpt,

@@ -18,7 +18,7 @@ import type {
   ReaderBookmarkPage,
   ReaderColumn,
   ReaderNovelState,
-} from "./types";
+} from "@pnt/contracts/reader";
 
 function toReaderColumn(value: string | null): ReaderColumn | null {
   return value === "raw" || value === "translated" ? value : null;

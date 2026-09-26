@@ -2,6 +2,12 @@
 
 Adapted from Lovable's design language for the Personal Novel Translator. Intentional deviations from the reference: the brand typeface is **Sofia Sans Variable** (the reference typeface is proprietary and not publicly available), components are built on **shadcn/ui + Base UI** (not Radix), the font stack includes a mandatory Thai fallback, and a derived warm dark theme extends the light-only original.
 
+The semantic light/dark/sepia/paper palette lives in
+`packages/design-tokens/src/tokens.ts`; `bun run tokens:generate` emits the web CSS.
+The native-ready `nativeThemes` values resolve CSS color aliases and omit the CSS-only
+focus shadow; native shadow styles must be defined separately when the mobile app is built.
+The values below document the design rationale; do not edit generated CSS directly.
+
 ## 1. Visual Theme & Atmosphere
 
 Lovable's website radiates warmth through restraint. The entire page sits on a creamy, parchment-toned background (`#f7f4ed`) that immediately separates it from the cold-white conventions of most developer tool sites. This isn't minimalism for minimalism's sake — it's a deliberate choice to feel approachable, almost analog, like a well-crafted notebook. The near-black text (`#1c1c1c`) against this warm cream creates a contrast ratio that's easy on the eyes while maintaining sharp readability.

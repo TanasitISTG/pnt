@@ -1,4 +1,4 @@
-import type { ReaderBookmark, ReaderBookmarkInput } from "./types";
+import type { ReaderBookmark, ReaderBookmarkInput } from "@pnt/contracts/reader";
 import { getReaderStorage, READER_BOOKMARKS_STORAGE_KEY as STORAGE_KEY } from "./storage";
 import { nanoid } from "@/lib/utils";
 

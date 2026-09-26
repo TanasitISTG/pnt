@@ -1,6 +1,6 @@
 import type { Ref } from "react";
 
-import type { ReaderColumn } from "@/lib/reader/types";
+import type { ReaderColumn } from "@pnt/contracts/reader";
 import type { ReaderParagraphHighlights } from "@/lib/reader/search";
 
 export type ReaderTranslationStatus = "idle" | "queued" | "running" | "error" | "cancelled";

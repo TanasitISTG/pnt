@@ -3,11 +3,6 @@ export interface ChunkInfo {
   text: string;
 }
 
-export interface AlignedParagraph {
-  raw?: string;
-  translated?: string;
-}
-
 export interface ResidualScriptSpan {
   start: number;
   end: number; // exclusive

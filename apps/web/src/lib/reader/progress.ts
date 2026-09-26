@@ -1,4 +1,4 @@
-import type { ReaderProgress } from "./types";
+import type { ReaderProgress } from "@pnt/contracts/reader";
 import { getReaderStorage, READER_PROGRESS_STORAGE_KEY as STORAGE_KEY } from "./storage";
 
 export function getReaderProgress(novelId: string): ReaderProgress {
