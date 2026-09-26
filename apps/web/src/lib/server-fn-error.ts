@@ -14,6 +14,13 @@ export class SafeServerError extends Error {
   }
 }
 
+export class NotFoundError extends SafeServerError {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotFoundError";
+  }
+}
+
 export class RateLimitError extends SafeServerError {
   constructor() {
     super("Too many requests");
@@ -32,6 +39,7 @@ export async function withSafeHandler<T>(fn: () => Promise<T>): Promise<T> {
       err instanceof RateLimitError ||
       name === "UnauthorizedError" ||
       name === "SafeServerError" ||
+      name === "NotFoundError" ||
       name === "RateLimitError"
     ) {
       throw err;

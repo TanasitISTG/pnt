@@ -81,6 +81,14 @@
         "vitest": "4.1.11",
       },
     },
+    "packages/api-client": {
+      "name": "@pnt/api-client",
+      "dependencies": {
+        "@pnt/contracts": "workspace:*",
+        "@tanstack/react-query": "5.101.2",
+        "zod": "4.4.3",
+      },
+    },
     "packages/contracts": {
       "name": "@pnt/contracts",
       "dependencies": {
@@ -729,6 +737,8 @@
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.85.0", "", { "os": "win32", "cpu": "x64" }, "sha512-pBebIPUpKKhWrhSMWhy8TdAZBewiXnfxmaAGxhzxM1068GagqFaTwgKlU6e+UyJ2sPR+VoHouhXuGJkQjsrDvA=="],
 
     "@playwright/test": ["@playwright/test@1.62.1", "", { "dependencies": { "playwright": "1.62.1" }, "bin": { "playwright": "cli.js" } }, "sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ=="],
+
+    "@pnt/api-client": ["@pnt/api-client@workspace:packages/api-client"],
 
     "@pnt/contracts": ["@pnt/contracts@workspace:packages/contracts"],
 

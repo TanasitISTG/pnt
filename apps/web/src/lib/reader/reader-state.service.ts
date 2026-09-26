@@ -10,7 +10,7 @@ import {
   readerProgress,
 } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
-import { SafeServerError } from "@/lib/server-fn-error";
+import { NotFoundError, SafeServerError } from "@/lib/server-fn-error";
 import type {
   ReaderBookmark,
   ReaderBookmarkCursor,
@@ -31,7 +31,7 @@ export async function assertNovelOwnedByUser(userId: string, novelId: string): P
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1);
 
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new NotFoundError("Novel not found or unauthorized");
 }
 
 export async function assertChapterOwnedByUser(
@@ -48,7 +48,7 @@ export async function assertChapterOwnedByUser(
     )
     .limit(1);
 
-  if (!chapter) throw new SafeServerError("Chapter not found or unauthorized");
+  if (!chapter) throw new NotFoundError("Chapter not found or unauthorized");
 }
 
 const READER_BOOKMARK_PAGE_SIZE = 200;
@@ -160,7 +160,7 @@ async function lockReaderChapter(
   strength: "key share" | "update" = "key share",
 ): Promise<void> {
   if (!(await lockNovelForMutation(tx, novelId, userId))) {
-    throw new SafeServerError("Chapter not found or unauthorized");
+    throw new NotFoundError("Chapter not found or unauthorized");
   }
   const [chapter] = await tx
     .select({ id: chapters.id })
@@ -171,7 +171,7 @@ async function lockReaderChapter(
     )
     .limit(1)
     .for(strength, { of: chapters });
-  if (!chapter) throw new SafeServerError("Chapter not found or unauthorized");
+  if (!chapter) throw new NotFoundError("Chapter not found or unauthorized");
 }
 
 // An omitted fraction opens the chapter; a supplied fraction is a delayed scroll sample.

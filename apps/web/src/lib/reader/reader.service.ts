@@ -5,7 +5,7 @@ import type {
   ReaderNovelState,
 } from "@pnt/contracts/reader";
 
-import { SafeServerError } from "@/lib/server-fn-error";
+import { NotFoundError } from "@/lib/server-fn-error";
 import {
   assertChapterOwnedByUser,
   assertNovelOwnedByUser,
@@ -78,12 +78,12 @@ export async function editReaderBookmarkNoteForUser(
   note: string | null,
 ) {
   const updated = await updateReaderBookmarkNoteForUser(userId, bookmarkId, note);
-  if (!updated) throw new SafeServerError("Bookmark not found");
+  if (!updated) throw new NotFoundError("Bookmark not found");
   return { success: true };
 }
 
 export async function removeReaderBookmarkForUser(userId: string, bookmarkId: string) {
   const deleted = await deleteReaderBookmarkForUser(userId, bookmarkId);
-  if (!deleted) throw new SafeServerError("Bookmark not found");
+  if (!deleted) throw new NotFoundError("Bookmark not found");
   return { success: true };
 }

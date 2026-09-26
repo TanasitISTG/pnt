@@ -1,0 +1,14 @@
+{
+  "name": "@pnt/api-client",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": "./src/client.ts",
+    "./queries": "./src/queries.ts"
+  },
+  "dependencies": {
+    "@pnt/contracts": "workspace:*",
+    "@tanstack/react-query": "5.101.2",
+    "zod": "4.4.3"
+  }
+}

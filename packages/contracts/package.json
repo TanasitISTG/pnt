@@ -5,7 +5,9 @@
   "exports": {
     "./content": "./src/content.ts",
     "./reader": "./src/reader.ts",
-    "./reader-inputs": "./src/reader-inputs.ts"
+    "./reader-inputs": "./src/reader-inputs.ts",
+    "./reader-api": "./src/reader-api.ts",
+    "./api-error": "./src/api-error.ts"
   },
   "dependencies": {
     "zod": "4.4.3"

@@ -18,6 +18,7 @@ apps/web/.tura/e2e/
 playwright-report/
 test-results/
 .commandcode/
+.pi/
 
 # Expo and native build output
 **/.expo/

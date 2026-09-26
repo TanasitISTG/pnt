@@ -25,11 +25,23 @@ import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/nove
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
 import { Route as ApiExportsSplatRouteImport } from './routes/api/exports/$'
+import { Route as ApiV1NovelsRouteImport } from './routes/api/v1/novels'
 import { Route as ProtectedNovelsNovelIdEditRouteImport } from './routes/_protected/novels/$novelId/edit'
 import { Route as ProtectedNovelsNovelIdGlossaryRouteImport } from './routes/_protected/novels/$novelId/glossary'
 import { Route as ProtectedNovelsNovelIdRelationshipsRouteImport } from './routes/_protected/novels/$novelId/relationships'
 import { Route as PublicNovelsNovelIdIndexRouteImport } from './routes/_public/novels/$novelId/index'
+import { Route as ApiV1BookmarksBookmarkIdRouteImport } from './routes/api/v1/bookmarks/$bookmarkId'
+import { Route as ApiV1NovelsNovelIdRouteImport } from './routes/api/v1/novels/$novelId'
 import { Route as PublicNovelsNovelIdChaptersChapterIdRouteImport } from './routes/_public/novels/$novelId/chapters/$chapterId'
+import { Route as ApiV1NovelsNovelIdBookmarksRouteImport } from './routes/api/v1/novels/$novelId/bookmarks'
+import { Route as ApiV1NovelsNovelIdChaptersRouteImport } from './routes/api/v1/novels/$novelId/chapters'
+import { Route as ApiV1NovelsNovelIdCoverRouteImport } from './routes/api/v1/novels/$novelId/cover'
+import { Route as ApiV1NovelsNovelIdManifestRouteImport } from './routes/api/v1/novels/$novelId/manifest'
+import { Route as ApiV1NovelsNovelIdReaderStateRouteImport } from './routes/api/v1/novels/$novelId/reader-state'
+import { Route as ApiV1NovelsNovelIdChaptersChapterIdRouteImport } from './routes/api/v1/novels/$novelId/chapters/$chapterId'
+import { Route as ApiV1NovelsNovelIdChaptersChapterIdOpenRouteImport } from './routes/api/v1/novels/$novelId/chapters/$chapterId/open'
+import { Route as ApiV1NovelsNovelIdChaptersChapterIdPositionRouteImport } from './routes/api/v1/novels/$novelId/chapters/$chapterId/position'
+import { Route as ApiV1NovelsNovelIdChaptersChapterIdReadRouteImport } from './routes/api/v1/novels/$novelId/chapters/$chapterId/read'
 
 const ProtectedRoute = ProtectedRouteImport.update({
   id: '/_protected',
@@ -109,6 +121,11 @@ const ApiExportsSplatRoute = ApiExportsSplatRouteImport.update({
   path: '/api/exports/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1NovelsRoute = ApiV1NovelsRouteImport.update({
+  id: '/api/v1/novels',
+  path: '/api/v1/novels',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProtectedNovelsNovelIdEditRoute =
   ProtectedNovelsNovelIdEditRouteImport.update({
     id: '/novels/$novelId/edit',
@@ -133,11 +150,75 @@ const PublicNovelsNovelIdIndexRoute =
     path: '/novels/$novelId/',
     getParentRoute: () => PublicRoute,
   } as any)
+const ApiV1BookmarksBookmarkIdRoute =
+  ApiV1BookmarksBookmarkIdRouteImport.update({
+    id: '/api/v1/bookmarks/$bookmarkId',
+    path: '/api/v1/bookmarks/$bookmarkId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1NovelsNovelIdRoute = ApiV1NovelsNovelIdRouteImport.update({
+  id: '/$novelId',
+  path: '/$novelId',
+  getParentRoute: () => ApiV1NovelsRoute,
+} as any)
 const PublicNovelsNovelIdChaptersChapterIdRoute =
   PublicNovelsNovelIdChaptersChapterIdRouteImport.update({
     id: '/novels/$novelId/chapters/$chapterId',
     path: '/novels/$novelId/chapters/$chapterId',
     getParentRoute: () => PublicRoute,
+  } as any)
+const ApiV1NovelsNovelIdBookmarksRoute =
+  ApiV1NovelsNovelIdBookmarksRouteImport.update({
+    id: '/bookmarks',
+    path: '/bookmarks',
+    getParentRoute: () => ApiV1NovelsNovelIdRoute,
+  } as any)
+const ApiV1NovelsNovelIdChaptersRoute =
+  ApiV1NovelsNovelIdChaptersRouteImport.update({
+    id: '/chapters',
+    path: '/chapters',
+    getParentRoute: () => ApiV1NovelsNovelIdRoute,
+  } as any)
+const ApiV1NovelsNovelIdCoverRoute = ApiV1NovelsNovelIdCoverRouteImport.update({
+  id: '/cover',
+  path: '/cover',
+  getParentRoute: () => ApiV1NovelsNovelIdRoute,
+} as any)
+const ApiV1NovelsNovelIdManifestRoute =
+  ApiV1NovelsNovelIdManifestRouteImport.update({
+    id: '/manifest',
+    path: '/manifest',
+    getParentRoute: () => ApiV1NovelsNovelIdRoute,
+  } as any)
+const ApiV1NovelsNovelIdReaderStateRoute =
+  ApiV1NovelsNovelIdReaderStateRouteImport.update({
+    id: '/reader-state',
+    path: '/reader-state',
+    getParentRoute: () => ApiV1NovelsNovelIdRoute,
+  } as any)
+const ApiV1NovelsNovelIdChaptersChapterIdRoute =
+  ApiV1NovelsNovelIdChaptersChapterIdRouteImport.update({
+    id: '/$chapterId',
+    path: '/$chapterId',
+    getParentRoute: () => ApiV1NovelsNovelIdChaptersRoute,
+  } as any)
+const ApiV1NovelsNovelIdChaptersChapterIdOpenRoute =
+  ApiV1NovelsNovelIdChaptersChapterIdOpenRouteImport.update({
+    id: '/open',
+    path: '/open',
+    getParentRoute: () => ApiV1NovelsNovelIdChaptersChapterIdRoute,
+  } as any)
+const ApiV1NovelsNovelIdChaptersChapterIdPositionRoute =
+  ApiV1NovelsNovelIdChaptersChapterIdPositionRouteImport.update({
+    id: '/position',
+    path: '/position',
+    getParentRoute: () => ApiV1NovelsNovelIdChaptersChapterIdRoute,
+  } as any)
+const ApiV1NovelsNovelIdChaptersChapterIdReadRoute =
+  ApiV1NovelsNovelIdChaptersChapterIdReadRouteImport.update({
+    id: '/read',
+    path: '/read',
+    getParentRoute: () => ApiV1NovelsNovelIdChaptersChapterIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -155,11 +236,23 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
+  '/api/v1/novels': typeof ApiV1NovelsRouteWithChildren
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
+  '/api/v1/bookmarks/$bookmarkId': typeof ApiV1BookmarksBookmarkIdRoute
+  '/api/v1/novels/$novelId': typeof ApiV1NovelsNovelIdRouteWithChildren
   '/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
   '/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
+  '/api/v1/novels/$novelId/bookmarks': typeof ApiV1NovelsNovelIdBookmarksRoute
+  '/api/v1/novels/$novelId/chapters': typeof ApiV1NovelsNovelIdChaptersRouteWithChildren
+  '/api/v1/novels/$novelId/cover': typeof ApiV1NovelsNovelIdCoverRoute
+  '/api/v1/novels/$novelId/manifest': typeof ApiV1NovelsNovelIdManifestRoute
+  '/api/v1/novels/$novelId/reader-state': typeof ApiV1NovelsNovelIdReaderStateRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId': typeof ApiV1NovelsNovelIdChaptersChapterIdRouteWithChildren
+  '/api/v1/novels/$novelId/chapters/$chapterId/open': typeof ApiV1NovelsNovelIdChaptersChapterIdOpenRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId/position': typeof ApiV1NovelsNovelIdChaptersChapterIdPositionRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId/read': typeof ApiV1NovelsNovelIdChaptersChapterIdReadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
@@ -176,11 +269,23 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
+  '/api/v1/novels': typeof ApiV1NovelsRouteWithChildren
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
+  '/api/v1/bookmarks/$bookmarkId': typeof ApiV1BookmarksBookmarkIdRoute
+  '/api/v1/novels/$novelId': typeof ApiV1NovelsNovelIdRouteWithChildren
   '/novels/$novelId': typeof PublicNovelsNovelIdIndexRoute
   '/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
+  '/api/v1/novels/$novelId/bookmarks': typeof ApiV1NovelsNovelIdBookmarksRoute
+  '/api/v1/novels/$novelId/chapters': typeof ApiV1NovelsNovelIdChaptersRouteWithChildren
+  '/api/v1/novels/$novelId/cover': typeof ApiV1NovelsNovelIdCoverRoute
+  '/api/v1/novels/$novelId/manifest': typeof ApiV1NovelsNovelIdManifestRoute
+  '/api/v1/novels/$novelId/reader-state': typeof ApiV1NovelsNovelIdReaderStateRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId': typeof ApiV1NovelsNovelIdChaptersChapterIdRouteWithChildren
+  '/api/v1/novels/$novelId/chapters/$chapterId/open': typeof ApiV1NovelsNovelIdChaptersChapterIdOpenRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId/position': typeof ApiV1NovelsNovelIdChaptersChapterIdPositionRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId/read': typeof ApiV1NovelsNovelIdChaptersChapterIdReadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -200,11 +305,23 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
+  '/api/v1/novels': typeof ApiV1NovelsRouteWithChildren
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/_protected/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
+  '/api/v1/bookmarks/$bookmarkId': typeof ApiV1BookmarksBookmarkIdRoute
+  '/api/v1/novels/$novelId': typeof ApiV1NovelsNovelIdRouteWithChildren
   '/_public/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
   '/_public/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
+  '/api/v1/novels/$novelId/bookmarks': typeof ApiV1NovelsNovelIdBookmarksRoute
+  '/api/v1/novels/$novelId/chapters': typeof ApiV1NovelsNovelIdChaptersRouteWithChildren
+  '/api/v1/novels/$novelId/cover': typeof ApiV1NovelsNovelIdCoverRoute
+  '/api/v1/novels/$novelId/manifest': typeof ApiV1NovelsNovelIdManifestRoute
+  '/api/v1/novels/$novelId/reader-state': typeof ApiV1NovelsNovelIdReaderStateRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId': typeof ApiV1NovelsNovelIdChaptersChapterIdRouteWithChildren
+  '/api/v1/novels/$novelId/chapters/$chapterId/open': typeof ApiV1NovelsNovelIdChaptersChapterIdOpenRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId/position': typeof ApiV1NovelsNovelIdChaptersChapterIdPositionRoute
+  '/api/v1/novels/$novelId/chapters/$chapterId/read': typeof ApiV1NovelsNovelIdChaptersChapterIdReadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -223,11 +340,23 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/covers/$'
     | '/api/exports/$'
+    | '/api/v1/novels'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/relationships'
+    | '/api/v1/bookmarks/$bookmarkId'
+    | '/api/v1/novels/$novelId'
     | '/novels/$novelId/'
     | '/novels/$novelId/chapters/$chapterId'
+    | '/api/v1/novels/$novelId/bookmarks'
+    | '/api/v1/novels/$novelId/chapters'
+    | '/api/v1/novels/$novelId/cover'
+    | '/api/v1/novels/$novelId/manifest'
+    | '/api/v1/novels/$novelId/reader-state'
+    | '/api/v1/novels/$novelId/chapters/$chapterId'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/open'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/position'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/read'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -244,11 +373,23 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/covers/$'
     | '/api/exports/$'
+    | '/api/v1/novels'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/relationships'
+    | '/api/v1/bookmarks/$bookmarkId'
+    | '/api/v1/novels/$novelId'
     | '/novels/$novelId'
     | '/novels/$novelId/chapters/$chapterId'
+    | '/api/v1/novels/$novelId/bookmarks'
+    | '/api/v1/novels/$novelId/chapters'
+    | '/api/v1/novels/$novelId/cover'
+    | '/api/v1/novels/$novelId/manifest'
+    | '/api/v1/novels/$novelId/reader-state'
+    | '/api/v1/novels/$novelId/chapters/$chapterId'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/open'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/position'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/read'
   id:
     | '__root__'
     | '/_protected'
@@ -267,11 +408,23 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/covers/$'
     | '/api/exports/$'
+    | '/api/v1/novels'
     | '/_protected/novels/$novelId/edit'
     | '/_protected/novels/$novelId/glossary'
     | '/_protected/novels/$novelId/relationships'
+    | '/api/v1/bookmarks/$bookmarkId'
+    | '/api/v1/novels/$novelId'
     | '/_public/novels/$novelId/'
     | '/_public/novels/$novelId/chapters/$chapterId'
+    | '/api/v1/novels/$novelId/bookmarks'
+    | '/api/v1/novels/$novelId/chapters'
+    | '/api/v1/novels/$novelId/cover'
+    | '/api/v1/novels/$novelId/manifest'
+    | '/api/v1/novels/$novelId/reader-state'
+    | '/api/v1/novels/$novelId/chapters/$chapterId'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/open'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/position'
+    | '/api/v1/novels/$novelId/chapters/$chapterId/read'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -287,6 +440,8 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCoversSplatRoute: typeof ApiCoversSplatRoute
   ApiExportsSplatRoute: typeof ApiExportsSplatRoute
+  ApiV1NovelsRoute: typeof ApiV1NovelsRouteWithChildren
+  ApiV1BookmarksBookmarkIdRoute: typeof ApiV1BookmarksBookmarkIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -403,6 +558,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExportsSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/novels': {
+      id: '/api/v1/novels'
+      path: '/api/v1/novels'
+      fullPath: '/api/v1/novels'
+      preLoaderRoute: typeof ApiV1NovelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_protected/novels/$novelId/edit': {
       id: '/_protected/novels/$novelId/edit'
       path: '/novels/$novelId/edit'
@@ -431,12 +593,89 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicNovelsNovelIdIndexRouteImport
       parentRoute: typeof PublicRoute
     }
+    '/api/v1/bookmarks/$bookmarkId': {
+      id: '/api/v1/bookmarks/$bookmarkId'
+      path: '/api/v1/bookmarks/$bookmarkId'
+      fullPath: '/api/v1/bookmarks/$bookmarkId'
+      preLoaderRoute: typeof ApiV1BookmarksBookmarkIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/novels/$novelId': {
+      id: '/api/v1/novels/$novelId'
+      path: '/$novelId'
+      fullPath: '/api/v1/novels/$novelId'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdRouteImport
+      parentRoute: typeof ApiV1NovelsRoute
+    }
     '/_public/novels/$novelId/chapters/$chapterId': {
       id: '/_public/novels/$novelId/chapters/$chapterId'
       path: '/novels/$novelId/chapters/$chapterId'
       fullPath: '/novels/$novelId/chapters/$chapterId'
       preLoaderRoute: typeof PublicNovelsNovelIdChaptersChapterIdRouteImport
       parentRoute: typeof PublicRoute
+    }
+    '/api/v1/novels/$novelId/bookmarks': {
+      id: '/api/v1/novels/$novelId/bookmarks'
+      path: '/bookmarks'
+      fullPath: '/api/v1/novels/$novelId/bookmarks'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdBookmarksRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdRoute
+    }
+    '/api/v1/novels/$novelId/chapters': {
+      id: '/api/v1/novels/$novelId/chapters'
+      path: '/chapters'
+      fullPath: '/api/v1/novels/$novelId/chapters'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdChaptersRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdRoute
+    }
+    '/api/v1/novels/$novelId/cover': {
+      id: '/api/v1/novels/$novelId/cover'
+      path: '/cover'
+      fullPath: '/api/v1/novels/$novelId/cover'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdCoverRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdRoute
+    }
+    '/api/v1/novels/$novelId/manifest': {
+      id: '/api/v1/novels/$novelId/manifest'
+      path: '/manifest'
+      fullPath: '/api/v1/novels/$novelId/manifest'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdManifestRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdRoute
+    }
+    '/api/v1/novels/$novelId/reader-state': {
+      id: '/api/v1/novels/$novelId/reader-state'
+      path: '/reader-state'
+      fullPath: '/api/v1/novels/$novelId/reader-state'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdReaderStateRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdRoute
+    }
+    '/api/v1/novels/$novelId/chapters/$chapterId': {
+      id: '/api/v1/novels/$novelId/chapters/$chapterId'
+      path: '/$chapterId'
+      fullPath: '/api/v1/novels/$novelId/chapters/$chapterId'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdChaptersRoute
+    }
+    '/api/v1/novels/$novelId/chapters/$chapterId/open': {
+      id: '/api/v1/novels/$novelId/chapters/$chapterId/open'
+      path: '/open'
+      fullPath: '/api/v1/novels/$novelId/chapters/$chapterId/open'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdOpenRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdRoute
+    }
+    '/api/v1/novels/$novelId/chapters/$chapterId/position': {
+      id: '/api/v1/novels/$novelId/chapters/$chapterId/position'
+      path: '/position'
+      fullPath: '/api/v1/novels/$novelId/chapters/$chapterId/position'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdPositionRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdRoute
+    }
+    '/api/v1/novels/$novelId/chapters/$chapterId/read': {
+      id: '/api/v1/novels/$novelId/chapters/$chapterId/read'
+      path: '/read'
+      fullPath: '/api/v1/novels/$novelId/chapters/$chapterId/read'
+      preLoaderRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdReadRouteImport
+      parentRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdRoute
     }
   }
 }
@@ -480,6 +719,73 @@ const PublicRouteChildren: PublicRouteChildren = {
 const PublicRouteWithChildren =
   PublicRoute._addFileChildren(PublicRouteChildren)
 
+interface ApiV1NovelsNovelIdChaptersChapterIdRouteChildren {
+  ApiV1NovelsNovelIdChaptersChapterIdOpenRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdOpenRoute
+  ApiV1NovelsNovelIdChaptersChapterIdPositionRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdPositionRoute
+  ApiV1NovelsNovelIdChaptersChapterIdReadRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdReadRoute
+}
+
+const ApiV1NovelsNovelIdChaptersChapterIdRouteChildren: ApiV1NovelsNovelIdChaptersChapterIdRouteChildren =
+  {
+    ApiV1NovelsNovelIdChaptersChapterIdOpenRoute:
+      ApiV1NovelsNovelIdChaptersChapterIdOpenRoute,
+    ApiV1NovelsNovelIdChaptersChapterIdPositionRoute:
+      ApiV1NovelsNovelIdChaptersChapterIdPositionRoute,
+    ApiV1NovelsNovelIdChaptersChapterIdReadRoute:
+      ApiV1NovelsNovelIdChaptersChapterIdReadRoute,
+  }
+
+const ApiV1NovelsNovelIdChaptersChapterIdRouteWithChildren =
+  ApiV1NovelsNovelIdChaptersChapterIdRoute._addFileChildren(
+    ApiV1NovelsNovelIdChaptersChapterIdRouteChildren,
+  )
+
+interface ApiV1NovelsNovelIdChaptersRouteChildren {
+  ApiV1NovelsNovelIdChaptersChapterIdRoute: typeof ApiV1NovelsNovelIdChaptersChapterIdRouteWithChildren
+}
+
+const ApiV1NovelsNovelIdChaptersRouteChildren: ApiV1NovelsNovelIdChaptersRouteChildren =
+  {
+    ApiV1NovelsNovelIdChaptersChapterIdRoute:
+      ApiV1NovelsNovelIdChaptersChapterIdRouteWithChildren,
+  }
+
+const ApiV1NovelsNovelIdChaptersRouteWithChildren =
+  ApiV1NovelsNovelIdChaptersRoute._addFileChildren(
+    ApiV1NovelsNovelIdChaptersRouteChildren,
+  )
+
+interface ApiV1NovelsNovelIdRouteChildren {
+  ApiV1NovelsNovelIdBookmarksRoute: typeof ApiV1NovelsNovelIdBookmarksRoute
+  ApiV1NovelsNovelIdChaptersRoute: typeof ApiV1NovelsNovelIdChaptersRouteWithChildren
+  ApiV1NovelsNovelIdCoverRoute: typeof ApiV1NovelsNovelIdCoverRoute
+  ApiV1NovelsNovelIdManifestRoute: typeof ApiV1NovelsNovelIdManifestRoute
+  ApiV1NovelsNovelIdReaderStateRoute: typeof ApiV1NovelsNovelIdReaderStateRoute
+}
+
+const ApiV1NovelsNovelIdRouteChildren: ApiV1NovelsNovelIdRouteChildren = {
+  ApiV1NovelsNovelIdBookmarksRoute: ApiV1NovelsNovelIdBookmarksRoute,
+  ApiV1NovelsNovelIdChaptersRoute: ApiV1NovelsNovelIdChaptersRouteWithChildren,
+  ApiV1NovelsNovelIdCoverRoute: ApiV1NovelsNovelIdCoverRoute,
+  ApiV1NovelsNovelIdManifestRoute: ApiV1NovelsNovelIdManifestRoute,
+  ApiV1NovelsNovelIdReaderStateRoute: ApiV1NovelsNovelIdReaderStateRoute,
+}
+
+const ApiV1NovelsNovelIdRouteWithChildren =
+  ApiV1NovelsNovelIdRoute._addFileChildren(ApiV1NovelsNovelIdRouteChildren)
+
+interface ApiV1NovelsRouteChildren {
+  ApiV1NovelsNovelIdRoute: typeof ApiV1NovelsNovelIdRouteWithChildren
+}
+
+const ApiV1NovelsRouteChildren: ApiV1NovelsRouteChildren = {
+  ApiV1NovelsNovelIdRoute: ApiV1NovelsNovelIdRouteWithChildren,
+}
+
+const ApiV1NovelsRouteWithChildren = ApiV1NovelsRoute._addFileChildren(
+  ApiV1NovelsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
@@ -493,6 +799,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCoversSplatRoute: ApiCoversSplatRoute,
   ApiExportsSplatRoute: ApiExportsSplatRoute,
+  ApiV1NovelsRoute: ApiV1NovelsRouteWithChildren,
+  ApiV1BookmarksBookmarkIdRoute: ApiV1BookmarksBookmarkIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -14,7 +14,12 @@ const localPostgresData = resolve(artifactDir, "postgres-data");
 const externalDatabaseUrl = process.env.E2E_DATABASE_URL;
 const requestedUrl =
   externalDatabaseUrl ?? `postgresql://postgres@127.0.0.1:${localPostgresPort}/pnt_e2e`;
-const parsedUrl = new URL(requestedUrl);
+let parsedUrl: URL;
+try {
+  parsedUrl = new URL(requestedUrl);
+} catch {
+  throw new Error("E2E_DATABASE_URL must be a valid disposable database URL");
+}
 const databaseName = parsedUrl.pathname.slice(1);
 if (!/^[a-z0-9_]+_e2e$/.test(databaseName)) {
   throw new Error("E2E_DATABASE_URL must name a disposable database ending in _e2e");
@@ -40,7 +45,7 @@ const environment = {
   INNGEST_SIGNING_KEY: "",
   E2E_APP_URL: appUrl,
   E2E_OPENAI_PORT: "4010",
-  LOCAL_PROVIDER_ORIGINS: JSON.stringify([new URL(stubUrl).origin]),
+  LOCAL_PROVIDER_ORIGINS: JSON.stringify([stubUrl]),
   RATE_LIMIT_TRUSTED_PROXY_HOPS: "1",
   PLAYWRIGHT_CHANNEL: detectBrowserChannel(),
   PORT: "3000",
@@ -251,6 +256,16 @@ try {
     "3000",
   ]);
   await waitForHttp("application", appUrl, app, 120_000);
+  await run(
+    [
+      "bun",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "src/lib/api-v1/api.integration.test.ts",
+      "--reporter=dot",
+    ],
+    "v1 HTTP smoke",
+  );
 
   const inngest = start("inngest", [
     "bunx",

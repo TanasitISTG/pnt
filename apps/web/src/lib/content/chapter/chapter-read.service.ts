@@ -4,7 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
-import { SafeServerError } from "@/lib/server-fn-error";
+import { NotFoundError } from "@/lib/server-fn-error";
 import {
   chapterTranslationPresent,
   chapterVisibleToGuests,
@@ -24,7 +24,7 @@ export async function listReadableChapters(userId: string | null, novelId: strin
     .limit(1);
 
   if (!novel) {
-    throw new SafeServerError("Novel not found or unauthorized");
+    throw new NotFoundError("Novel not found or unauthorized");
   }
 
   return db
@@ -79,7 +79,7 @@ export async function getReadableChapterManifest(userId: string | null, novelId:
           : and(eq(novels.id, novelId), novelLive()),
       )
       .limit(1);
-    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+    if (!novel) throw new NotFoundError("Novel not found or unauthorized");
   }
 
   return rows;
