@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
-import type { ReaderColumn, ReaderViewMode } from "@pnt/contracts/reader";
+import type { ReaderColumn, ReaderViewMode } from "@/lib/reader/types";
 import {
   buildReaderSearchTargets,
   collectReaderSearchMatches,

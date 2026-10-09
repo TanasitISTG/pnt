@@ -1,5 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import { ensureSession } from "@/lib/auth/functions";
+import { SafeServerError, withSafeHandler } from "@/lib/server-fn-error";
+import {
+  assertChapterOwnedByUser,
+  assertNovelOwnedByUser,
+  createReaderBookmarkForUser,
+  deleteReaderBookmarkForUser,
+  getReaderBookmarksForUser,
+  getReaderNovelStateForUser,
+  markReaderChapterReadForUser,
+  saveReaderPositionForUser,
+  setReaderChapterForUser,
+  updateReaderBookmarkNoteForUser,
+} from "@/lib/reader/reader-state.service";
 import {
   createBookmarkSchema,
   deleteBookmarkSchema,
@@ -8,27 +22,15 @@ import {
   readerNovelSchema,
   saveReaderPositionSchema,
   updateBookmarkNoteSchema,
-} from "@pnt/contracts/reader-inputs";
-
-import { ensureSession } from "@/lib/auth/functions";
-import { withSafeHandler } from "@/lib/server-fn-error";
-import {
-  addReaderBookmarkForUser,
-  editReaderBookmarkNoteForUser,
-  finishReaderChapterForUser,
-  getReaderStateForUser,
-  listReaderBookmarkPageForUser,
-  openReaderChapterForUser,
-  removeReaderBookmarkForUser,
-  writeReaderPositionForUser,
-} from "@/lib/reader/reader.service";
+} from "@/lib/reader/reader.schemas";
 
 export const getReaderNovelState = createServerFn({ method: "GET" })
   .validator(readerNovelSchema)
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      return getReaderStateForUser(session.user.id, data.novelId);
+      await assertNovelOwnedByUser(session.user.id, data.novelId);
+      return getReaderNovelStateForUser(session.user.id, data.novelId);
     });
   });
 
@@ -37,7 +39,8 @@ export const getReaderBookmarks = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      return listReaderBookmarkPageForUser(session.user.id, data.novelId, data.cursor);
+      await assertNovelOwnedByUser(session.user.id, data.novelId);
+      return getReaderBookmarksForUser(session.user.id, data.novelId, data.cursor);
     });
   });
 
@@ -46,7 +49,9 @@ export const setReaderChapter = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      return openReaderChapterForUser(session.user.id, data.novelId, data.chapterId);
+      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
+      await setReaderChapterForUser(session.user.id, data.novelId, data.chapterId);
+      return { success: true };
     });
   });
 
@@ -55,12 +60,14 @@ export const saveReaderPosition = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      return writeReaderPositionForUser(
+      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
+      await saveReaderPositionForUser(
         session.user.id,
         data.novelId,
         data.chapterId,
         data.scrollFraction,
       );
+      return { success: true };
     });
   });
 
@@ -69,7 +76,9 @@ export const markReaderChapterRead = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      return finishReaderChapterForUser(session.user.id, data.novelId, data.chapterId);
+      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
+      await markReaderChapterReadForUser(session.user.id, data.novelId, data.chapterId);
+      return { success: true };
     });
   });
 
@@ -78,7 +87,8 @@ export const createBookmark = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      return addReaderBookmarkForUser(session.user.id, data.novelId, data);
+      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
+      return createReaderBookmarkForUser(session.user.id, data.novelId, data);
     });
   });
 
@@ -87,7 +97,13 @@ export const updateBookmarkNote = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      return editReaderBookmarkNoteForUser(session.user.id, data.bookmarkId, data.note);
+      const updated = await updateReaderBookmarkNoteForUser(
+        session.user.id,
+        data.bookmarkId,
+        data.note,
+      );
+      if (!updated) throw new SafeServerError("Bookmark not found");
+      return { success: true };
     });
   });
 
@@ -96,6 +112,8 @@ export const deleteBookmark = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      return removeReaderBookmarkForUser(session.user.id, data.bookmarkId);
+      const deleted = await deleteReaderBookmarkForUser(session.user.id, data.bookmarkId);
+      if (!deleted) throw new SafeServerError("Bookmark not found");
+      return { success: true };
     });
   });

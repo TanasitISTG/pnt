@@ -1,9 +1,0 @@
-{
-  "name": "@pnt/reader-core",
-  "private": true,
-  "type": "module",
-  "exports": {
-    "./paragraphs": "./src/paragraphs.ts",
-    "./excerpts": "./src/excerpts.ts"
-  }
-}

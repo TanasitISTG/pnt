@@ -22,9 +22,6 @@
         "@fontsource-variable/sofia-sans": "5.2.8",
         "@fontsource/noto-sans-thai": "5.2.8",
         "@fontsource/sarabun": "5.2.8",
-        "@pnt/contracts": "workspace:*",
-        "@pnt/design-tokens": "workspace:*",
-        "@pnt/reader-core": "workspace:*",
         "@tailwindcss/vite": "4.3.3",
         "@tanstack/react-devtools": "0.10.8",
         "@tanstack/react-form": "1.33.5",
@@ -80,26 +77,6 @@
         "vite": "8.1.5",
         "vitest": "4.1.11",
       },
-    },
-    "packages/api-client": {
-      "name": "@pnt/api-client",
-      "dependencies": {
-        "@pnt/contracts": "workspace:*",
-        "@tanstack/react-query": "5.101.2",
-        "zod": "4.4.3",
-      },
-    },
-    "packages/contracts": {
-      "name": "@pnt/contracts",
-      "dependencies": {
-        "zod": "4.4.3",
-      },
-    },
-    "packages/design-tokens": {
-      "name": "@pnt/design-tokens",
-    },
-    "packages/reader-core": {
-      "name": "@pnt/reader-core",
     },
   },
   "trustedDependencies": [
@@ -737,14 +714,6 @@
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.85.0", "", { "os": "win32", "cpu": "x64" }, "sha512-pBebIPUpKKhWrhSMWhy8TdAZBewiXnfxmaAGxhzxM1068GagqFaTwgKlU6e+UyJ2sPR+VoHouhXuGJkQjsrDvA=="],
 
     "@playwright/test": ["@playwright/test@1.62.1", "", { "dependencies": { "playwright": "1.62.1" }, "bin": { "playwright": "cli.js" } }, "sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ=="],
-
-    "@pnt/api-client": ["@pnt/api-client@workspace:packages/api-client"],
-
-    "@pnt/contracts": ["@pnt/contracts@workspace:packages/contracts"],
-
-    "@pnt/design-tokens": ["@pnt/design-tokens@workspace:packages/design-tokens"],
-
-    "@pnt/reader-core": ["@pnt/reader-core@workspace:packages/reader-core"],
 
     "@pnt/web": ["@pnt/web@workspace:apps/web"],
 

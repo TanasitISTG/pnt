@@ -17,7 +17,7 @@ import type {
   ReaderSettings,
   ReaderTypeface,
   ReaderViewMode,
-} from "@pnt/contracts/reader";
+} from "@/lib/reader/types";
 
 export interface ReaderSettingsPanelProps {
   settings: ReaderSettings;

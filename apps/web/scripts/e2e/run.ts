@@ -45,7 +45,7 @@ const environment = {
   INNGEST_SIGNING_KEY: "",
   E2E_APP_URL: appUrl,
   E2E_OPENAI_PORT: "4010",
-  LOCAL_PROVIDER_ORIGINS: JSON.stringify([stubUrl]),
+  LOCAL_PROVIDER_ORIGINS: JSON.stringify([new URL(stubUrl).origin]),
   RATE_LIMIT_TRUSTED_PROXY_HOPS: "1",
   PLAYWRIGHT_CHANNEL: detectBrowserChannel(),
   PORT: "3000",
@@ -256,16 +256,6 @@ try {
     "3000",
   ]);
   await waitForHttp("application", appUrl, app, 120_000);
-  await run(
-    [
-      "bun",
-      "node_modules/vitest/vitest.mjs",
-      "run",
-      "src/lib/api-v1/api.integration.test.ts",
-      "--reporter=dot",
-    ],
-    "v1 HTTP smoke",
-  );
 
   const inngest = start("inngest", [
     "bunx",

@@ -20,9 +20,4 @@ test-results/
 .commandcode/
 .pi/
 
-# Expo and native build output
-**/.expo/
-apps/mobile/android/
-apps/mobile/ios/
-
 .vercel

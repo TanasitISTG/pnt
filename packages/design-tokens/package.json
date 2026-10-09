@@ -1,8 +1,0 @@
-{
-  "name": "@pnt/design-tokens",
-  "private": true,
-  "type": "module",
-  "exports": {
-    "./tokens": "./src/tokens.ts"
-  }
-}

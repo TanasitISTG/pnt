@@ -1,14 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
-import { and, eq } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
-import { novels } from "@/lib/db/schema";
+import { novels, chapters } from "@/lib/db/schema";
 import { ensureSession, getSession } from "@/lib/auth/functions";
 import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { createServerTiming } from "@/lib/server-timing";
+import { novelLive, chapterVisibleToGuests } from "@/lib/content/publish/publish";
 import {
   createNovelSchema,
   updateNovelSchema,
@@ -19,11 +20,6 @@ import {
   getAdminNovelDetailCoreForUser,
   getAdminNovelDetailMetricsForUser,
 } from "@/lib/content/novel/admin-novel-detail.service";
-import {
-  listReadableNovels,
-  getReadableNovel,
-  getReadableReaderNovel,
-} from "@/lib/content/novel/novel-read.service";
 
 export interface NovelListItem {
   id: string;
@@ -49,7 +45,41 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
       if (!session)
         await timing.measure("rate-limit", () => checkRateLimit("read", GUEST_READ_LIMIT));
 
-      return timing.measure("novels", () => listReadableNovels(session?.user.id ?? null));
+      const rows = await timing.measure("novels", () =>
+        db
+          .select({
+            id: novels.id,
+            title: novels.title,
+            originalTitle: novels.originalTitle,
+            author: novels.author,
+            description: novels.description,
+            sourceLang: novels.sourceLang,
+            targetLang: novels.targetLang,
+            publishedAt: novels.publishedAt,
+            createdAt: novels.createdAt,
+            updatedAt: novels.updatedAt,
+            hasCover: sql<number>`CASE WHEN ${novels.cover} IS NOT NULL THEN 1 ELSE 0 END`,
+            chapterCount: sql<number>`count(${chapters.id})::int`,
+            translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
+          })
+          .from(novels)
+          .leftJoin(
+            chapters,
+            session
+              ? eq(chapters.novelId, novels.id)
+              : and(eq(chapters.novelId, novels.id), chapterVisibleToGuests()),
+          )
+          .where(session ? eq(novels.userId, session.user.id) : novelLive())
+          .groupBy(novels.id)
+          .orderBy(desc(novels.createdAt)),
+      );
+
+      return rows.map((row) => ({
+        ...row,
+        chapterCount: Number(row.chapterCount || 0),
+        translatedCount: Number(row.translatedCount || 0),
+        hasCover: Number(row.hasCover || 0),
+      }));
     });
   } finally {
     timing.flush();
@@ -63,7 +93,40 @@ export const getNovel = createServerFn({ method: "GET" })
       const session = await getSession();
       if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
-      return getReadableNovel(session?.user.id ?? null, data.novelId);
+      const [novel] = await db
+        .select({
+          id: novels.id,
+          title: novels.title,
+          originalTitle: novels.originalTitle,
+          author: novels.author,
+          description: novels.description,
+          sourceLang: novels.sourceLang,
+          targetLang: novels.targetLang,
+          customPrompt: novels.customPrompt,
+          chunkSize: novels.chunkSize,
+          contextTailLength: novels.contextTailLength,
+          publishedAt: novels.publishedAt,
+          hasCover: sql<boolean>`${novels.cover} is not null`,
+          createdAt: novels.createdAt,
+          updatedAt: novels.updatedAt,
+        })
+        .from(novels)
+        .where(
+          session
+            ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
+            : and(eq(novels.id, data.novelId), novelLive()),
+        )
+        .limit(1);
+
+      if (!novel) return null;
+
+      return {
+        ...novel,
+        sourceLang: novel.sourceLang as "en" | "zh",
+        targetLang: novel.targetLang as "en" | "th",
+        // Guests don't get admin-only settings — NovelCover fetches covers from the public /api/covers route.
+        customPrompt: session ? novel.customPrompt : null,
+      };
     });
   });
 
@@ -74,7 +137,23 @@ export const getReaderNovel = createServerFn({ method: "GET" })
       const session = await getSession();
       if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
-      return getReadableReaderNovel(session?.user.id ?? null, data.novelId);
+      const [novel] = await db
+        .select({
+          id: novels.id,
+          title: novels.title,
+          description: novels.description,
+          sourceLang: novels.sourceLang,
+          targetLang: novels.targetLang,
+        })
+        .from(novels)
+        .where(
+          session
+            ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
+            : and(eq(novels.id, data.novelId), novelLive()),
+        )
+        .limit(1);
+
+      return novel ?? null;
     });
   });
 export const getAdminNovelDetailCore = createServerFn({ method: "GET" })
