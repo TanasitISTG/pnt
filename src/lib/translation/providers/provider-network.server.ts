@@ -175,6 +175,7 @@ const connector: buildConnector.connector = (options, callback) => {
   );
 };
 const agent = new Agent({
+  allowH2: false,
   connect: connector,
   maxResponseSize: PROVIDER_RESPONSE_SIZE_LIMIT_BYTES,
 });

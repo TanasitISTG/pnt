@@ -200,7 +200,7 @@ const publicHostConnector: buildConnector.connector = (options, callback) => {
   );
 };
 
-const publicHostAgent = new Agent({ connect: publicHostConnector });
+const publicHostAgent = new Agent({ allowH2: false, connect: publicHostConnector });
 
 export async function fetchFromPublicHost(url: string, init: RequestInit = {}): Promise<Response> {
   const parsed = new URL(url);
