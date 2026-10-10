@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getConsent, setConsent, useConsent } from "./consent";
 
@@ -28,15 +28,11 @@ class MemoryStorage implements Storage {
 
 describe("consent module", () => {
   beforeEach(() => {
-    const storage = new MemoryStorage();
-    const mockWindow = {
-      localStorage: storage,
-      dispatchEvent: () => true,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    };
-    globalThis.window = mockWindow as unknown as Window & typeof globalThis;
-    globalThis.localStorage = storage;
+    vi.stubGlobal("localStorage", new MemoryStorage());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("defaults getConsent to pending when no value stored", () => {
