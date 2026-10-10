@@ -99,20 +99,18 @@ const providerSettingsFormSchema = z
       }
     }
   })
-  .transform(
-    (value): SaveProviderSettingsInput => ({
-      provider: value.provider,
-      baseUrl: value.baseUrl,
-      apiKey: value.apiKey.trim() || undefined,
-      model: value.model.trim(),
-      fastModel: value.fastModel.trim() || null,
-      reasoningEffort: value.reasoningEffort,
-      temperature: value.temperature,
-      requestTimeoutSec: value.requestTimeoutSec === "" ? null : Number(value.requestTimeoutSec),
-      inputPricePer1M: value.inputPrice === "" ? null : Number(value.inputPrice),
-      outputPricePer1M: value.outputPrice === "" ? null : Number(value.outputPrice),
-    }),
-  );
+  .transform((value): SaveProviderSettingsInput => ({
+    provider: value.provider,
+    baseUrl: value.baseUrl,
+    apiKey: value.apiKey.trim() || undefined,
+    model: value.model.trim(),
+    fastModel: value.fastModel.trim() || null,
+    reasoningEffort: value.reasoningEffort,
+    temperature: value.temperature,
+    requestTimeoutSec: value.requestTimeoutSec === "" ? null : Number(value.requestTimeoutSec),
+    inputPricePer1M: value.inputPrice === "" ? null : Number(value.inputPrice),
+    outputPricePer1M: value.outputPrice === "" ? null : Number(value.outputPrice),
+  }));
 
 type ProviderSettingsFormValues = z.input<typeof providerSettingsFormSchema>;
 type ProviderSettingsFieldName = Exclude<keyof ProviderSettingsFormValues, "action">;

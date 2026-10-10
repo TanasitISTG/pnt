@@ -96,7 +96,7 @@ The README's compact project tree contains older shorthand for auth/scrape modul
 
 ## Runtime/Tooling Preferences
 
-- Required package manager/runtime: **Bun 1.3.14**, with `bun.lock`; the package is ESM (`"type": "module"`). Do not substitute npm/pnpm commands or floating CLI versions.
+- Required package manager/runtime: **Bun 1.4.2**, with `bun.lock`; the package is ESM (`"type": "module"`). Do not substitute npm/pnpm commands or floating CLI versions.
 - **Nitro:** `nitro` is an exact alias for the nightly build (`npm:nitro-nightly@…`); keep it pinned. The former workspace-only `h3-rules` shim was removed when the repo flattened back to a single package — re-add it only if a Nitro upgrade reintroduces app-root resolution problems.
 - Application stack: React 19, TanStack Start/Router/Query, Vite, Tailwind v4 CSS-first tokens, shadcn Base UI, Drizzle/PostgreSQL, Better Auth, Inngest, and Nitro/Vercel.
 - Formatting/linting: Oxfmt and Oxlint are canonical; there is no ESLint/Prettier/Biome workflow. `react-doctor` is a separate diagnostics command.
