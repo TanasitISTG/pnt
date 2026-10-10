@@ -618,6 +618,14 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
   const fullTranslation = normalizeTranslationOutput(
     chunkList.map((c) => c.translation || "").join("\n\n"),
   );
+
+  // Blank output would violate the translated-content invariant, so fail the job
+  // instead of writing `status = 'translated'` with an empty body.
+  if (fullTranslation.trim().length === 0) {
+    await failJob(jobId, generation, "Translation produced no content; nothing was saved");
+    return;
+  }
+
   let totalPromptTokens = chunkList.reduce((acc, c) => acc + (c.promptTokens || 0), 0);
   let totalCompletionTokens = chunkList.reduce((acc, c) => acc + (c.completionTokens || 0), 0);
 

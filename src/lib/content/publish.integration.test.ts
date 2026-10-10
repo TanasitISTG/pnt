@@ -32,7 +32,7 @@ async function seedFixture(): Promise<PublicationFixture> {
     { status: "queued", translatedContent: null, publishedAt: PAST },
     { status: "translating", translatedContent: null, publishedAt: PAST },
     { status: "error", translatedContent: "Old translation", publishedAt: PAST },
-    { status: "translated", translatedContent: "   \n\t", publishedAt: PAST },
+    { status: "error", translatedContent: null, publishedAt: PAST },
     { status: "translated", translatedContent: "Scheduled translation", publishedAt: FUTURE },
     { status: "translated", translatedContent: "Ready translation", publishedAt: PAST },
   ];
@@ -73,8 +73,6 @@ async function guestVisibleChapterIds(novelId: string): Promise<string[]> {
       AND n."published_at" <= now()
       AND c."published_at" <= now()
       AND c."status" = 'translated'
-      AND c."translated_content" IS NOT NULL
-      AND regexp_replace(c."translated_content", '[[:space:]]', '', 'g') <> ''
     ORDER BY c."number"
   `;
   return rows.map((row) => row.id);

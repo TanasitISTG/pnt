@@ -856,6 +856,32 @@ describe("translation worker guarded state transitions", () => {
     expect(jobStore.completeJob).not.toHaveBeenCalled();
   });
 
+  it("fails the job instead of finalizing blank chunk output", async () => {
+    vi.mocked(jobStore.loadJob).mockResolvedValue({
+      ...row,
+      job: {
+        ...mockJob,
+        doneChunks: 2,
+      },
+    } as never);
+    vi.mocked(jobStore.loadJobChunks).mockResolvedValue([
+      { ...chunks[0], translation: null },
+      { ...chunks[1], translation: "   " },
+    ] as never);
+
+    await finalizeJob("job-1", generation);
+
+    expect(jobStore.failActiveJob).toHaveBeenCalledWith(
+      "job-1",
+      generation,
+      "Translation produced no content; nothing was saved",
+      expect.stringContaining("Translation produced no content"),
+    );
+    expect(finalizeSummaryModule.generateSummaryArtifacts).not.toHaveBeenCalled();
+    expect(finalizeGlossaryModule.suggestAndReviewTerms).not.toHaveBeenCalled();
+    expect(jobStore.completeJob).not.toHaveBeenCalled();
+  });
+
   it("marks failure only through the guarded failure transaction", async () => {
     vi.mocked(jobStore.loadJob).mockResolvedValue(row as never);
     await failJob("job-1", generation, "LLM API Failure");

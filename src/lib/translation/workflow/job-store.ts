@@ -229,6 +229,10 @@ export interface CompleteJobInput {
 }
 
 export async function completeJob(input: CompleteJobInput) {
+  if (input.fullTranslation.trim().length === 0) {
+    throw new Error("completeJob received an empty translation");
+  }
+
   return db.transaction(async (tx) => {
     const row = await lockJobContext(tx, input.jobId);
 

@@ -596,6 +596,49 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     }
   });
 
+  it("rejects a blank translation before opening the finalize transaction", async () => {
+    const fixture = await seedChapter();
+    const jobId = `job-${randomUUID()}`;
+    try {
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation",
+          "total_chunks", "done_chunks"
+        ) VALUES (${jobId}, ${fixture.chapterId}, 'running', 1, 1, 1, 1)
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET "active_translation_job_id" = ${jobId}, "translation_generation" = 1,
+            "source_revision" = 1, "status" = 'translating'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+
+      await expect(
+        completeJob({
+          jobId,
+          generation: 1,
+          fullTranslation: "   \n\t",
+          glossaryRows: [],
+          logsJson: "[]",
+          usageJson: "{}",
+        }),
+      ).rejects.toThrow("completeJob received an empty translation");
+
+      const [chapter] = await sql<{ status: string; activeJobId: string | null }[]>`
+        SELECT "status", "active_translation_job_id" AS "activeJobId" FROM "chapters"
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      const [job] = await sql<{ status: string }[]>`
+        SELECT "status" FROM "translation_jobs" WHERE "id" = ${jobId}
+      `;
+
+      expect(chapter).toEqual({ status: "translating", activeJobId: jobId });
+      expect(job).toEqual({ status: "running" });
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
   it("rejects stale finalization without any partial side effects", async () => {
     const fixture = await seedChapter();
     const jobId = `job-${randomUUID()}`;

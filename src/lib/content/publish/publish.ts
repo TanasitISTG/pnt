@@ -12,17 +12,15 @@ export function publishState(
   return new Date(publishedAt) <= now ? "live" : "scheduled";
 }
 
-// Live = publication reached and a complete translated body is available.
-// Shared by the novel/chapter server-function modules for guest visibility filters.
+// Non-null means nonblank: blank-but-non-null content is invalid data
+// (finalization refuses blank output and backup validation asserts null-or-nonblank).
 export const chapterTranslationPresent = () =>
-  sql<boolean>`${
-    chapters.translatedContent
-  } IS NOT NULL AND regexp_replace(${chapters.translatedContent}, '[[:space:]]', '', 'g') <> ''`;
+  sql<boolean>`${chapters.translatedContent} IS NOT NULL`;
 export const novelLive = (now: Date = new Date()) => lte(novels.publishedAt, now);
+// Live = publication reached and a complete translated body is available.
+// `status = 'translated'` already implies a nonblank body, so visibility never
+// tests `translated_content`: referencing that column forces a row fetch per
+// chapter and made guest list queries take seconds on CockroachDB.
 export const chapterLive = (now: Date = new Date()) =>
-  and(
-    lte(chapters.publishedAt, now),
-    eq(chapters.status, "translated"),
-    chapterTranslationPresent(),
-  );
+  and(lte(chapters.publishedAt, now), eq(chapters.status, "translated"));
 export const chapterVisibleToGuests = (now: Date = new Date()) => chapterLive(now);

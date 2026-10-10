@@ -1,11 +1,10 @@
 import "@tanstack/react-start/server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db, queryClient } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { contentDisposition, sanitizeFilename } from "@/lib/filename";
-import { chapterTranslationPresent } from "@/lib/content/publish/publish";
 import { splitParagraphs } from "@/lib/translation/text/paragraphs";
 import { createEpubStream, type EpubChapter, type EpubMetadata } from "./epub";
 
@@ -20,6 +19,13 @@ function chapterTitle(chapter: Pick<ExportChapterRow, "number" | "title" | "tran
   return `Chapter ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`;
 }
 
+// Export eligibility requires a nonblank body. Unlike guest list queries, this path
+// streams the text anyway, so reading `translated_content` costs no extra I/O here.
+const nonblankTranslatedContent = () =>
+  sql<boolean>`${
+    chapters.translatedContent
+  } IS NOT NULL AND regexp_replace(${chapters.translatedContent}, '[[:space:]]', '', 'g') <> ''`;
+
 async function loadExportMetadata(novelId: string, userId: string) {
   const [novel] = await db
     .select({
@@ -33,12 +39,12 @@ async function loadExportMetadata(novelId: string, userId: string) {
     .limit(1);
   if (!novel) return null;
 
-  // Existence-only check with the exact nonblank predicate the body cursor uses,
+  // Existence-only check with the same nonblank predicate the body cursor uses,
   // so HEAD and body responses agree on whether any exportable chapter exists.
   const [present] = await db
     .select({ id: chapters.id })
     .from(chapters)
-    .where(and(eq(chapters.novelId, novelId), chapterTranslationPresent()))
+    .where(and(eq(chapters.novelId, novelId), nonblankTranslatedContent()))
     .limit(1);
   if (!present) return null;
 
