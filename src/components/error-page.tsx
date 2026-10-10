@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { captureException } from "@/lib/posthog";
 
 export function ErrorPage({ error, reset }: ErrorComponentProps) {
+  const errorMessage = error instanceof Error ? error.message : undefined;
+
   useEffect(() => {
     if (error) {
       captureException(error);
@@ -19,8 +21,8 @@ export function ErrorPage({ error, reset }: ErrorComponentProps) {
       </div>
       <h1 className="text-card-title font-semibold text-foreground">Something went wrong</h1>
       <p className="mt-2 max-w-sm text-body text-muted-foreground">
-        {import.meta.env.DEV && error?.message
-          ? error.message
+        {import.meta.env.DEV && errorMessage
+          ? errorMessage
           : "An unexpected error occurred. Please try again or return to the library."}
       </p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
