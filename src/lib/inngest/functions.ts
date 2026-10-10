@@ -75,7 +75,9 @@ export const translateChapterFn = inngest.createFunction(
 export const dispatchWorkflowOutboxFn = inngest.createFunction(
   {
     id: "dispatch-workflow-outbox",
-    triggers: { cron: "*/1 * * * *" },
+    // Eager dispatch on the request path already delivers promptly; this sweep
+    // is the retry path, so every two minutes is enough without 1,440 runs/day.
+    triggers: { cron: "*/2 * * * *" },
     retries: 0,
     concurrency: { limit: 1 },
   },

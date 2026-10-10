@@ -6,7 +6,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
-import { exportBackup, importBackup } from "@/lib/backup.functions";
+import { importBackup } from "@/lib/backup.functions";
 
 const backupImportSchema = z.object({
   file: z.custom<File>((file) => typeof File !== "undefined" && file instanceof File, {
@@ -38,8 +38,11 @@ export function BackupCard() {
   const onExport = async () => {
     setExporting(true);
     try {
-      const backup = await exportBackup({ data: {} });
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      // The route streams the JSON, so a large library never has to be
+      // serialized in memory just to start the download.
+      const response = await fetch("/api/backups");
+      if (!response.ok) throw new Error("Failed to export backup");
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;

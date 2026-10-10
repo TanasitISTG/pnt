@@ -16,8 +16,11 @@ export type BulkPublicationResult =
   | { id: string; published: number; skipped: number }
   | { id: string; unpublished: number };
 
-function chapterIsReady(chapter: { status: string; translatedContent: string | null }): boolean {
-  return chapter.status === "translated" && Boolean(chapter.translatedContent?.trim());
+// `status = 'translated'` already implies a nonblank body (finalization refuses
+// blank output and backup validation rejects translated-without-content), so the
+// readiness check never needs to read the wide content column.
+function chapterIsReady(chapter: { status: string }): boolean {
+  return chapter.status === "translated";
 }
 
 export async function setChapterPublishedForUser(
@@ -37,7 +40,6 @@ export async function setChapterPublishedForUser(
       .select({
         id: chapters.id,
         status: chapters.status,
-        translatedContent: chapters.translatedContent,
       })
       .from(chapters)
       .innerJoin(novels, eq(chapters.novelId, novels.id))
@@ -88,7 +90,6 @@ export async function setAllChaptersPublishedForUser(
       .select({
         id: chapters.id,
         status: chapters.status,
-        translatedContent: chapters.translatedContent,
       })
       .from(chapters)
       .where(eq(chapters.novelId, novelId))

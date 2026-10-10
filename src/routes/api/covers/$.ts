@@ -7,6 +7,7 @@ import { novels } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/functions";
 import { RateLimitError } from "@/lib/server-fn-error";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { immutablePublicCacheControl } from "@/lib/cache-control";
 const coverWidthSchema = z.enum(["320", "480", "640"]);
 
 export const Route = createFileRoute("/api/covers/$")({
@@ -56,9 +57,7 @@ export const Route = createFileRoute("/api/covers/$")({
             ? novel.cover
             : Buffer.from(novel.cover as Uint8Array);
 
-          const cacheControl = session
-            ? "private, max-age=3600"
-            : "public, max-age=31536000, immutable";
+          const cacheControl = session ? "private, max-age=3600" : immutablePublicCacheControl();
           if (requestedWidth) {
             // Sharp stays out of the browser graph and only loads for variant requests.
             const { resizeCover } = await import("@/lib/content/novel/cover-image.server");

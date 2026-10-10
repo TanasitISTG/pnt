@@ -5,12 +5,8 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { chapterTranslationPresent } from "@/lib/content/publish/publish";
+import { chapterHasTranslation } from "@/lib/content/publish/publish";
 import { getGlossaryStatsForOwnedNovel } from "@/lib/glossary/service";
-import {
-  getResidualScriptChaptersForOwnedNovel,
-  type ResidualScriptChapter,
-} from "@/lib/content/chapter/chapter-ops.service";
 import { getNovelCostsForOwnedNovel } from "@/lib/translation/cost-service";
 
 export async function getAdminNovelDetailCoreForUser(userId: string, novelId: string) {
@@ -44,7 +40,7 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
       number: chapters.number,
       title: chapters.title,
       translatedTitle: chapters.translatedTitle,
-      hasTranslation: chapterTranslationPresent(),
+      hasTranslation: chapterHasTranslation(),
       rawCharCount: chapters.rawCharCount,
       status: chapters.status,
       publishedAt: chapters.publishedAt,
@@ -74,7 +70,6 @@ export type AdminNovelDetailCore = NonNullable<
 export interface AdminNovelDetailMetrics {
   glossaryStats: Awaited<ReturnType<typeof getGlossaryStatsForOwnedNovel>>;
   costData: Awaited<ReturnType<typeof getNovelCostsForOwnedNovel>>;
-  residualScriptChapters: ResidualScriptChapter[];
 }
 
 export async function getAdminNovelDetailMetricsForUser(
@@ -88,11 +83,12 @@ export async function getAdminNovelDetailMetricsForUser(
     .limit(1);
   if (!novel) throw new SafeServerError("Novel not found or unauthorized");
 
-  const [glossaryStats, costData, residualScriptChapters] = await Promise.all([
+  // The residual-script scan deliberately stays out of this bundle: it reads
+  // every translated chapter body, and the admin detail query is fetched often.
+  const [glossaryStats, costData] = await Promise.all([
     getGlossaryStatsForOwnedNovel(novelId),
     getNovelCostsForOwnedNovel(userId, novelId),
-    getResidualScriptChaptersForOwnedNovel(novelId),
   ]);
 
-  return { glossaryStats, costData, residualScriptChapters };
+  return { glossaryStats, costData };
 }

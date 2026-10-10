@@ -19,6 +19,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ProtectedJobsRouteImport } from './routes/_protected/jobs'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
+import { Route as ApiBackupsRouteImport } from './routes/api/backups'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
@@ -78,6 +79,11 @@ const PublicIndexRoute = PublicIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => PublicRoute,
+} as any)
+const ApiBackupsRoute = ApiBackupsRouteImport.update({
+  id: '/api/backups',
+  path: '/api/backups',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiInngestRoute = ApiInngestRouteImport.update({
   id: '/api/inngest',
@@ -149,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/jobs': typeof ProtectedJobsRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/jobs': typeof ProtectedJobsRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/_protected/jobs': typeof ProtectedJobsRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
+  '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
   '/_public/': typeof PublicIndexRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/jobs'
     | '/settings'
+    | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
     | '/novels/new'
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/jobs'
     | '/settings'
+    | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
     | '/novels/new'
@@ -260,6 +271,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/_protected/jobs'
     | '/_protected/settings'
+    | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
     | '/_public/'
@@ -282,6 +294,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   TermsRoute: typeof TermsRoute
+  ApiBackupsRoute: typeof ApiBackupsRoute
   ApiInngestRoute: typeof ApiInngestRoute
   ApiSitemapRoute: typeof ApiSitemapRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -360,6 +373,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof PublicIndexRouteImport
       parentRoute: typeof PublicRoute
+    }
+    '/api/backups': {
+      id: '/api/backups'
+      path: '/api/backups'
+      fullPath: '/api/backups'
+      preLoaderRoute: typeof ApiBackupsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/inngest': {
       id: '/api/inngest'
@@ -488,6 +508,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   TermsRoute: TermsRoute,
+  ApiBackupsRoute: ApiBackupsRoute,
   ApiInngestRoute: ApiInngestRoute,
   ApiSitemapRoute: ApiSitemapRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

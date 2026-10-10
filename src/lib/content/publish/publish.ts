@@ -12,10 +12,11 @@ export function publishState(
   return new Date(publishedAt) <= now ? "live" : "scheduled";
 }
 
-// Non-null means nonblank: blank-but-non-null content is invalid data
-// (finalization refuses blank output and backup validation asserts null-or-nonblank).
-export const chapterTranslationPresent = () =>
-  sql<boolean>`${chapters.translatedContent} IS NOT NULL`;
+// `status = 'translated'` already implies a nonblank body: finalization refuses
+// blank output and backup validation rejects translated-without-content. Testing
+// the status instead of `translated_content` keeps the wide column out of list
+// projections, where referencing it forces a row fetch per chapter.
+export const chapterHasTranslation = () => sql<boolean>`${chapters.status} = 'translated'`;
 export const novelLive = (now: Date = new Date()) => lte(novels.publishedAt, now);
 // Live = publication reached and a complete translated body is available.
 // `status = 'translated'` already implies a nonblank body, so visibility never

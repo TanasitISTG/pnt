@@ -15,7 +15,7 @@ const isoDateStringSchema = z
   .string()
   .refine((value) => !Number.isNaN(Date.parse(value)), "Expected an ISO date string");
 
-const backupChapterSchema = z
+export const backupChapterSchema = z
   .object({
     id: z.string(),
     number: chapterNumberSchema,
@@ -69,7 +69,7 @@ const backupChapterSchema = z
     }
   });
 
-const backupTermSchema = z.object({
+export const backupTermSchema = z.object({
   id: z.string(),
   source: z.string(),
   target: z.string(),

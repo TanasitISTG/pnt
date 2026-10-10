@@ -35,8 +35,60 @@ export async function loadJob(jobId: string) {
   return row ?? null;
 }
 
+// Per-chunk hot path. `loadJob` selects whole rows, so its novel carries the
+// cover bytea and its chapter both content columns; every chunk step would pay
+// for them. These projections cover exactly what the chunk step reads.
+const jobChunkJobColumns = {
+  id: translationJobs.id,
+  chapterId: translationJobs.chapterId,
+  status: translationJobs.status,
+  generation: translationJobs.generation,
+  sourceRevision: translationJobs.sourceRevision,
+  doneChunks: translationJobs.doneChunks,
+  totalChunks: translationJobs.totalChunks,
+  logsJson: translationJobs.logsJson,
+  provider: translationJobs.provider,
+  model: translationJobs.model,
+  fastModel: translationJobs.fastModel,
+};
+
+const jobChunkChapterColumns = {
+  id: chapters.id,
+  number: chapters.number,
+  status: chapters.status,
+  sourceRevision: chapters.sourceRevision,
+  translationGeneration: chapters.translationGeneration,
+  activeTranslationJobId: chapters.activeTranslationJobId,
+};
+
+const jobChunkNovelColumns = {
+  id: novels.id,
+  userId: novels.userId,
+  sourceLang: novels.sourceLang,
+  targetLang: novels.targetLang,
+  customPrompt: novels.customPrompt,
+  storySummary: novels.storySummary,
+  relationshipMapJson: novels.relationshipMapJson,
+  contextTailLength: novels.contextTailLength,
+};
+
+async function loadJobChunkContext(jobId: string) {
+  const [row] = await db
+    .select({
+      job: jobChunkJobColumns,
+      chapter: jobChunkChapterColumns,
+      novel: jobChunkNovelColumns,
+    })
+    .from(translationJobs)
+    .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
+    .innerJoin(novels, eq(chapters.novelId, novels.id))
+    .where(eq(translationJobs.id, jobId))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function loadJobChunk(jobId: string, index: number) {
-  const row = await loadJob(jobId);
+  const row = await loadJobChunkContext(jobId);
   if (!row) return null;
   const chunks = await db
     .select()

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { exportBackupForUser, importBackupForUser } from "./backup.service";
+import { exportBackupForUser, importBackupForUser, streamBackupForUser } from "./backup.service";
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -122,10 +122,17 @@ beforeEach(() => {
   insertedValues = [];
   vi.mocked(db.select).mockImplementation(() => {
     const rows = selectQueue.shift() ?? [];
+    // Both `await query.orderBy(...)` (materialized export) and
+    // `query.orderBy(...).limit(n)` (streaming page) must resolve to the rows.
+    const settle = () => {
+      const result = Promise.resolve(rows);
+      return Object.assign(result, { limit: () => result });
+    };
     const chain = {
       from: () => chain,
       where: () => chain,
-      orderBy: () => Promise.resolve(rows),
+      orderBy: settle,
+      limit: settle,
     };
     return chain as never;
   });
@@ -155,6 +162,18 @@ describe("backup export", () => {
       importedNovelCount: 1,
       novelIds: [expect.any(String)],
     });
+  });
+
+  it("streams the same backup the materialized export produces", async () => {
+    selectQueue = [[novelRow()], [chapterRow()], []];
+    const materialized = await exportBackupForUser("user-1");
+
+    selectQueue = [[novelRow()], [chapterRow()], []];
+    let json = "";
+    for await (const chunk of streamBackupForUser("user-1")) json += chunk;
+
+    // `exportedAt` is the export timestamp, so pin only its shape.
+    expect(JSON.parse(json)).toEqual({ ...materialized, exportedAt: expect.any(String) });
   });
 
   it("refuses a cover type the app could not serve or restore", async () => {

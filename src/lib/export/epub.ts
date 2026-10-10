@@ -96,11 +96,15 @@ ${navItems}
 </html>`;
 }
 
+// fflate deflates synchronously on the event loop, so level 6 trades a little
+// size for noticeably less CPU per chapter than level 9.
+const EPUB_DEFLATE_LEVEL = 6;
+
 function addTextFile(
   zip: Zip,
   filename: string,
   content: string,
-  level: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = 9,
+  level: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = EPUB_DEFLATE_LEVEL,
 ) {
   const file = level === 0 ? new ZipPassThrough(filename) : new ZipDeflate(filename, { level });
   zip.add(file);
@@ -218,14 +222,17 @@ export function buildEpub(meta: EpubMetadata, chapters: EpubChapter[]): Uint8Arr
   const files: Zippable = {
     // mimetype must be the first entry and uncompressed per the EPUB spec.
     mimetype: [strToU8("application/epub+zip"), { level: 0 }],
-    "META-INF/container.xml": [strToU8(containerXml()), { level: 9 }],
-    "OEBPS/content.opf": [strToU8(packageXml(meta, titles, modified)), { level: 9 }],
-    "OEBPS/nav.xhtml": [strToU8(navigationXml(meta, titles)), { level: 9 }],
+    "META-INF/container.xml": [strToU8(containerXml()), { level: EPUB_DEFLATE_LEVEL }],
+    "OEBPS/content.opf": [
+      strToU8(packageXml(meta, titles, modified)),
+      { level: EPUB_DEFLATE_LEVEL },
+    ],
+    "OEBPS/nav.xhtml": [strToU8(navigationXml(meta, titles)), { level: EPUB_DEFLATE_LEVEL }],
   };
   chapters.forEach((c, i) => {
     files[`OEBPS/chapter-${i + 1}.xhtml`] = [
       strToU8(chapterXhtml(c.title, c.paragraphs)),
-      { level: 9 },
+      { level: EPUB_DEFLATE_LEVEL },
     ];
   });
 

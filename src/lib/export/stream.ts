@@ -51,22 +51,34 @@ async function loadExportMetadata(novelId: string, userId: string) {
   return { novel };
 }
 
-async function* chapterCursor(novelId: string): AsyncGenerator<ExportChapterRow> {
-  const cursor = queryClient<ExportChapterRow[]>`
-    SELECT
-      "number"::text AS "number",
-      "title",
-      "translated_title" AS "translatedTitle",
-      "translated_content" AS "translatedContent"
-    FROM "chapters"
-    WHERE "novel_id" = ${novelId}
-      AND "translated_content" IS NOT NULL
-      AND regexp_replace("translated_content", '[[:space:]]', '', 'g') <> ''
-    ORDER BY "chapters"."number"
-  `.cursor(1);
+// Chapters are read in keyset batches rather than through one held cursor: a
+// cursor keeps a pool connection checked out for the whole client-paced
+// download, while batches release it between fetches without ever buffering the
+// whole novel. `(novel_id, number)` is unique, so `number > $last` is a stable
+// keyset; chapter numbers are positive, so "0" starts the scan.
+const EXPORT_BATCH_SIZE = 25;
 
-  for await (const rows of cursor) {
-    if (rows[0]) yield rows[0];
+async function* chapterCursor(novelId: string): AsyncGenerator<ExportChapterRow> {
+  let lastNumber = "0";
+  while (true) {
+    const rows = await queryClient<ExportChapterRow[]>`
+      SELECT
+        "number"::text AS "number",
+        "title",
+        "translated_title" AS "translatedTitle",
+        "translated_content" AS "translatedContent"
+      FROM "chapters"
+      WHERE "novel_id" = ${novelId}
+        AND "number" > ${lastNumber}
+        AND "translated_content" IS NOT NULL
+        AND regexp_replace("translated_content", '[[:space:]]', '', 'g') <> ''
+      ORDER BY "chapters"."number"
+      LIMIT ${EXPORT_BATCH_SIZE}
+    `;
+    if (rows.length === 0) return;
+    for (const row of rows) yield row;
+    lastNumber = rows[rows.length - 1].number;
+    if (rows.length < EXPORT_BATCH_SIZE) return;
   }
 }
 

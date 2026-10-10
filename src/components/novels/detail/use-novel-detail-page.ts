@@ -13,8 +13,10 @@ import { useTranslationJob } from "@/components/translation/job/use-translation-
 import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
 import {
   adminNovelDetailMetricsQueryOptions,
+  adminNovelResidualQueryOptions,
   novelQueryOptions,
 } from "@/lib/content/novel/novel.query";
+import { residualRevisionOf } from "@/lib/content/novel/residual-revision";
 import { useReaderState } from "@/lib/reader/use-reader-state";
 
 let currentTimeSnapshot = 0;
@@ -97,7 +99,16 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
 
   const chapters = chaptersQuery.data ?? EMPTY_CHAPTERS;
   const metrics = metricsQuery.data;
-  const residualScriptChapters = metrics?.residualScriptChapters ?? EMPTY_RESIDUAL_SCRIPTS;
+  const approvedTermCount = metrics?.glossaryStats.approved ?? 0;
+  const residualRevision = useMemo(
+    () => residualRevisionOf(chapters, approvedTermCount),
+    [chapters, approvedTermCount],
+  );
+  const residualQuery = useQuery({
+    ...adminNovelResidualQueryOptions(novelId, residualRevision),
+    enabled: isAdmin && chaptersQuery.isSuccess,
+  });
+  const residualScriptChapters = residualQuery.data ?? EMPTY_RESIDUAL_SCRIPTS;
   const residualScriptMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of residualScriptChapters) {
@@ -226,6 +237,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
     queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
     queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["adminNovelResidual", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
   }, [queryClient, novelId]);
 

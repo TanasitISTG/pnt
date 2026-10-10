@@ -14,24 +14,14 @@ type SendOutboxEvent = (event: { name: string; data: Record<string, unknown> }) 
 
 const sendOutboxEvent: SendOutboxEvent = (event) => inngest.send(event as never);
 
-export async function dispatchWorkflowOutboxEvent(
-  outboxId: string,
-  send: SendOutboxEvent = sendOutboxEvent,
+type WorkflowOutboxRow = typeof workflowOutbox.$inferSelect;
+
+// Deliver a row the caller already selected. Both dispatch paths share this so
+// the sweep never re-reads a row it just fetched.
+async function deliverWorkflowOutboxRow(
+  row: WorkflowOutboxRow,
+  send: SendOutboxEvent,
 ): Promise<boolean> {
-  const [row] = await db
-    .select()
-    .from(workflowOutbox)
-    .where(
-      and(
-        eq(workflowOutbox.id, outboxId),
-        eq(workflowOutbox.status, "pending"),
-        lte(workflowOutbox.availableAt, sql`CURRENT_TIMESTAMP`),
-      ),
-    )
-    .limit(1);
-
-  if (!row) return false;
-
   try {
     const data = JSON.parse(row.payloadJson) as Record<string, unknown>;
     await send({ name: row.eventName, data });
@@ -57,9 +47,30 @@ export async function dispatchWorkflowOutboxEvent(
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(workflowOutbox.id, row.id), eq(workflowOutbox.status, "pending")));
-    log("warn", "Workflow outbox dispatch deferred", { outboxId, error: message });
+    log("warn", "Workflow outbox dispatch deferred", { outboxId: row.id, error: message });
     return false;
   }
+}
+
+export async function dispatchWorkflowOutboxEvent(
+  outboxId: string,
+  send: SendOutboxEvent = sendOutboxEvent,
+): Promise<boolean> {
+  const [row] = await db
+    .select()
+    .from(workflowOutbox)
+    .where(
+      and(
+        eq(workflowOutbox.id, outboxId),
+        eq(workflowOutbox.status, "pending"),
+        lte(workflowOutbox.availableAt, sql`CURRENT_TIMESTAMP`),
+      ),
+    )
+    .limit(1);
+
+  if (!row) return false;
+
+  return deliverWorkflowOutboxRow(row, send);
 }
 
 export async function dispatchWorkflowOutboxEventBestEffort(outboxId: string): Promise<void> {
@@ -76,7 +87,7 @@ export async function dispatchWorkflowOutboxEventBestEffort(outboxId: string): P
 
 export async function dispatchPendingWorkflowOutbox(limit = 25) {
   const rows = await db
-    .select({ id: workflowOutbox.id })
+    .select()
     .from(workflowOutbox)
     .where(
       and(
@@ -88,7 +99,7 @@ export async function dispatchPendingWorkflowOutbox(limit = 25) {
     .limit(limit);
 
   const results = await mapWithConcurrency(rows, OUTBOX_DISPATCH_CONCURRENCY, (row) =>
-    dispatchWorkflowOutboxEvent(row.id),
+    deliverWorkflowOutboxRow(row, sendOutboxEvent),
   );
   const sent = results.reduce((count, wasSent) => count + Number(wasSent), 0);
   return { examined: rows.length, sent };

@@ -10,7 +10,7 @@ import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import {
-  chapterTranslationPresent,
+  chapterHasTranslation,
   novelLive,
   chapterVisibleToGuests,
 } from "@/lib/content/publish/publish";
@@ -63,7 +63,7 @@ export const listChapters = createServerFn({ method: "GET" })
           number: chapters.number,
           title: chapters.title,
           translatedTitle: chapters.translatedTitle,
-          hasTranslation: chapterTranslationPresent(),
+          hasTranslation: chapterHasTranslation(),
           rawCharCount: chapters.rawCharCount,
           status: chapters.status,
           publishedAt: chapters.publishedAt,

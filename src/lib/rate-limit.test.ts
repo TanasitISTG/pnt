@@ -1,7 +1,10 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 
 const { envState, execute, getRequestHeaders, setResponseStatus, log } = vi.hoisted(() => ({
-  envState: { RATE_LIMIT_TRUSTED_PROXY_HOPS: 0 },
+  envState: {
+    RATE_LIMIT_TRUSTED_PROXY_HOPS: 0,
+    VERCEL: undefined as string | undefined,
+  },
   execute: vi.fn(),
   getRequestHeaders: vi.fn(),
   setResponseStatus: vi.fn(),
@@ -28,6 +31,7 @@ import { RateLimitError } from "@/lib/server-fn-error";
 beforeEach(() => {
   vi.resetAllMocks();
   envState.RATE_LIMIT_TRUSTED_PROXY_HOPS = 0;
+  envState.VERCEL = undefined;
   getRequestHeaders.mockReturnValue(new Headers());
   execute.mockResolvedValue([{ count: 1 }]);
 });
@@ -70,6 +74,29 @@ describe("extractIp", () => {
 
   it("returns null when x-forwarded-for is absent", () => {
     envState.RATE_LIMIT_TRUSTED_PROXY_HOPS = 1;
+    expect(extractIp(new Headers())).toBeNull();
+  });
+
+  it("trusts Vercel's forwarded header over a proxy-supplied x-forwarded-for", () => {
+    envState.VERCEL = "1";
+    const headers = new Headers({
+      "x-forwarded-for": "203.0.113.195",
+      "x-vercel-forwarded-for": "198.51.100.7",
+    });
+    expect(extractIp(headers)).toBe("198.51.100.7");
+  });
+
+  it("falls back to x-real-ip then x-forwarded-for on Vercel", () => {
+    envState.VERCEL = "1";
+    expect(extractIp(new Headers({ "x-real-ip": "198.51.100.9" }))).toBe("198.51.100.9");
+    expect(extractIp(new Headers({ "x-forwarded-for": "198.51.100.10, 10.0.0.1" }))).toBe(
+      "198.51.100.10",
+    );
+  });
+
+  it("returns null on Vercel when the trusted header is malformed or missing", () => {
+    envState.VERCEL = "1";
+    expect(extractIp(new Headers({ "x-vercel-forwarded-for": "not-an-address" }))).toBeNull();
     expect(extractIp(new Headers())).toBeNull();
   });
 });
@@ -152,6 +179,14 @@ describe("rate-limit request behavior", () => {
     expect(execute).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith("warn", "rate-limit skipped without trusted client IP", {});
     expect(setResponseStatus).not.toHaveBeenCalled();
+  });
+
+  it("applies guest limiting on Vercel without a configured hop count", async () => {
+    envState.VERCEL = "1";
+    getRequestHeaders.mockReturnValue(new Headers({ "x-vercel-forwarded-for": "192.0.2.10" }));
+    await expect(checkRateLimit("guest-read", 60)).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(log).not.toHaveBeenCalled();
   });
 
   it("also allows a trusted guest read when database limiting is unavailable", async () => {

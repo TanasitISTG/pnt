@@ -30,8 +30,10 @@ export async function findOwnedTranslationJob(userId: string, lookup: Translatio
 
   if (!whereCondition) return null;
 
+  // Only the chapter title is displayed; selecting the whole row would drag
+  // both wide content columns along for a logs dialog.
   const [row] = await db
-    .select({ job: translationJobs, chapter: chapters })
+    .select({ job: translationJobs, chapterTitle: chapters.title })
     .from(translationJobs)
     .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
     .innerJoin(novels, eq(chapters.novelId, novels.id))

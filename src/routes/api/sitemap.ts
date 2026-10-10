@@ -6,6 +6,7 @@ import { novels, chapters } from "@/lib/db/schema";
 import { chapterVisibleToGuests, novelLive } from "@/lib/content/publish/publish";
 import { RateLimitError } from "@/lib/server-fn-error";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { revalidatingPublicCacheControl } from "@/lib/cache-control";
 
 const escapeXml = (str: string) =>
   str
@@ -85,7 +86,7 @@ ${urls.join("\n")}
           return new Response(xml, {
             headers: {
               "Content-Type": "application/xml; charset=utf-8",
-              "Cache-Control": "public, max-age=3600",
+              "Cache-Control": revalidatingPublicCacheControl(3600, 86400),
             },
           });
         } catch (err) {

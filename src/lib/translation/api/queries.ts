@@ -141,7 +141,17 @@ export const getTranslationJobDetails = createServerFn({ method: "GET" })
 
       const [chunkRows, runtime] = await Promise.all([
         db
-          .select()
+          .select({
+            index: translationJobChunks.index,
+            textLength: translationJobChunks.textLength,
+            // Only the presence of a translation is reported, so the chunk text
+            // and translation bodies stay out of the query.
+            hasTranslation: sql<boolean>`${translationJobChunks.translation} IS NOT NULL`,
+            promptTokens: translationJobChunks.promptTokens,
+            completionTokens: translationJobChunks.completionTokens,
+            latencyMs: translationJobChunks.latencyMs,
+            error: translationJobChunks.error,
+          })
           .from(translationJobChunks)
           .where(eq(translationJobChunks.jobId, row.job.id))
           .orderBy(asc(translationJobChunks.index)),
@@ -157,7 +167,7 @@ export const getTranslationJobDetails = createServerFn({ method: "GET" })
       const chunks: SlimChunkProgress[] = chunkRows.map((chunk) => ({
         index: chunk.index,
         textLength: chunk.textLength,
-        hasTranslation: chunk.translation !== null,
+        hasTranslation: chunk.hasTranslation,
         promptTokens: chunk.promptTokens ?? undefined,
         completionTokens: chunk.completionTokens ?? undefined,
         latencyMs: chunk.latencyMs ?? undefined,
@@ -167,7 +177,7 @@ export const getTranslationJobDetails = createServerFn({ method: "GET" })
       return {
         id: row.job.id,
         chapterId: row.job.chapterId,
-        chapterTitle: row.chapter.title,
+        chapterTitle: row.chapterTitle,
         status: row.job.status,
         doneChunks: row.job.doneChunks,
         totalChunks: row.job.totalChunks,

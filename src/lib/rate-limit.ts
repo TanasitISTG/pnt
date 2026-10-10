@@ -11,7 +11,26 @@ import { RateLimitError } from "@/lib/server-fn-error";
 // Guests hit read endpoints without a session; per-IP per-minute cap for scraping control.
 export const GUEST_READ_LIMIT = 60;
 
+function firstPublicAddress(value: string | null): string | null {
+  if (!value) return null;
+  // A forwarded list is client-first; take the leftmost entry.
+  const first = value.split(",")[0];
+  return first ? (normalizeIpAddress(first)?.address ?? null) : null;
+}
+
 export function extractIp(headers: Headers): string | null {
+  // On Vercel, x-forwarded-for is overwritten by the platform and external IPs
+  // are not forwarded, so it cannot be spoofed; x-vercel-forwarded-for is the
+  // variant that stays correct behind an external proxy. Trust it directly
+  // instead of requiring a configured hop count.
+  if (env.VERCEL === "1") {
+    const trusted =
+      headers.get("x-vercel-forwarded-for") ??
+      headers.get("x-real-ip") ??
+      headers.get("x-forwarded-for");
+    return firstPublicAddress(trusted);
+  }
+
   const hops = env.RATE_LIMIT_TRUSTED_PROXY_HOPS;
   if (hops === 0) return null;
   const forwarded = headers.get("x-forwarded-for");
