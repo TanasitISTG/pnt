@@ -65,13 +65,30 @@ function ProductionCover({
   priority,
   onError,
 }: ProductionCoverProps) {
+  const imageRef = useRef<HTMLImageElement | null>(null);
+
+  // A cover that failed before React attached listeners (eager SSR images) is
+  // never reported, leaving a broken <img> behind. Its alt is transparent, so
+  // treat an already-failed image as a failure the moment we can inspect it.
+  useEffect(() => {
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth === 0) onError();
+  }, [onError]);
+
   return (
     <div
       ref={rootRef}
       className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}
     >
+      {/* ponytail: Gecko (Firefox/Zen/Firefox Android) paints `alt` as a
+      placeholder inside an image box that has no pixels yet, so the novel
+      title flashes over the cover while the request is in flight; Chromium
+      only paints it after an error. `text-transparent` hides that placeholder
+      without dropping the alt from the accessibility tree, and real failures
+      already swap in CoverFallback. */}
       {visible ? (
         <img
+          ref={imageRef}
           src={url}
           srcSet={srcSet}
           sizes={sizes}
@@ -80,7 +97,7 @@ function ProductionCover({
           fetchPriority={priority ? "high" : "auto"}
           decoding={priority ? "sync" : "async"}
           onError={onError}
-          className="w-full h-full object-cover rounded-[inherit]"
+          className="w-full h-full object-cover rounded-[inherit] text-transparent"
         />
       ) : null}
     </div>
