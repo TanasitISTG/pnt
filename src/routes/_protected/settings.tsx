@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AlertCircle } from "lucide-react";
@@ -7,18 +7,15 @@ import {
   ProviderSettingsCard,
   type ProviderTestResult,
 } from "@/components/settings/provider-settings-card";
-import { ChangePasswordCard } from "@/components/settings/change-password-card";
 import { BackupCard } from "@/components/settings/backup-card";
 import {
   getProviderSettings,
   saveProviderSettings,
   testProviderConnection,
-  changePassword,
 } from "@/lib/settings/functions";
 import type {
   SaveProviderSettingsInput,
   TestProviderConnectionInput,
-  ChangePasswordInput,
 } from "@/lib/settings/schemas";
 
 export const Route = createFileRoute("/_protected/settings")({
@@ -46,19 +43,6 @@ async function handleTestConnection(
   }
 }
 
-async function handleChangePassword(data: ChangePasswordInput): Promise<boolean> {
-  try {
-    await changePassword({ data });
-
-    toast.success("Password updated successfully");
-    return true;
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to update password";
-    toast.error(message);
-    return false;
-  }
-}
-
 function SettingsPage() {
   const initialSettings = Route.useLoaderData();
 
@@ -83,7 +67,14 @@ function SettingsPage() {
       <div>
         <h1 className="text-display-alt font-semibold text-foreground">Settings</h1>
         <p className="mt-1 text-body-lg text-muted-foreground">
-          Configure your AI provider for translations and manage your admin account.
+          Configure your AI provider for translations and manage your data.
+        </p>
+        <p className="mt-2 text-caption text-muted-foreground">
+          Your display name, photo and password live in{" "}
+          <Link to="/profile" className="underline underline-offset-4 hover:text-primary">
+            Profile
+          </Link>
+          .
         </p>
       </div>
 
@@ -109,9 +100,6 @@ function SettingsPage() {
 
       {/* Backup Section */}
       <BackupCard />
-
-      {/* Account Section */}
-      <ChangePasswordCard onSubmit={handleChangePassword} />
     </div>
   );
 }

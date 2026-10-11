@@ -1,6 +1,17 @@
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, LogIn, LogOut, Menu, Moon, Settings, Sun, X } from "lucide-react";
+import {
+  ChevronDown,
+  ListChecks,
+  LogIn,
+  LogOut,
+  Menu,
+  Moon,
+  Settings,
+  Sun,
+  UserRound,
+  X,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
@@ -15,14 +26,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
+import { UserAvatar } from "@/components/user-avatar";
 import { signOut } from "@/lib/auth/auth-client";
-import type { User as AuthUser } from "@/lib/auth/auth";
 import { useConsent } from "@/lib/consent";
+import { useViewerAvatar } from "@/lib/profile/use-viewer-avatar";
+import type { ResolvedAvatar, ViewerUser } from "@/lib/profile/types";
 import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
-  user: AuthUser | null;
+  user: ViewerUser | null;
   children: React.ReactNode;
   layout?: "default" | "reader";
 }
@@ -38,6 +51,7 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
   const router = useRouter();
   const queryClient = useQueryClient();
   const { consent, hydrated } = useConsent();
+  const avatar = useViewerAvatar();
   const year = useSyncExternalStore(subscribeToYear, getClientYear, getServerYear);
 
   useEffect(() => {
@@ -122,7 +136,12 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
             <ThemeToggle />
             <div className="hidden md:block">
               {user ? (
-                <UserDropdown user={user} signingOut={signingOut} onSignOut={handleSignOut} />
+                <UserDropdown
+                  user={user}
+                  avatar={avatar}
+                  signingOut={signingOut}
+                  onSignOut={handleSignOut}
+                />
               ) : (
                 <Button variant="ghost" render={<Link to="/login" />}>
                   <LogIn className="size-4" />
@@ -156,6 +175,13 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
               </Link>
               {user && (
                 <>
+                  <Link
+                    to="/profile"
+                    className="text-body-lg text-foreground no-underline"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Profile
+                  </Link>
                   <Link
                     to="/jobs"
                     preload={false}
@@ -255,10 +281,12 @@ function ThemeToggle() {
 
 function UserDropdown({
   user,
+  avatar,
   signingOut,
   onSignOut,
 }: {
-  user: AuthUser;
+  user: ViewerUser;
+  avatar: ResolvedAvatar | null;
   signingOut: boolean;
   onSignOut: () => void;
 }) {
@@ -267,19 +295,32 @@ function UserDropdown({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="ghost" />} disabled={signingOut}>
+        <UserAvatar name={displayName} avatar={avatar} size="sm" />
         {displayName}
         <ChevronDown className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuGroup>
           <DropdownMenuLabel>
-            <div className="text-card-title text-foreground">{user.name}</div>
-            <div className="text-caption text-muted-foreground">{user.email}</div>
+            <div className="flex items-center gap-2">
+              <UserAvatar name={displayName} avatar={avatar} size="sm" />
+              <div className="min-w-0">
+                <div className="text-card-title truncate text-foreground">{user.name}</div>
+                <div className="text-caption truncate text-muted-foreground">{user.email}</div>
+              </div>
+            </div>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          <DropdownMenuItem
+            render={<Link to="/profile" className="no-underline text-foreground" />}
+          >
+            <UserRound className="size-4" />
+            Profile
+          </DropdownMenuItem>
           <DropdownMenuItem render={<Link to="/jobs" className="no-underline text-foreground" />}>
+            <ListChecks className="size-4" />
             Jobs
           </DropdownMenuItem>
           <DropdownMenuItem

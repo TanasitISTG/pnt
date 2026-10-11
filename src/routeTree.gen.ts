@@ -17,6 +17,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ProtectedJobsRouteImport } from './routes/_protected/jobs'
+import { Route as ProtectedProfileRouteImport } from './routes/_protected/profile'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
 import { Route as ApiBackupsRouteImport } from './routes/api/backups'
@@ -24,6 +25,7 @@ import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
 import { Route as ApiExportsSplatRouteImport } from './routes/api/exports/$'
 import { Route as ApiStorageUploadRouteImport } from './routes/api/storage/upload'
@@ -71,6 +73,11 @@ const ProtectedJobsRoute = ProtectedJobsRouteImport.update({
   path: '/jobs',
   getParentRoute: () => ProtectedRoute,
 } as any)
+const ProtectedProfileRoute = ProtectedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => ProtectedRoute,
+} as any)
 const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -104,6 +111,11 @@ const ProtectedNovelsNewRoute = ProtectedNovelsNewRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAvatarsSplatRoute = ApiAvatarsSplatRouteImport.update({
+  id: '/api/avatars/$',
+  path: '/api/avatars/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCoversSplatRoute = ApiCoversSplatRouteImport.update({
@@ -160,12 +172,14 @@ export interface FileRoutesByFullPath {
   '/robots.txt': typeof RobotsDottxtRoute
   '/terms': typeof TermsRoute
   '/jobs': typeof ProtectedJobsRoute
+  '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
@@ -183,12 +197,14 @@ export interface FileRoutesByTo {
   '/robots.txt': typeof RobotsDottxtRoute
   '/terms': typeof TermsRoute
   '/jobs': typeof ProtectedJobsRoute
+  '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
@@ -208,6 +224,7 @@ export interface FileRoutesById {
   '/robots.txt': typeof RobotsDottxtRoute
   '/terms': typeof TermsRoute
   '/_protected/jobs': typeof ProtectedJobsRoute
+  '/_protected/profile': typeof ProtectedProfileRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
@@ -215,6 +232,7 @@ export interface FileRoutesById {
   '/_public/': typeof PublicIndexRoute
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
@@ -234,12 +252,14 @@ export interface FileRouteTypes {
     | '/robots.txt'
     | '/terms'
     | '/jobs'
+    | '/profile'
     | '/settings'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
     | '/novels/new'
     | '/api/auth/$'
+    | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
@@ -257,12 +277,14 @@ export interface FileRouteTypes {
     | '/robots.txt'
     | '/terms'
     | '/jobs'
+    | '/profile'
     | '/settings'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
     | '/novels/new'
     | '/api/auth/$'
+    | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
@@ -281,6 +303,7 @@ export interface FileRouteTypes {
     | '/robots.txt'
     | '/terms'
     | '/_protected/jobs'
+    | '/_protected/profile'
     | '/_protected/settings'
     | '/api/backups'
     | '/api/inngest'
@@ -288,6 +311,7 @@ export interface FileRouteTypes {
     | '/_public/'
     | '/_protected/novels/new'
     | '/api/auth/$'
+    | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
@@ -310,6 +334,7 @@ export interface RootRouteChildren {
   ApiInngestRoute: typeof ApiInngestRoute
   ApiSitemapRoute: typeof ApiSitemapRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiAvatarsSplatRoute: typeof ApiAvatarsSplatRoute
   ApiCoversSplatRoute: typeof ApiCoversSplatRoute
   ApiExportsSplatRoute: typeof ApiExportsSplatRoute
   ApiStorageUploadRoute: typeof ApiStorageUploadRoute
@@ -373,6 +398,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedJobsRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/profile': {
+      id: '/_protected/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProtectedProfileRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
     '/_protected/settings': {
       id: '/_protected/settings'
       path: '/settings'
@@ -420,6 +452,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/avatars/$': {
+      id: '/api/avatars/$'
+      path: '/api/avatars/$'
+      fullPath: '/api/avatars/$'
+      preLoaderRoute: typeof ApiAvatarsSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/covers/$': {
@@ -483,6 +522,7 @@ declare module '@tanstack/react-router' {
 
 interface ProtectedRouteChildren {
   ProtectedJobsRoute: typeof ProtectedJobsRoute
+  ProtectedProfileRoute: typeof ProtectedProfileRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
   ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
   ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
@@ -492,6 +532,7 @@ interface ProtectedRouteChildren {
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedJobsRoute: ProtectedJobsRoute,
+  ProtectedProfileRoute: ProtectedProfileRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,
   ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
   ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,
@@ -532,6 +573,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInngestRoute: ApiInngestRoute,
   ApiSitemapRoute: ApiSitemapRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiAvatarsSplatRoute: ApiAvatarsSplatRoute,
   ApiCoversSplatRoute: ApiCoversSplatRoute,
   ApiExportsSplatRoute: ApiExportsSplatRoute,
   ApiStorageUploadRoute: ApiStorageUploadRoute,

@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles/globals.css?inline";
 import sofiaSansUrl from "@fontsource-variable/sofia-sans/files/sofia-sans-latin-wght-normal.woff2?url";
 
-import { getSession } from "../lib/auth/functions";
+import { getViewerProfile } from "@/lib/profile/functions";
 import { getConsent, useConsent } from "@/lib/consent";
 import { captureException, updatePostHogConsent } from "../lib/posthog";
 import { ConsentBanner } from "@/components/consent-banner";
@@ -25,8 +25,8 @@ type QueryDevtoolsModule = typeof import("../integrations/tanstack-query/devtool
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   notFoundComponent: NotFoundPage,
   beforeLoad: async () => {
-    const session = await getSession();
-    return { user: session?.user ?? null };
+    const viewer = await getViewerProfile();
+    return { user: viewer?.user ?? null, avatar: viewer?.avatar ?? null };
   },
   head: () => ({
     meta: [

@@ -10,6 +10,20 @@ export const COVER_ORIGINAL_NAME = "original";
 export const COVER_VARIANT_CONTENT_TYPE = "image/webp";
 /** Public bucket prefix. Must stay in sync with the bucket lifecycle rules. */
 export const COVER_KEY_ROOT = "covers";
+
+/**
+ * Profile-photo variants, generated at upload time. Square, because the shell
+ * renders the photo in a circle and a portrait crop would distort a face.
+ */
+export const AVATAR_WIDTHS = [64, 128, 256] as const;
+export type AvatarWidth = (typeof AVATAR_WIDTHS)[number];
+export const AVATAR_VARIANT_CONTENT_TYPE = "image/webp";
+/** Avatars share the public bucket with covers: guests will see them too. */
+export const AVATAR_KEY_ROOT = "avatars";
+
+export function objectKey(prefix: string, name: string): string {
+  return `${prefix}/${name}`;
+}
 export const EPUB_UPLOAD_KEY_ROOT = "epub-uploads";
 export const EXPORT_KEY_ROOT = "exports";
 /** Bumping this invalidates every cached export. */
@@ -24,7 +38,7 @@ export function coverPrefix(novelId: string, segment: string): string {
 }
 
 export function coverObjectKey(prefix: string, name: string): string {
-  return `${prefix}/${name}`;
+  return objectKey(prefix, name);
 }
 
 export function coverVariantKey(prefix: string, width: CoverWidth): string {
@@ -38,6 +52,57 @@ export function defaultCoverWidth(): CoverWidth {
 
 export function coverOriginalKey(prefix: string): string {
   return coverObjectKey(prefix, COVER_ORIGINAL_NAME);
+}
+
+export function avatarPrefix(userId: string, segment: string): string {
+  return `${AVATAR_KEY_ROOT}/${userId}/${segment}`;
+}
+
+/**
+ * Parses `avatars/<userId>/<segment>` back into its parts, or null when the stored
+ * value has any other shape. Callers use it to address an avatar without a second
+ * column, and to reject a request whose URL does not match the stored prefix.
+ */
+export function parseAvatarPrefix(prefix: string): { userId: string; segment: string } | null {
+  const parts = prefix.split("/");
+  if (parts.length !== 3) return null;
+  const [root, userId, segment] = parts;
+  if (root !== AVATAR_KEY_ROOT || !userId || !segment) return null;
+  return { userId, segment };
+}
+
+/**
+ * The prefix an avatar object key belongs to (`avatars/<userId>/<segment>/<file>`),
+ * or null when the key has any other shape. Reconciling stored objects against the
+ * rows that point at them needs the grouping without re-deriving the layout.
+ */
+export function avatarObjectKeyPrefix(key: string): string | null {
+  const parts = key.split("/");
+  if (parts.length < 4) return null;
+  const prefix = parts.slice(0, 3).join("/");
+  return parseAvatarPrefix(prefix) ? prefix : null;
+}
+
+export function avatarVariantKey(prefix: string, width: AvatarWidth): string {
+  return objectKey(prefix, `${width}.webp`);
+}
+
+export function avatarOriginalKey(prefix: string): string {
+  return objectKey(prefix, COVER_ORIGINAL_NAME);
+}
+
+/** The widest variant, served when a caller does not ask for a specific width. */
+export function defaultAvatarWidth(): AvatarWidth {
+  return AVATAR_WIDTHS[AVATAR_WIDTHS.length - 1];
+}
+
+/**
+ * Route that serves an avatar when no public CDN origin is configured (the
+ * filesystem adapter used in local dev and CI). The path carries the unguessable
+ * segment, so a replaced photo is a new URL and every response can be immutable.
+ */
+export function avatarProxyPath(userId: string, segment: string, width: AvatarWidth): string {
+  return `/api/avatars/${userId}/${segment}?w=${width}`;
 }
 
 export function epubUploadKey(uploadId: string): string {

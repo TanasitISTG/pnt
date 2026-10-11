@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AVATAR_KEY_ROOT,
+  AVATAR_WIDTHS,
+  avatarObjectKeyPrefix,
+  avatarOriginalKey,
+  avatarPrefix,
+  avatarProxyPath,
+  avatarVariantKey,
   COVER_WIDTHS,
+  defaultAvatarWidth,
+  parseAvatarPrefix,
   coverObjectKey,
   coverOriginalKey,
   coverPrefix,
@@ -24,6 +33,56 @@ describe("storage keys", () => {
 
   it("defaults to the widest variant", () => {
     expect(defaultCoverWidth()).toBe(COVER_WIDTHS[COVER_WIDTHS.length - 1]);
+  });
+
+  it("keeps avatars under a per-user prefix with an unguessable segment", () => {
+    const prefix = avatarPrefix("user-1", "segment-1");
+    expect(prefix).toBe("avatars/user-1/segment-1");
+    expect(avatarOriginalKey(prefix)).toBe("avatars/user-1/segment-1/original");
+    expect(avatarVariantKey(prefix, 128)).toBe("avatars/user-1/segment-1/128.webp");
+    expect(defaultAvatarWidth()).toBe(AVATAR_WIDTHS[AVATAR_WIDTHS.length - 1]);
+  });
+
+  it("round-trips an avatar prefix and rejects any other shape", () => {
+    expect(parseAvatarPrefix("avatars/user-1/segment-1")).toEqual({
+      userId: "user-1",
+      segment: "segment-1",
+    });
+    for (const value of [
+      "",
+      "avatars",
+      "avatars/user-1",
+      "avatars/user-1/segment-1/extra",
+      "covers/user-1/segment-1",
+      `${AVATAR_KEY_ROOT}//segment-1`,
+    ]) {
+      expect(parseAvatarPrefix(value)).toBeNull();
+    }
+  });
+
+  it("groups avatar objects by the prefix a user row stores", () => {
+    const prefix = avatarPrefix("user-1", "segment-1");
+
+    for (const key of [avatarOriginalKey(prefix), avatarVariantKey(prefix, 64)]) {
+      expect(avatarObjectKeyPrefix(key)).toBe(prefix);
+    }
+    // Anything deeper than `<prefix>/<file>` still belongs to that set, which is what a
+    // prefix delete would remove anyway.
+    expect(avatarObjectKeyPrefix(`${prefix}/extra/deeper`)).toBe(prefix);
+    for (const key of [
+      prefix,
+      "avatars/user-1",
+      "avatars",
+      "",
+      "covers/novel-1/segment-1/640.webp",
+      "avatars-archive/user-1/segment-1/640.webp",
+    ]) {
+      expect(avatarObjectKeyPrefix(key)).toBeNull();
+    }
+  });
+
+  it("addresses the fallback route by the same segment the key carries", () => {
+    expect(avatarProxyPath("user-1", "segment-1", 64)).toBe("/api/avatars/user-1/segment-1?w=64");
   });
 
   it("keys staged EPUB archives and exports by their identifying data", () => {

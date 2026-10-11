@@ -200,6 +200,16 @@ Cover uploads are validated and re-encoded into WebP variants (320/480/640) plus
 original, so a later variant can be derived without the source upload; deleting a novel's cover
 deletes the whole prefix, and a missing prefix is a no-op.
 
+Profile photos are the one public-bucket object that is not a novel's cover. `user.image` holds a key
+prefix (`avatars/<userId>/<segment>`), built through the same helpers and with the same unguessable
+segment, because guests will see these photos beside comments and author bylines. An upload writes
+square WebP variants (64/128/256) plus a retained original before the row is updated, so a profile
+never points at missing bytes and a replaced photo is a new URL rather than a purge. Where the bucket
+reports no public origin, the resolver falls back to `/api/avatars/<userId>/<segment>?w=`, whose path
+repeats the segment so even that response is immutable. The stored key never reaches a client: the
+viewer resolver exchanges it for URLs, and `user.image` is read only through
+`profile/service.server.ts`.
+
 EPUB uploads are written straight to the private bucket by the browser through a presigned PUT
 for exactly one key and a bounded expiry; the app verifies existence with a metadata `HEAD` rather
 than downloading the object, and the worker reads the archive once to combine and import it. Export
