@@ -17,3 +17,14 @@ export async function resizeAvatar(buffer: Uint8Array, width: AvatarWidth): Prom
     .webp({ quality: 80 })
     .toBuffer();
 }
+
+/**
+ * First frame of a multi-frame image, as PNG.
+ *
+ * Only provider photos reach this: Discord serves animated avatars as GIFs, and the
+ * avatar set stores one of the accepted still types. Reading the default page rather
+ * than `{ animated: true }` is what flattens it.
+ */
+export async function flattenToPng(buffer: Uint8Array): Promise<Uint8Array> {
+  return sharp(buffer).png().toBuffer();
+}

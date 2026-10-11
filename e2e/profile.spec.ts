@@ -70,7 +70,8 @@ test("profile owns the display name, photo, and account security", async ({ page
   await expect(page).toHaveURL(/\/profile$/);
   await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
   await expect(page.getByText("Account & Security")).toBeVisible();
-  await expect(page.getByLabel("Email")).toHaveValue(adminEmail);
+  // Exact: the change-email form on the same page also carries an "Email" label.
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(adminEmail);
 
   // Settings kept the provider work and hands account details over to Profile.
   await page.goto("/settings");

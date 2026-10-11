@@ -39,7 +39,7 @@ export interface ReaderPageControllerProps {
   chapter: ReaderChapterData;
   chapters: ReaderChapterSummary[];
   novel: ReaderNovelData;
-  user: unknown;
+  signedIn: boolean;
   settings: ReaderSettings;
   update: (patch: Partial<ReaderSettings>) => void;
   theme: string | undefined;
@@ -59,7 +59,7 @@ export function useReaderPageController({
   chapter,
   chapters,
   novel,
-  user,
+  signedIn,
   settings,
   update,
   theme,
@@ -73,6 +73,9 @@ export function useReaderPageController({
   toolbarRef,
 }: ReaderPageControllerProps): ReaderPageViewProps {
   const queryClient = useQueryClient();
+  // Ownership, not sign-in, decides what the reader may change: any signed-in account can
+  // read a published novel, but only its owner can edit, translate, or poll job status.
+  const canManage = chapter.canManage;
   const [retranslateConfirmOpen, setRetranslateConfirmOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [panel, setPanel] = useState<"chapters" | "settings" | "bookmarks" | null>(null);
@@ -82,7 +85,7 @@ export function useReaderPageController({
     activeJobs,
     activeJobsError,
     refetchActiveJobs,
-  } = useTranslationJob(novelId, !!user);
+  } = useTranslationJob(novelId, canManage);
   const activeJob = activeJobs.get(chapterId);
   const jobRunning =
     activeJob?.status === "pending" ||
@@ -94,7 +97,7 @@ export function useReaderPageController({
     chapterId,
     novelId,
     chapter,
-    canEdit: !!user,
+    canEdit: canManage,
     jobRunning,
   });
   const { prevChapter, nextChapter, goToChapter } = useChapterNav(novelId, chapterId, chapters);
@@ -133,7 +136,7 @@ export function useReaderPageController({
   useReaderHotkeys({
     viewMode: settings.viewMode,
     resolvedTheme,
-    user,
+    canManage,
     editing: editor.editing,
     hasTranslation,
     chapterLoaded: true,
@@ -200,7 +203,8 @@ export function useReaderPageController({
     readerFontClass,
     settings,
     update,
-    isAdmin: !!user,
+    signedIn,
+    canManage,
     editing: editor.editing,
     jobRunning,
     translationStatus,

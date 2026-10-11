@@ -76,5 +76,5 @@ function ReaderRoutePage() {
   const { novelId, chapterId } = Route.useParams();
   const { user } = Route.useRouteContext();
 
-  return <ReaderPage novelId={novelId} chapterId={chapterId} user={user} />;
+  return <ReaderPage novelId={novelId} chapterId={chapterId} signedIn={Boolean(user)} />;
 }

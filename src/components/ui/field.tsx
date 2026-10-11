@@ -165,7 +165,10 @@ function FieldSeparator({
       <Separator className="absolute inset-0 top-1/2" />
       {children && (
         <span
-          className="relative mx-auto block w-fit bg-background px-2 text-muted-foreground"
+          // `bg-card`, not `bg-background`: fields live inside cards, and in dark mode
+          // the card surface is lighter than the page, so the label's knockout patch
+          // would otherwise show as a rectangle darker than the card behind it.
+          className="relative mx-auto block w-fit bg-card px-2 text-muted-foreground"
           data-slot="field-separator-content"
         >
           {children}

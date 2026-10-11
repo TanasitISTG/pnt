@@ -1,13 +1,13 @@
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 
 import { LibraryEmpty } from "@/components/novels/library/library-empty";
 import { LibraryNoMatches } from "@/components/novels/library/library-no-matches";
 import { LibraryPending } from "@/components/novels/library/library-pending";
 import { LibraryToolbar } from "@/components/novels/library/library-toolbar";
-import { novelsQueryOptions } from "@/components/novels/library/library-query";
+import { novelsQueryOptions, type LibraryScope } from "@/components/novels/library/library-query";
 import { NovelCard } from "@/components/novels/novel-card";
 import {
   selectLibraryNovels,
@@ -16,52 +16,64 @@ import {
 import { QueryErrorState } from "@/components/query-error-state";
 import { Button } from "@/components/ui/button";
 
-const libraryRoute = getRouteApi("/_public/");
+interface LibraryPageProps {
+  scope: LibraryScope;
+  signedIn: boolean;
+  search: LibrarySearch;
+  onSearchChange: (patch: Partial<LibrarySearch>) => void;
+}
 
-export function LibraryPage() {
-  const { user } = libraryRoute.useRouteContext();
-  const search = libraryRoute.useSearch();
-  const navigate = libraryRoute.useNavigate();
-  const { data: novels = [], isPending, isError, error, refetch } = useQuery(novelsQueryOptions);
-  const isAdmin = Boolean(user);
-  const onSearchChange = useCallback(
-    (patch: Partial<LibrarySearch>) => {
-      void navigate({
-        search: (previous) => ({ ...previous, ...patch }),
-        replace: true,
-        resetScroll: false,
-      });
-    },
-    [navigate],
-  );
+/**
+ * One component serves three surfaces: a guest's public catalog, a signed-in
+ * account's workspace, and the shared catalog a signed-in account browses.
+ *
+ * `scope` decides which of those it is, and it is the only thing that decides whether
+ * manage affordances appear — never the mere presence of a session, which used to make
+ * a signed-in reader of someone else's novel look like its owner.
+ *
+ * Search state and navigation arrive as props rather than from a bound route, because
+ * this component is mounted by two routes with their own search schemas.
+ */
+export function LibraryPage({ scope, signedIn, search, onSearchChange }: LibraryPageProps) {
+  const {
+    data: novels = [],
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery(novelsQueryOptions(scope));
+  const canManage = scope === "mine";
   const languages = useMemo(
     () =>
-      Array.from(new Set(novels.map((novel) => `${novel.sourceLang}->${novel.targetLang}`))).sort(
-        (a, b) => a.localeCompare(b),
-      ),
+      Array.from(
+        new Set(novels.map((novel) => `${novel.sourceLang}->${novel.targetLang}`)),
+      ).toSorted((a, b) => a.localeCompare(b)),
     [novels],
   );
   const selectedNovels = useMemo(
-    () => selectLibraryNovels(novels, search, isAdmin),
-    [isAdmin, novels, search],
+    () => selectLibraryNovels(novels, search, canManage),
+    [canManage, novels, search],
   );
 
   if (isPending && novels.length === 0) return <LibraryPending />;
+
+  const heading = canManage ? "Your Library" : signedIn ? "Browse" : "Library";
+  const description = canManage
+    ? "Find a project, resume reading, or continue translating."
+    : signedIn
+      ? "Published novels from everyone on Pnt."
+      : "Browse the translated novel collection.";
 
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-sub font-semibold tracking-tight text-foreground sm:text-section">
-            {user ? "Your Library" : "Library"}
+            {heading}
           </h1>
-          <p className="mt-1 text-body text-muted-foreground">
-            {user
-              ? "Find a project, resume reading, or continue translating."
-              : "Browse the translated novel collection."}
-          </p>
+          <p className="mt-1 text-body text-muted-foreground">{description}</p>
         </div>
-        {user && (
+        {canManage && (
           <Button className="self-start sm:self-auto" render={<Link to="/novels/new" />}>
             <Plus className="size-4" aria-hidden="true" />
             New Novel
@@ -77,13 +89,13 @@ export function LibraryPage() {
           className="min-h-[45vh]"
         />
       ) : novels.length === 0 ? (
-        <LibraryEmpty isAdmin={isAdmin} />
+        <LibraryEmpty canManage={canManage} signedIn={signedIn} />
       ) : (
         <>
           <LibraryToolbar
             search={search}
             languages={languages}
-            isAdmin={isAdmin}
+            isAdmin={canManage}
             resultCount={selectedNovels.length}
             totalCount={novels.length}
             onSearchChange={onSearchChange}
@@ -111,7 +123,7 @@ export function LibraryPage() {
                   key={novel.id}
                   novel={novel}
                   view={search.view}
-                  isAdmin={isAdmin}
+                  isAdmin={canManage}
                   lazyCover={index > 0}
                   priorityCover={index === 0}
                 />

@@ -64,6 +64,10 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
       hasCover: coverKey !== null,
       coverUrl: cover?.url ?? null,
       coverSrcSet: cover?.srcSet ?? null,
+      // This core is only ever produced for the novel's owner (the query filters on
+      // `userId`), and it hydrates the same cache entry `getNovel` fills, so the flag
+      // has to be present on both shapes.
+      canManage: true,
     },
     chapters: chapterList,
   };

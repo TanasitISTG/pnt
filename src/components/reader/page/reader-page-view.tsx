@@ -18,6 +18,8 @@ export interface ReaderChapterData extends ReaderChapterSummary {
   novelId: string;
   rawContent: string;
   translatedContent: string | null;
+  // Server-computed ownership: only the novel's owner may edit, translate, or see summaries.
+  canManage: boolean;
   editedAt: Date | string | null;
   status: string;
 }
@@ -49,7 +51,8 @@ export interface ReaderPageViewProps {
   update: (patch: Partial<ReaderSettings>) => void;
   theme: string | undefined;
   setTheme: (theme: string) => void;
-  isAdmin: boolean;
+  signedIn: boolean;
+  canManage: boolean;
   editing: boolean;
   jobRunning: boolean;
   translationStatus: ReaderTranslationStatus;
@@ -111,7 +114,8 @@ export function ReaderPageView({
   update,
   theme,
   setTheme,
-  isAdmin,
+  signedIn,
+  canManage,
   editing,
   jobRunning,
   translationStatus,
@@ -166,7 +170,8 @@ export function ReaderPageView({
         update={update}
         theme={theme}
         setTheme={setTheme}
-        isAdmin={isAdmin}
+        signedIn={signedIn}
+        canManage={canManage}
         editing={editing}
         jobRunning={jobRunning}
         activeJob={activeJob}
@@ -184,7 +189,7 @@ export function ReaderPageView({
         onTranslateRequest={onTranslateRequest}
         onShortcutsRequest={onShortcutsRequest}
       />
-      {isAdmin && translationStatusError ? (
+      {canManage && translationStatusError ? (
         <QueryErrorState
           title="Unable to refresh translation status"
           error={translationStatusError}
@@ -223,7 +228,7 @@ export function ReaderPageView({
             readerFontClass={readerFontClass}
             sourceLang={novel.sourceLang}
             targetLang={novel.targetLang}
-            isAdmin={isAdmin}
+            canManage={canManage}
             translationStatus={translationStatus}
             highlightsFor={search.open ? search.highlightsFor : undefined}
             proseRef={onProseNodeChange ?? proseRef}
@@ -260,7 +265,7 @@ export function ReaderPageView({
         shortcuts={{
           open: shortcutsOpen,
           onOpenChange: onShortcutsOpenChange,
-          canEdit: isAdmin,
+          canEdit: canManage,
         }}
       />
     </div>

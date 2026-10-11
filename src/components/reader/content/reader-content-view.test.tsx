@@ -22,7 +22,7 @@ describe("ReaderContentView", () => {
           lineHeight={1.75}
           measureRem={42}
           sourceLang="en"
-          isAdmin
+          canManage
           translationStatus={translationStatus}
         />,
       );
@@ -44,7 +44,7 @@ describe("ReaderContentView", () => {
         fontSizePx={18}
         lineHeight={1.75}
         measureRem={42}
-        isAdmin
+        canManage
         translationStatus="error"
       />,
     );
@@ -67,7 +67,7 @@ describe("ReaderContentView", () => {
         fontSizePx={18}
         lineHeight={1.75}
         measureRem={42}
-        isAdmin
+        canManage
       />,
     );
 

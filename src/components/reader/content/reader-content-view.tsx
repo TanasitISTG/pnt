@@ -31,7 +31,7 @@ export function ReaderContentView({
   readerFontClass,
   sourceLang = "zh",
   targetLang = "th",
-  isAdmin = false,
+  canManage = false,
   translationStatus = "idle",
   highlightsFor,
   proseRef,
@@ -46,7 +46,7 @@ export function ReaderContentView({
 
   return (
     <div>
-      {isAdmin && hasTranslation && isFailedTranslation(translationStatus) ? (
+      {canManage && hasTranslation && isFailedTranslation(translationStatus) ? (
         <ReaderTranslationFailureNotice />
       ) : null}
       {viewMode !== "raw" && hasTranslation ? (

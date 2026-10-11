@@ -17,18 +17,28 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
   loaderDeps: () => ({}),
   shouldReload: false,
   loader: async ({ params, context }) => {
+    // The owner path is tried first because it is the only one that may see drafts and
+    // manage state. A signed-in viewer who does not own this novel falls through to the
+    // readable path rather than 404ing, which is what a shared catalog requires: the
+    // server still decides both, since the core query filters on the viewer's own id.
     if (context.user) {
       const core = await getAdminNovelDetailCore({ data: { novelId: params.novelId } });
-      if (!core) throw notFound();
-      hydrateAdminNovelDetailCore(context.queryClient, core);
-      await context.queryClient.ensureQueryData(readerStateQueryOptions(params.novelId));
-      return { novel: core.novel };
+      if (core) {
+        hydrateAdminNovelDetailCore(context.queryClient, core);
+        await context.queryClient.ensureQueryData(readerStateQueryOptions(params.novelId));
+        return { novel: core.novel };
+      }
     }
 
     const novelPromise = context.queryClient.ensureQueryData(novelQueryOptions(params.novelId));
     await Promise.all([
       novelPromise,
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
+      // A signed-in reader of someone else's published novel still gets per-account
+      // progress and bookmarks; a guest keeps the local-storage reader state.
+      context.user
+        ? context.queryClient.ensureQueryData(readerStateQueryOptions(params.novelId))
+        : Promise.resolve(null),
     ]);
     const novel = await novelPromise;
     if (!novel) throw notFound();
@@ -128,7 +138,7 @@ function NovelDetailRoute() {
   return (
     <NovelDetailController
       novelId={novelId}
-      isAdmin={!!user}
+      signedIn={Boolean(user)}
       reviewSearch={reviewSearch}
       onReviewSearchChange={onReviewSearchChange}
     />

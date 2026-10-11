@@ -86,15 +86,24 @@ export interface NovelDetailPageResult {
   sectionProps: NovelDetailSectionData;
   tableProps: Omit<ChapterTableProps, "chapters">;
   dialogProps: NovelDetailDialogData;
+  /** Whether this viewer owns the novel and may manage it. */
+  canManage: boolean;
 }
 
-export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDetailPageResult {
+/**
+ * @param signedIn any session at all, which is what enables account reader state.
+ *   Ownership is *not* passed in: it comes from the novel payload, which the server
+ *   derives from the viewer's session. That keeps a signed-in reader of someone else's
+ *   published novel from being offered manage controls.
+ */
+export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDetailPageResult {
   const queryClient = useQueryClient();
   const novelQuery = useQuery(novelQueryOptions(novelId));
   const chaptersQuery = useQuery(chaptersQueryOptions(novelId));
+  const canManage = novelQuery.data?.canManage ?? false;
   const metricsQuery = useQuery({
     ...adminNovelDetailMetricsQueryOptions(novelId),
-    enabled: isAdmin,
+    enabled: canManage,
   });
 
   const chapters = chaptersQuery.data ?? EMPTY_CHAPTERS;
@@ -106,7 +115,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
   );
   const residualQuery = useQuery({
     ...adminNovelResidualQueryOptions(novelId, residualRevision),
-    enabled: isAdmin && chaptersQuery.isSuccess,
+    enabled: canManage && chaptersQuery.isSuccess,
   });
   const residualScriptChapters = residualQuery.data ?? EMPTY_RESIDUAL_SCRIPTS;
   const residualScriptMap = useMemo(() => {
@@ -117,7 +126,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
     return map;
   }, [residualScriptChapters]);
 
-  const readerState = useReaderState(novelId, isAdmin);
+  const readerState = useReaderState(novelId, signedIn);
   const readerProgress = readerState.progress;
   const readChapterIdSet = useMemo(
     () => new Set(readerProgress.readChapterIds),
@@ -138,7 +147,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
   const firstChapter = chapters[0] ?? null;
   const chaptersReady = chaptersQuery.isSuccess && !chaptersQuery.isError;
   const readingActionsPending = chaptersQuery.isPending || !readerState.ready;
-  const chapterUiLoading = isAdmin && readingActionsPending;
+  const chapterUiLoading = canManage && readingActionsPending;
   const readingProgress = useMemo(() => {
     const totalCount = chapters.length;
     const readCount = chapters.reduce(
@@ -162,7 +171,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
     activeJobs,
     activeJobsError,
     refetchActiveJobs,
-  } = useTranslationJob(novelId, isAdmin && chaptersReady);
+  } = useTranslationJob(novelId, canManage && chaptersReady);
 
   const handleTranslationsDeleted = useCallback(() => {
     clearActiveJobs();
@@ -278,7 +287,7 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
 
   const tableProps: Omit<ChapterTableProps, "chapters"> = {
     novelId,
-    isAdmin,
+    isAdmin: canManage,
     activeJobs,
     readChapterIdSet,
     residualScriptMap,
@@ -423,5 +432,5 @@ export function useNovelDetailPage(novelId: string, isAdmin: boolean): NovelDeta
     },
   };
 
-  return { loadState, sectionProps, tableProps, dialogProps };
+  return { loadState, sectionProps, tableProps, dialogProps, canManage };
 }

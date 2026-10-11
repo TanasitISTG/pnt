@@ -136,11 +136,18 @@ export const getTranslationEvalReportSchema = z.object({
   pageSize: evalPageSizeSchema.default(25),
 });
 
+/**
+ * Review state carried in the novel page's URL, which is a public page a link can be
+ * shared with. Every field keeps its default *and* carries a `.catch`, so a stale or
+ * hand-edited value degrades to the default view instead of throwing a validation
+ * error at the router and replacing the page with an error screen. This is the rule
+ * the operator user list already follows for its own search parameters.
+ */
 export const evalReviewSearchSchema = z.object({
-  reviewReport: z.string().min(1).optional(),
-  reviewFilter: evalReportFilterSchema.default("attention"),
-  reviewPage: z.coerce.number().int().positive().default(1),
-  reviewPageSize: evalPageSizeSchema.default(25),
+  reviewReport: z.string().min(1).optional().catch(undefined),
+  reviewFilter: evalReportFilterSchema.default("attention").catch("attention"),
+  reviewPage: z.coerce.number().int().positive().default(1).catch(1),
+  reviewPageSize: evalPageSizeSchema.default(25).catch(25),
 });
 
 export const evalReportStatusSchema = z.enum(["pending", "running", "done", "error"]);

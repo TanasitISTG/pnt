@@ -41,7 +41,8 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 20. Reader manifests contain only navigation metadata. Full chapter bodies are loaded through the full chapter query, and reader anchors take precedence over saved scroll restoration.
 21. Chapter deletion first acquires the owned novel gate, then observes and locks the pointed translation job before locking the chapter and revalidating the pointer. Active work is terminalized with an exact-generation cancellation outbox event before the chapter and cascaded job rows are deleted; matching reader positions are cleared in the same transaction.
 22. Signed-in reader state is account-scoped and single-writer per `(user, novel)`. Opening a chapter preserves the stored fraction only for that chapter and resets it otherwise; a scroll sample for any other chapter is dropped rather than overwriting the newer position; read marks are idempotent. Guests keep the browser-local equivalent, and reader settings stay browser-local for everyone.
-23. Database rows hold storage keys, never object bytes. Cover keys embed an immutable unguessable segment, so replacing a cover writes a new URL instead of purging a CDN object; private-bucket objects are reachable only through signed URLs or authenticated app routes. Storage failures degrade a feature (a missing cache entry rebuilds, a deleted row's archive is reaped) but never fail open into a public read.
+23. A server function is callable only while the browser graph imports its module. The compiler registers server functions the client build reaches, and every server-side call site resolves through that manifest, so a `createServerFn` that only server code references fails at runtime with `Server function info not found`. Server-only work called from server code — session lookups above all — is `createServerOnlyFn`, which is invoked directly and never consults the manifest.
+24. Database rows hold storage keys, never object bytes. Cover keys embed an immutable unguessable segment, so replacing a cover writes a new URL instead of purging a CDN object; private-bucket objects are reachable only through signed URLs or authenticated app routes. Storage failures degrade a feature (a missing cache entry rebuilds, a deleted row's archive is reaped) but never fail open into a public read.
 
 ## Novel-first mutation protocol
 
@@ -271,6 +272,7 @@ hops (default zero); missing identity or limiter failure logs and allows. README
 - `reader/reader-state.service.ts` owns reader position, read-mark, and bookmark persistence and their ownership scoping; `reader/use-reader-state.ts` selects the account or browser store and serializes client writes.
 - `scrape.ts` and `scrape/parsers.ts`: client-safe source metadata and pure HTML parsing; `scrape/network-policy.server.ts` exclusively owns DNS resolution and private-address rejection.
 - Route-facing server functions authenticate and delegate state transitions; they do not implement worker validity rules.
+- `auth/functions.ts`: `getSession`, `ensureSession`, and `ensureAdminSession` are server-only functions consumed by route handlers and other server functions, so they carry no RPC identity; `getAuthMethods` stays a server function because the sign-in pages fetch it from the browser.
 - Inngest orchestrates retries and per-novel concurrency but is not the source of truth for job validity.
 
 ## Backward-compatibility verification

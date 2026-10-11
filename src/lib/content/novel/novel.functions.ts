@@ -9,7 +9,7 @@ import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { createServerTiming } from "@/lib/server-timing";
-import { novelLive, chapterVisibleToGuests } from "@/lib/content/publish/publish";
+import { novelLive, novelReadable, chapterVisibleToGuests } from "@/lib/content/publish/publish";
 import {
   createNovelSchema,
   updateNovelSchema,
@@ -46,61 +46,70 @@ export interface NovelListItem {
   coverSrcSet: string | null;
 }
 
-export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
-  const timing = createServerTiming();
-  try {
-    return await withSafeHandler(async () => {
-      const session = await timing.measure("auth", () => getSession());
-      if (!session)
-        await timing.measure("rate-limit", () => checkRateLimit("read", GUEST_READ_LIMIT));
+export const listNovels = createServerFn({ method: "GET" })
+  .validator(z.object({ scope: z.enum(["mine", "public"]).default("public") }))
+  .handler(async ({ data }) => {
+    const timing = createServerTiming();
+    try {
+      return await withSafeHandler(async () => {
+        const session = await timing.measure("auth", () => getSession());
+        if (!session)
+          await timing.measure("rate-limit", () => checkRateLimit("read", GUEST_READ_LIMIT));
 
-      const rows = await timing.measure("novels", () =>
-        db
-          .select({
-            id: novels.id,
-            title: novels.title,
-            originalTitle: novels.originalTitle,
-            author: novels.author,
-            description: novels.description,
-            sourceLang: novels.sourceLang,
-            targetLang: novels.targetLang,
-            publishedAt: novels.publishedAt,
-            createdAt: novels.createdAt,
-            updatedAt: novels.updatedAt,
-            hasCover: sql<number>`CASE WHEN ${novels.coverKey} IS NOT NULL THEN 1 ELSE 0 END`,
-            coverKey: novels.coverKey,
-            chapterCount: sql<number>`count(${chapters.id})::int`,
-            translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
-          })
-          .from(novels)
-          .leftJoin(
-            chapters,
-            session
-              ? eq(chapters.novelId, novels.id)
-              : and(eq(chapters.novelId, novels.id), chapterVisibleToGuests()),
-          )
-          .where(session ? eq(novels.userId, session.user.id) : novelLive())
-          .groupBy(novels.id)
-          .orderBy(desc(novels.createdAt)),
-      );
+        const viewerId = session?.user.id ?? null;
+        // "mine" is the signed-in workspace: drafts, scheduled, and live novels, with
+        // every chapter counted. Without a session it yields nothing instead of falling
+        // back to a public filter, so an expired session can never widen the query.
+        if (data.scope === "mine" && !viewerId) return [];
 
-      return rows.map((row) => {
-        const cover = resolvePublicCover(row.coverKey, row.publishedAt);
-        const { coverKey: _coverKey, ...item } = row;
-        return {
-          ...item,
-          chapterCount: Number(row.chapterCount || 0),
-          translatedCount: Number(row.translatedCount || 0),
-          hasCover: Number(row.hasCover || 0),
-          coverUrl: cover?.url ?? null,
-          coverSrcSet: cover?.srcSet ?? null,
-        };
+        const ownOnly = data.scope === "mine" && viewerId !== null;
+        const chapterJoin = ownOnly
+          ? eq(chapters.novelId, novels.id)
+          : and(eq(chapters.novelId, novels.id), chapterVisibleToGuests());
+        const novelFilter = ownOnly && viewerId ? eq(novels.userId, viewerId) : novelLive();
+
+        const rows = await timing.measure("novels", () =>
+          db
+            .select({
+              id: novels.id,
+              title: novels.title,
+              originalTitle: novels.originalTitle,
+              author: novels.author,
+              description: novels.description,
+              sourceLang: novels.sourceLang,
+              targetLang: novels.targetLang,
+              publishedAt: novels.publishedAt,
+              createdAt: novels.createdAt,
+              updatedAt: novels.updatedAt,
+              hasCover: sql<number>`CASE WHEN ${novels.coverKey} IS NOT NULL THEN 1 ELSE 0 END`,
+              coverKey: novels.coverKey,
+              chapterCount: sql<number>`count(${chapters.id})::int`,
+              translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
+            })
+            .from(novels)
+            .leftJoin(chapters, chapterJoin)
+            .where(novelFilter)
+            .groupBy(novels.id)
+            .orderBy(desc(novels.createdAt)),
+        );
+
+        return rows.map((row) => {
+          const cover = resolvePublicCover(row.coverKey, row.publishedAt);
+          const { coverKey: _coverKey, ...item } = row;
+          return {
+            ...item,
+            chapterCount: Number(row.chapterCount || 0),
+            translatedCount: Number(row.translatedCount || 0),
+            hasCover: Number(row.hasCover || 0),
+            coverUrl: cover?.url ?? null,
+            coverSrcSet: cover?.srcSet ?? null,
+          };
+        });
       });
-    });
-  } finally {
-    timing.flush();
-  }
-});
+    } finally {
+      timing.flush();
+    }
+  });
 
 export const getNovel = createServerFn({ method: "GET" })
   .validator(z.object({ novelId: z.string() }))
@@ -123,21 +132,19 @@ export const getNovel = createServerFn({ method: "GET" })
           contextTailLength: novels.contextTailLength,
           publishedAt: novels.publishedAt,
           coverKey: novels.coverKey,
+          userId: novels.userId,
           createdAt: novels.createdAt,
           updatedAt: novels.updatedAt,
         })
         .from(novels)
-        .where(
-          session
-            ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
-            : and(eq(novels.id, data.novelId), novelLive()),
-        )
+        .where(and(eq(novels.id, data.novelId), novelReadable(session?.user.id ?? null)))
         .limit(1);
 
       if (!novel) return null;
 
       const cover = resolvePublicCover(novel.coverKey, novel.publishedAt);
-      const { coverKey, ...novelRest } = novel;
+      const { coverKey, userId, ...novelRest } = novel;
+      const canManage = session?.user.id === userId;
       return {
         ...novelRest,
         sourceLang: novel.sourceLang as "en" | "zh",
@@ -145,8 +152,11 @@ export const getNovel = createServerFn({ method: "GET" })
         hasCover: coverKey !== null,
         coverUrl: cover?.url ?? null,
         coverSrcSet: cover?.srcSet ?? null,
-        // Guests don't get admin-only settings — NovelCover fetches covers from the public /api/covers route.
-        customPrompt: session ? novel.customPrompt : null,
+        // The custom prompt is owner-only. A signed-in reader of someone else's novel
+        // is a reader, and every consumer gates its controls on this flag rather than
+        // on "is there a session".
+        customPrompt: canManage ? novel.customPrompt : null,
+        canManage,
       };
     });
   });
@@ -167,11 +177,7 @@ export const getReaderNovel = createServerFn({ method: "GET" })
           targetLang: novels.targetLang,
         })
         .from(novels)
-        .where(
-          session
-            ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
-            : and(eq(novels.id, data.novelId), novelLive()),
-        )
+        .where(and(eq(novels.id, data.novelId), novelReadable(session?.user.id ?? null)))
         .limit(1);
 
       return novel ?? null;

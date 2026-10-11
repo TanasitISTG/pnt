@@ -2,12 +2,14 @@ import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
+  Compass,
   ListChecks,
   LogIn,
   LogOut,
   Menu,
   Moon,
   Settings,
+  ShieldCheck,
   Sun,
   UserRound,
   X,
@@ -28,6 +30,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { UserAvatar } from "@/components/user-avatar";
 import { signOut } from "@/lib/auth/auth-client";
+import { hasAdminRole } from "@/lib/auth/roles";
 import { useConsent } from "@/lib/consent";
 import { useViewerAvatar } from "@/lib/profile/use-viewer-avatar";
 import type { ResolvedAvatar, ViewerUser } from "@/lib/profile/types";
@@ -53,6 +56,9 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
   const { consent, hydrated } = useConsent();
   const avatar = useViewerAvatar();
   const year = useSyncExternalStore(subscribeToYear, getClientYear, getServerYear);
+  // Operator screens are reachable only from here, and the link is the mirror of the
+  // server's own role check rather than a second copy of the rule.
+  const isAdmin = hasAdminRole(user?.role);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -110,6 +116,14 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
               >
                 Library
               </Link>
+              <Link
+                to="/browse"
+                preload={false}
+                className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
+                activeProps={{ className: "font-semibold" }}
+              >
+                Browse
+              </Link>
               {user && (
                 <>
                   <Link
@@ -127,6 +141,16 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
                   >
                     Settings
                   </Link>
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      preload={false}
+                      className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
+                      activeProps={{ className: "font-semibold" }}
+                    >
+                      Admin
+                    </Link>
+                  )}
                 </>
               )}
             </nav>
@@ -139,14 +163,18 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
                 <UserDropdown
                   user={user}
                   avatar={avatar}
+                  isAdmin={isAdmin}
                   signingOut={signingOut}
                   onSignOut={handleSignOut}
                 />
               ) : (
-                <Button variant="ghost" render={<Link to="/login" />}>
-                  <LogIn className="size-4" />
-                  Sign in
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" render={<Link to="/login" />}>
+                    <LogIn className="size-4" />
+                    Sign in
+                  </Button>
+                  <Button render={<Link to="/signup" />}>Create account</Button>
+                </div>
               )}
             </div>
             <Button
@@ -173,6 +201,24 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
               >
                 Library
               </Link>
+              <Link
+                to="/browse"
+                preload={false}
+                className="text-body-lg text-foreground no-underline"
+                onClick={() => setMenuOpen(false)}
+              >
+                Browse
+              </Link>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  preload={false}
+                  className="text-body-lg text-foreground no-underline"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Admin
+                </Link>
+              )}
               {user && (
                 <>
                   <Link
@@ -216,15 +262,24 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
                   </Button>
                 </>
               ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  render={<Link to="/login" />}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <LogIn className="size-4" />
-                  Sign in
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    render={<Link to="/login" />}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    <LogIn className="size-4" />
+                    Sign in
+                  </Button>
+                  <Button
+                    size="sm"
+                    render={<Link to="/signup" />}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Create account
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -282,11 +337,13 @@ function ThemeToggle() {
 function UserDropdown({
   user,
   avatar,
+  isAdmin,
   signingOut,
   onSignOut,
 }: {
   user: ViewerUser;
   avatar: ResolvedAvatar | null;
+  isAdmin: boolean;
   signingOut: boolean;
   onSignOut: () => void;
 }) {
@@ -318,6 +375,18 @@ function UserDropdown({
           >
             <UserRound className="size-4" />
             Profile
+          </DropdownMenuItem>
+          {isAdmin && (
+            <DropdownMenuItem
+              render={<Link to="/admin" className="no-underline text-foreground" />}
+            >
+              <ShieldCheck className="size-4" />
+              Admin
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem render={<Link to="/browse" className="no-underline text-foreground" />}>
+            <Compass className="size-4" />
+            Browse
           </DropdownMenuItem>
           <DropdownMenuItem render={<Link to="/jobs" className="no-underline text-foreground" />}>
             <ListChecks className="size-4" />

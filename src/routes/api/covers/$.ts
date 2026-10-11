@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { eq, and, lte } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { novels } from "@/lib/db/schema";
 import { getSession } from "@/lib/auth/functions";
+import { novelReadable } from "@/lib/content/publish/publish";
 import { RateLimitError } from "@/lib/server-fn-error";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { immutablePublicCacheControl } from "@/lib/cache-control";
@@ -17,11 +18,13 @@ const coverWidthSchema = z.enum(
 );
 
 /**
- * Ownership- and publication-checked cover delivery.
+ * Readable-cover delivery.
  *
  * Live novels hand the browser a public CDN URL, so this route mainly serves
- * drafts, scheduled novels, and the admin's own previews — the paths where a
- * cover must not be reachable without a session.
+ * drafts, scheduled novels, and an owner's own previews — the paths where a cover
+ * must not be reachable without a session. A signed-in reader of someone else's
+ * published novel is served it too; gating on "has a session" used to 404 exactly
+ * that case.
  */
 export const Route = createFileRoute("/api/covers/$")({
   server: {
@@ -30,7 +33,7 @@ export const Route = createFileRoute("/api/covers/$")({
         try {
           const session = await getSession();
 
-          // Guests are rate-limited; the admin browsing their own library is not.
+          // Guests are rate-limited; a signed-in reader browsing a library is not.
           if (!session) await checkRateLimit("covers", 120);
 
           // Extract novelId from the last segment of the pathname
@@ -50,18 +53,17 @@ export const Route = createFileRoute("/api/covers/$")({
             .select({
               id: novels.id,
               coverKey: novels.coverKey,
+              publishedAt: novels.publishedAt,
             })
             .from(novels)
-            .where(
-              session
-                ? and(eq(novels.id, novelId), eq(novels.userId, session.user.id))
-                : and(eq(novels.id, novelId), lte(novels.publishedAt, new Date())),
-            )
+            .where(and(eq(novels.id, novelId), novelReadable(session?.user.id ?? null)))
             .limit(1);
 
           if (!novel || !novel.coverKey) {
             return new Response("Not Found", { status: 404 });
           }
+
+          const isLive = novel.publishedAt !== null && novel.publishedAt <= new Date();
 
           const storage = getPublicStorage();
           const object = await storage.get(
@@ -76,7 +78,10 @@ export const Route = createFileRoute("/api/covers/$")({
               "Content-Type": object.contentType ?? "image/webp",
               // Guest URLs carry ?v=<updatedAt> (bumps on any novel edit), so a
               // changed cover gets a new URL and the old one can be cached forever.
-              "Cache-Control": session ? "private, max-age=3600" : immutablePublicCacheControl(),
+              // The cache header follows the novel's publication state rather than the
+              // session: a published cover is cacheable by everyone, and a draft cover
+              // must stay private no matter who fetched it.
+              "Cache-Control": isLive ? immutablePublicCacheControl() : "private, max-age=3600",
             },
           });
         } catch (err) {

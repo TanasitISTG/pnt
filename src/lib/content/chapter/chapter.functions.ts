@@ -11,8 +11,8 @@ import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import {
   chapterHasTranslation,
-  novelLive,
-  chapterVisibleToGuests,
+  novelReadable,
+  chapterReadable,
 } from "@/lib/content/publish/publish";
 import { normalizePunctuation } from "@/lib/translation/text/paragraphs";
 import {
@@ -41,15 +41,12 @@ export const listChapters = createServerFn({ method: "GET" })
       const session = await getSession();
       if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
 
-      // Admin: verify ownership. Guest: novel must be live.
+      // Readable = owned by the viewer (any state) or live for everyone else.
+      const viewerId = session?.user.id ?? null;
       const [novel] = await db
         .select({ id: novels.id })
         .from(novels)
-        .where(
-          session
-            ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
-            : and(eq(novels.id, data.novelId), novelLive()),
-        )
+        .where(and(eq(novels.id, data.novelId), novelReadable(viewerId)))
         .limit(1);
 
       if (!novel) {
@@ -73,11 +70,10 @@ export const listChapters = createServerFn({ method: "GET" })
           updatedAt: chapters.updatedAt,
         })
         .from(chapters)
-        .where(
-          session
-            ? eq(chapters.novelId, data.novelId)
-            : and(eq(chapters.novelId, data.novelId), chapterVisibleToGuests()),
-        )
+        // The join is what makes the owner branch expressible: ownership lives on the
+        // novel, so a viewer's own draft chapters are visible without a second query.
+        .innerJoin(novels, eq(chapters.novelId, novels.id))
+        .where(and(eq(chapters.novelId, data.novelId), chapterReadable(viewerId)))
         .orderBy(asc(chapters.number));
 
       return chapterList;
@@ -100,22 +96,14 @@ export const getReaderChapterManifest = createServerFn({ method: "GET" })
         })
         .from(chapters)
         .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(
-          session
-            ? and(eq(chapters.novelId, data.novelId), eq(novels.userId, session.user.id))
-            : and(eq(chapters.novelId, data.novelId), novelLive(), chapterVisibleToGuests()),
-        )
+        .where(and(eq(chapters.novelId, data.novelId), chapterReadable(session?.user.id ?? null)))
         .orderBy(asc(chapters.number));
 
       if (rows.length === 0) {
         const [novel] = await db
           .select({ id: novels.id })
           .from(novels)
-          .where(
-            session
-              ? and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id))
-              : and(eq(novels.id, data.novelId), novelLive()),
-          )
+          .where(and(eq(novels.id, data.novelId), novelReadable(session?.user.id ?? null)))
           .limit(1);
         if (!novel) throw new SafeServerError("Novel not found or unauthorized");
       }
@@ -148,23 +136,26 @@ export const getChapter = createServerFn({ method: "GET" })
           editedAt: chapters.editedAt,
           createdAt: chapters.createdAt,
           updatedAt: chapters.updatedAt,
+          userId: novels.userId,
         })
         .from(chapters)
         .innerJoin(novels, eq(chapters.novelId, novels.id))
-        .where(
-          session
-            ? and(eq(chapters.id, data.chapterId), eq(novels.userId, session.user.id))
-            : and(eq(chapters.id, data.chapterId), chapterVisibleToGuests(), novelLive()),
-        )
+        .where(and(eq(chapters.id, data.chapterId), chapterReadable(session?.user.id ?? null)))
         .limit(1);
 
       if (!chapter) return null;
 
+      const { userId, ...chapterRest } = chapter;
+      const canManage = session?.user.id === userId;
       return {
-        ...chapter,
+        ...chapterRest,
+        // The rolling summary is a consistency-engine input, not reader-facing content,
+        // so it stays with the owner even when the chapter itself is public.
+        summary: canManage ? chapter.summary : null,
         translatedContent: chapter.translatedContent
           ? normalizePunctuation(chapter.translatedContent)
           : chapter.translatedContent,
+        canManage,
       };
     });
   });

@@ -34,6 +34,10 @@ const environment = {
   // schema, which requires Inngest Cloud keys this run deliberately leaves empty.
   NODE_ENV: "development",
   DATABASE_URL: requestedUrl,
+  // Migrations read the direct URL when one is configured, so it has to point at the
+  // disposable database too: otherwise `db:migrate` lands on whatever host the
+  // developer's .env.local names and the seed fails against an empty schema.
+  DATABASE_URL_UNPOOLED: requestedUrl,
   TEST_DATABASE_URL: requestedUrl,
   E2E_DATABASE_URL: requestedUrl,
   BETTER_AUTH_SECRET: "e2e-secret-at-least-thirty-two-bytes",

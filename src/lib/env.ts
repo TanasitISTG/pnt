@@ -54,6 +54,20 @@ export const R2_ENV_KEYS = [
   "R2_PUBLIC_BASE_URL",
 ] as const;
 
+// Transactional email (Resend). Optional so local dev, CI, and a deployment that
+// predates public signup still boot; when unset the mailer logs the message
+// instead of sending it. All-or-nothing, because half a sender is a silent
+// "reset email never arrived" bug.
+export const EMAIL_ENV_KEYS = ["RESEND_API_KEY", "EMAIL_FROM"] as const;
+
+// Feature credential pairs that only work complete. Each is optional, but a lone
+// half is a configuration error rather than a dead button or an unenforceable check.
+export const PAIRED_ENV_KEYS = {
+  google: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+  discord: ["DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET"],
+  turnstile: ["TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY"],
+} as const;
+
 /**
  * A copied `.env.example` defines every optional variable as `KEY=`. An empty value
  * there means "not configured", so it must read as absent rather than as a present
@@ -142,6 +156,30 @@ const baseEnvSchema = z.object({
       return z.NEVER;
     }
   }),
+
+  // Transactional email. Optional everywhere, including production, so a deploy is
+  // never blocked on a mail credential; see the pairing check below and the
+  // runtime warning in `src/lib/email/send.server.ts`.
+  RESEND_API_KEY: optionalConfigured,
+  EMAIL_FROM: optionalConfigured,
+
+  // Cloudflare Turnstile. Optional: the captcha plugin is registered only when the
+  // secret is present, which is what lets dev, CI, and E2E run without keys. The site
+  // key is public and is handed to the browser by the auth-methods server function,
+  // so one deployment variable describes both halves.
+  TURNSTILE_SITE_KEY: optionalConfigured,
+  TURNSTILE_SECRET_KEY: optionalConfigured,
+
+  // OAuth providers for public signup. Each is registered only when complete.
+  GOOGLE_CLIENT_ID: optionalConfigured,
+  GOOGLE_CLIENT_SECRET: optionalConfigured,
+  DISCORD_CLIENT_ID: optionalConfigured,
+  DISCORD_CLIENT_SECRET: optionalConfigured,
+
+  // Set by Vercel on every deployment. Used to trust preview origins so OAuth and
+  // the auth client work on a deployment URL before a custom domain is attached.
+  VERCEL_URL: z.string().optional(),
+  VERCEL_BRANCH_URL: z.string().optional(),
 });
 
 export interface R2ConfigurationIssue {
@@ -175,16 +213,48 @@ export function r2ConfigurationIssues(
   }));
 }
 
-function refineR2Configuration(
-  value: { VERCEL?: "1" | undefined } & Partial<Record<(typeof R2_ENV_KEYS)[number], string>>,
-  ctx: z.RefinementCtx,
-): void {
-  for (const issue of r2ConfigurationIssues(value)) {
+/** Transactional email is all-or-nothing: a lone half silently drops every reset mail. */
+export function emailConfigurationIssues(
+  value: Partial<Record<(typeof EMAIL_ENV_KEYS)[number], string>>,
+): R2ConfigurationIssue[] {
+  const configured = EMAIL_ENV_KEYS.filter((key) => value[key] !== undefined);
+  if (configured.length === 0 || configured.length === EMAIL_ENV_KEYS.length) return [];
+  return EMAIL_ENV_KEYS.filter((key) => value[key] === undefined).map((key) => ({
+    path: [key],
+    message: "required when transactional email is configured",
+  }));
+}
+
+/**
+ * Each optional feature credential needs both halves. A lone client ID would render a
+ * button whose callback can never complete, and a lone Turnstile secret would enforce
+ * a challenge the browser has no key to answer, so both are rejected at boot.
+ */
+export function pairedConfigurationIssues(value: Record<string, unknown>): R2ConfigurationIssue[] {
+  const issues: R2ConfigurationIssue[] = [];
+  for (const keys of Object.values(PAIRED_ENV_KEYS)) {
+    const configured = keys.filter((key) => value[key] !== undefined);
+    if (configured.length === 0 || configured.length === keys.length) continue;
+    for (const missing of keys.filter((key) => value[key] === undefined)) {
+      issues.push({ path: [missing], message: `required when ${keys[0]} is configured` });
+    }
+  }
+  return issues;
+}
+
+function refineOptionalConfiguration(value: Record<string, unknown>, ctx: z.RefinementCtx): void {
+  // Each helper keeps its own narrow key set; the casts are the seam between Zod's
+  // inferred object and those views, not a widening of what is checked.
+  for (const issue of [
+    ...r2ConfigurationIssues(value as Partial<Record<(typeof R2_ENV_KEYS)[number], string>>),
+    ...emailConfigurationIssues(value as Partial<Record<(typeof EMAIL_ENV_KEYS)[number], string>>),
+    ...pairedConfigurationIssues(value),
+  ]) {
     ctx.addIssue({ code: "custom", path: issue.path, message: issue.message });
   }
 }
 
-const checkedBaseEnvSchema = baseEnvSchema.superRefine(refineR2Configuration);
+const checkedBaseEnvSchema = baseEnvSchema.superRefine(refineOptionalConfiguration);
 
 const prodEnvSchema = checkedBaseEnvSchema.extend({
   // Prod-only (Inngest Cloud); required when NODE_ENV === "production".
@@ -192,6 +262,18 @@ const prodEnvSchema = checkedBaseEnvSchema.extend({
   INNGEST_EVENT_KEY: z.string().min(1),
   INNGEST_SIGNING_KEY: z.string().min(1),
 });
+
+/**
+ * Whether verification and password-reset mail can actually leave the process.
+ * Unset means the mailer logs the message instead, which is what keeps local dev,
+ * CI, and E2E free of mail credentials.
+ */
+export function transactionalEmailConfigured(value: {
+  RESEND_API_KEY?: string | undefined;
+  EMAIL_FROM?: string | undefined;
+}): boolean {
+  return value.RESEND_API_KEY !== undefined && value.EMAIL_FROM !== undefined;
+}
 
 const devEnvSchema = checkedBaseEnvSchema.extend({
   INNGEST_EVENT_KEY: z.string().optional(),

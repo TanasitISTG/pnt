@@ -59,6 +59,9 @@ export async function getRelationshipWorkspaceForUser(userId: string, novelId: s
       hasCover: coverKey !== null,
       coverUrl: cover?.url ?? null,
       coverSrcSet: cover?.srcSet ?? null,
+      // Owner-scoped query that hydrates the shared `novel` cache entry, which `getNovel`
+      // fills with this same flag, so both shapes have to agree.
+      canManage: true,
     },
     map: pair ? parseStoredMap(relationshipMapJson) : null,
   };

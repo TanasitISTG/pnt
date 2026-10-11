@@ -74,7 +74,7 @@ export function ProfileDetailsCard({ initialName, email, onSubmit }: ProfileDeta
               Email
             </FieldLabel>
             <Input id="profileEmail" value={email} readOnly disabled />
-            <FieldDescription>Used to sign in. It cannot be changed here.</FieldDescription>
+            <FieldDescription>Used to sign in. Change it in the email card below.</FieldDescription>
           </Field>
           <div className="pt-2">
             <Button type="submit" disabled={isSubmitting}>

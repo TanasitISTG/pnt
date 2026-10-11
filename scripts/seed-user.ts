@@ -9,6 +9,9 @@ config();
 import { hashPassword } from "better-auth/crypto";
 import { and, eq } from "drizzle-orm";
 
+/** Only the seeded operator account gets this; sign-up can never produce it. */
+const ADMIN_ROLE = "admin";
+
 const args = process.argv.slice(2).reduce(
   (acc, arg) => {
     const [key, value] = arg.replace(/^--/, "").split("=");
@@ -51,6 +54,13 @@ const result = await db.transaction(async (tx) => {
     .for("update");
 
   if (existing) {
+    // Re-running the seeder is also how an operator whose role was never set is
+    // repaired, so the promotion is unconditional rather than create-only.
+    await tx
+      .update(user)
+      .set({ role: ADMIN_ROLE, emailVerified: true, updatedAt: now })
+      .where(eq(user.id, existing.id));
+
     const [credential] = await tx
       .select({ id: account.id })
       .from(account)
@@ -76,6 +86,7 @@ const result = await db.transaction(async (tx) => {
     email,
     emailVerified: true,
     image: null,
+    role: ADMIN_ROLE,
     createdAt: now,
     updatedAt: now,
   });

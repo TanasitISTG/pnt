@@ -22,6 +22,8 @@ await db.insert(schema.user).values({
   email: "e2e-admin@example.test",
   emailVerified: true,
   image: null,
+  // The operator role is granted out of band, exactly as a real deployment does it.
+  role: "admin",
   createdAt: now,
   updatedAt: now,
 });

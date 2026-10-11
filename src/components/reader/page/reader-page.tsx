@@ -18,10 +18,10 @@ import { ReaderPageSurface } from "./reader-page-surface";
 export interface ReaderPageProps {
   novelId: string;
   chapterId: string;
-  user: unknown;
+  signedIn: boolean;
 }
 
-export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
+export function ReaderPage({ novelId, chapterId, signedIn }: ReaderPageProps) {
   const chapterQuery = useQuery(chapterQueryOptions(chapterId, novelId));
   const chaptersQuery = useQuery(readerChapterManifestQueryOptions(novelId));
   const novelQuery = useQuery(readerNovelQueryOptions(novelId));
@@ -32,7 +32,7 @@ export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
   const chapter = chapterQuery.data;
   const chapters = chaptersQuery.data ?? [];
   const novel = novelQuery.data;
-  const readerState = useReaderState(novelId, !!user);
+  const readerState = useReaderState(novelId, signedIn);
   // Measuring the prose element keeps the app footer out of saved positions and progress.
   const proseRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLElement | null>(null);
@@ -91,7 +91,7 @@ export function ReaderPage({ novelId, chapterId, user }: ReaderPageProps) {
       chapter={chapter}
       chapters={chapters}
       novel={novel}
-      user={user}
+      signedIn={signedIn}
       settings={settings}
       update={update}
       theme={theme}

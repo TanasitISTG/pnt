@@ -57,7 +57,8 @@ export interface ReaderToolbarProps {
   update: (patch: Partial<ReaderSettings>) => void;
   theme: string | undefined;
   setTheme: (theme: string) => void;
-  isAdmin: boolean;
+  signedIn: boolean;
+  canManage: boolean;
   editing: boolean;
   jobRunning: boolean;
   activeJob: ActiveJobState | undefined;
@@ -90,7 +91,8 @@ export function ReaderToolbar({
   update,
   theme,
   setTheme,
-  isAdmin,
+  signedIn,
+  canManage,
   editing,
   jobRunning,
   activeJob,
@@ -175,7 +177,7 @@ export function ReaderToolbar({
               chapterId={chapterId}
               chapters={chapters}
               readerState={readerState}
-              isAdmin={isAdmin}
+              signedIn={signedIn}
               editing={editing}
               open={panel === "bookmarks"}
               onOpenChange={(open) => onPanelChange(open ? "bookmarks" : null)}
@@ -201,13 +203,13 @@ export function ReaderToolbar({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="z-[60] w-56">
                 <DropdownMenuGroup>
-                  {isAdmin && !editing && !jobRunning ? (
+                  {canManage && !editing && !jobRunning ? (
                     <DropdownMenuItem onClick={onEditRequest}>
                       <Pencil className="size-4" aria-hidden="true" />
                       Edit chapter
                     </DropdownMenuItem>
                   ) : null}
-                  {isAdmin && !editing && !jobRunning ? (
+                  {canManage && !editing && !jobRunning ? (
                     <DropdownMenuItem onClick={onTranslateRequest}>
                       <RotateCw className="size-4" aria-hidden="true" />
                       {hasTranslation ? "Re-translate chapter" : "Translate chapter"}

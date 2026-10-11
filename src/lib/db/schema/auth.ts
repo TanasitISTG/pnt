@@ -9,6 +9,16 @@ export const user = pgTable("user", {
   image: text("image"),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
+  // Better Auth admin plugin. `role` is declared non-input, so it can only be set by
+  // the account-create hook, a seeded admin, or the admin-only setRole endpoint.
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
+  // Terms/privacy version in force when the account was created. Written by the
+  // create hook, never by the client.
+  termsVersion: text("terms_version"),
+  termsAcceptedAt: timestamp("terms_accepted_at"),
 });
 
 export const session = pgTable(
@@ -21,6 +31,8 @@ export const session = pgTable(
     updatedAt: timestamp("updated_at").notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
+    // Set when an admin is acting as this user; the admin plugin's field.
+    impersonatedBy: text("impersonated_by"),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

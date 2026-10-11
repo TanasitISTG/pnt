@@ -3,7 +3,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 export interface ReaderHotkeysProps {
   viewMode: "side" | "translated" | "raw";
   resolvedTheme: string | undefined;
-  user: unknown;
+  canManage: boolean;
   editing: boolean;
   hasTranslation: boolean;
   chapterLoaded: boolean;
@@ -59,7 +59,13 @@ type ReaderViewHotkeysProps = Pick<
 
 type ReaderEditorHotkeysProps = Pick<
   ReaderHotkeysProps,
-  "editing" | "overlayOpen" | "user" | "chapterLoaded" | "jobRunning" | "onBeginEditing" | "onSave"
+  | "editing"
+  | "overlayOpen"
+  | "canManage"
+  | "chapterLoaded"
+  | "jobRunning"
+  | "onBeginEditing"
+  | "onSave"
 >;
 
 function isReaderShortcutBlocked(
@@ -122,14 +128,14 @@ function beginEditing(
   event: KeyboardEvent,
   editing: boolean,
   overlayOpen: boolean,
-  user: unknown,
+  canManage: boolean,
   chapterLoaded: boolean,
   jobRunning: boolean,
   onBeginEditing: () => void,
 ): void {
   if (
     isReaderShortcutBlocked(event, editing, overlayOpen) ||
-    !user ||
+    !canManage ||
     !chapterLoaded ||
     jobRunning
   ) {
@@ -142,11 +148,11 @@ function beginEditing(
 function saveEditing(
   event: KeyboardEvent,
   editing: boolean,
-  user: unknown,
+  canManage: boolean,
   overlayOpen: boolean,
   onSave: () => void,
 ): void {
-  if (!editing || !user || overlayOpen) return;
+  if (!editing || !canManage || overlayOpen) return;
   event.preventDefault();
   onSave();
 }
@@ -254,7 +260,7 @@ function useReaderEscapeHotkey({
 function useReaderEditorHotkeys({
   editing,
   overlayOpen,
-  user,
+  canManage,
   chapterLoaded,
   jobRunning,
   onBeginEditing,
@@ -263,15 +269,23 @@ function useReaderEditorHotkeys({
   useHotkey(
     "E",
     (event) =>
-      beginEditing(event, editing, overlayOpen, user, chapterLoaded, jobRunning, onBeginEditing),
+      beginEditing(
+        event,
+        editing,
+        overlayOpen,
+        canManage,
+        chapterLoaded,
+        jobRunning,
+        onBeginEditing,
+      ),
     {
       ...PASSIVE_HOTKEY_OPTIONS,
-      enabled: !editing && !overlayOpen && !!user && chapterLoaded && !jobRunning,
+      enabled: !editing && !overlayOpen && canManage && chapterLoaded && !jobRunning,
     },
   );
-  useHotkey("Mod+S", (event) => saveEditing(event, editing, user, overlayOpen, onSave), {
+  useHotkey("Mod+S", (event) => saveEditing(event, editing, canManage, overlayOpen, onSave), {
     ...PASSIVE_HOTKEY_OPTIONS,
-    enabled: editing && !!user && !overlayOpen,
+    enabled: editing && canManage && !overlayOpen,
   });
 }
 

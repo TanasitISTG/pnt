@@ -29,7 +29,7 @@ export interface ReaderBookmarksDialogProps {
   chapterId: string;
   chapters: ReaderChapterSummary[];
   readerState: ReaderStateApi;
-  isAdmin: boolean;
+  signedIn: boolean;
   editing: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -60,7 +60,7 @@ export function ReaderBookmarksDialog({
   chapterId,
   chapters,
   readerState,
-  isAdmin,
+  signedIn,
   editing,
   open,
   onOpenChange,
@@ -134,7 +134,7 @@ export function ReaderBookmarksDialog({
         <DialogHeader>
           <DialogTitle>Bookmarks</DialogTitle>
           <DialogDescription>
-            {isAdmin
+            {signedIn
               ? "Bookmarks are saved to your account and sync across devices."
               : "Bookmarks are stored in this browser only."}
           </DialogDescription>

@@ -22,7 +22,7 @@ export interface ReaderContentProps {
   readerFontClass?: string;
   sourceLang?: string;
   targetLang?: string;
-  isAdmin?: boolean;
+  canManage?: boolean;
   translationStatus?: ReaderTranslationStatus;
   highlightsFor?: ReaderHighlightsLookup;
   // The outer prose node, measured for reader progress and restore.

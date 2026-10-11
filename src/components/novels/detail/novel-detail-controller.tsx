@@ -14,24 +14,28 @@ import type {
 
 export interface NovelDetailControllerProps {
   novelId: string;
-  isAdmin: boolean;
+  /** Any session at all. Ownership is read from the novel payload, not from this. */
+  signedIn: boolean;
   reviewSearch: NovelDetailSearch;
   onReviewSearchChange: (patch: Partial<NovelDetailSearch>) => void;
 }
 
 export function NovelDetailController({
   novelId,
-  isAdmin,
+  signedIn,
   reviewSearch,
   onReviewSearchChange,
 }: NovelDetailControllerProps) {
-  const { loadState, sectionProps, tableProps, dialogProps } = useNovelDetailPage(novelId, isAdmin);
+  const { loadState, sectionProps, tableProps, dialogProps, canManage } = useNovelDetailPage(
+    novelId,
+    signedIn,
+  );
   const [addVisited, setAddVisited] = useState(reviewSearch.section === "add");
   const titleEditing = tableProps.titleEdit !== null;
   const requestedSection: DetailSection = reviewSearch.reviewReport
     ? "quality"
     : (reviewSearch.section ?? "chapters");
-  const section: DetailSection = isAdmin ? requestedSection : "chapters";
+  const section: DetailSection = canManage ? requestedSection : "chapters";
 
   const setSection = useCallback(
     (nextSection: string) => {
@@ -79,7 +83,7 @@ export function NovelDetailController({
       <NovelDetailSections
         novel={novel}
         novelId={novelId}
-        isAdmin={isAdmin}
+        isAdmin={canManage}
         section={section}
         addVisited={addVisited}
         reviewSearch={reviewSearch}

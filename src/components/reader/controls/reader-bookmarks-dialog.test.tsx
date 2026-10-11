@@ -59,7 +59,7 @@ function DialogHarness({
       chapterId="chapter-1"
       chapters={[{ id: "chapter-1", number: "1", title: "Chapter one", translatedTitle: null }]}
       readerState={readerState}
-      isAdmin
+      signedIn
       editing={false}
       open
       onOpenChange={() => undefined}

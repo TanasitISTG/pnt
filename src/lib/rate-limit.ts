@@ -48,12 +48,18 @@ export function isOverLimit(count: number, limit: number): boolean {
 
 // ponytail: best-effort per-IP fixed window in Postgres — fails open on DB error
 // (availability over strictness for a reading app). Escalate to Upstash if abuse appears.
-async function checkSubjectLimit(
+
+/**
+ * Increments a fixed-window counter and returns the new count.
+ *
+ * Split out from the quota check because callers outside a request (background mail,
+ * for one) must be able to meter themselves without touching the HTTP response status.
+ */
+export async function bumpRateLimit(
   bucket: string,
   subject: string,
-  limit: number,
   windowMs = 60_000,
-): Promise<void> {
+): Promise<number> {
   const key = `${bucket}:${subject}`;
   const result = await db.execute(sql`
     INSERT INTO rate_limits (key, count, reset_at)
@@ -75,6 +81,16 @@ async function checkSubjectLimit(
   if (!Number.isFinite(count) || !Number.isInteger(count) || count <= 0) {
     throw new Error("Invalid rate limit result");
   }
+  return count;
+}
+
+async function checkSubjectLimit(
+  bucket: string,
+  subject: string,
+  limit: number,
+  windowMs = 60_000,
+): Promise<void> {
+  const count = await bumpRateLimit(bucket, subject, windowMs);
   if (isOverLimit(count, limit)) {
     setResponseStatus(429);
     throw new RateLimitError();

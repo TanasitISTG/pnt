@@ -17,6 +17,7 @@ import {
   failEpubImportJob,
   cleanupExpiredEpubUploads,
 } from "@/lib/epub/worker";
+import { pruneOrphanNovelAssets } from "@/lib/account/purge.server";
 import { log } from "@/lib/log";
 import { dispatchPendingWorkflowOutbox } from "./outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
@@ -195,6 +196,21 @@ export const cleanupExpiredRateLimitsFn = inngest.createFunction(
   },
 );
 
+// Deleting an account cascades its novels away in Postgres but leaves their cover
+// variants and cached exports in the buckets, because no foreign key reaches storage.
+// This reconciliation is the only thing that reclaims those bytes; it is idempotent and
+// also self-heals orphans left by any earlier failure. Daily is enough — storage cost
+// accrues slowly and each run lists both buckets.
+export const pruneOrphanStorageFn = inngest.createFunction(
+  {
+    id: "prune-orphan-storage",
+    triggers: { cron: "0 3 * * *" },
+    retries: 2,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => step.run("prune", () => pruneOrphanNovelAssets()),
+);
+
 export const translationEvalFn = inngest.createFunction(
   {
     id: "translation-eval",
@@ -227,5 +243,6 @@ export const functions = [
   importEpubChaptersFn,
   cleanupExpiredEpubUploadsFn,
   cleanupExpiredRateLimitsFn,
+  pruneOrphanStorageFn,
   translationEvalFn,
 ];

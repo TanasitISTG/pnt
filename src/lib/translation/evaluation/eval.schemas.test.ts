@@ -66,6 +66,24 @@ describe("evaluation schemas", () => {
     });
   });
 
+  it("degrades stale review URL state to the default view", () => {
+    // A shared or hand-edited novel link must not be able to replace the page with a
+    // validation error; the router's parser also turns `?reviewPage=1` into a number.
+    expect(
+      evalReviewSearchSchema.parse({
+        reviewFilter: "bogus",
+        reviewPage: "nope",
+        reviewPageSize: 7,
+      }),
+    ).toEqual({ reviewFilter: "attention", reviewPage: 1, reviewPageSize: 25 });
+    expect(evalReviewSearchSchema.parse({ reviewReport: 5, reviewPage: 2 })).toEqual({
+      reviewReport: undefined,
+      reviewFilter: "attention",
+      reviewPage: 2,
+      reviewPageSize: 25,
+    });
+  });
+
   it("rejects an explicitly empty or overlong selector before a request is accepted", () => {
     expect(() =>
       startTranslationEvalSchema.parse({ novelId: "novel-1", chapterSelector: " " }),

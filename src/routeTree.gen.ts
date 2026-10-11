@@ -12,14 +12,20 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as PublicRouteImport } from './routes/_public'
 import { Route as CookiePolicyRouteImport } from './routes/cookie-policy'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as ProtectedAdminRouteImport } from './routes/_protected/admin'
 import { Route as ProtectedJobsRouteImport } from './routes/_protected/jobs'
 import { Route as ProtectedProfileRouteImport } from './routes/_protected/profile'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
+import { Route as PublicBrowseRouteImport } from './routes/_public/browse'
 import { Route as ApiBackupsRouteImport } from './routes/api/backups'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
@@ -48,6 +54,11 @@ const CookiePolicyRoute = CookiePolicyRouteImport.update({
   path: '/cookie-policy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -58,15 +69,35 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
   id: '/robots.txt',
   path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
   getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProtectedAdminRoute = ProtectedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => ProtectedRoute,
 } as any)
 const ProtectedJobsRoute = ProtectedJobsRouteImport.update({
   id: '/jobs',
@@ -86,6 +117,11 @@ const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
 const PublicIndexRoute = PublicIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicBrowseRoute = PublicBrowseRouteImport.update({
+  id: '/browse',
+  path: '/browse',
   getParentRoute: () => PublicRoute,
 } as any)
 const ApiBackupsRoute = ApiBackupsRouteImport.update({
@@ -167,13 +203,19 @@ const PublicNovelsNovelIdChaptersChapterIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/cookie-policy': typeof CookiePolicyRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
+  '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/admin': typeof ProtectedAdminRoute
   '/jobs': typeof ProtectedJobsRoute
   '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/browse': typeof PublicBrowseRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -192,13 +234,19 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/cookie-policy': typeof CookiePolicyRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
+  '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/admin': typeof ProtectedAdminRoute
   '/jobs': typeof ProtectedJobsRoute
   '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/browse': typeof PublicBrowseRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -219,13 +267,19 @@ export interface FileRoutesById {
   '/_protected': typeof ProtectedRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
   '/cookie-policy': typeof CookiePolicyRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
+  '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/_protected/admin': typeof ProtectedAdminRoute
   '/_protected/jobs': typeof ProtectedJobsRoute
   '/_protected/profile': typeof ProtectedProfileRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
+  '/_public/browse': typeof PublicBrowseRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -247,13 +301,19 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cookie-policy'
+    | '/forgot-password'
     | '/login'
     | '/privacy'
+    | '/reset-password'
     | '/robots.txt'
+    | '/signup'
     | '/terms'
+    | '/verify-email'
+    | '/admin'
     | '/jobs'
     | '/profile'
     | '/settings'
+    | '/browse'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
@@ -272,13 +332,19 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/cookie-policy'
+    | '/forgot-password'
     | '/login'
     | '/privacy'
+    | '/reset-password'
     | '/robots.txt'
+    | '/signup'
     | '/terms'
+    | '/verify-email'
+    | '/admin'
     | '/jobs'
     | '/profile'
     | '/settings'
+    | '/browse'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
@@ -298,13 +364,19 @@ export interface FileRouteTypes {
     | '/_protected'
     | '/_public'
     | '/cookie-policy'
+    | '/forgot-password'
     | '/login'
     | '/privacy'
+    | '/reset-password'
     | '/robots.txt'
+    | '/signup'
     | '/terms'
+    | '/verify-email'
+    | '/_protected/admin'
     | '/_protected/jobs'
     | '/_protected/profile'
     | '/_protected/settings'
+    | '/_public/browse'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
@@ -326,10 +398,14 @@ export interface RootRouteChildren {
   ProtectedRoute: typeof ProtectedRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
   CookiePolicyRoute: typeof CookiePolicyRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
+  SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   ApiBackupsRoute: typeof ApiBackupsRoute
   ApiInngestRoute: typeof ApiInngestRoute
   ApiSitemapRoute: typeof ApiSitemapRoute
@@ -363,6 +439,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CookiePolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -377,11 +460,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/robots.txt': {
       id: '/robots.txt'
       path: '/robots.txt'
       fullPath: '/robots.txt'
       preLoaderRoute: typeof RobotsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -390,6 +487,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_protected/admin': {
+      id: '/_protected/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof ProtectedAdminRouteImport
+      parentRoute: typeof ProtectedRoute
     }
     '/_protected/jobs': {
       id: '/_protected/jobs'
@@ -417,6 +528,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof PublicIndexRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/browse': {
+      id: '/_public/browse'
+      path: '/browse'
+      fullPath: '/browse'
+      preLoaderRoute: typeof PublicBrowseRouteImport
       parentRoute: typeof PublicRoute
     }
     '/api/backups': {
@@ -521,6 +639,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface ProtectedRouteChildren {
+  ProtectedAdminRoute: typeof ProtectedAdminRoute
   ProtectedJobsRoute: typeof ProtectedJobsRoute
   ProtectedProfileRoute: typeof ProtectedProfileRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
@@ -531,6 +650,7 @@ interface ProtectedRouteChildren {
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
+  ProtectedAdminRoute: ProtectedAdminRoute,
   ProtectedJobsRoute: ProtectedJobsRoute,
   ProtectedProfileRoute: ProtectedProfileRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,
@@ -546,12 +666,14 @@ const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
 )
 
 interface PublicRouteChildren {
+  PublicBrowseRoute: typeof PublicBrowseRoute
   PublicIndexRoute: typeof PublicIndexRoute
   PublicNovelsNovelIdIndexRoute: typeof PublicNovelsNovelIdIndexRoute
   PublicNovelsNovelIdChaptersChapterIdRoute: typeof PublicNovelsNovelIdChaptersChapterIdRoute
 }
 
 const PublicRouteChildren: PublicRouteChildren = {
+  PublicBrowseRoute: PublicBrowseRoute,
   PublicIndexRoute: PublicIndexRoute,
   PublicNovelsNovelIdIndexRoute: PublicNovelsNovelIdIndexRoute,
   PublicNovelsNovelIdChaptersChapterIdRoute:
@@ -565,10 +687,14 @@ const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
   CookiePolicyRoute: CookiePolicyRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
+  SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   ApiBackupsRoute: ApiBackupsRoute,
   ApiInngestRoute: ApiInngestRoute,
   ApiSitemapRoute: ApiSitemapRoute,

@@ -1,6 +1,6 @@
 # Personal Novel Translator
 
-A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin and guest read-only access. Paste or scrape chapters, translate with an OpenAI-compatible provider or Gemini, and read side-by-side with Thai font support.
+A novel translation app (EN→TH default, ZH→EN, ZH→TH) with public accounts and guest read-only access. Paste or scrape chapters, translate with an OpenAI-compatible provider or Gemini, and read side-by-side with Thai font support. Every account owns an isolated workspace; an optional operator role unlocks account administration.
 
 <details>
 <summary>Preview</summary>
@@ -21,6 +21,9 @@ A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin 
 - **Reader** — side-by-side raw/translated, paragraph-aligned synced scroll, font size/typeface controls, chapter editing and translation from the reader actions menu
 - **Translation review** — admin-only script, paragraph-count, and approved-glossary checks with per-chapter findings. Check `first3`, `all`, or decimal ranges such as `1,1.5,5-8`; open a chapter to edit, then run a new check. Reports remain immutable snapshots, mark changed/deleted chapters, and explicitly skip untranslated content. These heuristics do not verify translation accuracy.
 - **Guest access** — published content visible to anyone; scheduled publishing (`publishedAt` null/draft/future); best-effort rate-limited reads when trusted ingress is configured
+- **Accounts** — public sign-up with optional OAuth (Google/Discord), email verification and password reset through Resend, optional Cloudflare Turnstile, profile photo/name, linked sign-in methods, active-session management, and self-service account deletion
+- **Shared catalog** — `/browse` lists every published novel from every account; a signed-in reader gets per-account bookmarks, progress, and read marks on novels they do not own
+- **Operator screen** — `/admin` (admin role only) lists accounts with search and paging, and can grant or revoke operator access, suspend or restore an account, and delete one. The seeded account from `bun run seed:user` is the only source of the admin role
 - **Dark mode** — app-wide via `next-themes`, warm charcoal surfaces
 - **Export** — chapter/novel to `.txt` or `.epub`
 - **Batch translate** — multi-select chapters, queued sequentially
@@ -54,7 +57,8 @@ bun run db:migrate
 # Create and migrate the isolated integration-test database (TEST_DATABASE_URL)
 bun run db:migrate:test
 
-# Seed admin user (requires SEED_ADMIN_* in .env.local)
+# Seed the operator account, the only source of the admin role
+# (requires SEED_ADMIN_* in .env.local)
 bun run seed:user
 
 # Start dev server (port 3000)
@@ -81,7 +85,7 @@ bun run inngest
 | Move covers to storage | `bun run storage:migrate`                    |
 | Prune orphan avatars   | `bun run storage:prune-avatars`              |
 | Migrate test database  | `bun run db:migrate:test`                    |
-| Seed admin user        | `bun run seed:user`                          |
+| Seed operator account  | `bun run seed:user`                          |
 | Regenerate route tree  | `bun run generate-routes`                    |
 
 ### Deployment migrations
@@ -139,9 +143,19 @@ tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `
 | `APP_ENCRYPTION_KEY`            | Yes      | 32-byte base64 random string for encrypting API keys at rest                                       |
 | `LOCAL_PROVIDER_ORIGINS`        | No       | JSON array of exact canonical HTTP(S) origins allowed to use local/private addresses; default `[]` |
 | `RATE_LIMIT_TRUSTED_PROXY_HOPS` | No       | Nonnegative trusted `X-Forwarded-For` hop count; default `0` trusts no client IP headers           |
-| `SEED_ADMIN_EMAIL`              | No       | Admin email for `bun run seed:user`                                                                |
-| `SEED_ADMIN_NAME`               | No       | Admin display name                                                                                 |
-| `SEED_ADMIN_PASSWORD`           | No       | Admin password                                                                                     |
+| `SEED_ADMIN_EMAIL`              | No       | Operator email for `bun run seed:user`                                                             |
+| `SEED_ADMIN_NAME`               | No       | Operator display name                                                                              |
+| `SEED_ADMIN_PASSWORD`           | No       | Operator password                                                                                  |
+| `RESEND_API_KEY`                | No       | Resend API key for verification, reset, email-change, and deletion mail                            |
+| `EMAIL_FROM`                    | No       | Verified Resend sender, e.g. `Pnt <no-reply@example.com>`                                          |
+| `TURNSTILE_SITE_KEY`            | No       | Cloudflare Turnstile site key (public); the captcha registers only with the secret below           |
+| `TURNSTILE_SECRET_KEY`          | No       | Cloudflare Turnstile secret key; presence enables the captcha on sign-up, sign-in, and reset       |
+| `GOOGLE_CLIENT_ID`              | No       | Google OAuth client ID; offered only when both halves are set                                      |
+| `GOOGLE_CLIENT_SECRET`          | No       | Google OAuth client secret                                                                         |
+| `DISCORD_CLIENT_ID`             | No       | Discord OAuth client ID; offered only when both halves are set                                     |
+| `DISCORD_CLIENT_SECRET`         | No       | Discord OAuth client secret                                                                        |
+| `VERCEL_URL`                    | No       | Set by Vercel; trusted as an auth origin so preview deployments can sign in                        |
+| `VERCEL_BRANCH_URL`             | No       | Set by Vercel; trusted as an auth origin so branch deployments can sign in                         |
 | `INNGEST_DEV`                   | No       | Set to `1` for local dev (SDK v4 defaults to cloud mode)                                           |
 | `INNGEST_EVENT_KEY`             | No       | Inngest Cloud event key (production only)                                                          |
 | `INNGEST_SIGNING_KEY`           | No       | Inngest Cloud signing key (production only)                                                        |
@@ -159,6 +173,26 @@ tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `
 | `R2_PUBLIC_BUCKET`              | Prod     | Bucket for published cover variants, served from the CDN origin                                    |
 | `R2_PRIVATE_BUCKET`             | Prod     | Bucket for EPUB upload archives and cached exports; never publicly readable                        |
 | `R2_PUBLIC_BASE_URL`            | Prod     | Canonical HTTPS origin of the public bucket's custom domain, no trailing slash                     |
+
+### Accounts, roles, and email
+
+Sign-up is public. Every account receives the `user` role and an isolated workspace, and
+ownership — not identity — is what gates a novel, its chapters, its glossary, and its
+reader state. The `admin` role is granted only out of band, either by `bun run seed:user`
+or by an existing operator on `/admin`; nothing a client sends can produce it. Server
+functions read the role from the session with `requireAdminSession`.
+
+Email verification is offered at sign-up but not required to sign in: an unverified
+address costs almost nothing here, while blocking sign-in behind mail deliverability would
+strand people at the moment they are most likely to leave. Password reset, email change,
+and account deletion all go through email, so configure Resend (`RESEND_API_KEY` and
+`EMAIL_FROM`, both or neither) before offering this to real users. Without those values
+the mailer logs the message instead of sending it — which is what lets local dev, CI, and
+the E2E run finish a reset flow with no mail account — and the app logs a startup warning.
+
+Cloudflare Turnstile and the OAuth providers are each registered only when their
+credentials are present, so an unconfigured method is absent from the sign-in pages
+rather than shown and then failing at the callback.
 
 ### Provider connections
 
@@ -209,9 +243,17 @@ scripts/
 drizzle/
 ```
 
-The `postgres` driver uses a maximum pool size of three connections per application process.
-That bound is intentional for serverless instances; account for `3 x active instances` when
-sizing the database connection limit or external pooler.
+The `postgres` driver keeps a single connection per application process, recycled after 60
+seconds idle and 10 minutes total, and runs with `prepare: false` so it is safe behind a
+transaction-mode pooler. Serverless instances scale out independently and each opens its own
+pool, so the raw demand is `1 x active instances`: `DATABASE_URL` must be the provider's
+**pooled** endpoint (on Neon, the host carrying the `-pooler` suffix), which multiplexes that
+fan-out onto a small number of server connections. Without a pooler a modest `max_connections`
+is exhausted during a traffic spike and queries are rejected with SQLSTATE 53300.
+
+`DATABASE_URL_UNPOOLED` is the paired **direct** endpoint. Migrations and drizzle-kit use it
+because DDL and prepared statements need a real session, which transaction pooling does not
+guarantee; set it to the same value as `DATABASE_URL` when the deployment has no pooler.
 
 ## Persistence and delivery boundaries
 

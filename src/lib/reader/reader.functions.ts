@@ -3,8 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { ensureSession } from "@/lib/auth/functions";
 import { SafeServerError, withSafeHandler } from "@/lib/server-fn-error";
 import {
-  assertChapterOwnedByUser,
-  assertNovelOwnedByUser,
+  assertChapterReadableByUser,
+  assertNovelReadableByUser,
   createReaderBookmarkForUser,
   deleteReaderBookmarkForUser,
   getReaderBookmarksForUser,
@@ -29,7 +29,7 @@ export const getReaderNovelState = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertNovelOwnedByUser(session.user.id, data.novelId);
+      await assertNovelReadableByUser(session.user.id, data.novelId);
       return getReaderNovelStateForUser(session.user.id, data.novelId);
     });
   });
@@ -39,7 +39,7 @@ export const getReaderBookmarks = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertNovelOwnedByUser(session.user.id, data.novelId);
+      await assertNovelReadableByUser(session.user.id, data.novelId);
       return getReaderBookmarksForUser(session.user.id, data.novelId, data.cursor);
     });
   });
@@ -49,7 +49,7 @@ export const setReaderChapter = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
+      await assertChapterReadableByUser(session.user.id, data.novelId, data.chapterId);
       await setReaderChapterForUser(session.user.id, data.novelId, data.chapterId);
       return { success: true };
     });
@@ -60,7 +60,7 @@ export const saveReaderPosition = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
+      await assertChapterReadableByUser(session.user.id, data.novelId, data.chapterId);
       await saveReaderPositionForUser(
         session.user.id,
         data.novelId,
@@ -76,7 +76,7 @@ export const markReaderChapterRead = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
+      await assertChapterReadableByUser(session.user.id, data.novelId, data.chapterId);
       await markReaderChapterReadForUser(session.user.id, data.novelId, data.chapterId);
       return { success: true };
     });
@@ -87,7 +87,7 @@ export const createBookmark = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertChapterOwnedByUser(session.user.id, data.novelId, data.chapterId);
+      await assertChapterReadableByUser(session.user.id, data.novelId, data.chapterId);
       return createReaderBookmarkForUser(session.user.id, data.novelId, data);
     });
   });

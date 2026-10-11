@@ -16,7 +16,7 @@ type ReaderHotkeysHarnessProps = {
   findOpen?: boolean;
   resolvedTheme?: string;
   initialTheme?: string;
-  user?: unknown;
+  canManage?: boolean;
   chapterLoaded?: boolean;
   jobRunning?: boolean;
   prevChapter?: { id: string } | null;
@@ -31,7 +31,7 @@ function ReaderHotkeysHarness({
   findOpen = false,
   resolvedTheme = "dark",
   initialTheme,
-  user = { id: "user" },
+  canManage = true,
   chapterLoaded = true,
   jobRunning = false,
   prevChapter = { id: "previous" },
@@ -51,7 +51,7 @@ function ReaderHotkeysHarness({
   useReaderHotkeys({
     viewMode,
     resolvedTheme,
-    user,
+    canManage,
     editing,
     hasTranslation,
     chapterLoaded,

@@ -2,6 +2,7 @@ import { and, asc, desc, eq, lt, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
+import { novelReadable, chapterReadable } from "@/lib/content/publish/publish";
 import {
   chapters,
   novels,
@@ -24,17 +25,23 @@ function toReaderColumn(value: string | null): ReaderColumn | null {
   return value === "raw" || value === "translated" ? value : null;
 }
 
-export async function assertNovelOwnedByUser(userId: string, novelId: string): Promise<void> {
+/**
+ * Reader state is per account, but it hangs off a novel the viewer may merely be
+ * reading. The gate is therefore read visibility (owned or published), not ownership:
+ * bookmarking someone else's published chapter is the whole point of a shared catalog.
+ * Every row written afterwards is still scoped by `userId`.
+ */
+export async function assertNovelReadableByUser(userId: string, novelId: string): Promise<void> {
   const [novel] = await db
     .select({ id: novels.id })
     .from(novels)
-    .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+    .where(and(eq(novels.id, novelId), novelReadable(userId)))
     .limit(1);
 
   if (!novel) throw new SafeServerError("Novel not found or unauthorized");
 }
 
-export async function assertChapterOwnedByUser(
+export async function assertChapterReadableByUser(
   userId: string,
   novelId: string,
   chapterId: string,
@@ -43,9 +50,7 @@ export async function assertChapterOwnedByUser(
     .select({ id: chapters.id })
     .from(chapters)
     .innerJoin(novels, eq(chapters.novelId, novels.id))
-    .where(
-      and(eq(chapters.id, chapterId), eq(chapters.novelId, novelId), eq(novels.userId, userId)),
-    )
+    .where(and(eq(chapters.id, chapterId), eq(chapters.novelId, novelId), chapterReadable(userId)))
     .limit(1);
 
   if (!chapter) throw new SafeServerError("Chapter not found or unauthorized");
@@ -159,16 +164,26 @@ async function lockReaderChapter(
   chapterId: string,
   strength: "key share" | "update" = "key share",
 ): Promise<void> {
-  if (!(await lockNovelForMutation(tx, novelId, userId))) {
-    throw new SafeServerError("Chapter not found or unauthorized");
+  // Owners keep taking the novel-row gate: the ordering rule that gates novel
+  // mutations against descendant locks is theirs to respect. A reader who does not own
+  // the novel is not mutating it, and an exclusive row lock on a popular published
+  // novel would serialize every reader's scroll flush behind a single lock, so they
+  // instead prove read visibility and rely on the chapter key-share lock below.
+  const owned = await lockNovelForMutation(tx, novelId, userId);
+  if (!owned) {
+    const [readable] = await tx
+      .select({ id: novels.id })
+      .from(novels)
+      .where(and(eq(novels.id, novelId), novelReadable(userId)))
+      .limit(1);
+    if (!readable) throw new SafeServerError("Chapter not found or unauthorized");
   }
+
   const [chapter] = await tx
     .select({ id: chapters.id })
     .from(chapters)
     .innerJoin(novels, eq(chapters.novelId, novels.id))
-    .where(
-      and(eq(chapters.id, chapterId), eq(chapters.novelId, novelId), eq(novels.userId, userId)),
-    )
+    .where(and(eq(chapters.id, chapterId), eq(chapters.novelId, novelId), chapterReadable(userId)))
     .limit(1)
     .for(strength, { of: chapters });
   if (!chapter) throw new SafeServerError("Chapter not found or unauthorized");
