@@ -15,7 +15,17 @@ export function requireSession(session: { user: User; session: Session } | null)
   return session;
 }
 
-export const getSession = createServerFn({ method: "GET" }).handler(() =>
+/*
+ * The session lookups below are server-only functions, not server functions.
+ *
+ * Server code calls them (every mutation and route handler gates on a session),
+ * while nothing in the browser graph ever does, and a server function that the
+ * client graph never imports is absent from the server-function manifest that
+ * resolves server-side RPC call sites — its calls then fail at runtime with
+ * "Server function info not found" instead of reaching the implementation.
+ * A server-only function is called directly and never consults that manifest.
+ */
+export const getSession = createServerOnlyFn(() =>
   withSafeHandler(async () => {
     const headers = getRequestHeaders();
     const session = await auth.api.getSession({ headers });
@@ -23,7 +33,7 @@ export const getSession = createServerFn({ method: "GET" }).handler(() =>
   }),
 );
 
-export const ensureSession = createServerFn({ method: "GET" }).handler(() =>
+export const ensureSession = createServerOnlyFn(() =>
   withSafeHandler(async () => {
     const headers = getRequestHeaders();
     const session = await auth.api.getSession({ headers });
