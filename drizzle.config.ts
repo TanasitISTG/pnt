@@ -9,7 +9,10 @@ export default defineConfig({
   dialect: "postgresql",
   schema: "./src/lib/db/schema/index.ts",
   out: "./drizzle",
+  // drizzle-kit runs DDL and prepared statements, so it needs the direct endpoint: a
+  // transaction-mode pooler reassigns the server connection between transactions.
+  // Fall back to DATABASE_URL when the deployment has no pooler.
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    url: (process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL)!,
   },
 });

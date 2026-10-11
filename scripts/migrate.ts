@@ -212,10 +212,15 @@ async function assertStorageMigrationReady(client: Sql): Promise<void> {
   }
 }
 
-const connectionString = process.env.DATABASE_URL;
+// Migrations run DDL and postgres.js's own prepared statements, both of which need a
+// real session. A transaction-mode pooler reassigns the server connection between
+// transactions, so migrations must use the provider's direct endpoint. Fall back to
+// DATABASE_URL for a setup with no pooler at all (local Postgres, or a provider that
+// does not offer one).
+const connectionString = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 
 if (!connectionString) {
-  console.error("DATABASE_URL is not set");
+  console.error("DATABASE_URL_UNPOOLED or DATABASE_URL is not set");
   process.exit(1);
 }
 
