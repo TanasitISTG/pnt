@@ -20,7 +20,7 @@ const config = defineConfig(({ command }) => {
 
   return {
     build: { target: "es2022" },
-    resolve: { tsconfigPaths: true },
+    resolve: { tsconfigPaths: true, dedupe: ["solid-js"] },
     test: {
       setupFiles: ["./src/test/setup.ts"],
       // React resolves its production build from an inherited NODE_ENV, which
