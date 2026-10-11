@@ -79,6 +79,7 @@ bun run inngest
 | Release audit          | `bun run audit:release`                      |
 | DB generate / migrate  | `bun run db:generate` / `bun run db:migrate` |
 | Move covers to storage | `bun run storage:migrate`                    |
+| Prune orphan avatars   | `bun run storage:prune-avatars`              |
 | Migrate test database  | `bun run db:migrate:test`                    |
 | Seed admin user        | `bun run seed:user`                          |
 | Regenerate route tree  | `bun run generate-routes`                    |
@@ -111,6 +112,17 @@ without writing anything, and the script refuses to finish while any cover is un
 any EPUB upload is queued or staged, so no archive is lost to an ordering mistake. The
 migration runner performs the same preflight and aborts with a nonzero exit code when
 unmigrated covers or keyless upload rows remain.
+
+Avatars need no equivalent release step, because replacing a photo already deletes the set
+it replaced. What can still strand a set is a path that stops short of the row write: a user
+row removed, or a failed write-back. `bun run storage:prune-avatars` lists the public
+bucket, diffs it against the `image` of every user, and deletes the avatar sets nothing
+points at; `--dry-run` prints the same plan and deletes nothing. It refuses to act when the
+bucket cannot be listed rather than reading a failed listing as an empty one, ignores every
+key that is not a whole `avatars/<userId>/<segment>` set, and re-reads the referenced keys
+just before deleting so a set that an upload referenced while the listing was in flight is
+kept. Run it while the app is idle: an upload writes its objects before its row, so a sweep
+crossing that window cannot tell a fresh set from an abandoned one.
 
 The release audit fails on moderate, high, or critical advisories. Direct dependencies and
 tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `esbuild`,

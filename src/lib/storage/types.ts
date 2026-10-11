@@ -36,6 +36,13 @@ export interface ObjectStorage {
   /** Removes every object under a prefix; a missing prefix is a no-op. */
   deletePrefix(prefix: string): Promise<void>;
   /**
+   * Every key under a prefix, for callers that reconcile the bucket against the
+   * database. Null means the bucket as a whole could not be listed, which is
+   * deliberately distinct from an empty list: a sweep that read "no keys" from an
+   * unreachable bucket would report a clean pass having inspected nothing.
+   */
+  listKeys(prefix: string): Promise<string[] | null>;
+  /**
    * Capability URL that lets the caller write exactly one key for a bounded time. The
    * signature covers the host and expiry, so the URL cannot be replayed against another
    * key; the media type is advisory and travels unsigned.

@@ -173,6 +173,59 @@ describe("R2 object storage", () => {
     expect(body).toContain("<Key>covers/n/seg/640.webp</Key>");
   });
 
+  it("lists every key under a prefix for callers that reconcile the bucket", async () => {
+    const listed = `<ListBucketResult>
+      <Contents><Key>avatars/user-1/segment/original</Key></Contents>
+      <Contents><Key>avatars/user-1/segment/64.webp</Key></Contents>
+      <IsTruncated>false</IsTruncated>
+    </ListBucketResult>`;
+    const requests = stubFetch(() => xml(listed));
+    const storage = createR2ObjectStorage(config);
+
+    await expect(storage.listKeys("avatars")).resolves.toEqual([
+      "avatars/user-1/segment/original",
+      "avatars/user-1/segment/64.webp",
+    ]);
+    expect(requests.map((request) => request.method)).toEqual(["GET"]);
+    expect(requests[0].url).toContain("list-type=2");
+    expect(requests[0].url).toContain("prefix=avatars");
+  });
+
+  it("follows continuation tokens to the end of a listing", async () => {
+    let page = 0;
+    const requests = stubFetch(() => {
+      page += 1;
+      return page === 1
+        ? xml(`<ListBucketResult>
+            <Contents><Key>avatars/user-1/segment/original</Key></Contents>
+            <IsTruncated>true</IsTruncated>
+            <NextContinuationToken>token-1</NextContinuationToken>
+          </ListBucketResult>`)
+        : xml(`<ListBucketResult>
+            <Contents><Key>avatars/user-1/segment/64.webp</Key></Contents>
+            <IsTruncated>false</IsTruncated>
+          </ListBucketResult>`);
+    });
+    const storage = createR2ObjectStorage(config);
+
+    await expect(storage.listKeys("avatars")).resolves.toEqual([
+      "avatars/user-1/segment/original",
+      "avatars/user-1/segment/64.webp",
+    ]);
+    expect(requests).toHaveLength(2);
+    expect(requests[1].url).toContain("continuation-token=token-1");
+  });
+
+  it("reports an absent bucket as null rather than an empty listing", async () => {
+    const requests = stubFetch(() => xml("<Error><Code>NoSuchBucket</Code></Error>", 404));
+    const storage = createR2ObjectStorage(config);
+
+    // Null is the signal that nothing was inspected; an empty array would claim the
+    // bucket was read and found empty.
+    await expect(storage.listKeys("avatars")).resolves.toBeNull();
+    expect(requests.map((request) => request.method)).toEqual(["GET"]);
+  });
+
   it("treats an absent bucket as nothing to delete", async () => {
     const requests = stubFetch(() => xml("<Error><Code>NoSuchBucket</Code></Error>", 404));
     const storage = createR2ObjectStorage(config);

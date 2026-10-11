@@ -1,7 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { env } from "@/lib/env";
@@ -35,6 +35,43 @@ function assertSafeKey(key: string): void {
 function assertSafePrefix(prefix: string): void {
   if (prefix === "") return;
   assertSafeKey(prefix);
+}
+
+/** Suffix of the sidecar this adapter writes beside every object. */
+const META_SUFFIX = ".meta.json";
+
+/**
+ * Recursively collects the keys stored under a directory. Each object is paired with
+ * a `<key>.meta.json` sidecar, which is this adapter's own bookkeeping rather than a
+ * key a caller stored; the sidecar is skipped only when the file it annotates is
+ * present, so a key that genuinely carries that suffix still lists.
+ */
+async function listKeysUnder(rootDir: string, prefix: string): Promise<string[]> {
+  // A directory that was never written is an empty bucket. Any other failure is a
+  // real one and is raised: a caller that reconciled on a swallowed error would
+  // read "nothing was inspected" as "nothing is there".
+  const entries = await readdir(rootDir, { withFileTypes: true }).catch((error: unknown) => {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return [];
+    throw error;
+  });
+  const files = new Set(entries.filter((entry) => entry.isFile()).map((entry) => entry.name));
+  const keys: string[] = [];
+
+  for (const entry of entries) {
+    const key = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      keys.push(...(await listKeysUnder(path.join(rootDir, entry.name), key)));
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (entry.name.endsWith(META_SUFFIX) && files.has(entry.name.slice(0, -META_SUFFIX.length))) {
+      continue;
+    }
+    keys.push(key);
+  }
+
+  return keys;
 }
 
 function objectPath(bucket: string, key: string): string {
@@ -105,6 +142,14 @@ export function createLocalObjectStorage(bucket: string): ObjectStorage {
     async deletePrefix(prefix) {
       assertSafePrefix(prefix);
       await rm(path.join(STORAGE_ROOT, bucket, prefix), { recursive: true, force: true });
+    },
+
+    async listKeys(prefix) {
+      assertSafePrefix(prefix);
+      const rootDir =
+        prefix === "" ? path.join(STORAGE_ROOT, bucket) : path.join(STORAGE_ROOT, bucket, prefix);
+      // Sorted so two adapters agree; a caller never depends on the order.
+      return (await listKeysUnder(rootDir, prefix)).toSorted();
     },
 
     async presignPut(key, { expiresIn }) {

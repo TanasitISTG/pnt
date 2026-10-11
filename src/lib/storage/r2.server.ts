@@ -94,7 +94,7 @@ export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStor
   });
 
   /** Lists every key under a prefix, bounded to the configured page ceiling. */
-  async function listKeys(prefix: string): Promise<string[] | null> {
+  async function listEveryKey(prefix: string): Promise<string[] | null> {
     const keys: string[] = [];
     let token: string | undefined;
 
@@ -149,11 +149,13 @@ export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStor
     },
 
     async deletePrefix(prefix: string) {
-      const keys = await listKeys(prefix);
+      const keys = await listEveryKey(prefix);
       if (keys === null || keys.length === 0) return;
       // `deleteObjects` batches at 1000 keys per request.
       await request(`R2 DELETE ${prefix}`, () => client.deleteObjects(keys));
     },
+
+    listKeys: listEveryKey,
 
     async presignPut(key, { expiresIn }) {
       // Signs the host and expiry only, so the URL writes exactly one key and cannot be

@@ -22,6 +22,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun scripts/migrate.ts",
     "storage:migrate": "bun scripts/storage-migrate.ts",
+    "storage:prune-avatars": "bun scripts/avatar-sweep.ts",
     "db:migrate:test": "bun scripts/migrate-test-db.ts",
     "postbuild": "bun scripts/postbuild.ts",
     "seed:user": "bun scripts/seed-user.ts",

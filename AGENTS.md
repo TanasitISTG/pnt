@@ -18,21 +18,21 @@ Personal Novel Translator (PNT) is a single-admin novel translation app. It supp
 
 ## Key Directories
 
-| Directory                                                       | Purpose                                                                                                                            |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `src/routes/`                                                   | File-based public/protected pages and API handlers.                                                                                |
-| `src/components/`                                               | Feature UI plus restyled shadcn/Base UI primitives in `ui/`; `chapters/`, `novels/`, and `reader/` are split into role subfolders. |
-| `src/lib/content/`                                              | Novel/chapter CRUD, publishing, ownership, covers, and schemas in `novel/`, `chapter/`, and `publish/`.                            |
-| `src/lib/translation/`                                          | Chunking, prompts, provider clients, job APIs/state/store, worker, outbox, and evaluation.                                         |
-| `src/lib/scrape/`                                               | Source registry, HTML parsers, safe fetches, network policy, and import worker.                                                    |
-| `src/lib/inngest/`                                              | Inngest client and durable function registration.                                                                                  |
-| `src/lib/db/`                                                   | Server-only Drizzle connection and schema modules.                                                                                 |
-| `src/lib/storage/`                                              | Object-storage port for cover variants, EPUB archives, and cached exports (s3mini + filesystem adapters, pure key derivation).     |
-| `src/lib/auth/`, `glossary/`, `reader/`, `export/`, `settings/` | Authentication, glossary propagation, persisted reader preferences/progress, streaming exports, and provider/account settings.     |
-| `src/styles/globals.css`                                        | Tailwind v4 CSS-first theme, semantic tokens, light/dark variables, and font stacks.                                               |
-| `scripts/`                                                      | Migrations, seed user, postbuild Vercel patch, translation evaluation, and E2E supervisor.                                         |
-| `e2e/`                                                          | Playwright browser workflow; integration tests are colocated under `src/**/*.integration.test.ts`.                                 |
-| `drizzle/`                                                      | Generated PostgreSQL migrations and migration metadata.                                                                            |
+| Directory                                                                   | Purpose                                                                                                                                                             |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routes/`                                                               | File-based public/protected pages and API handlers.                                                                                                                 |
+| `src/components/`                                                           | Feature UI plus restyled shadcn/Base UI primitives in `ui/`; `chapters/`, `novels/`, and `reader/` are split into role subfolders.                                  |
+| `src/lib/content/`                                                          | Novel/chapter CRUD, publishing, ownership, covers, and schemas in `novel/`, `chapter/`, and `publish/`.                                                             |
+| `src/lib/translation/`                                                      | Chunking, prompts, provider clients, job APIs/state/store, worker, outbox, and evaluation.                                                                          |
+| `src/lib/scrape/`                                                           | Source registry, HTML parsers, safe fetches, network policy, and import worker.                                                                                     |
+| `src/lib/inngest/`                                                          | Inngest client and durable function registration.                                                                                                                   |
+| `src/lib/db/`                                                               | Server-only Drizzle connection and schema modules.                                                                                                                  |
+| `src/lib/storage/`                                                          | Object-storage port for cover/avatar variants, EPUB archives, and cached exports (s3mini + filesystem adapters, pure key derivation).                               |
+| `src/lib/auth/`, `profile/`, `glossary/`, `reader/`, `export/`, `settings/` | Authentication, profile photo/display-name behavior, glossary propagation, persisted reader preferences/progress, streaming exports, and provider/account settings. |
+| `src/styles/globals.css`                                                    | Tailwind v4 CSS-first theme, semantic tokens, light/dark variables, and font stacks.                                                                                |
+| `scripts/`                                                                  | Migrations, seed user, postbuild Vercel patch, translation evaluation, and E2E supervisor.                                                                          |
+| `e2e/`                                                                      | Playwright browser workflow; integration tests are colocated under `src/**/*.integration.test.ts`.                                                                  |
+| `drizzle/`                                                                  | Generated PostgreSQL migrations and migration metadata.                                                                                                             |
 
 ## Development Commands
 
@@ -47,24 +47,25 @@ bun dev                 # http://localhost:3000
 bun run inngest         # second terminal, http://localhost:8288
 ```
 
-| Task                                 | Command                                               |
-| ------------------------------------ | ----------------------------------------------------- |
-| Dev server                           | `bun dev`                                             |
-| Inngest local server                 | `bun run inngest`                                     |
-| Production build / preview           | `bun run build` / `bun run preview`                   |
-| Regenerate TanStack route tree       | `bun run generate-routes`                             |
-| Lint / auto-fix                      | `bun run lint` / `bun run lint:fix`                   |
-| Format / check                       | `bun run format` / `bun run format:check`             |
-| Typecheck                            | `bun run typecheck`                                   |
-| Unit tests                           | `bun run test`                                        |
-| PostgreSQL integration tests         | `bun run test:integration` (uses `TEST_DATABASE_URL`) |
-| Browser workflow                     | `bun run test:e2e`                                    |
-| Generate/apply migrations            | `bun run db:generate` / `bun run db:migrate`          |
-| Move legacy covers to storage        | `bun run storage:migrate` (`--dry-run` to preview)    |
-| Create/migrate test database         | `bun run db:migrate:test`                             |
-| Seed admin                           | `bun run seed:user`                                   |
-| Translation evaluation               | `bun run eval:translation <novelId> [chapterNumbers]` |
-| React diagnostics / dependency audit | `bun run doctor` / `bun run audit:release`            |
+| Task                                 | Command                                                  |
+| ------------------------------------ | -------------------------------------------------------- |
+| Dev server                           | `bun dev`                                                |
+| Inngest local server                 | `bun run inngest`                                        |
+| Production build / preview           | `bun run build` / `bun run preview`                      |
+| Regenerate TanStack route tree       | `bun run generate-routes`                                |
+| Lint / auto-fix                      | `bun run lint` / `bun run lint:fix`                      |
+| Format / check                       | `bun run format` / `bun run format:check`                |
+| Typecheck                            | `bun run typecheck`                                      |
+| Unit tests                           | `bun run test`                                           |
+| PostgreSQL integration tests         | `bun run test:integration` (uses `TEST_DATABASE_URL`)    |
+| Browser workflow                     | `bun run test:e2e`                                       |
+| Generate/apply migrations            | `bun run db:generate` / `bun run db:migrate`             |
+| Move legacy covers to storage        | `bun run storage:migrate` (`--dry-run` to preview)       |
+| Prune avatars no user references     | `bun run storage:prune-avatars` (`--dry-run` to preview) |
+| Create/migrate test database         | `bun run db:migrate:test`                                |
+| Seed admin                           | `bun run seed:user`                                      |
+| Translation evaluation               | `bun run eval:translation <novelId> [chapterNumbers]`    |
+| React diagnostics / dependency audit | `bun run doctor` / `bun run audit:release`               |
 
 Database migrations are a release operation, not a Vercel build operation. Set the Vercel project's Root Directory to the repository root; `vercel.json` runs the frozen install and `bun run build && bun run postbuild`. The postbuild patch sets the server function limit needed by long Inngest steps.
 
@@ -72,7 +73,7 @@ Database migrations are a release operation, not a Vercel build operation. Set t
 
 - **TypeScript:** Strict compiler settings, no unused locals/parameters, no explicit `any`, no unchecked side-effect imports, and no fallthrough. Prefer named exports, descriptive camelCase symbols, and colocated leaf types such as `translation/types/*.ts`, `reader/types.ts`, and `*.schemas.ts` for Zod-inferred inputs. Use `@/` (or `#/`) aliases instead of long relative imports.
 - **Folder organization:** A domain folder that outgrows a flat listing splits into role subfolders (`chapters/table/`, `chapters/import/`, `novels/detail/`, `lib/content/chapter/`, `translation/workflow/`), not one folder per file. Keep leaf filenames unchanged, colocate `*.test.ts(x)` with the module, leave domain-wide `*.integration.test.ts` at the domain root, and keep modules shared across subfolders at the domain root. There are no barrel `index.ts` re-exports — import the module directly through `@/`, using relative paths only for same-folder siblings.
-- **Server functions:** Follow `createServerFn({ method })` + `.validator(schema)` + `.handler(...)`. Use `ensureSession()` for mutations, verify resource ownership through the novel/user join, apply guest publication filters and `checkRateLimit` to public reads, and return safe errors through `withSafeHandler`/`SafeServerError`.
+- **Server functions:** Follow `createServerFn({ method })` + `.validator(schema)` + `.handler(...)`. Use `ensureSession()` for mutations, verify resource ownership through the novel/user join, apply guest publication filters and `checkRateLimit` to public reads, and return safe errors through `withSafeHandler`/`SafeServerError`. Keep server-only work behind a `*.server.ts` service and export only server functions from the module client code imports: a plain export that reaches a `.server` module survives into the client bundle and fails the build's import protection.
 - **Errors and untrusted data:** Catch variables are `unknown`; narrow with `instanceof Error`. Validate request/form/JSON input with Zod. Unknown server failures are logged and exposed as a generic safe message. Do not leak provider keys or internal database details.
 - **Database/state:** Drizzle properties are camelCase over snake_case columns. Use `nanoid()` IDs, transactions, and `for('update')` locks for job ownership/state changes. Keep source revisions, translation generations, active job IDs, and outbox intent consistent; do not implement worker validity rules in route handlers.
 - **Async jobs:** Keep LLM work in Inngest workers. Use memoized steps and explicit cancellation/idempotency; sequential chunk loops are intentional because each chunk depends on prior context. Client job hooks are refresh-safe polling/enqueue controls, not workers. Use `Promise.all` only for independent reads.
