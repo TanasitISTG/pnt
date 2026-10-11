@@ -124,7 +124,7 @@ export const previewTermReplacement = createServerFn({ method: "GET" })
       const [row] = await db
         .select({
           chapterCount: sql<number>`count(*)::int`,
-          // ponytail: ::text cast — CockroachDB can't infer a bare placeholder's type inside length()
+          // ponytail: ::text cast — a bare placeholder's type can't be inferred inside length()
           occurrences: sql<number>`coalesce(sum((length(${chapters.translatedContent}) - length(replace(${chapters.translatedContent}, ${data.oldTarget}, ''))) / length(${data.oldTarget}::text)), 0)::int`,
         })
         .from(chapters)

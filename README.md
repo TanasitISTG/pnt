@@ -27,14 +27,14 @@ A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin 
 
 ## Tech Stack
 
-TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`) · shadcn/ui on Base UI · Drizzle ORM + CockroachDB / PostgreSQL (`postgres` driver) · Cloudflare R2 object storage (S3 API via `s3mini`) · Better Auth · Inngest (durable translation steps) · `openai` SDK + Gemini REST over controlled Undici transport · oxlint/oxfmt · Vitest · Nitro (Vercel deploy)
+TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`) · shadcn/ui on Base UI · Drizzle ORM + PostgreSQL (`postgres` driver) · Cloudflare R2 object storage (S3 API via `s3mini`) · Better Auth · Inngest (durable translation steps) · `openai` SDK + Gemini REST over controlled Undici transport · oxlint/oxfmt · Vitest · Nitro (Vercel deploy)
 
 ## Getting Started
 
 ### Prerequisites
 
 - [Bun](https://bun.sh/)
-- A CockroachDB or PostgreSQL database
+- A PostgreSQL database
 
 ### Setup
 
@@ -132,7 +132,7 @@ tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `
 
 | Variable                        | Required | Description                                                                                        |
 | ------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                  | Yes      | CockroachDB / PostgreSQL TCP connection string                                                     |
+| `DATABASE_URL`                  | Yes      | PostgreSQL TCP connection string                                                                   |
 | `TEST_DATABASE_URL`             | No       | Isolated database for `bun run test:integration`                                                   |
 | `BETTER_AUTH_SECRET`            | Yes      | 32-byte base64 random string                                                                       |
 | `BETTER_AUTH_URL`               | Yes      | App base URL, no trailing slash (e.g. `http://localhost:3000`)                                     |

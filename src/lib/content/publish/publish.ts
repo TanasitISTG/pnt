@@ -21,7 +21,7 @@ export const novelLive = (now: Date = new Date()) => lte(novels.publishedAt, now
 // Live = publication reached and a complete translated body is available.
 // `status = 'translated'` already implies a nonblank body, so visibility never
 // tests `translated_content`: referencing that column forces a row fetch per
-// chapter and made guest list queries take seconds on CockroachDB.
+// chapter, which made guest list queries take seconds.
 export const chapterLive = (now: Date = new Date()) =>
   and(lte(chapters.publishedAt, now), eq(chapters.status, "translated"));
 export const chapterVisibleToGuests = (now: Date = new Date()) => chapterLive(now);
