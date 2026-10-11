@@ -1,11 +1,12 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { chapterHasTranslation } from "@/lib/content/publish/publish";
+import { resolvePublicCover } from "@/lib/content/novel/cover-storage.server";
 import { getGlossaryStatsForOwnedNovel } from "@/lib/glossary/service";
 import { getNovelCostsForOwnedNovel } from "@/lib/translation/cost-service";
 
@@ -23,7 +24,7 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
       chunkSize: novels.chunkSize,
       contextTailLength: novels.contextTailLength,
       publishedAt: novels.publishedAt,
-      hasCover: sql<boolean>`${novels.cover} is not null`,
+      coverKey: novels.coverKey,
       createdAt: novels.createdAt,
       updatedAt: novels.updatedAt,
     })
@@ -32,6 +33,7 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
     .limit(1);
 
   if (!novel) return null;
+  const cover = resolvePublicCover(novel.coverKey, novel.publishedAt);
 
   const chapterList = await db
     .select({
@@ -53,11 +55,15 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
     .where(eq(chapters.novelId, novelId))
     .orderBy(asc(chapters.number));
 
+  const { coverKey, ...novelRest } = novel;
   return {
     novel: {
-      ...novel,
+      ...novelRest,
       sourceLang: novel.sourceLang as "en" | "zh",
       targetLang: novel.targetLang as "en" | "th",
+      hasCover: coverKey !== null,
+      coverUrl: cover?.url ?? null,
+      coverSrcSet: cover?.srcSet ?? null,
     },
     chapters: chapterList,
   };

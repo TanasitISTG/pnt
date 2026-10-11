@@ -41,6 +41,7 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 20. Reader manifests contain only navigation metadata. Full chapter bodies are loaded through the full chapter query, and reader anchors take precedence over saved scroll restoration.
 21. Chapter deletion first acquires the owned novel gate, then observes and locks the pointed translation job before locking the chapter and revalidating the pointer. Active work is terminalized with an exact-generation cancellation outbox event before the chapter and cascaded job rows are deleted; matching reader positions are cleared in the same transaction.
 22. Signed-in reader state is account-scoped and single-writer per `(user, novel)`. Opening a chapter preserves the stored fraction only for that chapter and resets it otherwise; a scroll sample for any other chapter is dropped rather than overwriting the newer position; read marks are idempotent. Guests keep the browser-local equivalent, and reader settings stay browser-local for everyone.
+23. Database rows hold storage keys, never object bytes. Cover keys embed an immutable unguessable segment, so replacing a cover writes a new URL instead of purging a CDN object; private-bucket objects are reachable only through signed URLs or authenticated app routes. Storage failures degrade a feature (a missing cache entry rebuilds, a deleted row's archive is reaped) but never fail open into a public read.
 
 ## Novel-first mutation protocol
 
@@ -172,6 +173,52 @@ if all eligible chapters disappear before cursor iteration, a valid empty EPUB i
 Cancellation stops production, closes iteration, and terminates compression. Iteration or
 compression failures remain stream errors rather than successful truncated archives.
 
+## Object storage
+
+Covers, EPUB upload archives, and cached exports live in object storage, not in Postgres.
+`novels.cover_key` holds a key prefix (`covers/<novelId>/<segment>`), `epub_uploads.object_key`
+holds one archive key, and the bytea `cover` column plus the `epub_upload_chunks` staging table
+are gone (migration 0038). Keys are built only through `storage/keys.ts`: cover prefixes carry a
+fresh random segment per upload, so the bytes behind any URL are immutable and the CDN may keep
+them indefinitely, while publication state still gates whether a cover URL is exposed at all —
+draft and scheduled covers resolve to null and fall back to the ownership-checked
+`/api/covers/:novelId` route.
+
+Caching is a property of the delivery path, not of a write. The app never sets a per-object
+`Cache-Control`, and the storage port has no option to: cover variants are kept by a long-lived
+immutable rule on the public bucket's custom domain, which makes the same guarantee for objects
+written by any code path. Adding an immutable-looking header here would let a written object and
+a cached one disagree. `r2.server.ts` talks to R2 through `s3mini` over the bucket-scoped S3
+endpoint, with the client's `fetch` pinned explicitly: the library would otherwise switch to
+Bun's native `Bun.S3Client` for reads, listings, deletes and presigning on a Bun runtime, and
+development would then exercise a different implementation than the Node deployment.
+
+Two buckets separate exposure: `public` serves only live cover variants from the CDN origin and
+always names a `publicUrl`; `private` holds upload archives and cached exports and reports a null
+`publicUrl`, which is the signal to serve through the application instead of handing out a link.
+Cover uploads are validated and re-encoded into WebP variants (320/480/640) plus a retained
+original, so a later variant can be derived without the source upload; deleting a novel's cover
+deletes the whole prefix, and a missing prefix is a no-op.
+
+EPUB uploads are written straight to the private bucket by the browser through a presigned PUT
+for exactly one key and a bounded expiry; the app verifies existence with a metadata `HEAD` rather
+than downloading the object, and the worker reads the archive once to combine and import it. Export
+caching is a best-effort tee: the generated response streams to the client exactly as before and is
+spooled to the private bucket only while it stays under the in-memory cap, so bounded memory never
+depends on the cache. Cache identity is a content fingerprint over format, title, author, target
+language, chapter count, newest chapter update, and highest translation generation; cover or
+publication-only edits deliberately do not invalidate it, and bumping `EXPORT_FORMAT_VERSION`
+invalidates everything. Storage write failures are swallowed for caches and reaped objects, because
+the user-visible operation already succeeded.
+
+When the six `R2_*` variables are unset, `index.server.ts` selects a filesystem adapter rooted at
+`.tura/storage/`; `env.ts` enforces all-or-nothing configuration and requires the full set on
+Vercel. That adapter reports a null `publicUrl` for both buckets and presigns PUTs back to a
+dev-only receiver route, so the production upload path is exercised without a bucket. Migration
+0037 folds keys staged by `bun run storage:migrate` into `cover_key`; that script must run before
+`db:migrate` on any database still holding legacy cover bytes, and `scripts/migrate.ts` refuses to
+apply 0038 while unmapped covers or keyless upload rows remain.
+
 ## Provider transport and upload admission
 
 Both OpenAI and Gemini use the server-only provider network boundary and a shared Undici
@@ -226,4 +273,10 @@ The browser compatibility gate is `bun run test:e2e`. Its supervisor refuses dat
 
 ## Deferred cleanup
 
-The `translation_jobs.chunks_json` contract migration (0032) has been applied. `epub_uploads` carries a partial `(expires_at) WHERE status = 'uploading'` index for the hourly expired-upload cleanup, and `translation_job_chunks_metrics_idx` is deliberately kept as the covering index for the dashboard token/latency aggregate. Scrape responses remain bounded to 5 MB while streaming. Future storage or delivery changes must preserve the invariants and compatibility gates above.
+The `translation_jobs.chunks_json` contract migration (0032) has been applied. `epub_uploads` carries a partial `(expires_at) WHERE status = 'uploading'` index for the hourly expired-upload cleanup, and `translation_job_chunks_metrics_idx` is deliberately kept as the covering index for the dashboard token/latency aggregate. Scrape responses remain bounded to 5 MB while streaming.
+
+The object-storage move (0037 map fold plus 0038 contract) has also been applied: `novels.cover`
+and `epub_upload_chunks` are gone and `epub_uploads.object_key` is required. Re-run order for any
+lagging environment is `bun run storage:migrate` then `bun run db:migrate`; the migration runner's
+preflight enforces it. Future storage or delivery changes must preserve the invariants and
+compatibility gates above.

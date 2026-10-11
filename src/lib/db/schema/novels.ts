@@ -9,7 +9,6 @@ import {
   unique,
   index,
 } from "drizzle-orm/pg-core";
-import { bytea } from "./bytea";
 import { user } from "./auth";
 import { translationJobs } from "./translation-jobs";
 import { glossaryTerms } from "./glossary-terms";
@@ -33,7 +32,9 @@ export const novels = pgTable(
     originalTitle: text("original_title"),
     author: text("author"),
     description: text("description"),
-    cover: bytea("cover"),
+    // Object key prefix in the public bucket: `covers/<novelId>/<segment>`.
+    // Null means the novel has no cover; byte variants are derived from it.
+    coverKey: text("cover_key"),
     coverMime: text("cover_mime"),
     sourceLang: text("source_lang").notNull(),
     targetLang: text("target_lang").notNull(),

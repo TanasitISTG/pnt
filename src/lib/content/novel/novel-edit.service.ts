@@ -8,6 +8,7 @@ import { emptyRelationshipMap, serializeRelationshipMap } from "@/lib/relationsh
 import { SafeServerError } from "@/lib/server-fn-error";
 import { isSupportedLanguagePair } from "@/lib/language-pair";
 import { updateNovelSchema, type UpdateNovelInput } from "@/lib/content/novel/novel.schemas";
+import { deleteCoverSet, writeCoverSet } from "@/lib/content/novel/cover-storage.server";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { mapWithConcurrency } from "@/lib/async";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
@@ -24,71 +25,94 @@ export async function updateNovelForUser(
     throw new SafeServerError("Cover image data was not validated");
   }
 
-  return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({
-        id: novels.id,
-        sourceLang: novels.sourceLang,
-        targetLang: novels.targetLang,
-      })
-      .from(novels)
-      .where(and(eq(novels.id, data.novelId), eq(novels.userId, userId)))
-      .limit(1)
-      .for("update");
+  // Object storage stays outside the transaction: the row lock only covers the
+  // metadata write, and a failed commit deletes the freshly written objects.
+  const nextCoverKey =
+    coverBuffer && !data.removeCover
+      ? await writeCoverSet(data.novelId, coverBuffer, data.coverMime ?? "image/webp")
+      : null;
 
-    if (!existing) {
-      throw new SafeServerError("Novel not found or unauthorized");
-    }
+  let previousCoverKey: string | null = null;
+  let result: { id: string };
+  try {
+    result = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({
+          id: novels.id,
+          sourceLang: novels.sourceLang,
+          targetLang: novels.targetLang,
+          coverKey: novels.coverKey,
+        })
+        .from(novels)
+        .where(and(eq(novels.id, data.novelId), eq(novels.userId, userId)))
+        .limit(1)
+        .for("update");
 
-    const nextSourceLang = data.sourceLang ?? existing.sourceLang;
-    const nextTargetLang = data.targetLang ?? existing.targetLang;
-    const languagePairChanged =
-      nextSourceLang !== existing.sourceLang || nextTargetLang !== existing.targetLang;
-
-    if (!isSupportedLanguagePair(nextSourceLang, nextTargetLang)) {
-      throw new SafeServerError("Unsupported language pair — use EN→TH, ZH→EN, or ZH→TH");
-    }
-
-    if (languagePairChanged) {
-      const [activeChapter] = await tx
-        .select({ id: chapters.id })
-        .from(chapters)
-        .where(and(eq(chapters.novelId, data.novelId), isNotNull(chapters.activeTranslationJobId)))
-        .limit(1);
-      if (activeChapter) {
-        throw new SafeServerError("Cancel active translations before changing the language pair");
+      if (!existing) {
+        throw new SafeServerError("Novel not found or unauthorized");
       }
-    }
 
-    const updateValues: Record<string, unknown> = {
-      title: data.title,
-      originalTitle: data.originalTitle,
-      author: data.author,
-      description: data.description,
-      sourceLang: data.sourceLang,
-      targetLang: data.targetLang,
-      customPrompt: data.customPrompt,
-      updatedAt: new Date(),
-    };
+      const nextSourceLang = data.sourceLang ?? existing.sourceLang;
+      const nextTargetLang = data.targetLang ?? existing.targetLang;
+      const languagePairChanged =
+        nextSourceLang !== existing.sourceLang || nextTargetLang !== existing.targetLang;
 
-    if (languagePairChanged) {
-      updateValues.relationshipMapJson = serializeRelationshipMap(emptyRelationshipMap());
-    }
-    if (data.chunkSize !== undefined) updateValues.chunkSize = data.chunkSize;
-    if (data.contextTailLength !== undefined)
-      updateValues.contextTailLength = data.contextTailLength;
+      if (!isSupportedLanguagePair(nextSourceLang, nextTargetLang)) {
+        throw new SafeServerError("Unsupported language pair — use EN→TH, ZH→EN, or ZH→TH");
+      }
 
-    if (data.removeCover) {
-      updateValues.cover = null;
-      updateValues.coverMime = null;
-    } else if (coverBuffer) {
-      updateValues.cover = coverBuffer;
-      updateValues.coverMime = data.coverMime;
-    }
+      if (languagePairChanged) {
+        const [activeChapter] = await tx
+          .select({ id: chapters.id })
+          .from(chapters)
+          .where(
+            and(eq(chapters.novelId, data.novelId), isNotNull(chapters.activeTranslationJobId)),
+          )
+          .limit(1);
+        if (activeChapter) {
+          throw new SafeServerError("Cancel active translations before changing the language pair");
+        }
+      }
 
-    await tx.update(novels).set(updateValues).where(eq(novels.id, data.novelId));
-    return { id: data.novelId };
-  });
+      const updateValues: Record<string, unknown> = {
+        title: data.title,
+        originalTitle: data.originalTitle,
+        author: data.author,
+        description: data.description,
+        sourceLang: data.sourceLang,
+        targetLang: data.targetLang,
+        customPrompt: data.customPrompt,
+        updatedAt: new Date(),
+      };
+
+      if (languagePairChanged) {
+        updateValues.relationshipMapJson = serializeRelationshipMap(emptyRelationshipMap());
+      }
+      if (data.chunkSize !== undefined) updateValues.chunkSize = data.chunkSize;
+      if (data.contextTailLength !== undefined)
+        updateValues.contextTailLength = data.contextTailLength;
+
+      previousCoverKey = existing.coverKey;
+      if (data.removeCover) {
+        updateValues.coverKey = null;
+        updateValues.coverMime = null;
+      } else if (nextCoverKey) {
+        updateValues.coverKey = nextCoverKey;
+        updateValues.coverMime = data.coverMime ?? null;
+      }
+
+      await tx.update(novels).set(updateValues).where(eq(novels.id, data.novelId));
+      return { id: data.novelId };
+    });
+  } catch (error) {
+    await deleteCoverSet(nextCoverKey).catch(() => {});
+    throw error;
+  }
+
+  if (previousCoverKey && previousCoverKey !== nextCoverKey) {
+    await deleteCoverSet(previousCoverKey).catch(() => {});
+  }
+  return result;
 }
 
 export async function deleteNovelForUser(
@@ -96,8 +120,15 @@ export async function deleteNovelForUser(
   novelId: string,
   dispatch: (outboxId: string) => Promise<void> = dispatchWorkflowOutboxEventBestEffort,
 ): Promise<{ success: true }> {
-  const outboxIds = await db.transaction(async (tx) => {
-    if (!(await lockNovelForMutation(tx, novelId, userId))) return [];
+  const { outboxIds, coverKey } = await db.transaction(async (tx) => {
+    if (!(await lockNovelForMutation(tx, novelId, userId))) {
+      return { outboxIds: [] as string[], coverKey: null as string | null };
+    }
+    const [novelRow] = await tx
+      .select({ coverKey: novels.coverKey })
+      .from(novels)
+      .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
+      .limit(1);
     const novelChapters = await tx
       .select({ id: chapters.id })
       .from(chapters)
@@ -137,8 +168,14 @@ export async function deleteNovelForUser(
     );
     const importOutboxIds = await cancelActiveImportsInTransaction(tx, novelId, now);
     await tx.delete(novels).where(and(eq(novels.id, novelId), eq(novels.userId, userId)));
-    return [...cancellation.outboxIds, ...importOutboxIds];
+    return {
+      outboxIds: [...cancellation.outboxIds, ...importOutboxIds],
+      coverKey: novelRow?.coverKey ?? null,
+    };
   });
+  // Cover objects are reachable only after the row is gone, so a crash between
+  // the two leaves objects with no row rather than a row with no cover.
+  await deleteCoverSet(coverKey).catch(() => {});
   await mapWithConcurrency(outboxIds, 2, async (outboxId) => {
     try {
       await dispatch(outboxId);

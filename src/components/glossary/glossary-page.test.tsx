@@ -74,6 +74,8 @@ const novel = {
   contextTailLength: 1_000,
   publishedAt: null,
   hasCover: false,
+  coverUrl: null,
+  coverSrcSet: null,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 };

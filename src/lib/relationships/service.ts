@@ -1,11 +1,12 @@
 import "@tanstack/react-start/server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { nanoid } from "@/lib/utils";
 import { db } from "@/lib/db";
 import { novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { parseLanguagePair } from "@/lib/language-pair";
+import { resolvePublicCover } from "@/lib/content/novel/cover-storage.server";
 import {
   deleteRelationshipEntrySchema,
   relationshipMapSchema,
@@ -37,7 +38,7 @@ export async function getRelationshipWorkspaceForUser(userId: string, novelId: s
       chunkSize: novels.chunkSize,
       contextTailLength: novels.contextTailLength,
       publishedAt: novels.publishedAt,
-      hasCover: sql<boolean>`${novels.cover} is not null`,
+      coverKey: novels.coverKey,
       createdAt: novels.createdAt,
       updatedAt: novels.updatedAt,
       relationshipMapJson: novels.relationshipMapJson,
@@ -47,13 +48,17 @@ export async function getRelationshipWorkspaceForUser(userId: string, novelId: s
     .limit(1);
 
   if (!row) return null;
-  const { relationshipMapJson, ...novel } = row;
+  const { relationshipMapJson, coverKey, ...novel } = row;
+  const cover = resolvePublicCover(coverKey, novel.publishedAt);
   const pair = parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`);
   return {
     novel: {
       ...novel,
       sourceLang: novel.sourceLang as "en" | "zh",
       targetLang: novel.targetLang as "en" | "th",
+      hasCover: coverKey !== null,
+      coverUrl: cover?.url ?? null,
+      coverSrcSet: cover?.srcSet ?? null,
     },
     map: pair ? parseStoredMap(relationshipMapJson) : null,
   };

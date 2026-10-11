@@ -9,9 +9,7 @@ import {
   index,
   uniqueIndex,
   unique,
-  primaryKey,
 } from "drizzle-orm/pg-core";
-import { bytea } from "./bytea";
 import { novels } from "./novels";
 
 export const importJobKindEnum = pgEnum("import_job_kind", ["scrape", "epub"]);
@@ -76,8 +74,9 @@ export const epubUploads = pgTable(
       .references(() => novels.id, { onDelete: "cascade" }),
     fileName: text("file_name").notNull(),
     fileSize: integer("file_size").notNull(),
-    chunkCount: integer("chunk_count").notNull(),
-    receivedBytes: integer("received_bytes").notNull().default(0),
+    // Key of the staged archive in the private bucket, written by a presigned
+    // direct upload. Verified against fileSize before the import is queued.
+    objectKey: text("object_key").notNull(),
     status: epubUploadStatusEnum("status").notNull().default("uploading"),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -89,18 +88,6 @@ export const epubUploads = pgTable(
       .on(table.expiresAt)
       .where(sql`${table.status} = 'uploading'`),
   ],
-);
-
-export const epubUploadChunks = pgTable(
-  "epub_upload_chunks",
-  {
-    uploadId: text("upload_id")
-      .notNull()
-      .references(() => epubUploads.id, { onDelete: "cascade" }),
-    chunkIndex: integer("chunk_index").notNull(),
-    data: bytea("data").notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.uploadId, table.chunkIndex] })],
 );
 
 export const importJobItems = pgTable(
@@ -137,18 +124,10 @@ export const importJobsRelations = relations(importJobs, ({ one, many }) => ({
   }),
 }));
 
-export const epubUploadsRelations = relations(epubUploads, ({ one, many }) => ({
+export const epubUploadsRelations = relations(epubUploads, ({ one }) => ({
   novel: one(novels, {
     fields: [epubUploads.novelId],
     references: [novels.id],
-  }),
-  chunks: many(epubUploadChunks),
-}));
-
-export const epubUploadChunksRelations = relations(epubUploadChunks, ({ one }) => ({
-  upload: one(epubUploads, {
-    fields: [epubUploadChunks.uploadId],
-    references: [epubUploads.id],
   }),
 }));
 

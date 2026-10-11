@@ -17,7 +17,9 @@ import * as epubParser from "./parser";
 
 vi.mock("./job-store", () => ({
   loadEpubImportJob: vi.fn(),
-  loadOrderedUploadChunks: vi.fn(),
+  loadEpubUploadObjectKey: vi.fn(),
+  readStagedEpubArchive: vi.fn(),
+  deleteStagedEpubArchive: vi.fn(),
   stageImportJobItems: vi.fn(),
   importOneStagedChapter: vi.fn(),
   markEpubImportJobDone: vi.fn(),
@@ -84,12 +86,14 @@ describe("EPUB worker steps", () => {
       expect(epubJobStore.stageImportJobItems).not.toHaveBeenCalled();
     });
 
-    it("concatenates chunks, parses EPUB, calculates fallback numbers, and stages items", async () => {
+    it("reads the staged archive, parses EPUB, calculates fallback numbers, and stages items", async () => {
       vi.mocked(epubJobStore.loadEpubImportJob).mockResolvedValueOnce(dummyJob as never);
-      vi.mocked(epubJobStore.loadOrderedUploadChunks).mockResolvedValueOnce([
-        { chunkIndex: 0, data: Buffer.from([1, 2, 3]) },
-        { chunkIndex: 1, data: Buffer.from([4, 5, 6]) },
-      ]);
+      vi.mocked(epubJobStore.loadEpubUploadObjectKey).mockResolvedValueOnce(
+        "epub-uploads/upload-1",
+      );
+      vi.mocked(epubJobStore.readStagedEpubArchive).mockResolvedValueOnce(
+        Uint8Array.from([1, 2, 3, 4, 5, 6]),
+      );
       vi.mocked(epubParser.parseEpubArchive).mockReturnValueOnce({
         metadata: { title: "Novel", author: "Author", language: "zh", description: null },
         chapters: [
@@ -119,12 +123,15 @@ describe("EPUB worker steps", () => {
           rawCharCount: 9,
         },
       ]);
+      // The raw archive is dropped once every chapter is staged.
+      expect(epubJobStore.deleteStagedEpubArchive).toHaveBeenCalledWith("epub-uploads/upload-1");
     });
     it("terminalizes an EPUB with no importable chapters and cleans up", async () => {
       vi.mocked(epubJobStore.loadEpubImportJob).mockResolvedValueOnce(dummyJob as never);
-      vi.mocked(epubJobStore.loadOrderedUploadChunks).mockResolvedValueOnce([
-        { chunkIndex: 0, data: Buffer.from([1]) },
-      ]);
+      vi.mocked(epubJobStore.loadEpubUploadObjectKey).mockResolvedValueOnce(
+        "epub-uploads/upload-1",
+      );
+      vi.mocked(epubJobStore.readStagedEpubArchive).mockResolvedValueOnce(Uint8Array.from([1]));
       vi.mocked(epubParser.parseEpubArchive).mockReturnValueOnce({
         metadata: { title: "Novel", author: null, language: null, description: null },
         chapters: [],
@@ -143,9 +150,10 @@ describe("EPUB worker steps", () => {
 
     it("rejects chapter numbers with more than two decimal places", async () => {
       vi.mocked(epubJobStore.loadEpubImportJob).mockResolvedValueOnce(dummyJob as never);
-      vi.mocked(epubJobStore.loadOrderedUploadChunks).mockResolvedValueOnce([
-        { chunkIndex: 0, data: Buffer.from([1]) },
-      ]);
+      vi.mocked(epubJobStore.loadEpubUploadObjectKey).mockResolvedValueOnce(
+        "epub-uploads/upload-1",
+      );
+      vi.mocked(epubJobStore.readStagedEpubArchive).mockResolvedValueOnce(Uint8Array.from([1]));
       vi.mocked(epubParser.parseEpubArchive).mockReturnValueOnce({
         metadata: { title: "Novel", author: null, language: null, description: null },
         chapters: [{ number: "1.234", title: "Invalid", content: "Content" }],
@@ -235,13 +243,35 @@ describe("EPUB worker steps", () => {
   });
 
   describe("finishEpubImportJob and failEpubImportJob", () => {
-    it("finish marks job done and cleans staged data", async () => {
+    it("finish removes the staged archive before marking the job done", async () => {
+      vi.mocked(epubJobStore.loadEpubImportJob).mockResolvedValueOnce({
+        ...dummyJob,
+        status: "running",
+        epubUploadId: "upload-1",
+      } as never);
+      vi.mocked(epubJobStore.loadEpubUploadObjectKey).mockResolvedValueOnce(
+        "epub-uploads/upload-1",
+      );
+
       await finishEpubImportJob("job-1");
+
+      expect(epubJobStore.deleteStagedEpubArchive).toHaveBeenCalledWith("epub-uploads/upload-1");
       expect(epubJobStore.markEpubImportJobDone).toHaveBeenCalledWith("job-1");
     });
 
-    it("fail marks job error and cleans staged data", async () => {
+    it("fail removes the staged archive before marking the job errored", async () => {
+      vi.mocked(epubJobStore.loadEpubImportJob).mockResolvedValueOnce({
+        ...dummyJob,
+        status: "running",
+        epubUploadId: "upload-1",
+      } as never);
+      vi.mocked(epubJobStore.loadEpubUploadObjectKey).mockResolvedValueOnce(
+        "epub-uploads/upload-1",
+      );
+
       await failEpubImportJob("job-1", "Parser failed");
+
+      expect(epubJobStore.deleteStagedEpubArchive).toHaveBeenCalledWith("epub-uploads/upload-1");
       expect(epubJobStore.markEpubImportJobError).toHaveBeenCalledWith("job-1", "Parser failed");
     });
   });

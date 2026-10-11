@@ -1,16 +1,11 @@
 import "@tanstack/react-start/server-only";
 
-import { eq, and, asc, count, sql, inArray } from "drizzle-orm";
+import { eq, and, count, sql, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
-import {
-  chapters,
-  importJobs,
-  importJobItems,
-  epubUploads,
-  epubUploadChunks,
-} from "@/lib/db/schema";
+import { chapters, importJobs, importJobItems, epubUploads } from "@/lib/db/schema";
+import { getPrivateStorage } from "@/lib/storage/index.server";
 import { nanoid } from "@/lib/utils";
 
 export async function loadEpubImportJob(jobId: string) {
@@ -18,15 +13,30 @@ export async function loadEpubImportJob(jobId: string) {
   return job ?? null;
 }
 
-export async function loadOrderedUploadChunks(uploadId: string) {
-  return await db
-    .select({
-      chunkIndex: epubUploadChunks.chunkIndex,
-      data: epubUploadChunks.data,
-    })
-    .from(epubUploadChunks)
-    .where(eq(epubUploadChunks.uploadId, uploadId))
-    .orderBy(asc(epubUploadChunks.chunkIndex));
+/** Locates the staged archive for a job; the bytes live in the private bucket. */
+export async function loadEpubUploadObjectKey(uploadId: string): Promise<string | null> {
+  const [upload] = await db
+    .select({ objectKey: epubUploads.objectKey })
+    .from(epubUploads)
+    .where(eq(epubUploads.id, uploadId))
+    .limit(1);
+  return upload?.objectKey ?? null;
+}
+
+/**
+ * Reads the staged archive as one buffer. The EPUB parser needs the whole file in
+ * memory anyway, so this matches the previous concatenated-chunk memory profile.
+ */
+export async function readStagedEpubArchive(objectKey: string): Promise<Uint8Array | null> {
+  const object = await getPrivateStorage().get(objectKey);
+  return object?.bytes ?? null;
+}
+
+/** Best-effort removal of a staged archive; a missing object is not an error. */
+export async function deleteStagedEpubArchive(objectKey: string): Promise<void> {
+  await getPrivateStorage()
+    .delete(objectKey)
+    .catch(() => {});
 }
 
 async function lockEpubImportJob(tx: NovelMutationTransaction, jobId: string) {
@@ -112,9 +122,6 @@ export async function stageImportJobItems(
         updatedAt: new Date(),
       })
       .where(eq(epubUploads.id, uploadId));
-
-    // Delete raw chunks atomically after successful staging
-    await tx.delete(epubUploadChunks).where(eq(epubUploadChunks.uploadId, uploadId));
 
     return items.length;
   });
@@ -255,7 +262,7 @@ export async function markEpubImportJobError(jobId: string, message: string): Pr
 }
 
 export async function cleanupExpiredUploads(): Promise<number> {
-  return await db.transaction(async (tx) => {
+  const objectKeys = await db.transaction(async (tx) => {
     const expired = await tx
       .select({ novelId: epubUploads.novelId })
       .from(epubUploads)
@@ -270,7 +277,7 @@ export async function cleanupExpiredUploads(): Promise<number> {
     for (const novelId of novelIds) {
       if (await lockNovelForMutation(tx, novelId)) lockedNovelIds.push(novelId);
     }
-    if (lockedNovelIds.length === 0) return 0;
+    if (lockedNovelIds.length === 0) return [];
 
     const deleted = await tx
       .delete(epubUploads)
@@ -281,7 +288,14 @@ export async function cleanupExpiredUploads(): Promise<number> {
           eq(epubUploads.status, "uploading"),
         ),
       )
-      .returning({ id: epubUploads.id });
-    return deleted.length;
+      .returning({ objectKey: epubUploads.objectKey });
+    return deleted.map((row) => row.objectKey);
   });
+
+  // Objects are removed only after the rows are gone, so a crash here can leave an
+  // orphan object but never a live upload whose archive has been deleted.
+  for (const objectKey of objectKeys) {
+    await deleteStagedEpubArchive(objectKey);
+  }
+  return objectKeys.length;
 }

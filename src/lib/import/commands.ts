@@ -3,14 +3,8 @@ import "@tanstack/react-start/server-only";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import {
-  epubUploadChunks,
-  epubUploads,
-  importJobItems,
-  importJobs,
-  novels,
-  workflowOutbox,
-} from "@/lib/db/schema";
+import { epubUploads, importJobItems, importJobs, novels, workflowOutbox } from "@/lib/db/schema";
+import { getPrivateStorage } from "@/lib/storage/index.server";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { chapterUrlFor, findSource } from "@/lib/scrape";
@@ -175,6 +169,31 @@ export async function completeEpubImportForUser(
   uploadId: string,
   dispatch: ImportOutboxDispatch = dispatchWorkflowOutboxEventBestEffort,
 ): Promise<{ jobId: string; outboxIds: string[] }> {
+  // The browser wrote the archive straight to storage, so its declared size is the
+  // only bound on what landed. Verify the object before any job state changes; an
+  // upload still marked `uploading` has not been trusted yet.
+  const [verification] = await db
+    .select({
+      objectKey: epubUploads.objectKey,
+      fileSize: epubUploads.fileSize,
+      status: epubUploads.status,
+      expired: sql<boolean>`${epubUploads.expiresAt} <= CURRENT_TIMESTAMP`,
+    })
+    .from(epubUploads)
+    .innerJoin(novels, eq(epubUploads.novelId, novels.id))
+    .where(and(eq(epubUploads.id, uploadId), eq(novels.userId, userId)))
+    .limit(1);
+  if (!verification) throw new SafeServerError("Upload not found or unauthorized");
+  if (verification.status === "uploading" && !verification.expired) {
+    const storage = getPrivateStorage();
+    const head = await storage.head(verification.objectKey);
+    if (!head) throw new SafeServerError("Uploaded EPUB file was not found in storage");
+    if (head.size !== verification.fileSize) {
+      await storage.delete(verification.objectKey).catch(() => {});
+      throw new SafeServerError("Uploaded EPUB size does not match the declared file size");
+    }
+  }
+
   const result = await db.transaction(async (tx) => {
     const [upload] = await tx
       .select({
@@ -182,8 +201,6 @@ export async function completeEpubImportForUser(
         novelId: epubUploads.novelId,
         fileName: epubUploads.fileName,
         fileSize: epubUploads.fileSize,
-        chunkCount: epubUploads.chunkCount,
-        receivedBytes: epubUploads.receivedBytes,
         status: epubUploads.status,
         expiresAt: epubUploads.expiresAt,
       })
@@ -208,8 +225,6 @@ export async function completeEpubImportForUser(
         novelId: epubUploads.novelId,
         fileName: epubUploads.fileName,
         fileSize: epubUploads.fileSize,
-        chunkCount: epubUploads.chunkCount,
-        receivedBytes: epubUploads.receivedBytes,
         status: epubUploads.status,
         expired: sql<boolean>`${epubUploads.expiresAt} <= CURRENT_TIMESTAMP`,
       })
@@ -234,17 +249,6 @@ export async function completeEpubImportForUser(
     if (lockedUpload.expired) {
       throw new SafeServerError("Upload session has expired");
     }
-
-    const chunks = await tx
-      .select({ chunkIndex: epubUploadChunks.chunkIndex })
-      .from(epubUploadChunks)
-      .where(eq(epubUploadChunks.uploadId, uploadId))
-      .orderBy(asc(epubUploadChunks.chunkIndex));
-    const complete =
-      chunks.length === lockedUpload.chunkCount &&
-      chunks.every((chunk, index) => chunk.chunkIndex === index) &&
-      lockedUpload.receivedBytes === lockedUpload.fileSize;
-    if (!complete) throw new SafeServerError("Upload is incomplete: missing chunks");
 
     const now = new Date();
     const outboxIds = await cancelActiveImportsInTransaction(tx, lockedUpload.novelId, now);

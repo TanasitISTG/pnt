@@ -8,8 +8,21 @@ import { getSession } from "@/lib/auth/functions";
 import { RateLimitError } from "@/lib/server-fn-error";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { immutablePublicCacheControl } from "@/lib/cache-control";
-const coverWidthSchema = z.enum(["320", "480", "640"]);
+import { log } from "@/lib/log";
+import { getPublicStorage } from "@/lib/storage/index.server";
+import { COVER_WIDTHS, coverVariantKey, defaultCoverWidth } from "@/lib/storage/keys";
 
+const coverWidthSchema = z.enum(
+  COVER_WIDTHS.map((width) => String(width)) as [string, ...string[]],
+);
+
+/**
+ * Ownership- and publication-checked cover delivery.
+ *
+ * Live novels hand the browser a public CDN URL, so this route mainly serves
+ * drafts, scheduled novels, and the admin's own previews — the paths where a
+ * cover must not be reachable without a session.
+ */
 export const Route = createFileRoute("/api/covers/$")({
   server: {
     handlers: {
@@ -31,13 +44,12 @@ export const Route = createFileRoute("/api/covers/$")({
             return new Response("Unsupported cover width", { status: 400 });
           }
           const requestedWidth = widthResult?.success
-            ? (Number(widthResult.data) as 320 | 480 | 640)
+            ? (Number(widthResult.data) as (typeof COVER_WIDTHS)[number])
             : undefined;
           const [novel] = await db
             .select({
               id: novels.id,
-              cover: novels.cover,
-              coverMime: novels.coverMime,
+              coverKey: novels.coverKey,
             })
             .from(novels)
             .where(
@@ -47,41 +59,33 @@ export const Route = createFileRoute("/api/covers/$")({
             )
             .limit(1);
 
-          if (!novel || !novel.cover) {
+          if (!novel || !novel.coverKey) {
             return new Response("Not Found", { status: 404 });
           }
 
-          // Drizzle's native bytea column returns Buffer or Uint8Array.
-          // Since Uint8Array/Buffer can be sent in Response directly, we convert to Buffer/Uint8Array:
-          const buffer = Buffer.isBuffer(novel.cover)
-            ? novel.cover
-            : Buffer.from(novel.cover as Uint8Array);
-
-          const cacheControl = session ? "private, max-age=3600" : immutablePublicCacheControl();
-          if (requestedWidth) {
-            // Sharp stays out of the browser graph and only loads for variant requests.
-            const { resizeCover } = await import("@/lib/content/novel/cover-image.server");
-            const resized = await resizeCover(new Uint8Array(buffer), requestedWidth);
-            return new Response(Buffer.from(resized), {
-              headers: {
-                "Content-Type": "image/webp",
-                "Cache-Control": cacheControl,
-              },
-            });
+          const storage = getPublicStorage();
+          const object = await storage.get(
+            coverVariantKey(novel.coverKey, requestedWidth ?? defaultCoverWidth()),
+          );
+          if (!object) {
+            return new Response("Not Found", { status: 404 });
           }
 
-          return new Response(new Uint8Array(buffer), {
+          return new Response(object.bytes as unknown as BodyInit, {
             headers: {
-              "Content-Type": novel.coverMime || "image/jpeg",
+              "Content-Type": object.contentType ?? "image/webp",
               // Guest URLs carry ?v=<updatedAt> (bumps on any novel edit), so a
               // changed cover gets a new URL and the old one can be cached forever.
-              "Cache-Control": cacheControl,
+              "Cache-Control": session ? "private, max-age=3600" : immutablePublicCacheControl(),
             },
           });
         } catch (err) {
           if (err instanceof RateLimitError) {
             return new Response("Too Many Requests", { status: 429 });
           }
+          log("error", "Cover delivery failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
           return new Response("Internal Server Error", { status: 500 });
         }
       },

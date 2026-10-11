@@ -3,6 +3,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres, { type Sql } from "postgres";
 import { sql as drizzleSql } from "drizzle-orm";
 import type * as NovelLocks from "@/lib/db/novel-lock";
+import type * as Storage from "@/lib/storage/index.server";
+import { COVER_WIDTHS, coverVariantKey, epubUploadKey } from "@/lib/storage/keys";
 import * as fflate from "fflate";
 import type {
   prepareEpubImportJob as PrepareEpubImportJob,
@@ -24,6 +26,14 @@ let finishEpubImportJob: typeof FinishEpubImportJob;
 let cleanupExpiredEpubUploads: typeof CleanupExpiredEpubUploads;
 let cancelImportJobForUser: typeof CancelImportJobForUser;
 let novelLocks: typeof NovelLocks;
+let storage: typeof Storage;
+
+/** Writes the staged archive where the presigned upload would have put it. */
+async function stageArchive(objectKey: string, bytes: Uint8Array): Promise<void> {
+  await storage.getPrivateStorage().put(objectKey, bytes, {
+    contentType: "application/epub+zip",
+  });
+}
 
 function pauseNextNovelGate(novelId: string) {
   const original = novelLocks.lockNovelForMutation;
@@ -136,6 +146,7 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
     // Defer server-only imports until DATABASE_URL points to the disposable database.
     novelLocks = await import("@/lib/db/novel-lock");
+    storage = await import("@/lib/storage/index.server");
 
     ({
       prepareEpubImportJob,
@@ -167,16 +178,14 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
   it("completes full EPUB import lifecycle: upload persistence, staging, duplicate handling, and cleanup", async () => {
     const epubBytes = createTestEpubBuffer();
 
-    // 1. Persist upload and chunk
+    // 1. Persist upload and stage the archive in object storage
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const objectKey = epubUploadKey(uploadId);
     await sql`
-      INSERT INTO "epub_uploads" ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at", "created_at", "updated_at")
-      VALUES (${uploadId}, ${novelId}, 'test.epub', ${epubBytes.length}, 1, ${epubBytes.length}, 'uploading', ${expiresAt}, now(), now())
+      INSERT INTO "epub_uploads" ("id", "novel_id", "file_name", "file_size", "object_key", "status", "expires_at", "created_at", "updated_at")
+      VALUES (${uploadId}, ${novelId}, 'test.epub', ${epubBytes.length}, ${objectKey}, 'uploading', ${expiresAt}, now(), now())
     `;
-    await sql`
-      INSERT INTO "epub_upload_chunks" ("upload_id", "chunk_index", "data")
-      VALUES (${uploadId}, 0, ${Buffer.from(epubBytes)})
-    `;
+    await stageArchive(objectKey, epubBytes);
 
     // 2. Create import job
     await sql`
@@ -191,17 +200,16 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
       )
     `;
 
-    // 3. Prepare job: parses archive, stages items, removes chunks
+    // 3. Prepare job: parses archive, stages items, removes the staged archive
     const prep = await prepareEpubImportJob(jobId);
     expect(prep.skip).toBe(false);
     expect(prep.total).toBe(3);
 
-    // Verify upload status changed to 'staged' and chunks were removed
+    // Verify upload status changed to 'staged' and the archive was released
     const [uploadRow] = await sql`SELECT "status" FROM "epub_uploads" WHERE "id" = ${uploadId}`;
     expect(uploadRow.status).toBe("staged");
 
-    const chunks = await sql`SELECT * FROM "epub_upload_chunks" WHERE "upload_id" = ${uploadId}`;
-    expect(chunks.length).toBe(0);
+    expect(await storage.getPrivateStorage().head(objectKey)).toBeNull();
 
     // Verify staged items
     const stagedItems =
@@ -279,8 +287,8 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     const futureDate = new Date(Date.now() + 60 * 60 * 1000);
 
     await sql`
-      INSERT INTO "epub_uploads" ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at", "created_at", "updated_at")
-      VALUES (${canceledUploadId}, ${novelId}, 'canceled.epub', 0, 0, 0, 'staged', ${futureDate}, now(), now())
+      INSERT INTO "epub_uploads" ("id", "novel_id", "file_name", "file_size", "object_key", "status", "expires_at", "created_at", "updated_at")
+      VALUES (${canceledUploadId}, ${novelId}, 'canceled.epub', 0, ${epubUploadKey(canceledUploadId)}, 'staged', ${futureDate}, now(), now())
     `;
     await sql`
       INSERT INTO "import_jobs" (
@@ -332,18 +340,16 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     await sql`DELETE FROM "import_jobs" WHERE "id" = ${scrapeJobId}`;
   });
 
-  it("cleans up expired uploads whose status is uploading", async () => {
+  it("cleans up expired uploads whose status is uploading, including their staged archive", async () => {
     const expiredUploadId = `upload-exp-${randomUUID()}`;
     const pastDate = new Date(Date.now() - 1000 * 60 * 60 * 25); // 25 hours ago
+    const expiredObjectKey = epubUploadKey(expiredUploadId);
 
     await sql`
-      INSERT INTO "epub_uploads" ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at", "created_at", "updated_at")
-      VALUES (${expiredUploadId}, ${novelId}, 'expired.epub', 100, 1, 100, 'uploading', ${pastDate}, now(), now())
+      INSERT INTO "epub_uploads" ("id", "novel_id", "file_name", "file_size", "object_key", "status", "expires_at", "created_at", "updated_at")
+      VALUES (${expiredUploadId}, ${novelId}, 'expired.epub', 3, ${expiredObjectKey}, 'uploading', ${pastDate}, now(), now())
     `;
-    await sql`
-      INSERT INTO "epub_upload_chunks" ("upload_id", "chunk_index", "data")
-      VALUES (${expiredUploadId}, 0, ${Buffer.from([1, 2, 3])})
-    `;
+    await stageArchive(expiredObjectKey, Uint8Array.from([1, 2, 3]));
 
     const cleaned = await cleanupExpiredEpubUploads();
     expect(cleaned).toBeGreaterThanOrEqual(1);
@@ -351,9 +357,7 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     const checkUpload = await sql`SELECT * FROM "epub_uploads" WHERE "id" = ${expiredUploadId}`;
     expect(checkUpload.length).toBe(0);
 
-    const checkChunks =
-      await sql`SELECT * FROM "epub_upload_chunks" WHERE "upload_id" = ${expiredUploadId}`;
-    expect(checkChunks.length).toBe(0);
+    expect(await storage.getPrivateStorage().head(expiredObjectKey)).toBeNull();
   });
 
   it("rejects a staging upload from a different novel without touching either resource", async () => {
@@ -370,10 +374,8 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
         [foreignUploadId, otherNovelId],
       ]) {
         await sql`INSERT INTO "epub_uploads"
-          ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at")
-          VALUES (${id}, ${parent}, 'source.epub', 3, 1, 3, 'queued', now() + interval '1 day')`;
-        await sql`INSERT INTO "epub_upload_chunks" ("upload_id", "chunk_index", "data")
-          VALUES (${id}, 0, ${Buffer.from([1, 2, 3])})`;
+          ("id", "novel_id", "file_name", "file_size", "object_key", "status", "expires_at")
+          VALUES (${id}, ${parent}, 'source.epub', 3, ${epubUploadKey(id)}, 'queued', now() + interval '1 day')`;
       }
       await sql`INSERT INTO "import_jobs"
         ("id", "novel_id", "kind", "status", "base_url", "epub_upload_id", "from_number", "to_number", "next_number", "scrape_provider")
@@ -395,9 +397,6 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
       for (const id of [ownUploadId, foreignUploadId]) {
         const [upload] = await sql`SELECT "status" FROM "epub_uploads" WHERE "id" = ${id}`;
         expect(upload.status).toBe("queued");
-        const [chunk] =
-          await sql`SELECT "data" FROM "epub_upload_chunks" WHERE "upload_id" = ${id}`;
-        expect(Buffer.from(chunk.data)).toEqual(Buffer.from([1, 2, 3]));
       }
     } finally {
       await sql`DELETE FROM "import_jobs" WHERE "id" = ${stagingJobId}`;
@@ -418,13 +417,18 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     const parentId = `novel-${randomUUID()}`;
     const resourceId = `upload-${randomUUID()}`;
     const activeJobId = `job-${randomUUID()}`;
-    await sql`INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang")
-      VALUES (${parentId}, ${userId}, 'EPUB deletion race', 'zh', 'en')`;
+    // The cascade must also reclaim the novel's public cover objects, so this
+    // fixture carries one; the dispatch snapshot observes it alongside the rows.
+    const coverPrefix = `covers/${parentId}/race-${randomUUID()}`;
+    const coverObjectKey = coverVariantKey(coverPrefix, COVER_WIDTHS[0]);
+    await storage.getPublicStorage().put(coverObjectKey, Uint8Array.from([1]), {
+      contentType: "image/webp",
+    });
+    await sql`INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang", "cover_key")
+      VALUES (${parentId}, ${userId}, 'EPUB deletion race', 'zh', 'en', ${coverPrefix})`;
     await sql`INSERT INTO "epub_uploads"
-      ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at")
-      VALUES (${resourceId}, ${parentId}, 'source.epub', 3, 1, 3, ${operation === "stage" ? "queued" : "staged"}, now() + interval '1 day')`;
-    await sql`INSERT INTO "epub_upload_chunks" ("upload_id", "chunk_index", "data")
-      VALUES (${resourceId}, 0, ${Buffer.from([1, 2, 3])})`;
+      ("id", "novel_id", "file_name", "file_size", "object_key", "status", "expires_at")
+      VALUES (${resourceId}, ${parentId}, 'source.epub', 3, ${epubUploadKey(resourceId)}, ${operation === "stage" ? "queued" : "staged"}, now() + interval '1 day')`;
     await sql`INSERT INTO "import_jobs"
       ("id", "novel_id", "kind", "status", "base_url", "epub_upload_id", "from_number", "to_number", "next_number", "scrape_provider")
       VALUES (${activeJobId}, ${parentId}, 'epub', 'running', 'epub://source', ${resourceId}, 1, 1, 1, 'epub')`;
@@ -454,9 +458,7 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
           (await sql`SELECT "id" FROM "novels" WHERE "id" = ${parentId}`).length,
           (await sql`SELECT "id" FROM "epub_uploads" WHERE "id" = ${resourceId}`).length,
           (await sql`SELECT "id" FROM "import_job_items" WHERE "job_id" = ${activeJobId}`).length,
-          (
-            await sql`SELECT "chunk_index" FROM "epub_upload_chunks" WHERE "upload_id" = ${resourceId}`
-          ).length,
+          (await storage.getPublicStorage().head(coverObjectKey)) === null ? 0 : 1,
         ];
         // Eager failure must not undo the committed cascade or lose its durable intent.
         throw new Error("Dispatch unavailable");
@@ -507,11 +509,11 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     const resourceId = `upload-${randomUUID()}`;
     await sql`INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang")
       VALUES (${parentId}, ${userId}, 'Expiry race', 'zh', 'en')`;
+    const raceObjectKey = epubUploadKey(resourceId);
     await sql`INSERT INTO "epub_uploads"
-      ("id", "novel_id", "file_name", "file_size", "chunk_count", "received_bytes", "status", "expires_at")
-      VALUES (${resourceId}, ${parentId}, 'source.epub', 3, 1, 3, 'uploading', now() - interval '1 day')`;
-    await sql`INSERT INTO "epub_upload_chunks" ("upload_id", "chunk_index", "data")
-      VALUES (${resourceId}, 0, ${Buffer.from([1, 2, 3])})`;
+      ("id", "novel_id", "file_name", "file_size", "object_key", "status", "expires_at")
+      VALUES (${resourceId}, ${parentId}, 'source.epub', 3, ${raceObjectKey}, 'uploading', now() - interval '1 day')`;
+    await stageArchive(raceObjectKey, Uint8Array.from([1, 2, 3]));
     const gate = pauseNextNovelGate(parentId);
     const pending: Promise<unknown>[] = [];
     try {
@@ -530,9 +532,10 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
       await bounded(Promise.all([queue, cleanup]));
       const [upload] = await sql`SELECT "status" FROM "epub_uploads" WHERE "id" = ${resourceId}`;
       expect(upload.status).toBe("queued");
-      const [chunk] =
-        await sql`SELECT "data" FROM "epub_upload_chunks" WHERE "upload_id" = ${resourceId}`;
-      expect(Buffer.from(chunk.data)).toEqual(Buffer.from([1, 2, 3]));
+      // The competing transaction re-marked the upload as queued, so cleanup left
+      // both its row and its staged archive alone.
+      const staged = await storage.getPrivateStorage().get(raceObjectKey);
+      expect(staged === null ? null : Buffer.from(staged.bytes)).toEqual(Buffer.from([1, 2, 3]));
     } finally {
       gate.release();
       await Promise.allSettled(pending);

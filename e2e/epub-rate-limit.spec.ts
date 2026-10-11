@@ -29,7 +29,7 @@ test("EPUB account quota returns HTTP 429 without a guest IP", async ({ page }) 
     for (let index = 0; index < 7; index += 1) {
       try {
         await createEpubUpload({
-          data: { novelId: "unused", fileName: "invalid.txt", fileSize: 1, chunkCount: 1 },
+          data: { novelId: "unused", fileName: "invalid.txt", fileSize: 1 },
         });
       } catch {
         // Expected: filename rejection for six calls, then quota rejection.

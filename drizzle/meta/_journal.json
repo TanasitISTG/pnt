@@ -253,6 +253,27 @@
       "when": 1789643445641,
       "tag": "0035_mature_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791670845355,
+      "tag": "0036_curly_yellow_claw",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791670889111,
+      "tag": "0037_r2_backfill_cover_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791670934826,
+      "tag": "0038_gifted_tinkerer",
+      "breakpoints": true
     }
   ]
 }

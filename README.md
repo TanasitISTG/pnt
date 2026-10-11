@@ -14,7 +14,7 @@ A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin 
 
 ## Features
 
-- **Novel library** — gallery grid with cover uploads (stored in Postgres), language pair display, and translation progress
+- **Novel library** — gallery grid with cover uploads (validated, re-encoded to WebP variants, and served from object storage), language pair display, and translation progress
 - **Chapter CRUD** — paste raw text or bulk-import from supported sites (`quanben.io`, `twkan.com`, `biquge.tw`); decimal numbering for re-ordering
 - **Inngest-driven translation** — serverless-safe, chunked at paragraph boundaries, resumable, cancellable, per-chunk retry
 - **Consistency engine** — per-novel glossary (approved terms injected per chunk) + rolling chapter summaries for stable names/tone
@@ -27,7 +27,7 @@ A novel translation app (EN→TH default, ZH→EN, ZH→TH) with a single admin 
 
 ## Tech Stack
 
-TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`) · shadcn/ui on Base UI · Drizzle ORM + CockroachDB / PostgreSQL (`postgres` driver) · Better Auth · Inngest (durable translation steps) · `openai` SDK + Gemini REST over controlled Undici transport · oxlint/oxfmt · Vitest · Nitro (Vercel deploy)
+TanStack Start (React 19, Vite) + Router + Query · Tailwind v4 (CSS-first `@theme`) · shadcn/ui on Base UI · Drizzle ORM + CockroachDB / PostgreSQL (`postgres` driver) · Cloudflare R2 object storage (S3 API via `s3mini`) · Better Auth · Inngest (durable translation steps) · `openai` SDK + Gemini REST over controlled Undici transport · oxlint/oxfmt · Vitest · Nitro (Vercel deploy)
 
 ## Getting Started
 
@@ -66,21 +66,22 @@ bun run inngest
 
 ### Commands
 
-| Task                  | Command                                      |
-| --------------------- | -------------------------------------------- |
-| Dev server            | `bun dev`                                    |
-| Inngest dev           | `bun run inngest`                            |
-| Production build      | `bun run build`                              |
-| Lint / fix            | `bun run lint` / `bun run lint:fix`          |
-| Format / check        | `bun run format` / `bun run format:check`    |
-| Tests                 | `bun run test`                               |
-| PostgreSQL invariants | `bun run test:integration`                   |
-| Browser workflow      | `bun run test:e2e`                           |
-| Release audit         | `bun run audit:release`                      |
-| DB generate / migrate | `bun run db:generate` / `bun run db:migrate` |
-| Migrate test database | `bun run db:migrate:test`                    |
-| Seed admin user       | `bun run seed:user`                          |
-| Regenerate route tree | `bun run generate-routes`                    |
+| Task                   | Command                                      |
+| ---------------------- | -------------------------------------------- |
+| Dev server             | `bun dev`                                    |
+| Inngest dev            | `bun run inngest`                            |
+| Production build       | `bun run build`                              |
+| Lint / fix             | `bun run lint` / `bun run lint:fix`          |
+| Format / check         | `bun run format` / `bun run format:check`    |
+| Tests                  | `bun run test`                               |
+| PostgreSQL invariants  | `bun run test:integration`                   |
+| Browser workflow       | `bun run test:e2e`                           |
+| Release audit          | `bun run audit:release`                      |
+| DB generate / migrate  | `bun run db:generate` / `bun run db:migrate` |
+| Move covers to storage | `bun run storage:migrate`                    |
+| Migrate test database  | `bun run db:migrate:test`                    |
+| Seed admin user        | `bun run seed:user`                          |
+| Regenerate route tree  | `bun run generate-routes`                    |
 
 ### Deployment migrations
 
@@ -97,6 +98,19 @@ merge bookmarks or choose which note to retain. If this preflight fails, abort t
 leave the existing application/schema in service after lifting maintenance and resolve the
 duplicates through a deliberate, data-preserving operator decision before retrying. The
 unique index remains the final backstop if a write races preflight; do not bypass the guard.
+
+Migration 0038 is the contract half of the object-storage move: it drops `novels.cover`,
+drops `epub_upload_chunks`, and makes `epub_uploads.object_key` required. For any database
+that already holds cover bytes, the expand half is 0037, which folds in keys staged by
+`bun run storage:migrate`. That means the release order is explicitly
+`bun run storage:migrate` **before** `bun run db:migrate`. The storage script uploads each
+legacy cover to object storage and records one row per novel in a temporary
+`r2_migration_covers` map; 0037 copies those keys into `cover_key` and drops the map, 0038
+then drops the bytea column. `bun run storage:migrate --dry-run` reports what would move
+without writing anything, and the script refuses to finish while any cover is unmapped or
+any EPUB upload is queued or staged, so no archive is lost to an ordering mistake. The
+migration runner performs the same preflight and aborts with a nonzero exit code when
+unmigrated covers or keyless upload rows remain.
 
 The release audit fails on moderate, high, or critical advisories. Direct dependencies and
 tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `esbuild`,
@@ -127,6 +141,12 @@ tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `
 | `FIRECRAWL_API_KEY`             | No       | Firecrawl API key for scrape endpoint                                                              |
 | `VITE_PUBLIC_POSTHOG_KEY`       | No       | PostHog project API key for frontend analytics                                                     |
 | `VITE_PUBLIC_POSTHOG_HOST`      | No       | PostHog API host (default `https://us.i.posthog.com`)                                              |
+| `R2_ACCOUNT_ID`                 | Prod     | Cloudflare account ID owning the R2 buckets                                                        |
+| `R2_ACCESS_KEY_ID`              | Prod     | R2 S3-API access key ID                                                                            |
+| `R2_SECRET_ACCESS_KEY`          | Prod     | R2 S3-API secret access key                                                                        |
+| `R2_PUBLIC_BUCKET`              | Prod     | Bucket for published cover variants, served from the CDN origin                                    |
+| `R2_PRIVATE_BUCKET`             | Prod     | Bucket for EPUB upload archives and cached exports; never publicly readable                        |
+| `R2_PUBLIC_BASE_URL`            | Prod     | Canonical HTTPS origin of the public bucket's custom domain, no trailing slash                     |
 
 ### Provider connections
 
@@ -203,6 +223,15 @@ sizing the database connection limit or external pooler.
 - Account bookmarks load in 200-row keyset pages with explicit **Load more** and a partial
   count while more remain; 200 is not a storage quota. A reader-state refetch replaces
   accumulated pages with the first page and its continuation. Guests retain local storage.
+- `src/lib/storage/` is the object-storage port. `keys.ts` is pure key/revision derivation,
+  `r2.server.ts` speaks the R2 S3 API, `local.server.ts` is the filesystem adapter used when
+  R2 is unconfigured, and `index.server.ts` selects between them. Covers are uploaded to the
+  public bucket as per-width WebP variants under `covers/<novelId>/<unguessable segment>/`, so
+  replacing a cover yields a fresh URL instead of a cache purge. EPUB upload archives and
+  cached exports live in the private bucket and are reached only through signed URLs or the
+  app's own routes. When R2 is absent the app boots against `.tura/storage/`, which keeps the
+  upload code path identical (presigned PUTs point back at a dev-only receiver route) without
+  a bucket. The `R2_*` variables are all-or-nothing, and Vercel requires all six.
 - `src/lib/scrape/index.ts` is a client-safe facade over pure parsers. DNS resolution and private-IP
   rejection live in the server-only `src/lib/scrape/network-policy.server.ts` boundary.
 
@@ -214,7 +243,10 @@ sizing the database connection limit or external pooler.
 suites skip themselves when the variable is unset. `bun run test:e2e` owns a guarded `*_e2e`
 database, app, Inngest dev server, and deterministic OpenAI-compatible stub, then drives login,
 novel/chapter creation, translation, publication, logout, and guest reading in an installed Chrome
-or Edge browser. Every child process is bounded and torn down on success or failure.
+or Edge browser. Every child process is bounded and torn down on success or failure. Unit and
+integration suites exercise object storage through the filesystem adapter under
+`.tura/storage/`, so no bucket or credentials are needed to verify upload, variant, cleanup,
+and streamed-export behavior locally.
 
 ## Docs
 
@@ -226,6 +258,23 @@ or Edge browser. Every child process is bounded and torn down on success or fail
 ### Vercel
 
 Connect the repository in Vercel. If the project was previously configured with **Root Directory** `apps/web`, change it back to the repository root so Vercel uses the root `bun.lock` and `vercel.json`. Set all required environment variables. The Nitro adapter produces a self-contained Node server; the configured build also runs the postbuild function-duration patch.
+
+### Cloudflare R2
+
+Covers, EPUB upload archives, and cached exports live in object storage. Create two R2
+buckets — one public (cover variants, fronted by a custom domain) and one private (upload
+archives and exports) — then create an R2 API token with object read/write access and set the
+six `R2_*` variables. `R2_PUBLIC_BASE_URL` must be the public bucket's custom domain as a
+canonical HTTPS origin with no trailing slash; the app uses it to build cover URLs and falls
+back to serving through its own proxy route when it is unset. Without the full set the app
+boots against the local filesystem adapter, which is fine in development and on the CI runner
+but not on Vercel, where all six are required.
+
+Cover objects carry no `Cache-Control` header: caching is a rule on the public domain. Add a
+Cloudflare Cache Rule for the cover path with a long edge TTL so the CDN keeps the variants,
+which is safe because every upload writes a fresh unguessable key segment and the bytes at any
+cover URL never change. EPUB archives and cached exports live behind the private bucket and are
+never cached publicly.
 
 ### Inngest (production)
 

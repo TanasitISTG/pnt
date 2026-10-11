@@ -53,6 +53,8 @@ export function NovelCard({
             <NovelCover
               novelId={novel.hasCover ? novel.id : null}
               coverVersion={novel.updatedAt}
+              coverUrl={novel.coverUrl}
+              coverSrcSet={novel.coverSrcSet}
               lazy={lazyCover}
               priority={priorityCover}
               sizes={

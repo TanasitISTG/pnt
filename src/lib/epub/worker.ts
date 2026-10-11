@@ -3,7 +3,9 @@ import "@tanstack/react-start/server-only";
 import { parseEpubArchive } from "./parser";
 import {
   loadEpubImportJob,
-  loadOrderedUploadChunks,
+  loadEpubUploadObjectKey,
+  readStagedEpubArchive,
+  deleteStagedEpubArchive,
   stageImportJobItems,
   importOneStagedChapter,
   markEpubImportJobDone,
@@ -35,18 +37,14 @@ export async function prepareEpubImportJob(
     throw new SafeServerError("EPUB upload ID is missing from import job");
   }
 
-  const chunks = await loadOrderedUploadChunks(job.epubUploadId);
-  if (chunks.length === 0) {
-    throw new SafeServerError("EPUB upload chunks not found");
+  const objectKey = await loadEpubUploadObjectKey(job.epubUploadId);
+  if (!objectKey) {
+    throw new SafeServerError("EPUB upload storage key is missing from import job");
   }
 
-  // Concatenate ordered chunks into a single buffer
-  const totalLength = chunks.reduce((acc, c) => acc + c.data.length, 0);
-  const combined = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    combined.set(chunk.data, offset);
-    offset += chunk.data.length;
+  const combined = await readStagedEpubArchive(objectKey);
+  if (!combined || combined.length === 0) {
+    throw new SafeServerError("EPUB upload file was not found in storage");
   }
 
   // Parse EPUB archive
@@ -99,9 +97,12 @@ export async function prepareEpubImportJob(
 
   const total = await stageImportJobItems(jobId, job.epubUploadId, items);
   if (total === 0) {
+    await deleteStagedEpubArchive(objectKey);
     await markEpubImportJobError(jobId, "EPUB contains no importable chapters.");
     return { skip: true };
   }
+  // Every chapter is staged, so the raw archive is no longer needed.
+  await deleteStagedEpubArchive(objectKey);
   return { skip: false, total };
 }
 
@@ -166,13 +167,26 @@ export async function importEpubChapterBatch(
   return { stop: false };
 }
 
+/**
+ * Removes the staged archive before its owning row is deleted, so a terminal job
+ * never leaves an object that nothing can reach.
+ */
+async function deleteJobEpubArchive(jobId: string): Promise<void> {
+  const job = await loadEpubImportJob(jobId);
+  if (!job?.epubUploadId) return;
+  const objectKey = await loadEpubUploadObjectKey(job.epubUploadId);
+  if (objectKey) await deleteStagedEpubArchive(objectKey);
+}
+
 export async function finishEpubImportJob(jobId: string): Promise<void> {
   log("info", "EPUB worker step finish", { jobId });
+  await deleteJobEpubArchive(jobId);
   await markEpubImportJobDone(jobId);
 }
 
 export async function failEpubImportJob(jobId: string, message: string): Promise<void> {
   log("error", "EPUB worker step fail", { jobId, message });
+  await deleteJobEpubArchive(jobId);
   await markEpubImportJobError(jobId, message);
 }
 

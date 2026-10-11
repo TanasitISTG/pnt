@@ -35,6 +35,8 @@ const BASE_NOVEL: NovelHeaderProps["novel"] = {
   contextTailLength: 3,
   publishedAt: null,
   hasCover: false,
+  coverUrl: null,
+  coverSrcSet: null,
   createdAt: new Date("2025-01-01T00:00:00.000Z"),
   updatedAt: new Date("2025-01-01T00:00:00.000Z"),
 };

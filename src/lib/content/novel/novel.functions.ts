@@ -20,6 +20,11 @@ import {
   getAdminNovelDetailCoreForUser,
   getAdminNovelDetailMetricsForUser,
 } from "@/lib/content/novel/admin-novel-detail.service";
+import {
+  deleteCoverSet,
+  resolvePublicCover,
+  writeCoverSet,
+} from "@/lib/content/novel/cover-storage.server";
 
 export interface NovelListItem {
   id: string;
@@ -35,6 +40,9 @@ export interface NovelListItem {
   hasCover: number;
   chapterCount: number;
   translatedCount: number;
+  /** Public CDN URL; null keeps the client on the proxied cover route. */
+  coverUrl: string | null;
+  coverSrcSet: string | null;
 }
 
 export const listNovels = createServerFn({ method: "GET" }).handler(async () => {
@@ -58,7 +66,8 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
             publishedAt: novels.publishedAt,
             createdAt: novels.createdAt,
             updatedAt: novels.updatedAt,
-            hasCover: sql<number>`CASE WHEN ${novels.cover} IS NOT NULL THEN 1 ELSE 0 END`,
+            hasCover: sql<number>`CASE WHEN ${novels.coverKey} IS NOT NULL THEN 1 ELSE 0 END`,
+            coverKey: novels.coverKey,
             chapterCount: sql<number>`count(${chapters.id})::int`,
             translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
           })
@@ -74,12 +83,18 @@ export const listNovels = createServerFn({ method: "GET" }).handler(async () => 
           .orderBy(desc(novels.createdAt)),
       );
 
-      return rows.map((row) => ({
-        ...row,
-        chapterCount: Number(row.chapterCount || 0),
-        translatedCount: Number(row.translatedCount || 0),
-        hasCover: Number(row.hasCover || 0),
-      }));
+      return rows.map((row) => {
+        const cover = resolvePublicCover(row.coverKey, row.publishedAt);
+        const { coverKey: _coverKey, ...item } = row;
+        return {
+          ...item,
+          chapterCount: Number(row.chapterCount || 0),
+          translatedCount: Number(row.translatedCount || 0),
+          hasCover: Number(row.hasCover || 0),
+          coverUrl: cover?.url ?? null,
+          coverSrcSet: cover?.srcSet ?? null,
+        };
+      });
     });
   } finally {
     timing.flush();
@@ -106,7 +121,7 @@ export const getNovel = createServerFn({ method: "GET" })
           chunkSize: novels.chunkSize,
           contextTailLength: novels.contextTailLength,
           publishedAt: novels.publishedAt,
-          hasCover: sql<boolean>`${novels.cover} is not null`,
+          coverKey: novels.coverKey,
           createdAt: novels.createdAt,
           updatedAt: novels.updatedAt,
         })
@@ -120,10 +135,15 @@ export const getNovel = createServerFn({ method: "GET" })
 
       if (!novel) return null;
 
+      const cover = resolvePublicCover(novel.coverKey, novel.publishedAt);
+      const { coverKey, ...novelRest } = novel;
       return {
-        ...novel,
+        ...novelRest,
         sourceLang: novel.sourceLang as "en" | "zh",
         targetLang: novel.targetLang as "en" | "th",
+        hasCover: coverKey !== null,
+        coverUrl: cover?.url ?? null,
+        coverSrcSet: cover?.srcSet ?? null,
         // Guests don't get admin-only settings — NovelCover fetches covers from the public /api/covers route.
         customPrompt: session ? novel.customPrompt : null,
       };
@@ -236,21 +256,31 @@ export const createNovel = createServerFn({ method: "POST" })
         assertCoverMagicBytes(coverBuffer, data.coverMime ?? "");
       }
 
-      await db.insert(novels).values({
-        id: novelId,
-        userId: session.user.id,
-        title: data.title,
-        originalTitle: data.originalTitle,
-        author: data.author,
-        description: data.description,
-        cover: coverBuffer,
-        coverMime: data.coverMime,
-        sourceLang: data.sourceLang,
-        targetLang: data.targetLang,
-        customPrompt: data.customPrompt,
-        chunkSize: data.chunkSize,
-        contextTailLength: data.contextTailLength,
-      });
+      // Objects are written before the row, so a novel never points at a missing
+      // cover; if the insert fails the just-written objects are removed again.
+      const coverKey = coverBuffer
+        ? await writeCoverSet(novelId, coverBuffer, data.coverMime ?? "image/webp")
+        : null;
+      try {
+        await db.insert(novels).values({
+          id: novelId,
+          userId: session.user.id,
+          title: data.title,
+          originalTitle: data.originalTitle,
+          author: data.author,
+          description: data.description,
+          coverKey,
+          coverMime: coverKey ? (data.coverMime ?? null) : null,
+          sourceLang: data.sourceLang,
+          targetLang: data.targetLang,
+          customPrompt: data.customPrompt,
+          chunkSize: data.chunkSize,
+          contextTailLength: data.contextTailLength,
+        });
+      } catch (error) {
+        await deleteCoverSet(coverKey).catch(() => {});
+        throw error;
+      }
 
       return { id: novelId };
     });

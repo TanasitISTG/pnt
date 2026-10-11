@@ -14,6 +14,7 @@ __unconfig*
 todos.json
 evals/results/
 .tura/e2e/
+.tura/storage/
 .vitest/
 playwright-report/
 test-results/

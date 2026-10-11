@@ -12,8 +12,78 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+// In-memory object storage: these tests defend backup orchestration, not bucket
+// behaviour, so no network or filesystem is involved.
+const storageMock = vi.hoisted(() => {
+  interface Entry {
+    bytes: Uint8Array;
+    contentType: string | null;
+  }
+  const createBucket = () => {
+    const objects = new Map<string, Entry>();
+    return {
+      objects,
+      async put(key: string, bytes: Uint8Array, options: { contentType: string }) {
+        objects.set(key, { bytes: new Uint8Array(bytes), contentType: options.contentType });
+      },
+      async get(key: string) {
+        const entry = objects.get(key);
+        return entry
+          ? { bytes: new Uint8Array(entry.bytes), contentType: entry.contentType }
+          : null;
+      },
+      async head(key: string) {
+        const entry = objects.get(key);
+        return entry ? { size: entry.bytes.length, contentType: entry.contentType } : null;
+      },
+      async delete(key: string) {
+        objects.delete(key);
+      },
+      async deletePrefix(prefix: string) {
+        for (const key of objects.keys()) {
+          if (key.startsWith(prefix)) objects.delete(key);
+        }
+      },
+      async presignPut() {
+        return "https://storage.test/upload";
+      },
+      publicUrl(key: string) {
+        return `https://cdn.test/${key}`;
+      },
+    };
+  };
+  const buckets = { public: createBucket(), private: createBucket() };
+  return {
+    buckets,
+    api: {
+      getStorage: () => buckets,
+      getPublicStorage: () => buckets.public,
+      getPrivateStorage: () => buckets.private,
+      isLocalStorage: () => false,
+      resetStorageCache: () => {},
+    },
+  };
+});
+
+vi.mock("@/lib/storage/index.server", () => storageMock.api);
+
+// Sharp is exercised directly in cover-image.server.test.ts; here the cover bytes
+// are a placeholder signature, so variant generation passes them through.
+vi.mock("@/lib/content/novel/cover-image.server", () => ({
+  resizeCover: async (buffer: Uint8Array) => buffer,
+}));
+
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const exportedAt = "2026-01-01T00:00:00.000Z";
+const COVER_KEY = "covers/novel-1/segment";
+const COVER_ORIGINAL_KEY = `${COVER_KEY}/original`;
+
+function seedStoredCover(contentType: string | null): void {
+  storageMock.buckets.public.objects.set(COVER_ORIGINAL_KEY, {
+    bytes: new Uint8Array(PNG_BYTES),
+    contentType,
+  });
+}
 
 function novelRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -23,7 +93,7 @@ function novelRow(overrides: Record<string, unknown> = {}) {
     originalTitle: null,
     author: null,
     description: null,
-    cover: null,
+    coverKey: null,
     coverMime: null,
     sourceLang: "zh",
     targetLang: "en",
@@ -120,6 +190,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   selectQueue = [];
   insertedValues = [];
+  storageMock.buckets.public.objects.clear();
+  storageMock.buckets.private.objects.clear();
   vi.mocked(db.select).mockImplementation(() => {
     const rows = selectQueue.shift() ?? [];
     // Both `await query.orderBy(...)` (materialized export) and
@@ -177,15 +249,27 @@ describe("backup export", () => {
   });
 
   it("refuses a cover type the app could not serve or restore", async () => {
-    selectQueue = [[novelRow({ cover: PNG_BYTES, coverMime: "image/gif" })], [], []];
+    seedStoredCover("image/gif");
+    selectQueue = [[novelRow({ coverKey: COVER_KEY, coverMime: "image/gif" })], [], []];
 
     await expect(exportBackupForUser("user-1")).rejects.toThrow(/unsupported cover media type/);
   });
 
   it("refuses to export cover bytes with no media type", async () => {
-    selectQueue = [[novelRow({ cover: PNG_BYTES, coverMime: null })], [], []];
+    seedStoredCover(null);
+    selectQueue = [[novelRow({ coverKey: COVER_KEY, coverMime: null })], [], []];
 
     await expect(exportBackupForUser("user-1")).rejects.toThrow(/cover image without a media type/);
+  });
+
+  it("reads the cover back out of storage so the file stays self-contained", async () => {
+    seedStoredCover("image/png");
+    selectQueue = [[novelRow({ coverKey: COVER_KEY, coverMime: "image/png" })], [], []];
+
+    const backup = await exportBackupForUser("user-1");
+
+    expect(backup.novels[0]?.coverMime).toBe("image/png");
+    expect(backup.novels[0]?.coverBase64).toBe(PNG_BYTES.toString("base64"));
   });
   it.each([
     "{",

@@ -6,6 +6,8 @@ import { db, queryClient } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { contentDisposition, sanitizeFilename } from "@/lib/filename";
 import { splitParagraphs } from "@/lib/translation/text/paragraphs";
+import { getPrivateStorage } from "@/lib/storage/index.server";
+import { exportObjectKey, exportRevision } from "@/lib/storage/keys";
 import { createEpubStream, type EpubChapter, type EpubMetadata } from "./epub";
 
 interface ExportChapterRow {
@@ -85,6 +87,96 @@ async function* chapterCursor(novelId: string): AsyncGenerator<ExportChapterRow>
 // One chapter's serialization output may exceed the queue mark; the bound is
 // "highWaterMark plus at most one pending unit", never a whole novel.
 const STREAM_HIGH_WATER_MARK = 64 * 1024;
+
+// Cached exports are held in memory only while the client consumes them. Above
+// this the response still streams normally and is simply not cached, so the
+// bounded-memory guarantee never depends on the cache.
+const EXPORT_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+
+interface ChapterRevisionStats {
+  chapterCount: number;
+  maxChapterUpdatedAt: Date | null;
+  maxTranslationGeneration: number;
+}
+
+async function loadChapterRevisionStats(novelId: string): Promise<ChapterRevisionStats> {
+  const [row] = await db
+    .select({
+      chapterCount: sql<number>`count(*)::int`,
+      maxChapterUpdatedAt: sql<Date | null>`max(${chapters.updatedAt})`,
+      maxTranslationGeneration: sql<number>`coalesce(max(${chapters.translationGeneration}), 0)::int`,
+    })
+    .from(chapters)
+    .where(eq(chapters.novelId, novelId));
+  return {
+    chapterCount: Number(row?.chapterCount ?? 0),
+    maxChapterUpdatedAt: row?.maxChapterUpdatedAt ?? null,
+    maxTranslationGeneration: Number(row?.maxTranslationGeneration ?? 0),
+  };
+}
+
+/**
+ * Tees a generated export into object storage while the client streams it, so a
+ * repeat download of an unchanged novel never re-walks every chapter. Cache writes
+ * are best-effort: a failure must not fail or truncate the download.
+ */
+function spoolExportToStorage(
+  source: ReadableStream<Uint8Array>,
+  key: string,
+  contentType: string,
+): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  let overflowed = false;
+  let stored = false;
+
+  async function persist(): Promise<void> {
+    if (stored || overflowed || size === 0) return;
+    stored = true;
+    try {
+      const bytes = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+      await getPrivateStorage().put(key, bytes, { contentType });
+    } catch {
+      // The download already succeeded; a missing cache entry only costs a rebuild.
+    }
+  }
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          await persist();
+          return;
+        }
+        if (!overflowed) {
+          if (size + value.length > EXPORT_CACHE_MAX_BYTES) {
+            overflowed = true;
+            chunks.length = 0;
+          } else {
+            // Copy: the queued buffer is owned by the consumer. Nothing in the
+            // export generators reuses one, but this keeps the spool independent.
+            chunks.push(value.slice());
+            size += value.length;
+          }
+        }
+        controller.enqueue(value);
+      },
+      async cancel() {
+        overflowed = true;
+        await reader.cancel();
+      },
+    },
+    new ByteLengthQueuingStrategy({ highWaterMark: STREAM_HIGH_WATER_MARK }),
+  );
+}
 
 function textStream(title: string, author: string | null, novelId: string) {
   const encoder = new TextEncoder();
@@ -166,26 +258,49 @@ export async function createNovelExportResponse(
     return new Response("Novel not found or has no translated chapters", { status: 404 });
 
   const filename = `${sanitizeFilename(manifest.novel.title)}.${format}`;
+  const contentType = format === "txt" ? "text/plain; charset=utf-8" : "application/epub+zip";
   const headers = new Headers({
     "Cache-Control": "private, no-store",
     "Content-Disposition": contentDisposition(filename),
-    "Content-Type": format === "txt" ? "text/plain; charset=utf-8" : "application/epub+zip",
+    "Content-Type": contentType,
     "X-Content-Type-Options": "nosniff",
   });
   if (!includeBody) return new Response(null, { status: 200, headers });
 
-  if (format === "txt") {
-    return new Response(
-      textStream(manifest.novel.title, manifest.novel.author, manifest.novel.id),
-      { headers },
-    );
+  const stats = await loadChapterRevisionStats(manifest.novel.id);
+  const cacheKey = exportObjectKey(
+    manifest.novel.id,
+    exportRevision({
+      format,
+      novelTitle: manifest.novel.title,
+      novelAuthor: manifest.novel.author,
+      targetLang: manifest.novel.targetLang,
+      chapterCount: stats.chapterCount,
+      maxChapterUpdatedAt: stats.maxChapterUpdatedAt,
+      maxTranslationGeneration: stats.maxTranslationGeneration,
+    }),
+    format,
+  );
+
+  // Exports stay private: a cached object is streamed back through this
+  // authenticated route, never handed to the browser as a signed URL.
+  const cached = await getPrivateStorage().get(cacheKey);
+  if (cached) {
+    return new Response(cached.bytes as unknown as BodyInit, { headers });
   }
 
-  const metadata: EpubMetadata = {
-    title: manifest.novel.title,
-    author: manifest.novel.author || "Unknown",
-    language: manifest.novel.targetLang || "en",
-    identifier: `urn:pnt:${manifest.novel.id}`,
-  };
-  return new Response(createEpubStream(metadata, epubChapters(manifest.novel.id)), { headers });
+  const generated =
+    format === "txt"
+      ? textStream(manifest.novel.title, manifest.novel.author, manifest.novel.id)
+      : createEpubStream(
+          {
+            title: manifest.novel.title,
+            author: manifest.novel.author || "Unknown",
+            language: manifest.novel.targetLang || "en",
+            identifier: `urn:pnt:${manifest.novel.id}`,
+          } satisfies EpubMetadata,
+          epubChapters(manifest.novel.id),
+        );
+
+  return new Response(spoolExportToStorage(generated, cacheKey, contentType), { headers });
 }

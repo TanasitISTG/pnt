@@ -13,9 +13,8 @@ import {
   abortEpubUpload,
   completeEpubUpload,
   createEpubUpload,
-  uploadEpubChunk,
+  EPUB_CONTENT_TYPE,
 } from "@/lib/epub/functions";
-import { blobToDataUrl } from "@/lib/utils";
 
 interface EpubImportSectionProps {
   novelId: string;
@@ -25,13 +24,39 @@ interface EpubImportSectionProps {
   otherImportActive: boolean;
 }
 
-const CHUNK_SIZE = 1024 * 1024; // 1 MiB
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MiB
 
 interface UploadProgress {
-  currentChunk: number;
-  totalChunks: number;
   percent: number;
+}
+
+/**
+ * Sends the archive straight to object storage through the presigned URL. XHR is
+ * deliberate: fetch cannot report upload progress, and the file is too large for a
+ * server-function body on the platform bound.
+ */
+function putEpubWithProgress(
+  uploadUrl: string,
+  file: File,
+  onProgress: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", uploadUrl);
+    request.setRequestHeader("Content-Type", EPUB_CONTENT_TYPE);
+    request.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    });
+    request.addEventListener("load", () => {
+      if (request.status >= 200 && request.status < 300) resolve();
+      else reject(new Error("Could not upload the EPUB file"));
+    });
+    request.addEventListener("error", () => reject(new Error("Could not upload the EPUB file")));
+    request.addEventListener("abort", () => reject(new Error("EPUB upload was cancelled")));
+    request.send(file);
+  });
 }
 
 const epubFileSchema = z.custom<File | null>(
@@ -85,9 +110,8 @@ export function EpubImportSection({
       const file = parsed.epubFile;
       if (!file) return;
 
-      const chunkCount = Math.ceil(file.size / CHUNK_SIZE);
       setUploadError(null);
-      setUploadProgress({ currentChunk: 0, totalChunks: chunkCount, percent: 0 });
+      setUploadProgress({ percent: 0 });
       let uploadId: string | null = null;
 
       try {
@@ -96,33 +120,13 @@ export function EpubImportSection({
             novelId,
             fileName: file.name,
             fileSize: file.size,
-            chunkCount,
           },
         });
         uploadId = createResult.uploadId;
 
-        // The upload protocol intentionally stays sequential for deterministic recovery.
-        for (let index = 0; index < chunkCount; index += 1) {
-          const start = index * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const slice = file.slice(start, end);
-          const dataUrl = await blobToDataUrl(slice);
-          const dataBase64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
-          await uploadEpubChunk({
-            data: {
-              uploadId,
-              chunkIndex: index,
-              dataBase64,
-            },
-          });
-
-          const currentChunk = index + 1;
-          setUploadProgress({
-            currentChunk,
-            totalChunks: chunkCount,
-            percent: Math.round((currentChunk / chunkCount) * 100),
-          });
-        }
+        await putEpubWithProgress(createResult.uploadUrl, file, (percent) => {
+          setUploadProgress({ percent });
+        });
 
         const { jobId } = await completeEpubUpload({ data: { uploadId } });
         importController.attachJob(jobId, file.name);
@@ -333,9 +337,7 @@ export function EpubImportSection({
               className="gap-2"
             >
               <div className="flex w-full items-center gap-3 text-sm text-muted-foreground">
-                <ProgressLabel>
-                  Uploading chunk {uploadProgress.currentChunk} of {uploadProgress.totalChunks}
-                </ProgressLabel>
+                <ProgressLabel>Uploading EPUB</ProgressLabel>
                 <ProgressValue>{() => `${uploadProgress.percent}%`}</ProgressValue>
               </div>
             </Progress>

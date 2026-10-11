@@ -48,8 +48,11 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
         : novel.description
       : "Read translated web novel chapters.";
     const appUrl = import.meta.env.VITE_APP_URL;
-    const coverBaseUrl = novel?.hasCover ? `/api/covers/${novel.id}` : null;
-    const coverUrl = novel?.hasCover ? `${appUrl ?? ""}${coverBaseUrl}` : undefined;
+    const proxiedCoverUrl = novel?.hasCover ? `/api/covers/${novel.id}` : null;
+    // Live novels carry a CDN URL; drafts fall back to the proxied route so the
+    // social preview never exposes an unpublished cover key.
+    const coverUrl =
+      novel?.coverUrl ?? (proxiedCoverUrl ? `${appUrl ?? ""}${proxiedCoverUrl}` : undefined);
     const version = novel?.updatedAt ? new Date(novel.updatedAt).getTime() : null;
     const versionParam = version ? `&v=${version}` : "";
 
@@ -64,16 +67,26 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
         { name: "twitter:description", content: description },
         ...(coverUrl ? [{ name: "twitter:image", content: coverUrl }] : []),
       ],
-      links: coverBaseUrl
+      links: novel?.coverUrl
         ? [
             {
               rel: "preload",
               as: "image",
-              href: `${coverBaseUrl}?w=480${versionParam}`,
+              href: novel.coverUrl,
+              imageSrcSet: novel.coverSrcSet ?? undefined,
               fetchPriority: "high",
             },
           ]
-        : [],
+        : proxiedCoverUrl
+          ? [
+              {
+                rel: "preload",
+                as: "image",
+                href: `${proxiedCoverUrl}?w=480${versionParam}`,
+                fetchPriority: "high",
+              },
+            ]
+          : [],
     };
   },
   remountDeps: ({ params }) => ({ novelId: params.novelId }),

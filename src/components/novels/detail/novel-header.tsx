@@ -429,8 +429,10 @@ export function NovelHeader({
       <div className="grid grid-cols-[96px_1fr] items-start gap-4 md:grid-cols-[200px_1fr] md:gap-6">
         <div className="relative aspect-3/4 w-full overflow-hidden rounded-xl border border-border bg-foreground/3">
           <NovelCover
-            novelId={novel.id}
+            novelId={novel.hasCover ? novel.id : null}
             coverVersion={novel.updatedAt}
+            coverUrl={novel.coverUrl}
+            coverSrcSet={novel.coverSrcSet}
             alt={novel.title}
             sizes="(max-width: 767px) 96px, 200px"
             priority

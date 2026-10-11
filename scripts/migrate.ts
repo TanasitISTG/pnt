@@ -140,6 +140,78 @@ async function assertReaderBookmarkSpotsUnique(client: Sql): Promise<void> {
   }
 }
 
+/**
+ * Migration 0038 drops `novels.cover`, drops `epub_upload_chunks`, and requires
+ * `epub_uploads.object_key`. All three depend on the operator having staged those
+ * bytes with `bun run storage:migrate` first; this guard makes the ordering explicit
+ * instead of failing halfway through the DDL.
+ */
+async function assertStorageMigrationReady(client: Sql): Promise<void> {
+  const columns = await client<{ table: string; column: string; nullable: string }[]>`
+    SELECT table_name AS "table", column_name AS "column", is_nullable AS "nullable"
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND ((table_name = 'novels' AND column_name IN ('cover', 'cover_key'))
+        OR (table_name = 'epub_uploads' AND column_name = 'object_key'))
+  `;
+
+  const hasNovelCover = columns.some((c) => c.table === "novels" && c.column === "cover");
+  if (!hasNovelCover) return;
+
+  const [{ hasMapTable }] = await client<{ hasMapTable: boolean }[]>`
+    SELECT to_regclass('public.r2_migration_covers') IS NOT NULL AS "hasMapTable"
+  `;
+  const uncovered = hasMapTable
+    ? await client<{ count: number }[]>`
+        SELECT count(*)::int AS "count"
+        FROM "novels" n
+        WHERE n."cover" IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM "r2_migration_covers" m WHERE m."novel_id" = n."id"
+          )
+      `
+    : await client<{ count: number }[]>`
+        SELECT count(*)::int AS "count" FROM "novels" WHERE "cover" IS NOT NULL
+      `;
+  if (Number(uncovered[0]?.count ?? 0) > 0) {
+    throw new Error(
+      "Novel covers still live in Postgres. Run `bun run storage:migrate` first: it writes them " +
+        "to object storage and records the keys that migration 0037 folds in.",
+    );
+  }
+
+  const [{ hasEpubUploads }] = await client<{ hasEpubUploads: boolean }[]>`
+    SELECT to_regclass('public.epub_uploads') IS NOT NULL AS "hasEpubUploads"
+  `;
+  if (!hasEpubUploads) return;
+
+  const objectKeyColumn = columns.find(
+    (column) => column.table === "epub_uploads" && column.column === "object_key",
+  );
+  if (objectKeyColumn?.nullable === "YES") {
+    const pending = await client<{ count: number }[]>`
+      SELECT count(*)::int AS "count" FROM "epub_uploads" WHERE "object_key" IS NULL
+    `;
+    if (Number(pending[0]?.count ?? 0) > 0) {
+      throw new Error(
+        "EPUB upload rows exist without a storage key. Run `bun run storage:migrate` first: it " +
+          "removes incomplete uploads that the new direct-upload path cannot resume.",
+      );
+    }
+  }
+
+  const active = await client<{ count: number }[]>`
+    SELECT count(*)::int AS "count" FROM "epub_uploads" WHERE "status" IN ('queued', 'staged')
+  `;
+  if (Number(active[0]?.count ?? 0) > 0) {
+    throw new Error(
+      "EPUB imports are queued or staged. Finish or abort them in the app before migrating: " +
+        "their staged archives were written by the previous chunked upload path and are not in " +
+        "object storage.",
+    );
+  }
+}
+
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
@@ -155,6 +227,7 @@ async function run() {
 
   try {
     await assertReaderBookmarkSpotsUnique(client);
+    await assertStorageMigrationReady(client);
     console.log("Ensuring drizzle migration table structure...");
     await client`CREATE SCHEMA IF NOT EXISTS drizzle`;
     await client`

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createEpubUpload: vi.fn(),
-  uploadEpubChunk: vi.fn(),
   completeEpubUpload: vi.fn(),
   abortEpubUpload: vi.fn(),
   useImportJob: vi.fn(),
@@ -16,10 +15,49 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/epub/functions", () => ({
   createEpubUpload: mocks.createEpubUpload,
-  uploadEpubChunk: mocks.uploadEpubChunk,
   completeEpubUpload: mocks.completeEpubUpload,
   abortEpubUpload: mocks.abortEpubUpload,
+  EPUB_CONTENT_TYPE: "application/epub+zip",
 }));
+
+/**
+ * The upload is one XHR PUT to the presigned URL, so the test supplies the request
+ * object: `send` reports progress and then completes the transfer.
+ */
+class FakeXMLHttpRequest {
+  static last: FakeXMLHttpRequest | null = null;
+  static nextStatus = 200;
+  readonly status = FakeXMLHttpRequest.nextStatus;
+  readonly open = vi.fn();
+  readonly setRequestHeader = vi.fn();
+  readonly send = vi.fn(() => {
+    for (const listener of this.progressListeners) {
+      listener({ lengthComputable: true, loaded: 1, total: 2 });
+    }
+    this.listeners.get("load")?.();
+  });
+  readonly upload = {
+    addEventListener: (
+      type: string,
+      listener: (event: { lengthComputable: boolean; loaded: number; total: number }) => void,
+    ) => {
+      if (type === "progress") this.progressListeners.push(listener);
+    },
+  };
+  private readonly listeners = new Map<string, () => void>();
+  private readonly progressListeners: Array<
+    (event: { lengthComputable: boolean; loaded: number; total: number }) => void
+  > = [];
+  constructor() {
+    FakeXMLHttpRequest.last = this;
+  }
+  addEventListener(type: string, listener: () => void) {
+    this.listeners.set(type, listener);
+  }
+  removeEventListener(type: string) {
+    this.listeners.delete(type);
+  }
+}
 vi.mock("./use-import-job", () => ({
   useImportJob: mocks.useImportJob,
 }));
@@ -71,9 +109,13 @@ function renderEpub(
 describe("EpubImportSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    FakeXMLHttpRequest.last = null;
+    FakeXMLHttpRequest.nextStatus = 200;
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     document.body.innerHTML = "";
   });
 
@@ -100,9 +142,11 @@ describe("EpubImportSection", () => {
     expect(screen.getByRole("button", { name: /Drop an EPUB here or choose a file/ })).toBeTruthy();
   });
 
-  it("reports upload activity synchronously at start and settlement", async () => {
-    mocks.createEpubUpload.mockResolvedValue({ uploadId: "upload-1" });
-    mocks.uploadEpubChunk.mockResolvedValue({ receivedBytes: 4 });
+  it("uploads the archive straight to the presigned URL and reports activity", async () => {
+    mocks.createEpubUpload.mockResolvedValue({
+      uploadId: "upload-1",
+      uploadUrl: "https://storage.test/epub-uploads/upload-1",
+    });
     mocks.completeEpubUpload.mockResolvedValue({ jobId: "epub-job-1" });
     const view = renderEpub();
     const file = new File(["epub"], "chapter.epub", { type: "application/epub+zip" });
@@ -114,6 +158,35 @@ describe("EpubImportSection", () => {
 
     expect(view.onUploadActivityChange).toHaveBeenNthCalledWith(1, true);
     await vi.waitFor(() => expect(mocks.completeEpubUpload).toHaveBeenCalledTimes(1));
+
+    const request = FakeXMLHttpRequest.last;
+    expect(request?.open).toHaveBeenCalledWith("PUT", "https://storage.test/epub-uploads/upload-1");
+    expect(request?.setRequestHeader).toHaveBeenCalledWith("Content-Type", "application/epub+zip");
+    expect(request?.send).toHaveBeenCalledWith(file);
+    expect(mocks.completeEpubUpload).toHaveBeenCalledWith({ data: { uploadId: "upload-1" } });
+    expect(view.onUploadActivityChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("aborts the reserved upload when the transfer fails", async () => {
+    mocks.createEpubUpload.mockResolvedValue({
+      uploadId: "upload-2",
+      uploadUrl: "https://storage.test/epub-uploads/upload-2",
+    });
+    mocks.abortEpubUpload.mockResolvedValue({ success: true });
+    FakeXMLHttpRequest.nextStatus = 500;
+    const view = renderEpub();
+
+    fireEvent.drop(screen.getByRole("button", { name: /Drop an EPUB here or choose a file/ }), {
+      dataTransfer: {
+        files: [new File(["epub"], "chapter.epub", { type: "application/epub+zip" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Upload and import" }));
+
+    await vi.waitFor(() =>
+      expect(mocks.abortEpubUpload).toHaveBeenCalledWith({ data: { uploadId: "upload-2" } }),
+    );
+    expect(mocks.completeEpubUpload).not.toHaveBeenCalled();
     expect(view.onUploadActivityChange).toHaveBeenLastCalledWith(false);
   });
 

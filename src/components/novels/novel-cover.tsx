@@ -7,6 +7,13 @@ import { blobToDataUrl } from "@/lib/utils";
 interface NovelCoverProps {
   novelId?: string | null;
   coverVersion?: string | number | Date | null;
+  /**
+   * Public CDN URLs resolved by the server. Null for drafts, scheduled novels, and
+   * whenever the deployment has no public bucket, in which case the cover is
+   * fetched through the ownership-checked proxy route instead.
+   */
+  coverUrl?: string | null;
+  coverSrcSet?: string | null;
   alt: string;
   className?: string;
   sizes: string;
@@ -17,7 +24,10 @@ interface NovelCoverProps {
 function buildCoverSources(
   novelId: string | null | undefined,
   coverVersion: NovelCoverProps["coverVersion"],
+  coverUrl: string | null | undefined,
+  coverSrcSet: string | null | undefined,
 ) {
+  if (coverUrl) return { url: coverUrl, srcSet: coverSrcSet ?? undefined };
   if (!novelId) return { url: null, srcSet: undefined };
   const version = coverVersion instanceof Date ? coverVersion.getTime() : coverVersion;
   const versionParam = version ? `&v=${version}` : "";
@@ -144,6 +154,8 @@ function DevelopmentCover({
 export function NovelCover({
   novelId,
   coverVersion,
+  coverUrl,
+  coverSrcSet,
   alt,
   className,
   sizes,
@@ -155,7 +167,7 @@ export function NovelCover({
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(!lazy);
   const rootRef = useRef<HTMLDivElement>(null);
-  const { url, srcSet } = buildCoverSources(novelId, coverVersion);
+  const { url, srcSet } = buildCoverSources(novelId, coverVersion, coverUrl, coverSrcSet);
   const directImage = import.meta.env.PROD;
 
   useEffect(() => {

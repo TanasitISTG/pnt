@@ -4,7 +4,10 @@ import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { assertCoverMagicBytes } from "@/lib/content/novel/novel.functions";
+import { deleteCoverSet, writeCoverSet } from "@/lib/content/novel/cover-storage.server";
 import { coverMimeSchema } from "@/lib/content/novel/novel.schemas";
+import { getPublicStorage } from "@/lib/storage/index.server";
+import { coverOriginalKey } from "@/lib/storage/keys";
 import { db } from "@/lib/db";
 import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
 import {
@@ -51,19 +54,38 @@ function exportableCoverMime(novelId: string, coverMime: string | null, hasCover
   return parsed.data;
 }
 
-function novelToBackupScalars(novel: typeof novels.$inferSelect) {
+/**
+ * Reads the stored cover back so backups stay self-contained: an exported file can
+ * be restored into a different deployment without the original bucket.
+ */
+async function novelCoverForBackup(novel: typeof novels.$inferSelect) {
+  if (!novel.coverKey) {
+    return { coverBase64: null, coverMime: exportableCoverMime(novel.id, novel.coverMime, false) };
+  }
+  const object = await getPublicStorage().get(coverOriginalKey(novel.coverKey));
+  if (!object) {
+    throw new SafeServerError(`Novel ${novel.id} cover object is missing from storage`);
+  }
+  return {
+    coverBase64: Buffer.from(object.bytes).toString("base64"),
+    coverMime: exportableCoverMime(novel.id, object.contentType ?? novel.coverMime, true),
+  };
+}
+
+async function novelToBackupScalars(novel: typeof novels.$inferSelect) {
   const relationshipMap = parseRelationshipMap(novel.relationshipMapJson);
   if (!relationshipMap) {
     throw new SafeServerError("Novel " + novel.id + " has an invalid relationship map");
   }
+  const cover = await novelCoverForBackup(novel);
   return {
     id: novel.id,
     title: novel.title,
     originalTitle: novel.originalTitle,
     author: novel.author,
     description: novel.description,
-    coverBase64: novel.cover ? Buffer.from(novel.cover).toString("base64") : null,
-    coverMime: exportableCoverMime(novel.id, novel.coverMime, Boolean(novel.cover)),
+    coverBase64: cover.coverBase64,
+    coverMime: cover.coverMime,
     sourceLang: novel.sourceLang,
     targetLang: novel.targetLang,
     customPrompt: novel.customPrompt,
@@ -157,11 +179,13 @@ export async function exportBackupForUser(userId: string, novelId?: string): Pro
     app: "pnt",
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
-    novels: novelRows.map((novel) => ({
-      ...novelToBackupScalars(novel),
-      chapters: (chaptersByNovel.get(novel.id) ?? []).map(chapterToBackup),
-      glossaryTerms: (termsByNovel.get(novel.id) ?? []).map(termToBackup),
-    })),
+    novels: await Promise.all(
+      novelRows.map(async (novel) => ({
+        ...(await novelToBackupScalars(novel)),
+        chapters: (chaptersByNovel.get(novel.id) ?? []).map(chapterToBackup),
+        glossaryTerms: (termsByNovel.get(novel.id) ?? []).map(termToBackup),
+      })),
+    ),
   };
 
   // Guarantees the invariant that matters for a backup: anything this exports,
@@ -188,7 +212,7 @@ export async function* streamBackupForUser(
 
   let firstNovel = true;
   for (const novel of novelRows) {
-    const scalars = novelToBackupScalars(novel);
+    const scalars = await novelToBackupScalars(novel);
     // The array refinements run vacuously on empty arrays and are enforced
     // incrementally below, keeping the export/restore symmetry without
     // holding the whole novel.
@@ -269,92 +293,112 @@ export async function importBackupForUser(userId: string, value: unknown) {
   const now = new Date();
 
   // Covers are served to guests under the stored content type, so verify the
-  // decoded bytes really are the declared image before anything is written.
-  for (const sourceNovel of backup.novels) {
-    if (!sourceNovel.coverBase64) continue;
-    assertCoverMagicBytes(
-      Buffer.from(sourceNovel.coverBase64, "base64"),
-      sourceNovel.coverMime ?? "",
-    );
-  }
-
-  const imported = await db.transaction(async (tx) => {
-    const importedNovelIds: string[] = [];
+  // decoded bytes really are the declared image before anything is written. The
+  // images are staged to storage ahead of the transaction, matching the cover
+  // upload path: objects first, then the rows that reference them.
+  const staged: Array<{
+    sourceNovel: Backup["novels"][number];
+    newNovelId: string;
+    coverKey: string | null;
+  }> = [];
+  try {
     for (const sourceNovel of backup.novels) {
       const newNovelId = nanoid();
-      await tx.insert(novels).values({
-        id: newNovelId,
-        userId,
-        title: `${sourceNovel.title} (imported)`,
-        originalTitle: sourceNovel.originalTitle,
-        author: sourceNovel.author,
-        description: sourceNovel.description,
-        cover: sourceNovel.coverBase64 ? Buffer.from(sourceNovel.coverBase64, "base64") : null,
-        coverMime: sourceNovel.coverMime,
-        sourceLang: sourceNovel.sourceLang,
-        targetLang: sourceNovel.targetLang,
-        customPrompt: sourceNovel.customPrompt,
-        storySummary: sourceNovel.storySummary,
-        relationshipMapJson: serializeRelationshipMap(
-          sourceNovel.relationshipMap ?? emptyRelationshipMap(),
-        ),
-        chunkSize: sourceNovel.chunkSize,
-        contextTailLength: sourceNovel.contextTailLength,
-        publishedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      });
-      importedNovelIds.push(newNovelId);
-
-      for (let offset = 0; offset < sourceNovel.chapters.length; offset += BATCH_SIZE) {
-        await tx.insert(chapters).values(
-          sourceNovel.chapters.slice(offset, offset + BATCH_SIZE).map((chapter) => ({
-            id: nanoid(),
-            novelId: newNovelId,
-            number: chapter.number,
-            title: chapter.title,
-            translatedTitle: chapter.translatedTitle,
-            rawContent: chapter.rawContent,
-            translatedContent: chapter.translatedContent,
-            status:
-              chapter.status === "queued" || chapter.status === "translating"
-                ? chapter.translatedContent !== null
-                  ? "translated"
-                  : "raw"
-                : chapter.status,
-            summary: chapter.summary,
-            rawCharCount: chapter.rawCharCount,
-            sourceRevision: chapter.sourceRevision,
-            translationGeneration: chapter.translationGeneration,
-            activeTranslationJobId: null,
-            publishedAt: null,
-            translatedAt: dateOrNull(chapter.translatedAt),
-            editedAt: dateOrNull(chapter.editedAt),
-            createdAt: now,
-            updatedAt: now,
-          })),
-        );
+      let coverKey: string | null = null;
+      if (sourceNovel.coverBase64) {
+        const buffer = Buffer.from(sourceNovel.coverBase64, "base64");
+        assertCoverMagicBytes(buffer, sourceNovel.coverMime ?? "");
+        coverKey = await writeCoverSet(newNovelId, buffer, sourceNovel.coverMime ?? "image/webp");
       }
-
-      for (let offset = 0; offset < sourceNovel.glossaryTerms.length; offset += BATCH_SIZE) {
-        await tx.insert(glossaryTerms).values(
-          sourceNovel.glossaryTerms.slice(offset, offset + BATCH_SIZE).map((term) => ({
-            id: nanoid(),
-            novelId: newNovelId,
-            source: term.source,
-            target: term.target,
-            category: term.category,
-            note: term.note,
-            status: term.status,
-            createdAt: now,
-            updatedAt: now,
-          })),
-        );
-      }
+      staged.push({ sourceNovel, newNovelId, coverKey });
     }
+  } catch (error) {
+    await Promise.all(staged.map((entry) => deleteCoverSet(entry.coverKey).catch(() => {})));
+    throw error;
+  }
 
-    return importedNovelIds;
-  });
+  let imported: string[];
+  try {
+    imported = await db.transaction(async (tx) => {
+      const importedNovelIds: string[] = [];
+      for (const { sourceNovel, newNovelId, coverKey } of staged) {
+        await tx.insert(novels).values({
+          id: newNovelId,
+          userId,
+          title: `${sourceNovel.title} (imported)`,
+          originalTitle: sourceNovel.originalTitle,
+          author: sourceNovel.author,
+          description: sourceNovel.description,
+          coverKey,
+          coverMime: coverKey ? sourceNovel.coverMime : null,
+          sourceLang: sourceNovel.sourceLang,
+          targetLang: sourceNovel.targetLang,
+          customPrompt: sourceNovel.customPrompt,
+          storySummary: sourceNovel.storySummary,
+          relationshipMapJson: serializeRelationshipMap(
+            sourceNovel.relationshipMap ?? emptyRelationshipMap(),
+          ),
+          chunkSize: sourceNovel.chunkSize,
+          contextTailLength: sourceNovel.contextTailLength,
+          publishedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+        importedNovelIds.push(newNovelId);
+
+        for (let offset = 0; offset < sourceNovel.chapters.length; offset += BATCH_SIZE) {
+          await tx.insert(chapters).values(
+            sourceNovel.chapters.slice(offset, offset + BATCH_SIZE).map((chapter) => ({
+              id: nanoid(),
+              novelId: newNovelId,
+              number: chapter.number,
+              title: chapter.title,
+              translatedTitle: chapter.translatedTitle,
+              rawContent: chapter.rawContent,
+              translatedContent: chapter.translatedContent,
+              status:
+                chapter.status === "queued" || chapter.status === "translating"
+                  ? chapter.translatedContent !== null
+                    ? "translated"
+                    : "raw"
+                  : chapter.status,
+              summary: chapter.summary,
+              rawCharCount: chapter.rawCharCount,
+              sourceRevision: chapter.sourceRevision,
+              translationGeneration: chapter.translationGeneration,
+              activeTranslationJobId: null,
+              publishedAt: null,
+              translatedAt: dateOrNull(chapter.translatedAt),
+              editedAt: dateOrNull(chapter.editedAt),
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
+        }
+
+        for (let offset = 0; offset < sourceNovel.glossaryTerms.length; offset += BATCH_SIZE) {
+          await tx.insert(glossaryTerms).values(
+            sourceNovel.glossaryTerms.slice(offset, offset + BATCH_SIZE).map((term) => ({
+              id: nanoid(),
+              novelId: newNovelId,
+              source: term.source,
+              target: term.target,
+              category: term.category,
+              note: term.note,
+              status: term.status,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
+        }
+      }
+
+      return importedNovelIds;
+    });
+  } catch (error) {
+    await Promise.all(staged.map((entry) => deleteCoverSet(entry.coverKey).catch(() => {})));
+    throw error;
+  }
 
   return { importedNovelCount: imported.length, novelIds: imported };
 }
