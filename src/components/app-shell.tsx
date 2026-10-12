@@ -33,12 +33,17 @@ import { signOut } from "@/lib/auth/auth-client";
 import { hasAdminRole } from "@/lib/auth/roles";
 import { useConsent } from "@/lib/consent";
 import { useViewerAvatar } from "@/lib/profile/use-viewer-avatar";
-import type { ResolvedAvatar, ViewerUser } from "@/lib/profile/types";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { TermsNotice } from "@/components/terms-notice";
+import type { ImpersonationState, ResolvedAvatar, ViewerUser } from "@/lib/profile/types";
+import { CURRENT_TERMS_VERSION } from "@/lib/terms";
 import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
   user: ViewerUser | null;
+  /** Present only while an operator is viewing as the signed-in account. */
+  impersonation?: ImpersonationState | null;
   children: React.ReactNode;
   layout?: "default" | "reader";
 }
@@ -47,7 +52,12 @@ const subscribeToYear = () => () => {};
 const getClientYear = () => new Date().getFullYear();
 const getServerYear = (): number | null => null;
 
-export function AppShell({ user, children, layout = "default" }: AppShellProps) {
+export function AppShell({
+  user,
+  impersonation = null,
+  children,
+  layout = "default",
+}: AppShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
@@ -59,6 +69,9 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
   // Operator screens are reachable only from here, and the link is the mirror of the
   // server's own role check rather than a second copy of the rule.
   const isAdmin = hasAdminRole(user?.role);
+  // The recorded version is written by the server only, so comparing it against the
+  // current one is what turns a version bump into a notice.
+  const termsStale = Boolean(user && user.termsVersion !== CURRENT_TERMS_VERSION);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -91,6 +104,12 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
         hydrated && consent === "pending" && "pb-28 md:pb-20",
       )}
     >
+      {impersonation && (
+        <ImpersonationBanner
+          impersonation={impersonation}
+          viewedName={user?.name || user?.email || "another account"}
+        />
+      )}
       <header
         className={cn(
           "z-40 border-b border-border bg-background",
@@ -285,6 +304,7 @@ export function AppShell({ user, children, layout = "default" }: AppShellProps) 
           </div>
         )}
       </header>
+      <TermsNotice stale={termsStale} />
       <main
         className={cn(
           "mx-auto w-full flex-1",

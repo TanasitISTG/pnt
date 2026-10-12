@@ -33,9 +33,14 @@ import * as schema from "./schema";
  * `max_lifetime` keeps a long-lived instance from pinning one forever. Neither
  * runs while Vercel has an instance frozen, which is the remaining argument for
  * transaction-mode pooling over anything the client can do on its own.
+ *
+ * `DATABASE_POOL_MAX` exists for the integration suites that make two transactions
+ * contend for the same row lock: at `max: 1` the second request waits for the
+ * connection rather than for the lock, so the contention they assert is never
+ * created. It defaults to the production value and is never needed to run the app.
  */
 export const queryClient = postgres(env.DATABASE_URL, {
-  max: 1,
+  max: env.DATABASE_POOL_MAX,
   prepare: false,
   idle_timeout: 60,
   max_lifetime: 60 * 10,

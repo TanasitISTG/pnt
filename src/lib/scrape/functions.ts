@@ -5,7 +5,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { novels, chapters, importJobs } from "@/lib/db/schema";
-import { ensureSession } from "@/lib/auth/functions";
+// Import status is polled through owner-scoped reads, so they use
+// `ensureSessionForRead` and keep working while an operator views the account.
+import { ensureSession, ensureSessionForRead } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
 import { chapterUrlFor, findSource } from "@/lib/scrape";
 import { fetchAndParse } from "@/lib/scrape/server";
@@ -151,7 +153,7 @@ export const getImportJobStatus = createServerFn({ method: "GET" })
   .validator(z.object({ jobId: z.string().min(1) }))
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
 
       const [row] = await db
         .select(importJobStatusSelect)
@@ -173,7 +175,7 @@ export const getActiveImportJob = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
 
       const [row] = await db
         .select(importJobStatusSelect)
@@ -208,7 +210,7 @@ export const getLatestImportJob = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
 
       const [row] = await db
         .select(importJobStatusSelect)

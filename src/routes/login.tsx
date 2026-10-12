@@ -5,6 +5,7 @@ import { Link, createFileRoute, redirect, useNavigate, useRouter } from "@tansta
 import { z } from "zod";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { isInvalidCredentialsError } from "@/lib/auth/error-codes";
 import { ProviderButtons } from "@/components/auth/provider-buttons";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -66,7 +67,10 @@ function LoginPage() {
         const credentials = loginFormSchema.parse(value);
         const { error: signInError } = await signIn.email(credentials);
         if (signInError) {
-          setCredentialsRejected(true);
+          // A suspension arrives through this same call, and it must not read as a
+          // wrong password: the account's message stands alone, without the provider
+          // hint that only helps someone who got their credentials wrong.
+          setCredentialsRejected(isInvalidCredentialsError(signInError.code));
           setError(signInError.message || "Invalid credentials");
           return;
         }

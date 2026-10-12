@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { ensureSession } from "@/lib/auth/functions";
+// The map and workspace are owner-scoped reads; `ensureSessionForRead` keeps them
+// visible to an operator viewing the account while every write below stays refused.
+import { ensureSession, ensureSessionForRead } from "@/lib/auth/functions";
 import { withSafeHandler } from "@/lib/server-fn-error";
 import {
   deleteRelationshipEntrySchema,
@@ -23,7 +25,7 @@ export const getRelationshipWorkspace = createServerFn({ method: "GET" })
   .validator(getRelationshipMapSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       return getRelationshipWorkspaceForUser(session.user.id, data.novelId);
     }),
   );
@@ -32,7 +34,7 @@ export const getRelationshipMap = createServerFn({ method: "GET" })
   .validator(getRelationshipMapSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       return getRelationshipMapForUser(session.user.id, data.novelId);
     }),
   );

@@ -5,7 +5,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
 import { novels, chapters, glossaryTerms, termCategoryEnum } from "@/lib/db/schema";
-import { ensureSession } from "@/lib/auth/functions";
+// Terms, stats, and replacement previews are owner-scoped reads; they authenticate
+// with `ensureSessionForRead` so an operator's read-only view still renders them.
+import { ensureSession, ensureSessionForRead } from "@/lib/auth/functions";
 import { nanoid } from "@/lib/utils";
 import {
   listTermsSchema,
@@ -49,7 +51,7 @@ export const listGlossaryTerms = createServerFn({ method: "GET" })
   .validator(listTermsSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       return listGlossaryTermsForUser(session.user.id, data);
     }),
   );
@@ -109,7 +111,7 @@ export const previewTermReplacement = createServerFn({ method: "GET" })
   .validator(previewTermReplacementSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
 
       const [novel] = await db
         .select({ id: novels.id })
@@ -358,7 +360,7 @@ export const getGlossaryStats = createServerFn({ method: "GET" })
   .validator(z.object({ novelId: z.string().min(1) }))
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       return getGlossaryStatsForUser(session.user.id, data.novelId);
     }),
   );

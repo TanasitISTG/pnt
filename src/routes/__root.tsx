@@ -26,7 +26,13 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
   notFoundComponent: NotFoundPage,
   beforeLoad: async () => {
     const viewer = await getViewerProfile();
-    return { user: viewer?.user ?? null, avatar: viewer?.avatar ?? null };
+    return {
+      user: viewer?.user ?? null,
+      avatar: viewer?.avatar ?? null,
+      // Set while an operator is viewing as this account; every layout passes it to
+      // the shell so the notice stands on every page, including the reader.
+      impersonation: viewer?.impersonation ?? null,
+    };
   },
   head: () => ({
     meta: [

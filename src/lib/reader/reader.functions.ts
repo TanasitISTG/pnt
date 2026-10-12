@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { ensureSession } from "@/lib/auth/functions";
+// Progress and bookmarks are owner-scoped reads: an operator viewing the account may
+// read them, while every write below still goes through `ensureSession`.
+import { ensureSession, ensureSessionForRead } from "@/lib/auth/functions";
 import { SafeServerError, withSafeHandler } from "@/lib/server-fn-error";
 import {
   assertChapterReadableByUser,
@@ -28,7 +30,7 @@ export const getReaderNovelState = createServerFn({ method: "GET" })
   .validator(readerNovelSchema)
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       await assertNovelReadableByUser(session.user.id, data.novelId);
       return getReaderNovelStateForUser(session.user.id, data.novelId);
     });
@@ -38,7 +40,7 @@ export const getReaderBookmarks = createServerFn({ method: "GET" })
   .validator(listReaderBookmarksSchema)
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       await assertNovelReadableByUser(session.user.id, data.novelId);
       return getReaderBookmarksForUser(session.user.id, data.novelId, data.cursor);
     });

@@ -200,6 +200,10 @@ async function waitForNovelLockWaiter(holderPid: number): Promise<void> {
 integrationDescribe("reader state service", () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = testDatabaseUrl;
+    // Files that make two transactions contend for one novel row need more than the
+    // single production connection; these gates pause one while the other must queue
+    // on the row lock itself, not on the pool.
+    process.env.DATABASE_POOL_MAX ||= "5";
     // Load server modules only after isolating their database connection from application data.
     sql = postgres(testDatabaseUrl as string, { max: 1 });
     ({ db } = await import("@/lib/db"));

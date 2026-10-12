@@ -37,5 +37,10 @@ try {
   await client.end({ timeout: 1 });
 }
 
+// `migrate.ts` prefers the direct endpoint, so leaving `DATABASE_URL_UNPOOLED` alone
+// would point the migration run at the application database even though
+// `DATABASE_URL` now names the test database. Both must name the same disposable
+// database for the run to be safe.
 process.env.DATABASE_URL = testDatabaseUrl;
+process.env.DATABASE_URL_UNPOOLED = testDatabaseUrl;
 await import("./migrate.ts");

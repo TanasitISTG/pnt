@@ -7,7 +7,7 @@ export const Route = createFileRoute("/_public")({
 });
 
 function PublicLayout() {
-  const { user } = Route.useRouteContext();
+  const { user, impersonation } = Route.useRouteContext();
   const isReader = useRouterState({
     select: (state) =>
       state.matches.some(
@@ -16,7 +16,7 @@ function PublicLayout() {
   });
 
   return (
-    <AppShell user={user} layout={isReader ? "reader" : "default"}>
+    <AppShell user={user} impersonation={impersonation} layout={isReader ? "reader" : "default"}>
       <Outlet />
     </AppShell>
   );

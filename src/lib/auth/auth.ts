@@ -203,6 +203,9 @@ export const auth = betterAuth({
       adminRoles: [ADMIN_ROLE],
       bannedUserMessage:
         "This account has been suspended. Contact the site operator if you believe this is a mistake.",
+      // Half an hour is long enough to reproduce what a reader reported and short
+      // enough that a forgotten "view as" session lapses on its own.
+      impersonationSessionDuration: 30 * 60,
     }),
     // Must stay last: it installs the cookie-writing hooks the TanStack Start
     // request lifecycle depends on.

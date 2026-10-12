@@ -21,6 +21,19 @@ export class RateLimitError extends SafeServerError {
   }
 }
 
+/**
+ * Raised when an operator viewing as another account tries to change something.
+ *
+ * It extends SafeServerError so its copy reaches the operator as written rather
+ * than being replaced by the generic failure message.
+ */
+export class ImpersonationReadOnlyError extends SafeServerError {
+  constructor() {
+    super("Actions are unavailable while you are viewing as another account.");
+    this.name = "ImpersonationReadOnlyError";
+  }
+}
+
 export async function withSafeHandler<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();

@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { ensureSession } from "@/lib/auth/functions";
+// Read-only, so an operator viewing an account keeps seeing its job history; every
+// mutation goes through `ensureSession`, which refuses during impersonation.
+import { ensureSessionForRead } from "@/lib/auth/functions";
 import { jobActivityInputSchema, jobHistorySearchSchema } from "@/lib/job-dashboard/contracts";
 import { loadJobActivity, loadJobHistory, loadJobStats } from "@/lib/job-dashboard/service";
 import { withSafeHandler } from "@/lib/server-fn-error";
@@ -12,7 +14,7 @@ export const getJobDashboard = createServerFn({ method: "GET" })
     const timing = createServerTiming();
     try {
       return await withSafeHandler(async () => {
-        const session = await timing.measure("auth", () => ensureSession());
+        const session = await timing.measure("auth", () => ensureSessionForRead());
         const [history, stats] = await Promise.all([
           loadJobHistory(session.user.id, data, timing),
           loadJobStats(session.user.id, timing),
@@ -30,7 +32,7 @@ export const getJobHistory = createServerFn({ method: "GET" })
     const timing = createServerTiming();
     try {
       return await withSafeHandler(async () => {
-        const session = await timing.measure("auth", () => ensureSession());
+        const session = await timing.measure("auth", () => ensureSessionForRead());
         return loadJobHistory(session.user.id, data, timing);
       });
     } finally {
@@ -42,7 +44,7 @@ export const getJobStats = createServerFn({ method: "GET" }).handler(async () =>
   const timing = createServerTiming();
   try {
     return await withSafeHandler(async () => {
-      const session = await timing.measure("auth", () => ensureSession());
+      const session = await timing.measure("auth", () => ensureSessionForRead());
       return loadJobStats(session.user.id, timing);
     });
   } finally {
@@ -56,7 +58,7 @@ export const getJobActivity = createServerFn({ method: "GET" })
     const timing = createServerTiming();
     try {
       return await withSafeHandler(async () => {
-        const session = await timing.measure("auth", () => ensureSession());
+        const session = await timing.measure("auth", () => ensureSessionForRead());
         return loadJobActivity(session.user.id, timing, data);
       });
     } finally {

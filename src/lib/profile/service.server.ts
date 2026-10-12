@@ -1,6 +1,11 @@
 import "@tanstack/react-start/server-only";
 
+import { eq } from "drizzle-orm";
+
 import { auth, type User as AuthUser } from "@/lib/auth/auth";
+import { impersonationOperatorId } from "@/lib/auth/impersonation";
+import { db } from "@/lib/db";
+import { user as userTable } from "@/lib/db/schema";
 import { assertImageMagicBytes } from "@/lib/images/magic-bytes";
 import { log } from "@/lib/log";
 import { SafeServerError } from "@/lib/server-fn-error";
@@ -29,14 +34,47 @@ function resolveAvatarSafely(image: string | null | undefined): ResolvedAvatar |
  * The stored `image` key is exchanged for resolved URLs here, so no client ever
  * receives an object key in a field named like a URL.
  */
-export function viewerProfileForSession(session: { user: AuthUser } | null): ViewerProfile | null {
+export function viewerProfileForSession(
+  session: { user: AuthUser; session?: unknown } | null,
+  operatorName: string | null = null,
+): ViewerProfile | null {
   if (!session) return null;
   const { image, ...user } = session.user;
-  return { user, avatar: resolveAvatarSafely(image) };
+  const operatorId = impersonationOperatorId(session.session);
+  return {
+    user,
+    avatar: resolveAvatarSafely(image),
+    impersonation: operatorId ? { operatorId, operatorName } : null,
+  };
+}
+
+/**
+ * A missing operator name costs a fallback label in the banner, so a lookup failure
+ * never takes down a page load.
+ */
+async function resolveOperatorName(operatorId: string): Promise<string | null> {
+  try {
+    const [operator] = await db
+      .select({ name: userTable.name })
+      .from(userTable)
+      .where(eq(userTable.id, operatorId))
+      .limit(1);
+    return operator?.name ?? null;
+  } catch (error) {
+    log("warn", "impersonating operator lookup failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 export async function viewerProfileForHeaders(headers: Headers): Promise<ViewerProfile | null> {
-  return viewerProfileForSession(await auth.api.getSession({ headers }));
+  const session = await auth.api.getSession({ headers });
+  if (!session) return null;
+
+  const operatorId = impersonationOperatorId(session.session);
+  const operatorName = operatorId ? await resolveOperatorName(operatorId) : null;
+  return viewerProfileForSession(session, operatorName);
 }
 
 export async function applyProfileName(headers: Headers, name: string): Promise<void> {

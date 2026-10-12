@@ -4,7 +4,9 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { providerSettings } from "@/lib/db/schema";
-import { ensureSession } from "@/lib/auth/functions";
+// Provider settings are read back masked, so the read tolerates an operator's
+// read-only view while every write below stays refused.
+import { ensureSession, ensureSessionForRead } from "@/lib/auth/functions";
 import { auth } from "@/lib/auth/auth";
 import { log } from "@/lib/log";
 import { encrypt, decrypt } from "@/lib/settings/crypto";
@@ -180,7 +182,7 @@ const assertProviderSettingsUrl = createServerOnlyFn(async function assertProvid
 
 export const getProviderSettings = createServerFn({ method: "GET" }).handler(async () =>
   withSafeHandler(async (): Promise<ProviderSettings> => {
-    const session = await ensureSession();
+    const session = await ensureSessionForRead();
 
     const [row] = await db
       .select()

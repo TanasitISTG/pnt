@@ -29,6 +29,8 @@ import { Route as PublicBrowseRouteImport } from './routes/_public/browse'
 import { Route as ApiBackupsRouteImport } from './routes/api/backups'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
+import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin.index'
+import { Route as ProtectedAdminActivityRouteImport } from './routes/_protected/admin.activity'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
@@ -139,6 +141,16 @@ const ApiSitemapRoute = ApiSitemapRouteImport.update({
   path: '/api/sitemap',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProtectedAdminIndexRoute = ProtectedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminActivityRoute = ProtectedAdminActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 const ProtectedNovelsNewRoute = ProtectedNovelsNewRouteImport.update({
   id: '/novels/new',
   path: '/novels/new',
@@ -211,7 +223,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/admin': typeof ProtectedAdminRoute
+  '/admin': typeof ProtectedAdminRouteWithChildren
   '/jobs': typeof ProtectedJobsRoute
   '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRoute
@@ -219,12 +231,14 @@ export interface FileRoutesByFullPath {
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
+  '/admin/activity': typeof ProtectedAdminActivityRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
+  '/admin/': typeof ProtectedAdminIndexRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
@@ -242,7 +256,6 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/admin': typeof ProtectedAdminRoute
   '/jobs': typeof ProtectedJobsRoute
   '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRoute
@@ -250,12 +263,14 @@ export interface FileRoutesByTo {
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
+  '/admin/activity': typeof ProtectedAdminActivityRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
+  '/admin': typeof ProtectedAdminIndexRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
@@ -275,7 +290,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/_protected/admin': typeof ProtectedAdminRoute
+  '/_protected/admin': typeof ProtectedAdminRouteWithChildren
   '/_protected/jobs': typeof ProtectedJobsRoute
   '/_protected/profile': typeof ProtectedProfileRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
@@ -284,12 +299,14 @@ export interface FileRoutesById {
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
   '/_public/': typeof PublicIndexRoute
+  '/_protected/admin/activity': typeof ProtectedAdminActivityRoute
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
+  '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/_protected/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
@@ -317,12 +334,14 @@ export interface FileRouteTypes {
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
+    | '/admin/activity'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
+    | '/admin/'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/relationships'
@@ -340,7 +359,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/terms'
     | '/verify-email'
-    | '/admin'
     | '/jobs'
     | '/profile'
     | '/settings'
@@ -348,12 +366,14 @@ export interface FileRouteTypes {
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
+    | '/admin/activity'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
+    | '/admin'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/relationships'
@@ -381,12 +401,14 @@ export interface FileRouteTypes {
     | '/api/inngest'
     | '/api/sitemap'
     | '/_public/'
+    | '/_protected/admin/activity'
     | '/_protected/novels/new'
     | '/api/auth/$'
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
+    | '/_protected/admin/'
     | '/_protected/novels/$novelId/edit'
     | '/_protected/novels/$novelId/glossary'
     | '/_protected/novels/$novelId/relationships'
@@ -558,6 +580,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSitemapRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_protected/admin/': {
+      id: '/_protected/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof ProtectedAdminIndexRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/activity': {
+      id: '/_protected/admin/activity'
+      path: '/activity'
+      fullPath: '/admin/activity'
+      preLoaderRoute: typeof ProtectedAdminActivityRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/novels/new': {
       id: '/_protected/novels/new'
       path: '/novels/new'
@@ -638,8 +674,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ProtectedAdminRouteChildren {
+  ProtectedAdminActivityRoute: typeof ProtectedAdminActivityRoute
+  ProtectedAdminIndexRoute: typeof ProtectedAdminIndexRoute
+}
+
+const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
+  ProtectedAdminActivityRoute: ProtectedAdminActivityRoute,
+  ProtectedAdminIndexRoute: ProtectedAdminIndexRoute,
+}
+
+const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
+  ProtectedAdminRouteChildren,
+)
+
 interface ProtectedRouteChildren {
-  ProtectedAdminRoute: typeof ProtectedAdminRoute
+  ProtectedAdminRoute: typeof ProtectedAdminRouteWithChildren
   ProtectedJobsRoute: typeof ProtectedJobsRoute
   ProtectedProfileRoute: typeof ProtectedProfileRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
@@ -650,7 +700,7 @@ interface ProtectedRouteChildren {
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
-  ProtectedAdminRoute: ProtectedAdminRoute,
+  ProtectedAdminRoute: ProtectedAdminRouteWithChildren,
   ProtectedJobsRoute: ProtectedJobsRoute,
   ProtectedProfileRoute: ProtectedProfileRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,

@@ -481,6 +481,10 @@ async function waitForNovelWaiter(blockerPid: number) {
 integrationDescribe("novel maintenance PostgreSQL invariants", () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = testDatabaseUrl!;
+    // The gates below pause one transaction while a second must queue on the same novel
+    // row, which a single pooled connection cannot express: raise the pool so the wait
+    // happens on the row lock instead of on the client's connection queue.
+    process.env.DATABASE_POOL_MAX ||= "5";
     process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
     process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
     process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";

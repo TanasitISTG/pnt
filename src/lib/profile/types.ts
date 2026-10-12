@@ -16,4 +16,15 @@ export type ViewerUser = Omit<AuthUser, "image">;
 export interface ViewerProfile {
   user: ViewerUser;
   avatar: ResolvedAvatar | null;
+  /**
+   * Set while an operator is viewing as this account, which the shell renders as a
+   * standing notice with the way back. Null in every ordinary session.
+   */
+  impersonation: ImpersonationState | null;
+}
+
+export interface ImpersonationState {
+  operatorId: string;
+  /** The operator's display name, or null when it could not be read. */
+  operatorName: string | null;
 }

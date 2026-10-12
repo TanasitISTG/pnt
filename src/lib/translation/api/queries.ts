@@ -9,7 +9,9 @@ import {
   translationJobChunks,
   providerSettings,
 } from "@/lib/db/schema";
-import { ensureSession } from "@/lib/auth/functions";
+// These queries only read; they ask for an owner rather than a guest without
+// refusing an operator's read-only impersonation session.
+import { ensureSessionForRead } from "@/lib/auth/functions";
 import {
   getJobsTerminalStatusSchema,
   listActiveJobsSchema,
@@ -67,7 +69,7 @@ export const listActiveTranslationJobs = createServerFn({ method: "GET" })
   .validator(listActiveJobsSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
 
       const rows = await db
         .select({
@@ -105,7 +107,7 @@ export const getNovelCosts = createServerFn({ method: "GET" })
   .validator(listActiveJobsSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       return getNovelCostsForUser(session.user.id, data.novelId);
     }),
   );
@@ -114,7 +116,7 @@ export const getTranslationJobProgress = createServerFn({ method: "GET" })
   .validator(translationJobLookupSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       const row = await findOwnedTranslationJobProgress(session.user.id, data);
       if (!row) return null;
 
@@ -134,7 +136,7 @@ export const getTranslationJobDetails = createServerFn({ method: "GET" })
   .validator(translationJobLookupSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       const row = await findOwnedTranslationJob(session.user.id, data);
       if (!row) return null;
       const logs = parseLogEntries(row.job.logsJson);
@@ -199,7 +201,7 @@ export const getTranslationJobsTerminalStatus = createServerFn({ method: "GET" }
   .validator(getJobsTerminalStatusSchema)
   .handler(async ({ data }) =>
     withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
 
       const rows = await db
         .select({

@@ -43,6 +43,11 @@ const sessionWith = (image: string | null) => ({
   },
 });
 
+const impersonatedSessionWith = (image: string | null) => ({
+  ...sessionWith(image),
+  session: { impersonatedBy: "operator-1" },
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.writeAvatarSet.mockResolvedValue(NEW_KEY);
@@ -66,6 +71,22 @@ describe("viewerProfileForSession", () => {
       avatar: { url: "https://cdn.test/a.webp", srcSet: null },
     });
     expect(mocks.resolveUserAvatar).toHaveBeenCalledWith(PREVIOUS_KEY);
+  });
+
+  it("reports an ordinary session as not impersonating", () => {
+    expect(viewerProfileForSession(sessionWith(null))?.impersonation).toBeNull();
+  });
+
+  it("carries the operator to return to while viewing as an account", () => {
+    // The banner is driven from here, so the shell can name both sides without a
+    // second request of its own.
+    expect(
+      viewerProfileForSession(impersonatedSessionWith(null), "Operator")?.impersonation,
+    ).toEqual({ operatorId: "operator-1", operatorName: "Operator" });
+    expect(viewerProfileForSession(impersonatedSessionWith(null))?.impersonation).toEqual({
+      operatorId: "operator-1",
+      operatorName: null,
+    });
   });
 
   it("still renders the shell when the photo cannot be resolved", () => {

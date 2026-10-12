@@ -48,9 +48,9 @@ function ProtectedErrorComponent(props: ErrorComponentProps) {
 }
 
 function ProtectedLayout() {
-  const { user } = Route.useRouteContext();
+  const { user, impersonation } = Route.useRouteContext();
   return (
-    <AppShell user={user}>
+    <AppShell user={user} impersonation={impersonation}>
       <Outlet />
     </AppShell>
   );

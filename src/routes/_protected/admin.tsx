@@ -1,56 +1,52 @@
-import { useCallback } from "react";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { Link, Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 
-import { AdminUsersPage } from "@/components/admin/admin-users-page";
-import { adminUsersQueryOptions } from "@/lib/admin/query";
-import { adminUserListSearchSchema, type AdminUserListSearch } from "@/lib/admin/schemas";
 import { hasAdminRole } from "@/lib/auth/roles";
 
 /**
- * Operator screen. The route gate only keeps a curious member from seeing a page whose
+ * Operator layout. The route gate only keeps a curious member from seeing pages whose
  * calls would all fail; the authorization itself lives in the admin server functions,
  * which is where it has to hold.
  */
 export const Route = createFileRoute("/_protected/admin")({
-  validateSearch: adminUserListSearchSchema,
-  loaderDeps: () => ({}),
-  shouldReload: false,
   beforeLoad: ({ context }) => {
     if (!hasAdminRole(context.user?.role)) throw redirect({ to: "/" });
   },
-  loader: async ({ context, location }) => {
-    const search = adminUserListSearchSchema.parse(location.search);
-    await context.queryClient.ensureQueryData(adminUsersQueryOptions(search));
-  },
   head: () => ({
     meta: [
-      { title: "Accounts | Pnt - Personal Novel Translator" },
+      { title: "Admin | Pnt - Personal Novel Translator" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
-  component: AdminRoutePage,
+  component: AdminLayout,
 });
 
-function AdminRoutePage() {
-  const { user } = Route.useRouteContext();
-  const search = Route.useSearch();
-  const navigate = Route.useNavigate();
-  const onSearchChange = useCallback(
-    (patch: Partial<AdminUserListSearch>) => {
-      void navigate({
-        search: (previous) => ({ ...previous, ...patch }),
-        replace: true,
-        resetScroll: false,
-      });
-    },
-    [navigate],
-  );
+const TAB_CLASS =
+  "inline-flex min-h-9 items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground no-underline transition-colors hover:bg-muted hover:text-foreground";
 
+function AdminLayout() {
   return (
-    <AdminUsersPage
-      currentUserId={user?.id ?? ""}
-      search={search}
-      onSearchChange={onSearchChange}
-    />
+    <div className="flex flex-col gap-6">
+      <nav
+        aria-label="Operator sections"
+        className="inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"
+      >
+        <Link
+          to="/admin"
+          activeOptions={{ exact: true }}
+          className={TAB_CLASS}
+          activeProps={{ className: "bg-background text-foreground shadow-sm" }}
+        >
+          Accounts
+        </Link>
+        <Link
+          to="/admin/activity"
+          className={TAB_CLASS}
+          activeProps={{ className: "bg-background text-foreground shadow-sm" }}
+        >
+          Activity
+        </Link>
+      </nav>
+      <Outlet />
+    </div>
   );
 }

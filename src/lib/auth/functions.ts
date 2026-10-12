@@ -2,9 +2,14 @@ import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 
 import { auth, type Session, type User } from "@/lib/auth/auth";
+import { impersonationOperatorId } from "@/lib/auth/impersonation";
 import { ADMIN_ROLE, hasAdminRole } from "@/lib/auth/roles";
 import { env } from "@/lib/env";
-import { UnauthorizedError, withSafeHandler } from "@/lib/server-fn-error";
+import {
+  ImpersonationReadOnlyError,
+  UnauthorizedError,
+  withSafeHandler,
+} from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
 
 export { ADMIN_ROLE, hasAdminRole };
@@ -18,6 +23,18 @@ export function requireSession(session: AuthenticatedSession | null): Authentica
   if (!session) {
     log("warn", "auth failed: no session");
     throw new UnauthorizedError();
+  }
+  // This is the whole read-only-impersonation rule. Every mutation in the app
+  // authenticates through here, while reads reach the session through `getSession`
+  // or `ensureSessionForRead`, so an operator viewing as another account cannot
+  // write anything anywhere without a single feature having to know about it.
+  const operatorId = impersonationOperatorId(session.session);
+  if (operatorId) {
+    log("warn", "mutation refused during impersonation", {
+      userId: session.user.id,
+      operatorId,
+    });
+    throw new ImpersonationReadOnlyError();
   }
   return session;
 }
@@ -66,6 +83,26 @@ export const ensureAdminSession = createServerOnlyFn(() =>
     const headers = getRequestHeaders();
     const session = await auth.api.getSession({ headers });
     return requireAdminSession(session);
+  }),
+);
+
+/**
+ * Session for a server function that only reads.
+ *
+ * It exists for the handful of read-only endpoints that want an owner rather than a
+ * guest (job history, translation status). Those must keep working while an operator
+ * views an account - refusing them would make the impersonated view look broken - so
+ * they take this instead of `ensureSession`, which is what mutations use.
+ */
+export const ensureSessionForRead = createServerOnlyFn(() =>
+  withSafeHandler(async () => {
+    const headers = getRequestHeaders();
+    const session = await auth.api.getSession({ headers });
+    if (!session) {
+      log("warn", "auth failed: no session");
+      throw new UnauthorizedError();
+    }
+    return session;
   }),
 );
 

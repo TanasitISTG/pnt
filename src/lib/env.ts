@@ -94,6 +94,14 @@ export function parseScraperBase(value: string): string {
 
 const baseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  // Connection ceiling for the pooled client in `src/lib/db/index.ts`. One connection
+  // per serverless instance is the production default; a suite that makes two
+  // transactions contend for the same row lock has to raise it, because a single
+  // connection serializes the requests client-side and Postgres never sees a waiter.
+  DATABASE_POOL_MAX: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(1).default(1),
+  ),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
   APP_ENCRYPTION_KEY: z.string().min(32),

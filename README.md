@@ -194,6 +194,40 @@ Cloudflare Turnstile and the OAuth providers are each registered only when their
 credentials are present, so an unconfigured method is absent from the sign-in pages
 rather than shown and then failing at the callback.
 
+### Operator controls
+
+`/admin` is the operator screen, in two tabs. **Accounts** lists every account with the
+controls that apply to it: grant or remove operator access, suspend (with a reason the
+account is shown at sign-in and a duration of 7, 30, or 90 days, or none for a
+permanent suspension), restore, sign the account out of every device, view as the
+account, and delete it. None of these will act on the acting operator's own account, and
+operator accounts cannot be viewed as another account — so impersonation is never a step
+toward taking over the deployment. **Activity** is the durable record of those actions,
+read from `admin_audit_log` rather than a process log that rotates away.
+
+A suspension is stored as `banned`, `banReason`, and `banExpires`, and the auth plugin
+enforces it when the account next creates a session — where it also clears a ban whose
+expiry has passed. Because that clearing is lazy, the stored flag can outlive the ban
+itself; the Accounts tab therefore reads its status from the expiry (`describeBan`) and
+shows a lapsed ban as suspended-but-expired rather than repeating the stale flag. A
+suspension ends the account's sessions and blocks sign-in; it does not unpublish the
+account's novels, because it targets the account rather than the catalog.
+
+**View as this account** opens a 30-minute session as that account, for reading. It is
+read-only by construction: an impersonated session carries `impersonatedBy`, and
+`requireSession` — which every mutation in the app authenticates through — refuses such a
+session. Reads reach the session through `getSession` or `ensureSessionForRead` instead,
+so the viewed account's library, job history, and reader state are all visible while
+nothing can be changed. A banner on every page names both accounts and returns the
+operator to their own session; if the operator's session cannot be restored, it says to
+sign out and back in rather than trapping them in someone else's account.
+
+Each account records the terms version in force when it was created. Bumping
+`CURRENT_TERMS_VERSION` (in `src/lib/terms.ts`) makes the shell show a standing notice
+to every account still recorded under an older version, and accepting it stamps the new
+version from the server. It is a notice, not a gate: reading, browsing, and exports stay
+available while it is showing.
+
 ### Provider connections
 
 Provider endpoints must use HTTPS and resolve only to public addresses by default. Empty
@@ -254,6 +288,11 @@ is exhausted during a traffic spike and queries are rejected with SQLSTATE 53300
 `DATABASE_URL_UNPOOLED` is the paired **direct** endpoint. Migrations and drizzle-kit use it
 because DDL and prepared statements need a real session, which transaction pooling does not
 guarantee; set it to the same value as `DATABASE_URL` when the deployment has no pooler.
+
+`DATABASE_POOL_MAX` is optional and defaults to `1`; leave it unset in production, where one
+connection per instance is the deliberate shape described above. The integration suites that
+make two transactions contend for the same row lock raise it, because a single connection
+serializes those requests client-side: Postgres then never sees the lock waiter they assert on.
 
 ## Persistence and delivery boundaries
 

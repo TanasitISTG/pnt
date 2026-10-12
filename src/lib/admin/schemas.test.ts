@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { ADMIN_USERS_PAGE_SIZE, adminUserListInputSchema, setUserBannedSchema } from "./schemas";
+import {
+  ADMIN_ACTIVITY_PAGE_SIZE,
+  ADMIN_USERS_PAGE_SIZE,
+  adminActivityInputSchema,
+  adminUserListInputSchema,
+  setUserBannedSchema,
+} from "./schemas";
 
 describe("adminUserListInputSchema", () => {
   it("fills in defaults for an empty search", () => {
@@ -56,5 +62,23 @@ describe("setUserBannedSchema", () => {
     expect(() =>
       setUserBannedSchema.parse({ userId: "user-1", banned: true, banReason: "x".repeat(201) }),
     ).toThrow();
+  });
+});
+
+describe("adminActivityInputSchema", () => {
+  it("fills in defaults for an empty query", () => {
+    expect(adminActivityInputSchema.parse({})).toEqual({
+      page: 1,
+      pageSize: ADMIN_ACTIVITY_PAGE_SIZE,
+    });
+  });
+
+  it("degrades an out-of-range page to the first one", () => {
+    // Same treatment as the account list: a hand-edited URL must not reach the router
+    // as a validation error on the operator's own page.
+    expect(adminActivityInputSchema.parse({ page: "0" }).page).toBe(1);
+    expect(adminActivityInputSchema.parse({ pageSize: "5000" }).pageSize).toBe(
+      ADMIN_ACTIVITY_PAGE_SIZE,
+    );
   });
 });

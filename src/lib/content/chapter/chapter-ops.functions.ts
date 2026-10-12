@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { ensureSession } from "@/lib/auth/functions";
+// The residual-script scan is an owner-scoped read, so it authenticates the same way
+// every other read does and keeps working while an operator views the account.
+import { ensureSession, ensureSessionForRead } from "@/lib/auth/functions";
 import { withSafeHandler } from "@/lib/server-fn-error";
 import {
   deleteAllNovelTranslationsForUser,
@@ -22,7 +24,7 @@ export const getResidualScriptChapters = createServerFn({ method: "GET" })
   .validator(z.object({ novelId: z.string() }))
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
-      const session = await ensureSession();
+      const session = await ensureSessionForRead();
       return getResidualScriptChaptersForUser(session.user.id, data.novelId);
     });
   });

@@ -4,7 +4,11 @@ import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { novels, chapters } from "@/lib/db/schema";
-import { ensureSession, getSession } from "@/lib/auth/functions";
+// Mutations authenticate through `ensureSession`. The owner-scoped reads below use
+// `ensureSessionForRead`, which still requires an account but does not refuse an
+// operator's read-only impersonation session - refusing them would leave the
+// operator looking at a broken page instead of the account they asked to view.
+import { ensureSession, ensureSessionForRead, getSession } from "@/lib/auth/functions";
 import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
@@ -189,7 +193,7 @@ export const getAdminNovelDetailCore = createServerFn({ method: "GET" })
     const timing = createServerTiming();
     try {
       return await withSafeHandler(async () => {
-        const session = await timing.measure("auth", () => ensureSession());
+        const session = await timing.measure("auth", () => ensureSessionForRead());
         return timing.measure("core", () =>
           getAdminNovelDetailCoreForUser(session.user.id, data.novelId),
         );
@@ -205,7 +209,7 @@ export const getAdminNovelDetailMetrics = createServerFn({ method: "GET" })
     const timing = createServerTiming();
     try {
       return await withSafeHandler(async () => {
-        const session = await timing.measure("auth", () => ensureSession());
+        const session = await timing.measure("auth", () => ensureSessionForRead());
         return timing.measure("metrics", () =>
           getAdminNovelDetailMetricsForUser(session.user.id, data.novelId),
         );
