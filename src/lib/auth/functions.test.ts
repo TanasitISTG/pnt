@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { requireSession } from "@/lib/auth/functions";
+import { requireAdminSession, requireSession } from "@/lib/auth/functions";
 import { ImpersonationReadOnlyError, UnauthorizedError } from "@/lib/server-fn-error";
 
 describe("requireSession", () => {
@@ -81,5 +81,54 @@ describe("requireSession", () => {
     };
 
     expect(requireSession(mockSession)).toBe(mockSession);
+  });
+});
+
+/**
+ * The operator gate, which is `requireSession` plus a role check - so an impersonating
+ * operator is refused here too, and the report queue's decisions cannot be taken while
+ * viewing as the account they are about.
+ */
+function sessionFor(role: string | null, impersonatedBy?: string) {
+  return {
+    user: {
+      id: "user-1",
+      email: "reader@example.com",
+      name: "Reader",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      emailVerified: true,
+      role,
+    },
+    session: {
+      id: "sess-1",
+      userId: "user-1",
+      expiresAt: new Date(),
+      token: "tok",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(impersonatedBy ? { impersonatedBy } : {}),
+    },
+  };
+}
+
+describe("requireAdminSession", () => {
+  it("accepts an operator's session", () => {
+    const operator = sessionFor("admin");
+    expect(requireAdminSession(operator)).toBe(operator);
+  });
+
+  it("refuses a signed-out visitor and an ordinary member", () => {
+    expect(() => requireAdminSession(null)).toThrow(UnauthorizedError);
+    expect(() => requireAdminSession(sessionFor("user"))).toThrow(UnauthorizedError);
+    // The plugin's role check compares each comma-separated segment exactly, so a role
+    // that merely contains "admin" is not one.
+    expect(() => requireAdminSession(sessionFor("administrator"))).toThrow(UnauthorizedError);
+  });
+
+  it("refuses an operator viewing as another account", () => {
+    expect(() => requireAdminSession(sessionFor("admin", "operator-1"))).toThrow(
+      ImpersonationReadOnlyError,
+    );
   });
 });

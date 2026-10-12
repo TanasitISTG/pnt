@@ -31,6 +31,16 @@ function describeDetail(detail: Record<string, unknown> | null): string | null {
     parts.push(typeof days === "number" ? `${days} days` : "Permanent");
   }
 
+  // A report decision records the novel it was about and how many reports it closed,
+  // which is what makes the trail row readable months later, after the novel is gone.
+  const novelTitle = detail["novelTitle"];
+  if (typeof novelTitle === "string" && novelTitle) parts.push(`“${novelTitle}”`);
+
+  const reports = detail["reports"];
+  if (typeof reports === "number") {
+    parts.push(`${reports} ${reports === 1 ? "report" : "reports"}`);
+  }
+
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 

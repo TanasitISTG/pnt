@@ -7,10 +7,12 @@ import { z } from "zod";
 import { AuthCard } from "@/components/auth/auth-card";
 import { isInvalidCredentialsError } from "@/lib/auth/error-codes";
 import { ProviderButtons } from "@/components/auth/provider-buttons";
+import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { captchaFetchOptions } from "@/lib/auth/captcha";
 import { signIn } from "@/lib/auth/auth-client";
 import { getAuthMethods } from "@/lib/auth/functions";
 import { authRedirectSearchSchema } from "@/lib/auth/search.schemas";
@@ -50,6 +52,13 @@ function LoginPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [credentialsRejected, setCredentialsRejected] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
+  // The captcha plugin verifies /sign-in/email as well as signup, so the widget has to
+  // be rendered here too: without it every sign-in on a Turnstile deployment fails
+  // with "Missing CAPTCHA response".
+  const challengeRequired = methods.turnstileSiteKey !== null;
+  const challengeSatisfied = !challengeRequired || captchaToken !== null;
 
   const form = useForm({
     defaultValues: {
@@ -65,8 +74,13 @@ function LoginPage() {
 
       try {
         const credentials = loginFormSchema.parse(value);
-        const { error: signInError } = await signIn.email(credentials);
+        const { error: signInError } = await signIn.email(
+          credentials,
+          captchaFetchOptions(captchaToken),
+        );
         if (signInError) {
+          // A challenge cannot be replayed, so a failed attempt needs a fresh one.
+          setCaptchaToken(null);
           // A suspension arrives through this same call, and it must not read as a
           // wrong password: the account's message stands alone, without the provider
           // hint that only helps someone who got their credentials wrong.
@@ -82,6 +96,7 @@ function LoginPage() {
         await navigate({ to: isInternal ? redirectPath : "/", replace: true });
       } catch {
         setError("Something went wrong. Please try again.");
+        setCaptchaToken(null);
       }
     },
   });
@@ -108,6 +123,7 @@ function LoginPage() {
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          if (!challengeSatisfied) return;
           void form.handleSubmit();
         }}
       >
@@ -168,6 +184,14 @@ function LoginPage() {
             }}
           </form.Field>
 
+          {methods.turnstileSiteKey ? (
+            <TurnstileWidget
+              siteKey={methods.turnstileSiteKey}
+              onToken={setCaptchaToken}
+              className="w-full"
+            />
+          ) : null}
+
           {error && (
             <div className="space-y-1">
               <p role="alert" className="text-caption text-destructive-text">
@@ -184,10 +208,20 @@ function LoginPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={!canSubmit || isSubmitting || !challengeSatisfied}
+          >
             {isSubmitting && <Spinner />}
             {isSubmitting ? "Signing in…" : "Sign in"}
           </Button>
+
+          {challengeRequired && !challengeSatisfied && (
+            <p className="text-center text-caption text-muted-foreground">
+              Waiting for the verification check to finish.
+            </p>
+          )}
         </FieldGroup>
       </form>
 

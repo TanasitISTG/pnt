@@ -48,6 +48,7 @@ function renderNovelHeader(description: string): void {
       novel={{ ...BASE_NOVEL, description }}
       novelId={BASE_NOVEL.id}
       isAdmin={false}
+      canReport={false}
       glossaryStats={undefined}
       costData={undefined}
       chapters={[]}

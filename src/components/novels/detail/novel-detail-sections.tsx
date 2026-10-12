@@ -14,7 +14,7 @@ import type {
 } from "@/components/novels/detail/novel-detail-search";
 
 export interface NovelDetailSectionData {
-  header: Omit<NovelHeaderProps, "novel" | "novelId" | "isAdmin">;
+  header: Omit<NovelHeaderProps, "novel" | "novelId" | "isAdmin" | "canReport">;
   chapterPanel: NovelDetailChapterPanelDetail;
   metrics: {
     error: unknown;
@@ -31,6 +31,7 @@ export interface NovelDetailSectionsProps {
   novel: NovelHeaderProps["novel"];
   novelId: string;
   isAdmin: boolean;
+  canReport: boolean;
   section: DetailSection;
   addVisited: boolean;
   reviewSearch: NovelDetailSearch;
@@ -44,6 +45,7 @@ export function NovelDetailSections({
   novel,
   novelId,
   isAdmin,
+  canReport,
   section,
   addVisited,
   reviewSearch,
@@ -68,7 +70,13 @@ export function NovelDetailSections({
 
   return (
     <>
-      <NovelHeader novel={novel} novelId={novelId} isAdmin={isAdmin} {...detail.header} />
+      <NovelHeader
+        novel={novel}
+        novelId={novelId}
+        isAdmin={isAdmin}
+        canReport={canReport}
+        {...detail.header}
+      />
       <hr className="border-border" />
 
       {isAdmin && metrics.isError ? (

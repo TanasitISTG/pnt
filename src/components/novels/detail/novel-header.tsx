@@ -27,6 +27,7 @@ import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { NovelCover } from "@/components/novels/novel-cover";
 import { PublishMenu } from "@/components/publish-menu";
+import { ReportNovelButton } from "@/components/reports/report-novel-button";
 import type { ChapterRow } from "@/components/chapters/types";
 import { cn, formatCost, formatTokens } from "@/lib/utils";
 import { parseLanguagePair } from "@/lib/language-pair";
@@ -44,6 +45,8 @@ export interface NovelHeaderProps {
   novel: Novel;
   novelId: string;
   isAdmin: boolean;
+  /** A member reading someone else's novel; the owner manages it instead. */
+  canReport: boolean;
   glossaryStats: GlossaryStats;
   costData: CostData;
   chapters: ChapterRow[];
@@ -380,6 +383,7 @@ export function NovelHeader({
   novel,
   novelId,
   isAdmin,
+  canReport,
   glossaryStats,
   costData,
   chapters,
@@ -425,6 +429,11 @@ export function NovelHeader({
           <ArrowLeft className="size-4" />
         </Button>
         {isAdmin ? <AdminActions {...adminActionsProps} /> : null}
+        {/* Hidden from the owner (who manages the novel instead) and from guests, whose
+            filing call would fail; the control never appears without a way to use it. */}
+        {canReport ? (
+          <ReportNovelButton novelId={novelId} novelTitle={novel.title} className="ml-auto" />
+        ) : null}
       </div>
       <div className="grid grid-cols-[96px_1fr] items-start gap-4 md:grid-cols-[200px_1fr] md:gap-6">
         <div className="relative aspect-3/4 w-full overflow-hidden rounded-xl border border-border bg-foreground/3">

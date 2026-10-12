@@ -47,6 +47,12 @@ const environment = {
   INNGEST_BASE_URL: inngestUrl,
   INNGEST_EVENT_KEY: "",
   INNGEST_SIGNING_KEY: "",
+  // Pinned empty so a developer's own Cloudflare keys in .env.local cannot reach the
+  // suite: with them present, sign-in and signup render a real challenge that the
+  // test browser cannot solve, and every spec that signs in times out. Empty reads as
+  // "not configured" in `src/lib/env.ts`, which is what lets dev, CI, and E2E agree.
+  TURNSTILE_SITE_KEY: "",
+  TURNSTILE_SECRET_KEY: "",
   E2E_APP_URL: appUrl,
   E2E_OPENAI_PORT: "4010",
   LOCAL_PROVIDER_ORIGINS: JSON.stringify([new URL(stubUrl).origin]),

@@ -15,6 +15,8 @@ export const ADMIN_ACTIONS = [
   "account.deleted",
   "impersonation.started",
   "impersonation.stopped",
+  "report.upheld",
+  "report.dismissed",
 ] as const;
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];
@@ -36,6 +38,8 @@ const ADMIN_ACTION_LABELS: Record<AdminAction, string> = {
   "account.deleted": "Account deleted",
   "impersonation.started": "Viewed as account",
   "impersonation.stopped": "Returned to operator",
+  "report.upheld": "Report upheld",
+  "report.dismissed": "Report dismissed",
 };
 
 /** Falls back to the raw value so an action added later still renders something. */

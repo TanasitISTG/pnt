@@ -31,6 +31,7 @@ import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
 import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin.index'
 import { Route as ProtectedAdminActivityRouteImport } from './routes/_protected/admin.activity'
+import { Route as ProtectedAdminReportsRouteImport } from './routes/_protected/admin.reports'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
@@ -151,6 +152,11 @@ const ProtectedAdminActivityRoute = ProtectedAdminActivityRouteImport.update({
   path: '/activity',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedAdminReportsRoute = ProtectedAdminReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 const ProtectedNovelsNewRoute = ProtectedNovelsNewRouteImport.update({
   id: '/novels/new',
   path: '/novels/new',
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
   '/admin/activity': typeof ProtectedAdminActivityRoute
+  '/admin/reports': typeof ProtectedAdminReportsRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
   '/admin/activity': typeof ProtectedAdminActivityRoute
+  '/admin/reports': typeof ProtectedAdminReportsRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
@@ -300,6 +308,7 @@ export interface FileRoutesById {
   '/api/sitemap': typeof ApiSitemapRoute
   '/_public/': typeof PublicIndexRoute
   '/_protected/admin/activity': typeof ProtectedAdminActivityRoute
+  '/_protected/admin/reports': typeof ProtectedAdminReportsRoute
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
@@ -335,6 +344,7 @@ export interface FileRouteTypes {
     | '/api/inngest'
     | '/api/sitemap'
     | '/admin/activity'
+    | '/admin/reports'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/avatars/$'
@@ -367,6 +377,7 @@ export interface FileRouteTypes {
     | '/api/inngest'
     | '/api/sitemap'
     | '/admin/activity'
+    | '/admin/reports'
     | '/novels/new'
     | '/api/auth/$'
     | '/api/avatars/$'
@@ -402,6 +413,7 @@ export interface FileRouteTypes {
     | '/api/sitemap'
     | '/_public/'
     | '/_protected/admin/activity'
+    | '/_protected/admin/reports'
     | '/_protected/novels/new'
     | '/api/auth/$'
     | '/api/avatars/$'
@@ -594,6 +606,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminActivityRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/reports': {
+      id: '/_protected/admin/reports'
+      path: '/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof ProtectedAdminReportsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/novels/new': {
       id: '/_protected/novels/new'
       path: '/novels/new'
@@ -676,11 +695,13 @@ declare module '@tanstack/react-router' {
 
 interface ProtectedAdminRouteChildren {
   ProtectedAdminActivityRoute: typeof ProtectedAdminActivityRoute
+  ProtectedAdminReportsRoute: typeof ProtectedAdminReportsRoute
   ProtectedAdminIndexRoute: typeof ProtectedAdminIndexRoute
 }
 
 const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminActivityRoute: ProtectedAdminActivityRoute,
+  ProtectedAdminReportsRoute: ProtectedAdminReportsRoute,
   ProtectedAdminIndexRoute: ProtectedAdminIndexRoute,
 }
 

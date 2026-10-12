@@ -288,6 +288,13 @@
       "when": 1791749007484,
       "tag": "0040_fresh_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791777068208,
+      "tag": "0041_curious_paper_doll",
+      "breakpoints": true
     }
   ]
 }

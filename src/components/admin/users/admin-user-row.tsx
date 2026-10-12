@@ -48,7 +48,9 @@ function SuspensionStatus({ row }: { row: AdminUserRow }) {
         </Badge>
       )}
       {status.state !== "active" && row.banReason && (
-        <span className="text-caption text-muted-foreground">{row.banReason}</span>
+        // Labelled because the reason is free text the operator typed: unlabelled it
+        // reads as another status value rather than the note behind the suspension.
+        <span className="text-caption text-muted-foreground">Reason: {row.banReason}</span>
       )}
     </div>
   );

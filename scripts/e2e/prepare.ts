@@ -105,5 +105,60 @@ await db.insert(schema.chapters).values({
   updatedAt: now,
 });
 
+// A published novel by a third account. The reporting spec needs live content that
+// belongs to someone other than the reporter - an author cannot report their own novel -
+// and a case that the operator therefore does not own either.
+const authorId = "e2e-author";
+await db.insert(schema.user).values({
+  id: authorId,
+  name: "E2E Author",
+  email: "e2e-author@example.test",
+  emailVerified: true,
+  image: null,
+  role: "user",
+  termsVersion: CURRENT_TERMS_VERSION,
+  termsAcceptedAt: now,
+  createdAt: now,
+  updatedAt: now,
+});
+await db.insert(schema.account).values({
+  id: "e2e-author-account",
+  accountId: authorId,
+  providerId: "credential",
+  userId: authorId,
+  password: await hashPassword("e2e-author-password-123"),
+  createdAt: now,
+  updatedAt: now,
+});
+
+const reportedNovelId = "e2e-reported-novel";
+const reportedChapterText = "Published source text for the reporting flow.";
+await db.insert(schema.novels).values({
+  id: reportedNovelId,
+  userId: authorId,
+  title: "E2E Reported Novel",
+  sourceLang: "en",
+  targetLang: "th",
+  storySummary: "A live novel a member can report and an operator can review.",
+  // Live, so any member can read it and be offered the report control.
+  publishedAt: new Date(now.getTime() - 86_400_000),
+  createdAt: now,
+  updatedAt: now,
+});
+await db.insert(schema.chapters).values({
+  id: "e2e-reported-chapter",
+  novelId: reportedNovelId,
+  number: "1",
+  title: "E2E Reported Chapter",
+  rawContent: reportedChapterText,
+  translatedContent: "Translated text for the reporting flow.",
+  rawCharCount: reportedChapterText.length,
+  status: "translated",
+  publishedAt: new Date(now.getTime() - 86_400_000),
+  translatedAt: now,
+  createdAt: now,
+  updatedAt: now,
+});
+
 await queryClient.end({ timeout: 1 });
 console.log("Seeded guarded E2E database");
