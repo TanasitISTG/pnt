@@ -7,6 +7,7 @@ import appCss from "../styles/globals.css?inline";
 import sofiaSansUrl from "@fontsource-variable/sofia-sans/files/sofia-sans-latin-wght-normal.woff2?url";
 
 import { getViewerProfile } from "@/lib/profile/functions";
+import { MotionProvider } from "@/components/motion/motion-provider";
 import { getConsent, useConsent } from "@/lib/consent";
 import { captureException, updatePostHogConsent } from "../lib/posthog";
 import { ConsentBanner } from "@/components/consent-banner";
@@ -207,9 +208,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <Toaster />
-          <ConsentBanner />
+          <MotionProvider>
+            {children}
+            <Toaster />
+            <ConsentBanner />
+          </MotionProvider>
         </ThemeProvider>
         {import.meta.env.DEV && <DevelopmentDevtools />}
         <Scripts />

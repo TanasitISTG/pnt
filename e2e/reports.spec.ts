@@ -55,7 +55,8 @@ async function signIn(page: Page, email: string, password: string) {
   await rejectOptionalAnalytics(page);
   await fillCredentials(page, email, password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  // A signed-in account lands on its reading home; the shelf itself is `/library`.
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 }
 
 /**

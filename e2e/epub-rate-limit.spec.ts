@@ -11,7 +11,8 @@ test("EPUB account quota returns HTTP 429 without a guest IP", async ({ page }) 
   await page.getByLabel("Email").fill("e2e-admin@example.test");
   await page.getByLabel("Password").fill("e2e-password-123");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  // A signed-in account lands on its reading home; the shelf itself is `/library`.
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
   // Invalid filenames fail before admission, but after the authenticated quota check;
   // no upload or chapter is persisted. Call the real client proxy and inspect its HTTP responses.

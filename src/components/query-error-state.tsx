@@ -1,29 +1,35 @@
-import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 
 interface QueryErrorStateProps {
   title?: string;
   error: unknown;
   onRetry: () => void;
   className?: string;
+  /** `panel` is a single tinted row for a failed section inside a working page. */
+  variant?: "page" | "panel";
 }
 
+/**
+ * The query-failure case keeps its own name so every existing caller stays put; the
+ * treatment itself is the shared ErrorState, so a failed read looks the same wherever it
+ * happens. It also keeps the reader's word for the action — a failed *read* is retried,
+ * and the label is part of what callers and tests already depend on.
+ */
 export function QueryErrorState({
   title = "Failed to load content",
   error,
   onRetry,
-  className = "min-h-[40vh] my-8",
+  className = "my-8",
+  variant = "page",
 }: QueryErrorStateProps) {
-  const message = error instanceof Error ? error.message : "An error occurred.";
-
   return (
-    <div
-      className={`flex flex-col items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center ${className}`}
-    >
-      <h3 className="text-card-title font-semibold text-foreground">{title}</h3>
-      <p className="mt-2 max-w-sm text-sm text-destructive-text font-medium">{message}</p>
-      <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
-        Retry
-      </Button>
-    </div>
+    <ErrorState
+      variant={variant}
+      title={title}
+      error={error}
+      onRetry={onRetry}
+      retryLabel="Retry"
+      className={className}
+    />
   );
 }

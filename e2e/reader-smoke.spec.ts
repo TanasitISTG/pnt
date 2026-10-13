@@ -34,9 +34,9 @@ test("reader upgrades: progress, find, bookmarks, typography and page themes", a
   await page.getByLabel("Email").fill(adminEmail);
   await page.getByLabel("Password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
-  await page.getByRole("button", { name: "New Novel" }).click();
+  await page.getByRole("button", { name: "New novel" }).click();
   await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(novelTitle);
   await page.getByRole("button", { name: "Create Novel" }).click();

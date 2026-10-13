@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { BookOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export interface LibraryEmptyProps {
   /** True only in the signed-in workspace (`scope === "mine"`). */
@@ -15,32 +16,38 @@ export interface LibraryEmptyProps {
  * action is here rather than only behind the header's account menu.
  */
 export function LibraryEmpty({ canManage, signedIn }: LibraryEmptyProps) {
-  return (
-    <div className="flex min-h-[45vh] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
-      <div
-        className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted"
-        aria-hidden="true"
+  if (canManage) {
+    return (
+      <EmptyState
+        icon={<BookOpen />}
+        title="No novels yet"
+        description="Create a novel project to start pasting chapters and translating them."
       >
-        <BookOpen className="size-6 text-muted-foreground" aria-hidden="true" />
-      </div>
-      <h2 className="text-card-title font-semibold text-foreground">
-        {canManage ? "No novels yet" : signedIn ? "Nothing published yet" : "No novels yet"}
-      </h2>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-        {canManage
-          ? "Create a novel project to start pasting chapters and translating them."
-          : signedIn
-            ? "Check back later. Published novels from other translators will appear here."
-            : "Create a free account to translate your own novels, with a side-by-side reader and glossary."}
-      </p>
-      {!canManage && !signedIn && (
-        <div className="mt-5 flex items-center gap-2">
-          <Button render={<Link to="/signup" />}>Create account</Button>
-          <Button variant="outline" render={<Link to="/login" />}>
-            Sign in
-          </Button>
-        </div>
-      )}
-    </div>
+        <Button render={<Link to="/novels/new" />}>New novel</Button>
+      </EmptyState>
+    );
+  }
+
+  if (signedIn) {
+    return (
+      <EmptyState
+        icon={<BookOpen />}
+        title="Nothing published yet"
+        description="Check back later — published novels from other translators will appear here."
+      />
+    );
+  }
+
+  return (
+    <EmptyState
+      icon={<BookOpen />}
+      title="No novels yet"
+      description="Create a free account to translate your own novels, with a side-by-side reader and glossary."
+    >
+      <Button render={<Link to="/signup" />}>Create account</Button>
+      <Button variant="outline" render={<Link to="/login" />}>
+        Sign in
+      </Button>
+    </EmptyState>
   );
 }

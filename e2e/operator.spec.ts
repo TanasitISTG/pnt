@@ -42,7 +42,8 @@ async function signIn(page: Page, email: string, password: string, url = "/login
 /** Signs in as the operator and opens the Accounts tab, ready for a row menu. */
 async function openAccounts(page: Page) {
   await signIn(page, adminEmail, adminPassword);
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  // A signed-in account lands on its reading home; the shelf itself is `/library`.
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
   // A document load renders the table before React attaches its handlers, and a click
@@ -73,7 +74,8 @@ test("operator moderates, audits, and views an account read-only", async ({ page
 
   await expect(page.getByText(/Viewing as E2E Member, read-only/)).toBeVisible();
   await expect(page.getByText(/Signed in as E2E Admin/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  // Viewing as an account means seeing that account's own home, not the operator's.
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
   // Reads are the point of a read-only view. The account's own unpublished novel - the
   // resource a guest could never see - opens with its chapters, and the owner-only
@@ -129,7 +131,7 @@ test("operator moderates, audits, and views an account read-only", async ({ page
     await signIn(memberPage, memberEmail, memberPassword);
     await expect(memberPage.getByText(/suspended/i)).toBeVisible();
     await expect(memberPage.getByText(/Signed up with Google or Discord/)).toHaveCount(0);
-    await expect(memberPage.getByRole("heading", { name: "Your Library" })).toHaveCount(0);
+    await expect(memberPage.getByRole("heading", { name: "Welcome back" })).toHaveCount(0);
   } finally {
     await memberContext.close();
   }

@@ -10,38 +10,33 @@ import {
 } from "@/components/novels/library/library-search";
 
 /**
- * The shared catalog, for a signed-in account.
- *
- * `/` stays what it always was — the catalog for a guest and the workspace for a
- * signed-in account — so the sitemap and crawler view are unaffected. This route is
- * how a signed-in reader reaches everyone else's published novels, which previously
- * had no entry point at all.
+ * The shared catalog: every published novel, readable by guests and by signed-in
+ * readers alike. It replaces `/browse`, which `/browse` now redirects to, so the two
+ * near-identical catalogs the app used to have are one page with one name.
  */
-export const Route = createFileRoute("/_public/browse")({
+export const Route = createFileRoute("/_public/catalog")({
   validateSearch: librarySearchSchema,
   loaderDeps: () => ({}),
   shouldReload: false,
-  loader: async ({ context }) => ({
-    novels: await context.queryClient.ensureQueryData(novelsQueryOptions("public")),
-  }),
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(novelsQueryOptions("public"));
+  },
   pendingMs: 100,
   pendingMinMs: 200,
   pendingComponent: LibraryPending,
   head: () => ({
     meta: [
-      { title: "Browse | Pnt - Personal Novel Translator" },
+      { title: "Catalog | Pnt - Personal Novel Translator" },
       {
         name: "description",
         content: "Browse published novel translations from the Pnt community.",
       },
     ],
   }),
-  component: BrowsePage,
+  component: CatalogPage,
 });
 
-function BrowsePage() {
-  // Root context for the same reason as the home route: a session change must be read
-  // from the live root match, not from this route's creation-time snapshot.
+function CatalogPage() {
   const { user } = useRouteContext({ from: "__root__" });
   const search = Route.useSearch();
   const navigate = Route.useNavigate();

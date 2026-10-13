@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 
+import { ReadingHome } from "@/components/home/reading-home";
 import { LibraryPage } from "@/components/novels/library/library-page";
 import { LibraryPending } from "@/components/novels/library/library-pending";
 import { novelsQueryOptions, type LibraryScope } from "@/components/novels/library/library-query";
@@ -10,9 +11,13 @@ import {
 } from "@/components/novels/library/library-search";
 
 /**
- * Home. A guest gets the shared public catalog — which is also what the sitemap and
- * crawlers see — while a signed-in account lands on its own workspace. Browsing other
- * people's published novels is `/browse`.
+ * Home. A guest gets the shared catalog — which is also what the sitemap and crawlers
+ * see — while a signed-in account lands on its reading home: continue reading, your
+ * novels, and whether anything is running.
+ *
+ * Browsing other people's published novels is `/catalog`, and the account's own shelf is
+ * `/library`; `/` used to be both of those at once, which is why a returning reader had
+ * nowhere to resume.
  */
 export const Route = createFileRoute("/_public/")({
   validateSearch: librarySearchSchema,
@@ -28,25 +33,24 @@ export const Route = createFileRoute("/_public/")({
   head: () => ({
     meta: [
       {
-        title: "Library | Pnt - Personal Novel Translator",
+        title: "Pnt - Personal Novel Translator",
       },
       {
         name: "description",
-        content: "Browse the translated web novel collection.",
+        content:
+          "Translate and read web novels side by side, with a glossary that keeps terms consistent.",
       },
     ],
   }),
-  component: HomeLibraryPage,
+  component: HomeRoute,
 });
 
-function HomeLibraryPage() {
+function HomeRoute() {
   // The viewer comes from the root match, never this route's own snapshot: signing out
   // while already on `/` invalidates the router, which refreshes the root context (the
   // shell switches to "Sign in") while this route's match keeps the context it was
-  // created with. Reading it here is what makes the catalog follow the live session
-  // rather than showing the previous account's workspace to a guest.
+  // created with.
   const { user } = useRouteContext({ from: "__root__" });
-  const scope: LibraryScope = user ? "mine" : "public";
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const onSearchChange = useCallback(
@@ -60,12 +64,9 @@ function HomeLibraryPage() {
     [navigate],
   );
 
+  if (user) return <ReadingHome user={user} />;
+
   return (
-    <LibraryPage
-      scope={scope}
-      signedIn={Boolean(user)}
-      search={search}
-      onSearchChange={onSearchChange}
-    />
+    <LibraryPage scope="public" signedIn={false} search={search} onSearchChange={onSearchChange} />
   );
 }

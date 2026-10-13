@@ -13,7 +13,7 @@ import {
   selectLibraryNovels,
   type LibrarySearch,
 } from "@/components/novels/library/library-search";
-import { QueryErrorState } from "@/components/query-error-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
 
 interface LibraryPageProps {
@@ -24,15 +24,15 @@ interface LibraryPageProps {
 }
 
 /**
- * One component serves three surfaces: a guest's public catalog, a signed-in
- * account's workspace, and the shared catalog a signed-in account browses.
+ * One component serves two surfaces: the shared catalog everyone can read, and the
+ * signed-in shelf of novels the account owns.
  *
- * `scope` decides which of those it is, and it is the only thing that decides whether
+ * `scope` decides which one it is, and it is the only thing that decides whether
  * manage affordances appear — never the mere presence of a session, which used to make
  * a signed-in reader of someone else's novel look like its owner.
  *
  * Search state and navigation arrive as props rather than from a bound route, because
- * this component is mounted by two routes with their own search schemas.
+ * this component is mounted by more than one route with its own search schema.
  */
 export function LibraryPage({ scope, signedIn, search, onSearchChange }: LibraryPageProps) {
   const {
@@ -57,35 +57,34 @@ export function LibraryPage({ scope, signedIn, search, onSearchChange }: Library
 
   if (isPending && novels.length === 0) return <LibraryPending />;
 
-  const heading = canManage ? "Your Library" : signedIn ? "Browse" : "Library";
+  const heading = canManage ? "Your Library" : "Catalog";
   const description = canManage
-    ? "Find a project, resume reading, or continue translating."
+    ? "Your novels, drafts and translations in one shelf."
     : signedIn
       ? "Published novels from everyone on Pnt."
-      : "Browse the translated novel collection.";
+      : "Every novel published on Pnt, from the translators who wrote them.";
 
   return (
-    <div className="flex flex-col gap-6 sm:gap-8">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-sub font-semibold tracking-tight text-foreground sm:text-section">
-            {heading}
-          </h1>
-          <p className="mt-1 text-body text-muted-foreground">{description}</p>
+          <h1 className="text-section text-foreground">{heading}</h1>
+          <p className="mt-1.5 text-body text-muted-foreground">{description}</p>
         </div>
-        {canManage && (
+        {/* One call to action per state: with an empty shelf the empty state owns it. */}
+        {canManage && novels.length > 0 ? (
           <Button className="self-start sm:self-auto" render={<Link to="/novels/new" />}>
             <Plus className="size-4" aria-hidden="true" />
-            New Novel
+            New novel
           </Button>
-        )}
+        ) : null}
       </div>
 
       {isError ? (
-        <QueryErrorState
-          title="Failed to load library"
+        <ErrorState
+          title="The shelf didn't load"
           error={error}
-          onRetry={() => refetch()}
+          onRetry={() => void refetch()}
           className="min-h-[45vh]"
         />
       ) : novels.length === 0 ? (
@@ -114,7 +113,7 @@ export function LibraryPage({ scope, signedIn, search, onSearchChange }: Library
             <div
               className={
                 search.view === "grid"
-                  ? "grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4"
+                  ? "grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
                   : "grid gap-3"
               }
             >

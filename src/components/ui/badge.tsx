@@ -4,39 +4,57 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+/*
+ * Twenty variants collapsed onto three treatments. Every old name still resolves — to a
+ * literal class string, because Tailwind can only see literals — so no call site moves.
+ *   neutral — hairline border, foreground text (the default "this is a label" chip)
+ *   quiet   — recessed fill, muted text (statuses that are informational only)
+ *   tone    — a muted tone tint; outline variants keep the tone and drop the fill
+ * Badges are square-ish now: pill radius is reserved for icon toggles, and only the
+ * counting badge (which lives inside a control) keeps a full radius.
+ */
+const NEUTRAL = "border-border-strong text-foreground [a]:hover:bg-surface-inset";
+const QUIET = "border-border bg-surface-inset text-muted-foreground [a]:hover:text-foreground";
+const INFO = "border-info/30 bg-info/10 text-info";
+const WARNING = "border-warning/30 bg-warning/10 text-warning";
+const SUCCESS = "border-success/30 bg-success/10 text-success";
+const DESTRUCTIVE = "border-destructive/30 bg-destructive/10 text-destructive-text";
+const WARNING_OUTLINE = "border-warning/40 text-warning";
+const SUCCESS_OUTLINE = "border-success/40 text-success";
+const DESTRUCTIVE_OUTLINE = "border-destructive/40 text-destructive-text";
+
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border border-transparent px-2 py-0.5 text-xs font-normal whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-sm border border-transparent px-1.5 py-0.5 text-xs font-normal whitespace-nowrap transition-colors duration-micro focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 aria-invalid:border-destructive [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        secondary: "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
-        destructive:
-          "bg-destructive/10 text-destructive-text focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
-        outline: "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
-        ghost: "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-        link: "text-primary underline-offset-4 hover:underline",
-        muted: "border-border bg-muted/60 text-muted-foreground",
-        mutedOutline: "border-border text-muted-foreground",
-        info: "border-info/20 bg-info/10 text-info",
-        warning: "border-warning/30 bg-warning/10 text-warning",
-        warningOutline: "border-warning/40 bg-warning/10 text-warning",
-        warningSubtle: "border-warning/20 bg-warning/10 text-warning",
-        warningStrong: "border-warning/50 bg-warning/10 text-warning",
-        success: "border-success/30 bg-success/10 text-success",
-        successOutline: "border-success/30 text-success",
-        successSubtle: "border-success/20 bg-success/10 text-success",
-        destructiveOutline: "border-destructive/40 bg-destructive/10 text-destructive-text",
-        strongOutline: "border-foreground/40 text-foreground",
+        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/90",
+        secondary: "border-transparent bg-surface-inset text-foreground",
+        outline: NEUTRAL,
+        strongOutline: NEUTRAL,
+        muted: QUIET,
+        mutedOutline: QUIET,
+        ghost: QUIET,
+        info: INFO,
+        warning: WARNING,
+        warningStrong: WARNING,
+        warningSubtle: WARNING,
+        warningOutline: WARNING_OUTLINE,
+        success: SUCCESS,
+        successSubtle: SUCCESS,
+        successOutline: SUCCESS_OUTLINE,
+        destructive: DESTRUCTIVE,
+        destructiveOutline: DESTRUCTIVE_OUTLINE,
+        link: "border-transparent text-ink underline-offset-4 hover:underline",
       },
       size: {
         default: "",
         stat: "px-3 py-1 font-mono",
-        count: "px-1.5 py-0 text-badge-count font-mono",
+        count: "rounded-full px-1.5 py-0 text-badge-count font-mono",
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "outline",
       size: "default",
     },
   },
@@ -44,7 +62,7 @@ const badgeVariants = cva(
 
 function Badge({
   className,
-  variant = "default",
+  variant = "outline",
   size = "default",
   render,
   ...props

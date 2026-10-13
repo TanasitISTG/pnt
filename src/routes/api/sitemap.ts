@@ -52,6 +52,11 @@ export const Route = createFileRoute("/api/sitemap")({
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>`,
+            `  <url>
+    <loc>${escapeXml(`${baseUrl}/catalog`)}</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>`,
           ];
 
           for (const novel of liveNovels) {

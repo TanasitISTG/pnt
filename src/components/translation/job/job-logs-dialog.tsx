@@ -360,18 +360,20 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6 sm:pr-2">
             {detailsQuery.isError ? (
               <QueryErrorState
+                variant="panel"
                 title="Unable to refresh job details"
                 error={detailsQuery.error}
                 onRetry={() => void detailsQuery.refetch()}
-                className="my-0 min-h-0 shrink-0 rounded-xl border border-destructive/20 p-3"
+                className="my-0 min-h-0 shrink-0"
               />
             ) : null}
             {progressQuery.isError ? (
               <QueryErrorState
+                variant="panel"
                 title="Unable to refresh job progress"
                 error={progressQuery.error}
                 onRetry={() => void progressQuery.refetch()}
-                className="my-0 min-h-0 shrink-0 rounded-xl border border-destructive/20 p-3"
+                className="my-0 min-h-0 shrink-0"
               />
             ) : null}
             <JobMetricsBar

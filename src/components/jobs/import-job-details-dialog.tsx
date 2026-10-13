@@ -190,7 +190,8 @@ export function ImportJobDetailsDialog({ jobId, open, onOpenChange }: ImportJobD
             title="Unable to refresh import details"
             error={jobQuery.error}
             onRetry={() => void jobQuery.refetch()}
-            className="my-0 min-h-0 rounded-lg p-3"
+            variant="panel"
+            className="my-0 min-h-0"
           />
         ) : null}
 

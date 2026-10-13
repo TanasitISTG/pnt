@@ -235,13 +235,30 @@
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* Cross-document navigations may use the native transition; same-document route
+   changes are opt-in per navigation (see DESIGN.md §6.3), so reader chapter turns and
+   every keyboard-initiated move stay instant. */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-panel);
+  animation-timing-function: var(--ease-out-quint);
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
  * Design tokens — single source of truth: DESIGN.md
- * Semantic tokens (background/foreground/muted/border/primary) flip in .dark.
- * Constant palette (cream/charcoal/off-white) never flips — use for fixed values.
- * All grays derive from foreground at opacity (charcoal light / cream dark).
+ *
+ * Four tiers, so a page never has to invent a value:
+ *   1. constant palette (cream / charcoal / off-white) never flips
+ *   2. surfaces (0 page · 1 card · 2 popover · 3 top) flip per theme
+ *   3. foregrounds (1 primary · 2 muted · 3 tertiary) and borders (hairline · strong)
+ *   4. one accent: ink — interactive emphasis, links, focus, selection
+ * All greys derive from the foreground hue at opacity (charcoal light / cream dark).
  */
 @theme inline {
   /* Semantic colors — flip in .dark */
@@ -249,11 +266,20 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-fg-3: var(--fg-3);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-surface: var(--surface);
+  --color-surface-0: var(--surface-0);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-inset: var(--surface-inset);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  /* Ink is the only accent: interactive emphasis, links, focus and selection. */
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-ink-quiet: var(--ink-quiet);
 
   /* shadcn aliases mapped to the design system */
   --color-card: var(--surface);
@@ -278,51 +304,68 @@
   --color-cream: #f7f4ed;
   --color-charcoal: #1c1c1c;
   --color-off-white: #fcfbf8;
-  --color-ring: rgb(59, 130, 246);
+  /* One focus convention: the ring follows the accent on every surface. */
+  --color-ring: var(--ring);
   --color-ring-blue: rgba(59, 130, 246, 0.5);
 
-  /* Elevation — borders > shadows */
+  /* Elevation — borders > shadows; overlays get one warm, diffused lift */
   --shadow-button-inset:
     rgba(255, 255, 255, 0.2) 0px 0.5px 0px 0px inset, rgba(0, 0, 0, 0.2) 0px 0px 0px 0.5px inset,
     rgba(0, 0, 0, 0.05) 0px 1px 2px 0px;
   --shadow-focus: var(--focus-shadow);
+  --shadow-pop: var(--shadow-pop-value);
+  --shadow-ring: 0 0 0 2px var(--ring);
   --shadow-ring-blue: 0 0 0 2px rgba(59, 130, 246, 0.5);
 
-  /* Radius scale (DESIGN.md §5): 4 / 6 / 8 / 12 / 16 + full (pills only) */
-  --radius-sm: 4px;
+  /* Radius scale (DESIGN.md §5): 3 / 6 / 8 / 10 / 14 + full (icon toggles only) */
+  --radius-sm: 3px;
   --radius-md: 6px;
   --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
 
-  /* Type scale per DESIGN.md §3 — weights 400/600 only (480 special display) */
-  --text-display: 3.75rem;
-  --text-display--line-height: 1.05;
-  --text-display--letter-spacing: -1.5px;
+  /* Type scale (DESIGN.md §3) — a fluid application ramp, not a landing page.
+     Weights: 400 body · 500 interface · 600 titles · 480 display alt. */
+  --text-display: clamp(2.25rem, 1.55rem + 3.1vw, 3.25rem);
+  --text-display--line-height: 1.04;
+  --text-display--letter-spacing: -0.03em;
   --text-display--font-weight: 600;
-  --text-display-alt: 3.75rem;
-  --text-display-alt--line-height: 1;
+  --text-display-alt: clamp(2rem, 1.5rem + 2.2vw, 2.75rem);
+  --text-display-alt--line-height: 1.08;
+  --text-display-alt--letter-spacing: -0.02em;
   --text-display-alt--font-weight: 480;
-  --text-section: 3rem;
-  --text-section--line-height: 1;
-  --text-section--letter-spacing: -1.2px;
+  --text-section: clamp(1.75rem, 1.35rem + 1.7vw, 2.375rem);
+  --text-section--line-height: 1.08;
+  --text-section--letter-spacing: -0.024em;
   --text-section--font-weight: 600;
-  --text-sub: 2.25rem;
-  --text-sub--line-height: 1.1;
-  --text-sub--letter-spacing: -0.9px;
+  --text-sub: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem);
+  --text-sub--line-height: 1.15;
+  --text-sub--letter-spacing: -0.018em;
   --text-sub--font-weight: 600;
-  --text-card-title: 1.25rem;
-  --text-card-title--line-height: 1.25;
-  --text-body-lg: 1.125rem;
-  --text-body-lg--line-height: 1.38;
-  --text-caption: 0.875rem;
+  /* Novel titles carry the product's subject, so they get their own step. */
+  --text-title: clamp(1.5rem, 1.25rem + 1.1vw, 2rem);
+  --text-title--line-height: 1.12;
+  --text-title--letter-spacing: -0.02em;
+  --text-title--font-weight: 600;
+  --text-card-title: 1.0625rem;
+  --text-card-title--line-height: 1.3;
+  --text-card-title--letter-spacing: -0.01em;
+  --text-card-title--font-weight: 600;
+  --text-body-lg: 1.0625rem;
+  --text-body-lg--line-height: 1.55;
+  --text-caption: 0.8125rem;
   --text-caption--line-height: 1.5;
   --text-body: 1rem;
-  --text-body--line-height: 1.5;
+  --text-body--line-height: 1.6;
   --text-micro: 0.6875rem;
   --text-badge-count: 0.625rem;
-  --text-metric: clamp(1.75rem, 4vw, 2.5rem);
-  --tracking-overline: 0.16em;
+  --text-metric: clamp(1.75rem, 1.3rem + 2vw, 2.25rem);
+  --tracking-overline: 0.14em;
+
+  /* Motion — budgets and curves live in DESIGN.md §6.1 */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* Fonts — Thai fallback is mandatory */
   --font-sans: "Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
@@ -333,17 +376,47 @@
   transition-property: width;
 }
 
+/* Tailwind has no duration namespace, so each motion budget gets a class. */
+@utility duration-press {
+  transition-duration: var(--dur-press);
+}
+
+@utility duration-micro {
+  transition-duration: var(--dur-micro);
+}
+
+@utility duration-ui {
+  transition-duration: var(--dur-ui);
+}
+
+@utility duration-panel {
+  transition-duration: var(--dur-panel);
+}
+
+@utility duration-modal {
+  transition-duration: var(--dur-modal);
+}
+
 :root {
   color-scheme: light;
   --background: #f7f4ed;
+  --surface-0: #f7f4ed;
+  --surface: #fbf9f4;
+  --surface-2: #fdfcf9;
+  --surface-3: #fefdfa;
+  --surface-inset: rgba(28, 28, 28, 0.04);
   --foreground: #1c1c1c;
+  --fg-3: #7a7a76;
   --muted: rgba(28, 28, 28, 0.04);
   --muted-foreground: #5f5f5d;
   --border: #eceae4;
-  --surface: #f7f4ed;
-  --surface-2: #fcfbf8;
+  --border-strong: rgba(28, 28, 28, 0.28);
   --primary: #1c1c1c;
   --primary-foreground: #fcfbf8;
+  --ink: #33507a;
+  --ink-foreground: #fcfbf8;
+  --ink-quiet: rgba(51, 80, 122, 0.08);
+  --ring: var(--ink);
   --destructive: #a8442f;
   --destructive-text: var(--destructive);
   --destructive-foreground: #fcfbf8;
@@ -351,19 +424,34 @@
   --warning: #735735;
   --info: #505f65;
   --focus-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
+  --shadow-pop-value:
+    rgba(28, 28, 28, 0.1) 0px 12px 32px -16px, rgba(28, 28, 28, 0.06) 0px 2px 8px -4px;
+  --dur-press: 120ms;
+  --dur-micro: 160ms;
+  --dur-ui: 200ms;
+  --dur-panel: 280ms;
+  --dur-modal: 360ms;
 }
 
 .dark {
   color-scheme: dark;
   --background: #1c1c1c;
+  --surface-0: #1c1c1c;
+  --surface: #232320;
+  --surface-2: #2a2a27;
+  --surface-3: #333330;
+  --surface-inset: rgba(247, 244, 237, 0.06);
   --foreground: #f7f4ed;
+  --fg-3: #8a8a86;
   --muted: rgba(247, 244, 237, 0.06);
   --muted-foreground: #a3a3a0;
   --border: rgba(247, 244, 237, 0.1);
-  --surface: #232320;
-  --surface-2: #2a2a27;
+  --border-strong: rgba(247, 244, 237, 0.28);
   --primary: #f7f4ed;
   --primary-foreground: #1c1c1c;
+  --ink: #a8c0e2;
+  --ink-foreground: #16233a;
+  --ink-quiet: rgba(168, 192, 226, 0.14);
   --destructive: #a8442f;
   --destructive-text: #e6a18f;
   --destructive-foreground: #fcfbf8;
@@ -371,6 +459,7 @@
   --warning: #d5b991;
   --info: #b8c5ca;
   --focus-shadow: rgba(247, 244, 237, 0.15) 0px 4px 12px;
+  --shadow-pop-value: rgba(0, 0, 0, 0.5) 0px 16px 40px -20px, rgba(0, 0, 0, 0.35) 0px 2px 8px -4px;
 }
 
 /* Reader page themes. Declared after .dark so they win on equal specificity, and
@@ -378,14 +467,22 @@
 [data-reader-theme="sepia"] {
   color-scheme: light !important;
   --background: #f4ecd8;
+  --surface-0: #f4ecd8;
+  --surface: #f8f1e1;
+  --surface-2: #f9f2e2;
+  --surface-3: #fbf5e9;
+  --surface-inset: rgba(91, 70, 54, 0.06);
   --foreground: #5b4636;
+  --fg-3: #8d7862;
   --muted: rgba(91, 70, 54, 0.06);
   --muted-foreground: #856f57;
   --border: #e2d5b8;
-  --surface: #f4ecd8;
-  --surface-2: #f9f2e2;
+  --border-strong: rgba(91, 70, 54, 0.28);
   --primary: #5b4636;
   --primary-foreground: #f9f2e2;
+  --ink: #4d6a8c;
+  --ink-foreground: #f9f2e2;
+  --ink-quiet: rgba(77, 106, 140, 0.1);
   --destructive: #8f4630;
   --destructive-text: var(--destructive);
   --destructive-foreground: #f9f2e2;
@@ -393,19 +490,29 @@
   --warning: #705333;
   --info: #525d61;
   --focus-shadow: rgba(91, 70, 54, 0.12) 0px 4px 12px;
+  --shadow-pop-value:
+    rgba(91, 70, 54, 0.14) 0px 12px 32px -16px, rgba(91, 70, 54, 0.08) 0px 2px 8px -4px;
 }
 
 [data-reader-theme="paper"] {
   color-scheme: light !important;
   --background: #f6f6f2;
+  --surface-0: #f6f6f2;
+  --surface: #fbfbf8;
+  --surface-2: #fcfcfa;
+  --surface-3: #fdfdfb;
+  --surface-inset: rgba(31, 31, 28, 0.05);
   --foreground: #1f1f1c;
+  --fg-3: #75756e;
   --muted: rgba(31, 31, 28, 0.05);
   --muted-foreground: #63635c;
   --border: #e6e6df;
-  --surface: #f6f6f2;
-  --surface-2: #fcfcfa;
+  --border-strong: rgba(31, 31, 28, 0.26);
   --primary: #1f1f1c;
   --primary-foreground: #fcfcfa;
+  --ink: #33507a;
+  --ink-foreground: #fcfcfa;
+  --ink-quiet: rgba(51, 80, 122, 0.07);
   --destructive: #9c4530;
   --destructive-text: var(--destructive);
   --destructive-foreground: #fcfcfa;
@@ -413,6 +520,8 @@
   --warning: #735735;
   --info: #505f65;
   --focus-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
+  --shadow-pop-value:
+    rgba(31, 31, 28, 0.12) 0px 12px 32px -16px, rgba(31, 31, 28, 0.06) 0px 2px 8px -4px;
 }
 
 @layer base {
@@ -432,7 +541,26 @@
     color: var(--foreground);
     font-family: "Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
     font-size: 1rem;
-    line-height: 1.5;
+    line-height: 1.6;
+  }
+
+  /* Fallback focus for anything that did not opt into a component-level ring.
+     Zero specificity on purpose: every component rule wins over it. */
+  :where(:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  :where(h1, h2, h3, h4) {
+    text-wrap: balance;
+  }
+
+  :where(p, li) {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: var(--ink-quiet);
   }
 }
 
@@ -442,5 +570,110 @@
     background-color: var(--muted);
     outline: 1px solid var(--border);
     outline-offset: 0.5rem;
+  }
+}
+
+@layer utilities {
+  /*
+   * Overlay motion. Base UI keeps a popup mounted while a transition runs, so the
+   * transition is declared on the resting element and the data attributes supply the
+   * "from" state. (The previous animate-in/zoom-in classes were inert: no
+   * tw-animate-css is installed.)
+   */
+  .overlay-fade {
+    transition: opacity var(--dur-ui) var(--ease-out-quint);
+  }
+
+  /* `scale`/`translate` are individual properties on purpose: a popup that is also
+     centred with Tailwind translate utilities composes instead of fighting. */
+  .overlay-pop {
+    transform-origin: var(--transform-origin, center);
+    transition:
+      opacity var(--dur-ui) var(--ease-out-quint),
+      scale var(--dur-ui) var(--ease-out-quint);
+  }
+
+  .overlay-fade[data-starting-style],
+  .overlay-fade[data-ending-style],
+  .overlay-pop[data-starting-style],
+  .overlay-pop[data-ending-style] {
+    opacity: 0;
+  }
+
+  .overlay-pop[data-starting-style],
+  .overlay-pop[data-ending-style] {
+    scale: 0.97;
+  }
+
+  /* Sheets and drawers: the panel travels, it does not pop. */
+  .overlay-sheet {
+    transition:
+      opacity var(--dur-panel) var(--ease-drawer),
+      translate var(--dur-panel) var(--ease-drawer);
+  }
+
+  .overlay-sheet[data-starting-style],
+  .overlay-sheet[data-ending-style] {
+    opacity: 0;
+    translate: 0 8%;
+  }
+
+  .overlay-slide-start {
+    transition: translate var(--dur-panel) var(--ease-drawer);
+  }
+
+  .overlay-slide-start[data-starting-style],
+  .overlay-slide-start[data-ending-style] {
+    translate: -100% 0;
+  }
+
+  .overlay-slide-end {
+    transition: translate var(--dur-panel) var(--ease-drawer);
+  }
+
+  .overlay-slide-end[data-starting-style],
+  .overlay-slide-end[data-ending-style] {
+    translate: 100% 0;
+  }
+
+  /* Keyboard-triggered, so it appears instantly: motion here would read as lag. */
+  .skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 100;
+    transform: translateY(-200%);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-2);
+    box-shadow: var(--shadow-pop-value);
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    color: var(--foreground);
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  .skip-link:focus-visible {
+    transform: none;
+  }
+}
+
+/*
+ * Reduced motion: looping motion stops, transitions resolve instantly. Surfaces driven
+ * by Motion (JS) branch on useReducedMotion() instead, dropping spatial movement while
+ * keeping the state change legible.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

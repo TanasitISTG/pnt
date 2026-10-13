@@ -1,4 +1,4 @@
-import { Grid2X2, List, Search, SlidersHorizontal, X } from "lucide-react";
+import { Grid2X2, List, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/novels/library/library-search";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Select,
   SelectContent,
@@ -27,6 +28,15 @@ interface LibraryToolbarProps {
   onSearchChange: (patch: Partial<LibrarySearch>) => void;
 }
 
+const VIEW_OPTIONS = [
+  { value: "grid", label: "Grid", icon: <Grid2X2 />, srLabel: "Grid view" },
+  { value: "list", label: "List", icon: <List />, srLabel: "List view" },
+] as const;
+
+/**
+ * Filters, not a panel: a sticky row that stays reachable while the shelf scrolls, one
+ * line of controls on desktop, and a single results sentence with the way to clear.
+ */
 export function LibraryToolbar({
   search,
   languages,
@@ -74,10 +84,10 @@ export function LibraryToolbar({
         if (value) onSearchChange({ sort: value as LibrarySearch["sort"] });
       }}
     >
-      <SelectTrigger aria-label="Sort by" className="h-10 min-w-0 w-full lg:min-w-48">
+      <SelectTrigger aria-label="Sort by" className="h-9 w-full min-w-0">
         <SelectValue placeholder={LIBRARY_SORT_LABELS.newest} />
       </SelectTrigger>
-      <SelectContent className="min-w-48">
+      <SelectContent>
         {Object.entries(LIBRARY_SORT_LABELS).map(([value, label]) => (
           <SelectItem key={value} value={value}>
             {label}
@@ -89,11 +99,11 @@ export function LibraryToolbar({
 
   return (
     <section
-      className="rounded-xl border border-border bg-card p-3 sm:p-4"
       aria-label="Library filters"
+      className="sticky top-16 z-30 flex flex-col gap-3 border-b border-border bg-background/90 py-3 supports-backdrop-filter:backdrop-blur-sm"
     >
-      <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_repeat(2,minmax(150px,190px))_auto] lg:items-center">
-        <div className="relative min-w-0">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 lg:flex-1">
           <Search
             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
@@ -109,91 +119,67 @@ export function LibraryToolbar({
             onChange={(event) => setQueryInputState({ query: search.q, input: event.target.value })}
             placeholder="Search title, author, or original title…"
             aria-label="Search novels"
-            className="h-10 pl-9"
+            className="h-9 pl-9"
           />
         </div>
-        <Select
-          value={search.language}
-          items={languageItems}
-          onValueChange={(value) => onSearchChange({ language: value ?? "all" })}
-        >
-          <SelectTrigger aria-label="Filter by language" className="h-10 w-full min-w-0">
-            <SelectValue placeholder={LIBRARY_LANGUAGE_ALL_LABEL} />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(languageItems).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {isAdmin ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:w-auto lg:items-center">
           <Select
-            value={search.publication}
-            items={LIBRARY_PUBLICATION_LABELS}
-            onValueChange={(value) => {
-              if (value) {
-                onSearchChange({
-                  publication: value as LibrarySearch["publication"],
-                });
-              }
-            }}
+            value={search.language}
+            items={languageItems}
+            onValueChange={(value) => onSearchChange({ language: value ?? "all" })}
           >
-            <SelectTrigger aria-label="Filter by publication" className="h-10 w-full min-w-0">
-              <SelectValue placeholder={LIBRARY_PUBLICATION_LABELS.all} />
+            <SelectTrigger aria-label="Filter by language" className="h-9 w-full min-w-0">
+              <SelectValue placeholder={LIBRARY_LANGUAGE_ALL_LABEL} />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(LIBRARY_PUBLICATION_LABELS).map(([value, label]) => (
+              {Object.entries(languageItems).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        ) : (
-          sortSelect
-        )}
-        <div className="flex items-center justify-between gap-2 lg:justify-end">
-          {isAdmin && sortSelect}
-          <div
-            className="flex items-center gap-1 rounded-md border border-border p-1"
-            aria-label="Library view"
-          >
-            <Button
-              type="button"
-              variant={search.view === "grid" ? "outline" : "ghost"}
-              size="icon-sm"
-              aria-label="Grid view"
-              aria-pressed={search.view === "grid"}
-              onClick={() => onSearchChange({ view: "grid" })}
+          {isAdmin ? (
+            <Select
+              value={search.publication}
+              items={LIBRARY_PUBLICATION_LABELS}
+              onValueChange={(value) => {
+                if (value) onSearchChange({ publication: value as LibrarySearch["publication"] });
+              }}
             >
-              <Grid2X2 className="size-4" aria-hidden="true" />
-            </Button>
-            <Button
-              type="button"
-              variant={search.view === "list" ? "outline" : "ghost"}
-              size="icon-sm"
-              aria-label="List view"
-              aria-pressed={search.view === "list"}
-              onClick={() => onSearchChange({ view: "list" })}
-            >
-              <List className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
+              <SelectTrigger aria-label="Filter by publication" className="h-9 w-full min-w-0">
+                <SelectValue placeholder={LIBRARY_PUBLICATION_LABELS.all} />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(LIBRARY_PUBLICATION_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          {isAdmin ? <div className="lg:w-48">{sortSelect}</div> : null}
+          <SegmentedControl
+            label="Shelf layout"
+            value={search.view}
+            options={VIEW_OPTIONS}
+            size="sm"
+            className="h-9 lg:ml-auto"
+            onValueChange={(value) => onSearchChange({ view: value })}
+          />
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-caption text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5" aria-live="polite">
-          <SlidersHorizontal className="size-3.5" aria-hidden="true" />
+      <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-muted-foreground">
+        <span aria-live="polite">
           {resultCount} of {totalCount} {totalCount === 1 ? "novel" : "novels"}
         </span>
-        {hasFilters && (
+        {hasFilters ? (
           <Button type="button" variant="ghost" size="sm" onClick={clear}>
             <X className="size-3.5" aria-hidden="true" />
             Clear filters
           </Button>
-        )}
+        ) : null}
       </div>
     </section>
   );

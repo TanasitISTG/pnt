@@ -8,7 +8,7 @@ test("guest listNovels returns a safe HTTP 429 on request 61", async ({ page }, 
   await page.goto("/privacy");
   await page.waitForFunction(() => {
     const link = Array.from(document.querySelectorAll("a")).find(
-      (element) => element.textContent?.trim() === "Library",
+      (element) => element.textContent?.trim() === "Catalog",
     );
     return link && Object.keys(link).some((key) => key.startsWith("__reactProps$"));
   });
@@ -23,7 +23,7 @@ test("guest listNovels returns a safe HTTP 429 on request 61", async ({ page }, 
       response.request().resourceType() === "fetch" &&
       /(?:^|,\s*)novels;dur=/.test(response.headers()["server-timing"] ?? ""),
   );
-  await page.getByRole("link", { name: "Library", exact: true }).first().click();
+  await page.getByRole("link", { name: "Catalog", exact: true }).first().click();
   const discovered = await responsePromise;
   expect(discovered.status()).toBe(200);
   const request = discovered.request();

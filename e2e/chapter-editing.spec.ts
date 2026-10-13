@@ -23,7 +23,8 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill(adminEmail);
   await page.getByLabel("Password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  // A signed-in account lands on its reading home; the shelf itself is `/library`.
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 }
 
 async function addChapter(page: Page, number: string, title: string, content: string) {
@@ -42,7 +43,7 @@ async function addChapter(page: Page, number: string, title: string, content: st
 
 test("admin reorders and edits every chapter field", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("button", { name: "New Novel" }).click();
+  await page.getByRole("button", { name: "New novel" }).click();
   await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(novelTitle);
   await page.getByRole("button", { name: "Create Novel" }).click();
@@ -197,7 +198,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
   const reviewNovelTitle = "Translation Review Workflow";
 
   await signIn(page);
-  await page.getByRole("button", { name: "New Novel" }).click();
+  await page.getByRole("button", { name: "New novel" }).click();
   await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(reviewNovelTitle);
   await page.getByRole("button", { name: "Create Novel" }).click();

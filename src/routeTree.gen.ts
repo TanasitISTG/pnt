@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as PublicRouteImport } from './routes/_public'
+import { Route as BrowseRouteImport } from './routes/browse'
 import { Route as CookiePolicyRouteImport } from './routes/cookie-policy'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
@@ -22,10 +23,11 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as ProtectedAdminRouteImport } from './routes/_protected/admin'
 import { Route as ProtectedJobsRouteImport } from './routes/_protected/jobs'
+import { Route as ProtectedLibraryRouteImport } from './routes/_protected/library'
 import { Route as ProtectedProfileRouteImport } from './routes/_protected/profile'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
-import { Route as PublicBrowseRouteImport } from './routes/_public/browse'
+import { Route as PublicCatalogRouteImport } from './routes/_public/catalog'
 import { Route as ApiBackupsRouteImport } from './routes/api/backups'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
@@ -50,6 +52,11 @@ const ProtectedRoute = ProtectedRouteImport.update({
 } as any)
 const PublicRoute = PublicRouteImport.update({
   id: '/_public',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrowseRoute = BrowseRouteImport.update({
+  id: '/browse',
+  path: '/browse',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CookiePolicyRoute = CookiePolicyRouteImport.update({
@@ -107,6 +114,11 @@ const ProtectedJobsRoute = ProtectedJobsRouteImport.update({
   path: '/jobs',
   getParentRoute: () => ProtectedRoute,
 } as any)
+const ProtectedLibraryRoute = ProtectedLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => ProtectedRoute,
+} as any)
 const ProtectedProfileRoute = ProtectedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -122,9 +134,9 @@ const PublicIndexRoute = PublicIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PublicRoute,
 } as any)
-const PublicBrowseRoute = PublicBrowseRouteImport.update({
-  id: '/browse',
-  path: '/browse',
+const PublicCatalogRoute = PublicCatalogRouteImport.update({
+  id: '/catalog',
+  path: '/catalog',
   getParentRoute: () => PublicRoute,
 } as any)
 const ApiBackupsRoute = ApiBackupsRouteImport.update({
@@ -220,6 +232,7 @@ const PublicNovelsNovelIdChaptersChapterIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
+  '/browse': typeof BrowseRoute
   '/cookie-policy': typeof CookiePolicyRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -231,9 +244,10 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/admin': typeof ProtectedAdminRouteWithChildren
   '/jobs': typeof ProtectedJobsRoute
+  '/library': typeof ProtectedLibraryRoute
   '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRoute
-  '/browse': typeof PublicBrowseRoute
+  '/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -254,6 +268,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
+  '/browse': typeof BrowseRoute
   '/cookie-policy': typeof CookiePolicyRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -264,9 +279,10 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/jobs': typeof ProtectedJobsRoute
+  '/library': typeof ProtectedLibraryRoute
   '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRoute
-  '/browse': typeof PublicBrowseRoute
+  '/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -289,6 +305,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_protected': typeof ProtectedRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
+  '/browse': typeof BrowseRoute
   '/cookie-policy': typeof CookiePolicyRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -300,9 +317,10 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/_protected/admin': typeof ProtectedAdminRouteWithChildren
   '/_protected/jobs': typeof ProtectedJobsRoute
+  '/_protected/library': typeof ProtectedLibraryRoute
   '/_protected/profile': typeof ProtectedProfileRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
-  '/_public/browse': typeof PublicBrowseRoute
+  '/_public/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
@@ -326,6 +344,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/browse'
     | '/cookie-policy'
     | '/forgot-password'
     | '/login'
@@ -337,9 +356,10 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/admin'
     | '/jobs'
+    | '/library'
     | '/profile'
     | '/settings'
-    | '/browse'
+    | '/catalog'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
@@ -360,6 +380,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/browse'
     | '/cookie-policy'
     | '/forgot-password'
     | '/login'
@@ -370,9 +391,10 @@ export interface FileRouteTypes {
     | '/terms'
     | '/verify-email'
     | '/jobs'
+    | '/library'
     | '/profile'
     | '/settings'
-    | '/browse'
+    | '/catalog'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
@@ -394,6 +416,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_protected'
     | '/_public'
+    | '/browse'
     | '/cookie-policy'
     | '/forgot-password'
     | '/login'
@@ -405,9 +428,10 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/_protected/admin'
     | '/_protected/jobs'
+    | '/_protected/library'
     | '/_protected/profile'
     | '/_protected/settings'
-    | '/_public/browse'
+    | '/_public/catalog'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
@@ -431,6 +455,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   ProtectedRoute: typeof ProtectedRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
+  BrowseRoute: typeof BrowseRoute
   CookiePolicyRoute: typeof CookiePolicyRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
@@ -464,6 +489,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof PublicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/browse': {
+      id: '/browse'
+      path: '/browse'
+      fullPath: '/browse'
+      preLoaderRoute: typeof BrowseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cookie-policy': {
@@ -543,6 +575,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedJobsRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/library': {
+      id: '/_protected/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof ProtectedLibraryRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
     '/_protected/profile': {
       id: '/_protected/profile'
       path: '/profile'
@@ -564,11 +603,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicIndexRouteImport
       parentRoute: typeof PublicRoute
     }
-    '/_public/browse': {
-      id: '/_public/browse'
-      path: '/browse'
-      fullPath: '/browse'
-      preLoaderRoute: typeof PublicBrowseRouteImport
+    '/_public/catalog': {
+      id: '/_public/catalog'
+      path: '/catalog'
+      fullPath: '/catalog'
+      preLoaderRoute: typeof PublicCatalogRouteImport
       parentRoute: typeof PublicRoute
     }
     '/api/backups': {
@@ -712,6 +751,7 @@ const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
 interface ProtectedRouteChildren {
   ProtectedAdminRoute: typeof ProtectedAdminRouteWithChildren
   ProtectedJobsRoute: typeof ProtectedJobsRoute
+  ProtectedLibraryRoute: typeof ProtectedLibraryRoute
   ProtectedProfileRoute: typeof ProtectedProfileRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
   ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
@@ -723,6 +763,7 @@ interface ProtectedRouteChildren {
 const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedAdminRoute: ProtectedAdminRouteWithChildren,
   ProtectedJobsRoute: ProtectedJobsRoute,
+  ProtectedLibraryRoute: ProtectedLibraryRoute,
   ProtectedProfileRoute: ProtectedProfileRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,
   ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
@@ -737,14 +778,14 @@ const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
 )
 
 interface PublicRouteChildren {
-  PublicBrowseRoute: typeof PublicBrowseRoute
+  PublicCatalogRoute: typeof PublicCatalogRoute
   PublicIndexRoute: typeof PublicIndexRoute
   PublicNovelsNovelIdIndexRoute: typeof PublicNovelsNovelIdIndexRoute
   PublicNovelsNovelIdChaptersChapterIdRoute: typeof PublicNovelsNovelIdChaptersChapterIdRoute
 }
 
 const PublicRouteChildren: PublicRouteChildren = {
-  PublicBrowseRoute: PublicBrowseRoute,
+  PublicCatalogRoute: PublicCatalogRoute,
   PublicIndexRoute: PublicIndexRoute,
   PublicNovelsNovelIdIndexRoute: PublicNovelsNovelIdIndexRoute,
   PublicNovelsNovelIdChaptersChapterIdRoute:
@@ -757,6 +798,7 @@ const PublicRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
+  BrowseRoute: BrowseRoute,
   CookiePolicyRoute: CookiePolicyRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,

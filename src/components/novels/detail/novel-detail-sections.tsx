@@ -91,7 +91,7 @@ export function NovelDetailSections({
           onRetry={() => {
             void metrics.refetch();
           }}
-          className="my-0 p-4"
+          className="my-0"
         />
       ) : null}
 

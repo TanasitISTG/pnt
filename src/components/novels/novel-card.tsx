@@ -1,8 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
+import { BookOpen } from "lucide-react";
+
 import { NovelCover } from "@/components/novels/novel-cover";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { LangPair } from "@/components/ui/lang-pair";
 import { publishState, type PublishState } from "@/lib/content/publish/publish";
 import type { LibraryNovel } from "@/components/novels/library/library-search";
 
@@ -13,10 +15,19 @@ interface NovelCardProps {
   lazyCover?: boolean;
   priorityCover?: boolean;
 }
+
 function formatPublicationState(state: PublishState): string {
   return state === "live" ? "Live" : state === "scheduled" ? "Scheduled" : "Draft";
 }
 
+/**
+ * The shelf card. Cover-forward, with the language pair as the metadata that matters
+ * (it is what the product does) and exactly one progress statement — the old card spent
+ * two definition-list rows saying "chapters" and "translated" separately.
+ *
+ * The transition into the novel page is opt-in per navigation: a spatial move between
+ * two related surfaces, which is the only place a route transition earns its keep.
+ */
 export function NovelCard({
   novel,
   view,
@@ -33,94 +44,97 @@ export function NovelCard({
     <Link
       to="/novels/$novelId"
       params={{ novelId: novel.id }}
+      viewTransition
       className="group/card-link block h-full no-underline"
     >
-      <Card interactive className={isList ? "h-full" : "h-full pt-0"}>
+      <article
+        className={
+          isList
+            ? "flex h-full items-stretch gap-4 rounded-xl border border-border bg-card p-3 transition-colors duration-micro group-hover/card-link:border-border-strong sm:gap-5 sm:p-4"
+            : "flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card transition-colors duration-micro group-hover/card-link:border-border-strong"
+        }
+      >
         <div
           className={
             isList
-              ? "flex min-w-0 gap-4 p-3 sm:gap-5 sm:p-4"
-              : "flex h-full flex-col justify-between"
+              ? "relative h-24 w-16 shrink-0 overflow-hidden rounded-md bg-surface-inset sm:h-28 sm:w-[4.75rem]"
+              : "relative aspect-3/4 w-full shrink-0 overflow-hidden border-b border-border bg-surface-inset"
           }
         >
-          <div
-            className={
+          <NovelCover
+            novelId={novel.hasCover ? novel.id : null}
+            coverVersion={novel.updatedAt}
+            coverUrl={novel.coverUrl}
+            coverSrcSet={novel.coverSrcSet}
+            lazy={lazyCover}
+            priority={priorityCover}
+            sizes={
               isList
-                ? "relative h-24 w-16 shrink-0 overflow-hidden rounded-md bg-foreground/3 sm:h-30 sm:w-20"
-                : "relative aspect-3/4 w-full overflow-hidden border-b border-border bg-foreground/3"
+                ? "(max-width: 639px) 64px, 76px"
+                : "(max-width: 639px) calc(50vw - 34px), (max-width: 1023px) calc(33.333vw - 32px), 270px"
             }
-          >
-            <NovelCover
-              novelId={novel.hasCover ? novel.id : null}
-              coverVersion={novel.updatedAt}
-              coverUrl={novel.coverUrl}
-              coverSrcSet={novel.coverSrcSet}
-              lazy={lazyCover}
-              priority={priorityCover}
-              sizes={
+            alt={novel.title}
+            className="h-full w-full object-cover transition-transform duration-300 ease-out-quint group-hover/card-link:scale-[1.02]"
+            fallbackSize={isList ? 7 : 12}
+          />
+        </div>
+
+        <div
+          className={
+            isList
+              ? "flex min-w-0 flex-1 flex-col gap-2"
+              : "flex flex-1 flex-col gap-2.5 p-3.5 sm:p-4"
+          }
+        >
+          <div className="min-w-0">
+            <h3
+              className={
                 isList
-                  ? "(max-width: 639px) 64px, 80px"
-                  : "(max-width: 767px) calc(50vw - 34px), (max-width: 1023px) calc(33.333vw - 32px), 270px"
+                  ? "line-clamp-2 text-body-lg font-semibold text-foreground"
+                  : "line-clamp-2 text-card-title text-foreground"
               }
-              alt={novel.title}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover/card-link:scale-[1.02]"
-              fallbackSize={isList ? 7 : 12}
-            />
+            >
+              {novel.title}
+            </h3>
+            {novel.author ? (
+              <p className="mt-0.5 truncate text-caption text-muted-foreground">{novel.author}</p>
+            ) : null}
           </div>
-          <CardContent
-            className={
-              isList ? "flex min-w-0 flex-1 flex-col gap-2 p-0" : "flex flex-1 flex-col gap-3 p-4"
-            }
-          >
-            <div className="min-w-0">
-              <CardTitle className="line-clamp-2 text-body-lg font-semibold text-foreground group-hover/card-link:text-foreground/80">
-                {novel.title}
-              </CardTitle>
-              <p className="mt-1 truncate text-caption text-muted-foreground">
-                {novel.sourceLang} → {novel.targetLang}
-                {novel.author ? ` · ${novel.author}` : ""}
-              </p>
+
+          {novel.description && !isList ? (
+            <p className="line-clamp-2 text-caption text-muted-foreground">{novel.description}</p>
+          ) : null}
+
+          <div className="mt-auto flex flex-col gap-2.5 pt-1">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <LangPair source={novel.sourceLang} target={novel.targetLang} />
+              {isAdmin ? (
+                <Badge variant={state === "live" ? "successOutline" : "mutedOutline"}>
+                  {formatPublicationState(state)}
+                </Badge>
+              ) : null}
             </div>
-            {novel.description && !isList && (
-              <p className="mt-0.5 line-clamp-2 text-caption text-muted-foreground">
-                {novel.description}
+
+            {isAdmin ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <Progress
+                  value={percent}
+                  aria-label={`${novel.title} translation progress`}
+                  className="h-1 min-w-0 flex-1 gap-0"
+                />
+                <span className="shrink-0 text-micro tabular-nums text-muted-foreground">
+                  {novel.translatedCount}/{novel.chapterCount} · {percent}%
+                </span>
+              </div>
+            ) : (
+              <p className="flex items-center gap-1.5 text-micro text-muted-foreground">
+                <BookOpen className="size-3.5" aria-hidden="true" />
+                {novel.chapterCount} {novel.chapterCount === 1 ? "chapter" : "chapters"}
               </p>
             )}
-            <div className="mt-auto flex flex-col gap-2 pt-2">
-              <dl className="grid gap-x-3 gap-y-2 text-caption text-muted-foreground sm:grid-cols-2">
-                <div className="flex items-center justify-between gap-2">
-                  <dt>Chapters</dt>
-                  <dd className="shrink-0 tabular-nums text-foreground">{novel.chapterCount}</dd>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <dt>Translated</dt>
-                  <dd className="shrink-0 tabular-nums text-foreground">{novel.translatedCount}</dd>
-                </div>
-                {isAdmin && (
-                  <div className="flex flex-col items-start gap-1 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-                    <dt>Publication</dt>
-                    <dd className="shrink-0">
-                      <Badge variant="outline">{formatPublicationState(state)}</Badge>
-                    </dd>
-                  </div>
-                )}
-              </dl>
-              {isAdmin && (
-                <div className="flex min-w-0 items-center gap-2">
-                  <Progress
-                    value={percent}
-                    aria-label={`${novel.title} translation progress`}
-                    className="h-1.5 min-w-0 flex-1 gap-0"
-                  />
-                  <span className="shrink-0 tabular-nums text-caption text-muted-foreground">
-                    {percent}%
-                  </span>
-                </div>
-              )}
-            </div>
-          </CardContent>
+          </div>
         </div>
-      </Card>
+      </article>
     </Link>
   );
 }

@@ -1,43 +1,13 @@
-import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronDown,
-  Compass,
-  ListChecks,
-  LogIn,
-  LogOut,
-  Menu,
-  Moon,
-  Settings,
-  ShieldCheck,
-  Sun,
-  UserRound,
-  X,
-} from "lucide-react";
-import { useTheme } from "next-themes";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import * as React from "react";
 
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Spinner } from "@/components/ui/spinner";
-import { UserAvatar } from "@/components/user-avatar";
-import { signOut } from "@/lib/auth/auth-client";
-import { hasAdminRole } from "@/lib/auth/roles";
-import { useConsent } from "@/lib/consent";
-import { useViewerAvatar } from "@/lib/profile/use-viewer-avatar";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { SiteFooter } from "@/components/shell/site-footer";
+import { SiteHeader } from "@/components/shell/site-header";
+import { SkipLink } from "@/components/shell/skip-link";
 import { TermsNotice } from "@/components/terms-notice";
-import type { ImpersonationState, ResolvedAvatar, ViewerUser } from "@/lib/profile/types";
+import { useConsent } from "@/lib/consent";
 import { CURRENT_TERMS_VERSION } from "@/lib/terms";
-import { useHydrated } from "@/lib/use-hydrated";
+import type { ImpersonationState, ViewerUser } from "@/lib/profile/types";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -48,383 +18,52 @@ interface AppShellProps {
   layout?: "default" | "reader";
 }
 
-const subscribeToYear = () => () => {};
-const getClientYear = () => new Date().getFullYear();
-const getServerYear = (): number | null => null;
-
+/**
+ * The frame every page sits in: skip link, header, standing notices, the one `<main>`
+ * landmark, and a footer for everything except the reader. The reader keeps the same
+ * header identity but a compact bar, because a chapter page already carries its own
+ * toolbar and two sticky headers is one too many.
+ */
 export function AppShell({
   user,
   impersonation = null,
   children,
   layout = "default",
 }: AppShellProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-  const navigate = useNavigate();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const { consent, hydrated } = useConsent();
-  const avatar = useViewerAvatar();
-  const year = useSyncExternalStore(subscribeToYear, getClientYear, getServerYear);
-  // Operator screens are reachable only from here, and the link is the mirror of the
-  // server's own role check rather than a second copy of the rule.
-  const isAdmin = hasAdminRole(user?.role);
+  const reader = layout === "reader";
   // The recorded version is written by the server only, so comparing it against the
   // current one is what turns a version bump into a notice.
   const termsStale = Boolean(user && user.termsVersion !== CURRENT_TERMS_VERSION);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [menuOpen]);
-
-  const handleSignOut = async () => {
-    setSigningOut(true);
-    await signOut({
-      fetchOptions: {
-        onSuccess: () => {
-          queryClient.clear();
-          router.invalidate().finally(() => navigate({ to: "/" }));
-        },
-        onError: () => {
-          setSigningOut(false);
-        },
-      },
-    });
-  };
-
   return (
     <div
       className={cn(
-        "flex min-h-screen flex-col bg-background transition-all",
+        "flex min-h-dvh flex-col bg-background",
+        // The consent banner is fixed to the bottom edge and must not cover the last
+        // row of content while it is unanswered.
         hydrated && consent === "pending" && "pb-28 md:pb-20",
       )}
     >
-      {impersonation && (
+      <SkipLink />
+      {impersonation ? (
         <ImpersonationBanner
           impersonation={impersonation}
           viewedName={user?.name || user?.email || "another account"}
         />
-      )}
-      <header
-        className={cn(
-          "z-40 border-b border-border bg-background",
-          layout === "default" ? "sticky top-0" : "relative",
-        )}
-      >
-        <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-6">
-          <div className="flex items-center gap-8">
-            <Link
-              to="/"
-              preload={false}
-              className="flex items-center gap-2 text-card-title font-semibold text-foreground no-underline"
-            >
-              <img src="/logo-64.png" alt="" width={32} height={32} className="size-8 rounded-md" />
-              Pnt
-            </Link>
-            <nav className="hidden items-center gap-6 md:flex">
-              <Link
-                to="/"
-                preload={false}
-                className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
-                activeProps={{ className: "font-semibold" }}
-              >
-                Library
-              </Link>
-              <Link
-                to="/browse"
-                preload={false}
-                className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
-                activeProps={{ className: "font-semibold" }}
-              >
-                Browse
-              </Link>
-              {user && (
-                <>
-                  <Link
-                    to="/jobs"
-                    preload={false}
-                    className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
-                    activeProps={{ className: "font-semibold" }}
-                  >
-                    Jobs
-                  </Link>
-                  <Link
-                    to="/settings"
-                    className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
-                    activeProps={{ className: "font-semibold" }}
-                  >
-                    Settings
-                  </Link>
-                  {isAdmin && (
-                    <Link
-                      to="/admin"
-                      preload={false}
-                      className="text-body-lg text-foreground no-underline hover:text-muted-foreground"
-                      activeProps={{ className: "font-semibold" }}
-                    >
-                      Admin
-                    </Link>
-                  )}
-                </>
-              )}
-            </nav>
-          </div>
-          <div className="flex items-center gap-2">
-            <span aria-hidden="true" />
-            <ThemeToggle />
-            <div className="hidden md:block">
-              {user ? (
-                <UserDropdown
-                  user={user}
-                  avatar={avatar}
-                  isAdmin={isAdmin}
-                  signingOut={signingOut}
-                  onSignOut={handleSignOut}
-                />
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" render={<Link to="/login" />}>
-                    <LogIn className="size-4" />
-                    Sign in
-                  </Button>
-                  <Button render={<Link to="/signup" />}>Create account</Button>
-                </div>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setMenuOpen((o) => !o)}
-              aria-label={menuOpen ? "Close menu" : "Open menu"}
-              aria-expanded={menuOpen}
-              aria-controls="mobile-nav"
-            >
-              {menuOpen ? <X /> : <Menu />}
-            </Button>
-          </div>
-        </div>
-        {menuOpen && (
-          <div id="mobile-nav" className="border-t border-border bg-background px-6 py-4 md:hidden">
-            <nav className="flex flex-col gap-4">
-              <Link
-                to="/"
-                preload={false}
-                className="text-body-lg text-foreground no-underline"
-                onClick={() => setMenuOpen(false)}
-              >
-                Library
-              </Link>
-              <Link
-                to="/browse"
-                preload={false}
-                className="text-body-lg text-foreground no-underline"
-                onClick={() => setMenuOpen(false)}
-              >
-                Browse
-              </Link>
-              {isAdmin && (
-                <Link
-                  to="/admin"
-                  preload={false}
-                  className="text-body-lg text-foreground no-underline"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Admin
-                </Link>
-              )}
-              {user && (
-                <>
-                  <Link
-                    to="/profile"
-                    className="text-body-lg text-foreground no-underline"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Profile
-                  </Link>
-                  <Link
-                    to="/jobs"
-                    preload={false}
-                    className="text-body-lg text-foreground no-underline"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Jobs
-                  </Link>
-                  <Link
-                    to="/settings"
-                    className="text-body-lg text-foreground no-underline"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Settings
-                  </Link>
-                </>
-              )}
-            </nav>
-            <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
-              {user ? (
-                <>
-                  <span className="truncate text-caption text-muted-foreground">{user.email}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={handleSignOut}
-                    disabled={signingOut}
-                  >
-                    {signingOut ? <Spinner /> : <LogOut />}
-                    {signingOut ? "Signing out…" : "Sign out"}
-                  </Button>
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    render={<Link to="/login" />}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <LogIn className="size-4" />
-                    Sign in
-                  </Button>
-                  <Button
-                    size="sm"
-                    render={<Link to="/signup" />}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Create account
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </header>
+      ) : null}
+      <SiteHeader user={user} layout={layout} />
       <TermsNotice stale={termsStale} />
       <main
+        id="main"
         className={cn(
           "mx-auto w-full flex-1",
-          layout === "reader"
-            ? "max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6"
-            : "max-w-[1200px] px-6 py-8",
+          reader ? "max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6" : "max-w-[1200px] px-4 py-8 sm:px-6",
         )}
       >
         {children}
       </main>
-      <footer className="mt-12 border-t border-border bg-background py-6">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 px-6 sm:flex-row text-caption text-muted-foreground">
-          <p>© {year} Pnt · Personal Novel Translator</p>
-          <div className="flex items-center gap-6">
-            <Link to="/privacy" className="hover:text-foreground no-underline">
-              Privacy Policy
-            </Link>
-            <Link to="/terms" className="hover:text-foreground no-underline">
-              Terms of Service
-            </Link>
-            <Link to="/cookie-policy" className="hover:text-foreground no-underline">
-              Cookie Policy
-            </Link>
-          </div>
-        </div>
-      </footer>
+      {reader ? null : <SiteFooter />}
     </div>
-  );
-}
-
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const mounted = useHydrated();
-
-  const dark = mounted && resolvedTheme === "dark";
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="size-9"
-      onClick={() => setTheme(dark ? "light" : "dark")}
-      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-      title={dark ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-    </Button>
-  );
-}
-
-function UserDropdown({
-  user,
-  avatar,
-  isAdmin,
-  signingOut,
-  onSignOut,
-}: {
-  user: ViewerUser;
-  avatar: ResolvedAvatar | null;
-  isAdmin: boolean;
-  signingOut: boolean;
-  onSignOut: () => void;
-}) {
-  const displayName = user.name || user.email;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" />} disabled={signingOut}>
-        <UserAvatar name={displayName} avatar={avatar} size="sm" />
-        {displayName}
-        <ChevronDown className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            <div className="flex items-center gap-2">
-              <UserAvatar name={displayName} avatar={avatar} size="sm" />
-              <div className="min-w-0">
-                <div className="text-card-title truncate text-foreground">{user.name}</div>
-                <div className="text-caption truncate text-muted-foreground">{user.email}</div>
-              </div>
-            </div>
-          </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem
-            render={<Link to="/profile" className="no-underline text-foreground" />}
-          >
-            <UserRound className="size-4" />
-            Profile
-          </DropdownMenuItem>
-          {isAdmin && (
-            <DropdownMenuItem
-              render={<Link to="/admin" className="no-underline text-foreground" />}
-            >
-              <ShieldCheck className="size-4" />
-              Admin
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem render={<Link to="/browse" className="no-underline text-foreground" />}>
-            <Compass className="size-4" />
-            Browse
-          </DropdownMenuItem>
-          <DropdownMenuItem render={<Link to="/jobs" className="no-underline text-foreground" />}>
-            <ListChecks className="size-4" />
-            Jobs
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            render={<Link to="/settings" className="no-underline text-foreground" />}
-          >
-            <Settings className="size-4" />
-            Settings
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onSignOut} disabled={signingOut}>
-          {signingOut ? <Spinner /> : <LogOut />}
-          {signingOut ? "Signing out…" : "Sign out"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

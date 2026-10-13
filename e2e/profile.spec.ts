@@ -27,7 +27,8 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill(adminEmail);
   await page.getByLabel("Password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
+  // The account's front door is the reading home; the shelf is its own page.
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 }
 
 /** The account trigger carries only the photo, so an empty locator means no photo. */

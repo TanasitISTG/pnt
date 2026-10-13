@@ -37,8 +37,8 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await page.getByLabel("Password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
-  await page.getByRole("button", { name: "New Novel" }).click();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await page.getByRole("button", { name: "New novel" }).click();
   await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(novelTitle);
 
@@ -288,7 +288,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(
     page.getByRole("combobox", { name: "Sort by" }).locator('[data-slot="select-value"]'),
   ).toHaveText("Newest first");
-  await page.getByRole("button", { name: "New Novel" }).click();
+  await page.getByRole("button", { name: "New novel" }).click();
   await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(draftNovelTitle);
   await page.getByRole("button", { name: "Create Novel" }).click();
@@ -301,7 +301,9 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await page.getByRole("button", { name: /E2E Admin/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
+  // Signing out from the shelf lands a guest on `/`, which serves the shared catalog:
+  // published novels only, and none of the owner affordances.
+  await expect(page.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Your Library", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: new RegExp(novelTitle) })).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(draftNovelTitle) })).toHaveCount(0);
@@ -328,8 +330,8 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   await page.getByLabel("Password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
-  await page.getByRole("button", { name: "New Novel" }).click();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await page.getByRole("button", { name: "New novel" }).click();
   await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(zhEnNovelTitle);
   await page.locator("#sourceLang").click();
@@ -460,8 +462,8 @@ test("admin stops selected translations and reviews card metadata in both views"
   await page.getByLabel("Password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
-  await page.getByRole("button", { name: "New Novel" }).click();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await page.getByRole("button", { name: "New novel" }).click();
   await waitForReactHydration(page);
   await page.getByLabel("Title *").fill(bulkNovelTitle);
   await page.locator("#sourceLang").click();
