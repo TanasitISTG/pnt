@@ -7,8 +7,11 @@ import type { ReaderSearchApi } from "@/components/reader/page/use-reader-search
 
 export function ReaderFindBar({ search }: { search: ReaderSearchApi }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const handledFocusRequestRef = useRef(-1);
 
   useEffect(() => {
+    if (handledFocusRequestRef.current === search.focusRequest) return;
+    handledFocusRequestRef.current = search.focusRequest;
     const input = inputRef.current;
     if (!input) return;
     input.focus();

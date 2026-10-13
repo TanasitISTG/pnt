@@ -261,22 +261,22 @@ describe("planPollReconciliation", () => {
   });
 });
 
+function authorityContext(terminal = false): {
+  state: JobAuthorityState;
+  context: { replacedJobIds: Set<string>; lookupMutationVersion: number };
+} {
+  const remembered = stateWithRememberedJob("c1", "job-a");
+  const state = terminal
+    ? rememberTerminalJob(remembered.state, "c1", "job-a", false)
+    : remembered.state;
+  return {
+    state,
+    context: { replacedJobIds: new Set<string>(), lookupMutationVersion: remembered.version },
+  };
+}
+
 describe("decideTerminalLookup", () => {
   const tracked = { chapterId: "c1", jobId: "job-a" };
-
-  function authorityContext(terminal = false): {
-    state: JobAuthorityState;
-    context: { replacedJobIds: Set<string>; lookupMutationVersion: number };
-  } {
-    const remembered = stateWithRememberedJob("c1", "job-a");
-    const state = terminal
-      ? rememberTerminalJob(remembered.state, "c1", "job-a", false)
-      : remembered.state;
-    return {
-      state,
-      context: { replacedJobIds: new Set<string>(), lookupMutationVersion: remembered.version },
-    };
-  }
 
   it("forgets replaced jobs", () => {
     const { state, context } = authorityContext();

@@ -16,6 +16,7 @@ import { getReaderProgress } from "./progress";
 // Continuation pages resolve from this registry so the paging hook can be driven without a
 // server: the key is the cursor id the hook is continuing from.
 const bookmarkPages = vi.hoisted(() => new Map<string, () => Promise<ReaderBookmarkPage>>());
+const noopSetChapter = async () => ({});
 
 vi.mock("./query", async (importOriginal) => {
   const actual = await importOriginal<typeof ReaderQuery>();
@@ -394,8 +395,7 @@ describe("createAccountReaderStore", () => {
         durableKeepalive = options?.keepalive;
       },
     );
-    const setChapter = async () => ({});
-    const { queryClient, store } = setupAccountStore({ setChapter, savePosition });
+    const { queryClient, store } = setupAccountStore({ setChapter: noopSetChapter, savePosition });
     queryClient.setQueryData(readerStateQueryKey("novel"), {
       ...SERVER_STATE,
       scrollFraction: 0.2,
@@ -432,7 +432,7 @@ describe("createAccountReaderStore", () => {
     const reopened = createAccountReaderStore({
       novelId: "novel",
       queryClient,
-      persist: { setChapter, savePosition },
+      persist: { setChapter: noopSetChapter, savePosition },
     });
     reopened.markOpened("chapter-1");
     expect(reopened.getProgress().scrollFraction).toBe(0.61);
@@ -444,9 +444,11 @@ describe("createAccountReaderStore", () => {
   });
 
   it("does not let an outgoing store flush contaminate a newer chapter cache", async () => {
-    const setChapter = async () => ({});
     const savePosition = vi.fn(async () => ({}));
-    const { queryClient, store: outgoing } = setupAccountStore({ setChapter, savePosition });
+    const { queryClient, store: outgoing } = setupAccountStore({
+      setChapter: noopSetChapter,
+      savePosition,
+    });
     outgoing.markOpened("chapter-1");
     outgoing.saveScrollFraction(0.6);
     await flushPromises();
@@ -454,7 +456,7 @@ describe("createAccountReaderStore", () => {
     const incoming = createAccountReaderStore({
       novelId: "novel",
       queryClient,
-      persist: { setChapter, savePosition },
+      persist: { setChapter: noopSetChapter, savePosition },
     });
     incoming.markOpened("chapter-2");
     incoming.saveScrollFraction(0.35);
@@ -473,7 +475,7 @@ describe("createAccountReaderStore", () => {
     const reopened = createAccountReaderStore({
       novelId: "novel",
       queryClient,
-      persist: { setChapter, savePosition },
+      persist: { setChapter: noopSetChapter, savePosition },
     });
     reopened.markOpened("chapter-2");
     expect(reopened.getProgress().lastChapterId).toBe("chapter-2");
@@ -533,14 +535,14 @@ describe("createAccountReaderStore", () => {
 
     const optimistic = cachedState(queryClient).bookmarks;
     expect(optimistic).toHaveLength(2);
-    expect(new Set(optimistic.map((bookmark) => bookmark.id)).size).toBe(2);
+    expect(new Set(optimistic.map((entry) => entry.id)).size).toBe(2);
 
     await flushPromises();
     await flushPromises();
 
     expect(
       cachedState(queryClient)
-        .bookmarks.map((bookmark) => bookmark.id)
+        .bookmarks.map((entry) => entry.id)
         .toSorted(),
     ).toEqual(["first-id", "second-id"]);
   });
@@ -715,16 +717,16 @@ describe("createAccountReaderStore", () => {
   });
 });
 
-describe("useReaderState", () => {
-  function renderReaderState(novelId: string, isAdmin: boolean) {
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(readerStateQueryKey(novelId), SERVER_STATE);
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
-    return renderHook(() => useReaderState(novelId, isAdmin), { wrapper });
-  }
+function renderReaderState(novelId: string, isAdmin: boolean) {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(readerStateQueryKey(novelId), SERVER_STATE);
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return renderHook(() => useReaderState(novelId, isAdmin), { wrapper });
+}
 
+describe("useReaderState", () => {
   it("keeps the store and its methods stable across renders", () => {
     const { result, rerender } = renderReaderState("novel", false);
     const firstStore = result.current.store;
@@ -760,22 +762,22 @@ describe("useReaderState", () => {
   });
 });
 
+function bookmark(id: string) {
+  return {
+    id,
+    chapterId: "chapter-1",
+    paragraphIndex: 1,
+    column: null,
+    excerpt: id,
+    note: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
 describe("useReaderState bookmark paging", () => {
   const FIRST_CURSOR = { createdAt: "2026-01-01 00:00:00.123456", id: "bookmark-1" };
 
-  function bookmark(id: string) {
-    return {
-      id,
-      chapterId: "chapter-1",
-      paragraphIndex: 1,
-      column: null,
-      excerpt: id,
-      note: null,
-      createdAt: "2026-01-01T00:00:00.000Z",
-    };
-  }
-
-  function renderPagingReader(isAdmin = true) {
+  function renderPagingReader(admin = true) {
     // Retries stay off so a failed page surfaces once, the way a user-visible retry behaves.
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     queryClient.setQueryData(readerStateQueryKey("novel"), {
@@ -790,7 +792,7 @@ describe("useReaderState bookmark paging", () => {
       queryClient,
       ...renderHook(({ novelId, isAdmin }) => useReaderState(novelId, isAdmin), {
         wrapper,
-        initialProps: { novelId: "novel", isAdmin },
+        initialProps: { novelId: "novel", isAdmin: admin },
       }),
     };
   }

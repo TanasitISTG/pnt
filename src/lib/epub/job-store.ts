@@ -272,7 +272,7 @@ export async function cleanupExpiredUploads(): Promise<number> {
           eq(epubUploads.status, "uploading"),
         ),
       );
-    const novelIds = [...new Set(expired.map((upload) => upload.novelId))].sort();
+    const novelIds = [...new Set(expired.map((upload) => upload.novelId))].toSorted();
     const lockedNovelIds: string[] = [];
     for (const novelId of novelIds) {
       if (await lockNovelForMutation(tx, novelId)) lockedNovelIds.push(novelId);

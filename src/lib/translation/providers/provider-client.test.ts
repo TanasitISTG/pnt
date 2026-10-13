@@ -13,8 +13,10 @@ vi.mock("openai", () => ({
   },
 }));
 
+function Agent() {}
+
 vi.mock("undici", () => ({
-  Agent: class {},
+  Agent,
   buildConnector: vi.fn(),
   fetch: createGeminiContent,
 }));

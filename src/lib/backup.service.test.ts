@@ -186,6 +186,11 @@ function backupPayload(novelOverrides: Record<string, unknown> = {}) {
 let selectQueue: unknown[][];
 let insertedValues: { table: unknown; rows: unknown }[];
 
+const savedRows = (table: unknown) =>
+  insertedValues
+    .filter((entry) => entry.table === table)
+    .flatMap((entry) => (Array.isArray(entry.rows) ? entry.rows : [entry.rows]));
+
 beforeEach(() => {
   vi.clearAllMocks();
   selectQueue = [];
@@ -417,10 +422,6 @@ describe("backup import", () => {
       novelIds: [expect.any(String)],
     });
 
-    const savedRows = (table: unknown) =>
-      insertedValues
-        .filter((entry) => entry.table === table)
-        .flatMap((entry) => (Array.isArray(entry.rows) ? entry.rows : [entry.rows]));
     expect(savedRows(novels)).toEqual([
       expect.objectContaining({
         userId: "user-1",

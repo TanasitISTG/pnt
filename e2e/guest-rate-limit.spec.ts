@@ -39,14 +39,14 @@ test("guest listNovels returns a safe HTTP 429 on request 61", async ({ page }, 
   );
   headers["x-forwarded-for"] = guestIp;
   const result = await page.evaluate(
-    async ({ endpoint, headers }) => {
+    async ({ endpoint: requestUrl, headers: requestHeaders }) => {
       const startedAt = performance.now();
       const statuses: number[] = [];
       let lastBody = "";
       for (let index = 0; index < 61; index++) {
-        const response = await fetch(endpoint, {
+        const response = await fetch(requestUrl, {
           method: "GET",
-          headers,
+          headers: requestHeaders,
           credentials: "omit",
           cache: "no-store",
           redirect: "error",

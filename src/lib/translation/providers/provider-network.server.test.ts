@@ -15,11 +15,9 @@ vi.mock("@/lib/env", () => ({
   parseLocalProviderOrigins: JSON.parse,
 }));
 vi.mock("undici", () => ({
-  Agent: class {
-    constructor(options: { connect: unknown; maxResponseSize: number }) {
-      mocks.connect = options.connect;
-      mocks.agentOptions = options;
-    }
+  Agent: function Agent(options: { connect: unknown; maxResponseSize: number }) {
+    mocks.connect = options.connect;
+    mocks.agentOptions = options;
   },
   buildConnector: mocks.build,
   fetch: mocks.fetch,

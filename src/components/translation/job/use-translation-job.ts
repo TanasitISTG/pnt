@@ -36,13 +36,10 @@ import {
   type TrackedJob,
 } from "./job-authority";
 
-// This hook is a read-only observer: translation work is executed by Inngest
-// (see src/lib/inngest/functions.ts), never by the browser — so page
-// refreshes can no longer duplicate chunks or finalization.
-// `enabled=false` (guests) skips all server calls — job endpoints are admin-only.
-// The authority protocol that decides which poll/mutation response wins lives
-// in ./job-authority.ts; this hook only wires it to React, the query cache,
-// invalidation, and toasts.
+// Read-only observer: translation runs in Inngest (src/lib/inngest/functions.ts),
+// never in the browser, so refreshes cannot duplicate chunks or finalization.
+// `enabled=false` (guests) skips the admin-only job endpoints; the response-
+// authority protocol lives in ./job-authority.ts and is only wired to React here.
 export function useTranslationJob(novelId: string, enabled = true) {
   const queryClient = useQueryClient();
   const [activeJobs, setActiveJobs] = useState<Map<string, ActiveJobState>>(new Map());
@@ -57,13 +54,17 @@ export function useTranslationJob(novelId: string, enabled = true) {
   // Terminal lookups outlive the effect that claimed them. They are abandoned
   // only when the consumer unmounts or the hook lifecycle (novel/enabled)
   // changes, never because a sibling job's state published a new Map.
+  const lifecycleIdentityRef = useRef<string | null>(null);
   useEffect(() => {
+    const identity = `${novelId}:${enabled}`;
+    if (lifecycleIdentityRef.current === identity) return;
+    lifecycleIdentityRef.current = identity;
     const generation = lifecycleRef.current + 1;
     lifecycleRef.current = generation;
     return () => {
       if (lifecycleRef.current === generation) lifecycleRef.current = generation + 1;
     };
-  }, [novelId, enabled]);
+  }, [enabled, novelId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -309,6 +310,7 @@ export function useTranslationJob(novelId: string, enabled = true) {
     })();
   }, [
     activeJobsQuery.data,
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- a poll whose payload is unchanged keeps the same `data` reference, so this heartbeat is what makes every poll reconcile.
     activeJobsQuery.dataUpdatedAt,
     enabled,
     invalidateJobOutcome,

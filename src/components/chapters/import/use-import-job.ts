@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -132,10 +132,10 @@ export function useImportJob(
     invalidateChaptersRef.current = invalidateChapters;
   }, [invalidateChapters]);
 
-  const setInitialLoading = (loading: boolean) => {
+  const setInitialLoading = useCallback((loading: boolean) => {
     initialStatusLoadingRef.current = loading;
     setInitialStatusLoading(loading);
-  };
+  }, []);
 
   const markLocalMutation = (): number => {
     const revision = localRevisionRef.current + 1;
@@ -149,13 +149,13 @@ export function useImportJob(
     return revision;
   };
 
-  const applyRemoteJob = (next: ImportJobState | null): boolean => {
+  const applyRemoteJob = useCallback((next: ImportJobState | null): boolean => {
     const current = importJobRef.current;
     if (!canApplyStatus(current, next)) return false;
     importJobRef.current = next;
     setImportJob(next);
     return true;
-  };
+  }, []);
 
   // Re-attach after refresh. EPUB intentionally asks for the latest row,
   // rather than filtering to active rows in SQL: a newer completed row must
@@ -223,7 +223,7 @@ export function useImportJob(
     return () => {
       cancelled = true;
     };
-  }, [novelId, kind]);
+  }, [applyRemoteJob, kind, novelId, setInitialLoading]);
 
   const polledJobId = importJob?.id;
   const polledJobStatus = importJob?.status;
@@ -311,7 +311,7 @@ export function useImportJob(
       clearInterval(interval);
       if (pollRun === pollRunRef.current) pollRunRef.current += 1;
     };
-  }, [polledJobId, polledJobStatus, jobVersion, queryClient]);
+  }, [applyRemoteJob, jobVersion, polledJobId, polledJobStatus, queryClient]);
 
   const startImport = async (
     baseUrl: string,

@@ -96,56 +96,48 @@ export function useChapterSelection(
   const handleBatchTranslate = useCallback(async () => {
     if (selectedMissingIds.length === 0) return;
     setBatchStarting(true);
-    try {
-      const count = await startBatchTranslate(selectedMissingIds, "missing");
-      if (count > 0) {
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          for (const chapterId of selectedMissingIds) next.delete(chapterId);
-          return next;
-        });
-      }
-    } finally {
-      setBatchStarting(false);
+    const count = await startBatchTranslate(selectedMissingIds, "missing").finally(() =>
+      setBatchStarting(false),
+    );
+    if (count > 0) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const chapterId of selectedMissingIds) next.delete(chapterId);
+        return next;
+      });
     }
   }, [selectedMissingIds, startBatchTranslate]);
 
   const handleBatchRetranslate = useCallback(async () => {
     if (selectedTranslatedIds.length === 0) return;
     setBatchStarting(true);
-    try {
-      const count = await startBatchTranslate(selectedTranslatedIds, "overwrite");
-      if (count > 0) {
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          for (const chapterId of selectedTranslatedIds) next.delete(chapterId);
-          return next;
-        });
-      }
-    } finally {
-      setBatchStarting(false);
+    const count = await startBatchTranslate(selectedTranslatedIds, "overwrite").finally(() =>
+      setBatchStarting(false),
+    );
+    if (count > 0) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const chapterId of selectedTranslatedIds) next.delete(chapterId);
+        return next;
+      });
     }
   }, [selectedTranslatedIds, startBatchTranslate]);
 
   const handleBatchStop = useCallback(async () => {
     if (selectedActiveIds.length === 0) return true;
     setBatchStopping(true);
-    try {
-      const result = await cancelMany(selectedActiveIds);
-      if (!result) return false;
+    const result = await cancelMany(selectedActiveIds).finally(() => setBatchStopping(false));
+    if (!result) return false;
 
-      const cancelledIds = new Set(result.cancelledChapterIds);
-      if (cancelledIds.size > 0) {
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          for (const chapterId of cancelledIds) next.delete(chapterId);
-          return next;
-        });
-      }
-      return true;
-    } finally {
-      setBatchStopping(false);
+    const cancelledIds = new Set(result.cancelledChapterIds);
+    if (cancelledIds.size > 0) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const chapterId of cancelledIds) next.delete(chapterId);
+        return next;
+      });
     }
+    return true;
   }, [cancelMany, selectedActiveIds]);
 
   return {

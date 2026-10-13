@@ -108,7 +108,7 @@ function renderReaderScroll(options: {
   const toolbarRef = createRef<HTMLElement>();
   proseRef.current = options.prose ?? null;
   toolbarRef.current = options.toolbar ?? null;
-  const render = (props: { chapterId: string; ready: boolean }) =>
+  const renderScrollHook = (props: { chapterId: string; ready: boolean }) =>
     useReaderScroll({
       novelId: "novel",
       chapterId: props.chapterId,
@@ -118,11 +118,10 @@ function renderReaderScroll(options: {
       targetAnchor: options.targetAnchor ?? null,
       proseRef,
       toolbarRef,
-      layoutKey: props.chapterId,
     });
   return {
     store,
-    ...renderHook(render, {
+    ...renderHook(renderScrollHook, {
       initialProps: { chapterId: options.chapterId, ready: options.ready ?? true },
     }),
   };
@@ -452,7 +451,6 @@ describe("useReaderScroll", () => {
         proseRef,
         proseNode,
         toolbarRef,
-        layoutKey: "unchanged",
       });
       return (
         <>
@@ -460,7 +458,6 @@ describe("useReaderScroll", () => {
             proseRef={proseRef}
             proseNode={proseNode}
             toolbarRef={toolbarRef}
-            layoutKey="unchanged"
           />
           {editing ? (
             <textarea aria-label="Chapter editor" />
@@ -692,7 +689,6 @@ describe("useReaderScroll", () => {
         store: createStore(),
         proseRef,
         toolbarRef,
-        layoutKey: "chapter",
       }),
     );
     act(() => vi.runAllTimers());

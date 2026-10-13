@@ -509,11 +509,11 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
     const fixture = await seedPairChangeFixture();
     try {
       const backup = await exportBackupForUser(fixture.userId, fixture.novelId);
-      const source = backup.novels[0]!;
-      const chapter = source.chapters[0]!;
+      const novelBackup = backup.novels[0]!;
+      const chapter = novelBackup.chapters[0]!;
       const longText = "x".repeat(12000);
       backup.novels = ["A", "B"].map((label) => ({
-        ...source,
+        ...novelBackup,
         id: `source-${label}`,
         title: label.repeat(500),
         originalTitle: "o".repeat(500),
@@ -597,11 +597,11 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
         expect(
           reread.glossaryTerms
             .map(({ source, target, note }) => ({ source, target, note }))
-            .sort((a, b) => a.source.localeCompare(b.source)),
+            .toSorted((a, b) => a.source.localeCompare(b.source)),
         ).toEqual(
           original.glossaryTerms
             .map(({ source, target, note }) => ({ source, target, note }))
-            .sort((a, b) => a.source.localeCompare(b.source)),
+            .toSorted((a, b) => a.source.localeCompare(b.source)),
         );
         expect(
           reread.chapters.every((row) => !original.chapters.some((old) => old.id === row.id)),

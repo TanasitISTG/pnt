@@ -45,6 +45,9 @@ describe("jobHistorySearchSchema", () => {
   });
 });
 
+const identities = (count: number) =>
+  Array.from({ length: count }, (_, index) => ({ id: `job-${index}`, type: "scrape" }));
+
 describe("jobActivityInputSchema", () => {
   it("defaults to an empty request and trims requested identities", () => {
     expect(jobActivityInputSchema.parse({})).toEqual({ jobs: [] });
@@ -54,9 +57,6 @@ describe("jobActivityInputSchema", () => {
   });
 
   it("rejects more than one history page of identities and invalid types", () => {
-    const identities = (count: number) =>
-      Array.from({ length: count }, (_, index) => ({ id: `job-${index}`, type: "scrape" }));
-
     expect(jobActivityInputSchema.parse({ jobs: identities(50) }).jobs).toHaveLength(50);
     expect(() => jobActivityInputSchema.parse({ jobs: identities(51) })).toThrow();
     expect(() =>

@@ -152,6 +152,13 @@ export function createLocalReaderStore(novelId: string): ReaderStateStore {
     for (const listener of listeners) listener();
   };
 
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key !== READER_PROGRESS_STORAGE_KEY && event.key !== READER_BOOKMARKS_STORAGE_KEY) {
+      return;
+    }
+    notify();
+  };
+
   const store: ReaderStateStore = {
     getProgress: () => getReaderProgress(novelId),
     getSnapshot: () => {
@@ -162,15 +169,6 @@ export function createLocalReaderStore(novelId: string): ReaderStateStore {
     subscribe: (onChange) => {
       listeners.add(onChange);
       if (typeof window === "undefined") return () => {};
-      const handleStorage = (event: StorageEvent) => {
-        if (
-          event.key !== READER_PROGRESS_STORAGE_KEY &&
-          event.key !== READER_BOOKMARKS_STORAGE_KEY
-        ) {
-          return;
-        }
-        notify();
-      };
       window.addEventListener("storage", handleStorage);
       return () => {
         listeners.delete(onChange);

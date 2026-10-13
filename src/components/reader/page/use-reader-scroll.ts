@@ -31,8 +31,6 @@ export interface UseReaderScrollOptions {
   proseRef: RefObject<HTMLDivElement | null>;
   proseNode?: HTMLDivElement | null;
   toolbarRef: RefObject<HTMLElement | null>;
-  // Layout identity; a change means the rendered prose node can differ from the old one.
-  layoutKey: string;
 }
 
 function isOwned(owner: MutableValue<ScrollOwner>, novelId: string, chapterId: string): boolean {
@@ -49,7 +47,6 @@ export function useReaderScroll({
   proseRef,
   proseNode,
   toolbarRef,
-  layoutKey,
 }: UseReaderScrollOptions): void {
   const ownerRef = useRef<ScrollOwner>({ novelId, chapterId });
   const restoredChapterRef = useRef<string | null>(null);
@@ -71,7 +68,7 @@ export function useReaderScroll({
     isRestoringRef.current = false;
     userTookOverRef.current = false;
     readMarkedRef.current = false;
-  }, [chapterId, novelId, targetAnchor]);
+  }, [chapterId, novelId]);
 
   useEffect(() => {
     if (!ready || chapter?.id !== chapterId) return;
@@ -85,9 +82,9 @@ export function useReaderScroll({
   useEffect(() => {
     if (!ready || chapter?.id !== chapterId) return;
 
+    const prose = proseNode ?? proseRef.current;
     const checkFits = () => {
       if (readMarkedRef.current) return;
-      const prose = proseRef.current;
       if (!prose) return;
       const inset = toolbarRef.current ? getReaderTopInset(toolbarRef.current) : 0;
       if (getReaderScrollRange(prose, inset).scrollable) return;
@@ -97,14 +94,14 @@ export function useReaderScroll({
 
     checkFits();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(checkFits);
-    if (proseRef.current) observer?.observe(proseRef.current);
+    if (prose) observer?.observe(prose);
     if (toolbarRef.current) observer?.observe(toolbarRef.current);
     window.addEventListener("resize", checkFits);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", checkFits);
     };
-  }, [chapter?.id, chapterId, layoutKey, ready, proseRef, proseNode, toolbarRef]);
+  }, [chapter?.id, chapterId, proseNode, proseRef, ready, toolbarRef]);
 
   useEffect(() => {
     if (
@@ -209,6 +206,10 @@ export function useReaderScroll({
   useEffect(() => {
     if (!targetAnchor || !ready || chapter?.id !== chapterId) return;
 
+    // An anchor target replaces the saved-position restore; clearing the completion
+    // mark here also lets the restore run again once the target is left.
+    restoredChapterRef.current = null;
+    isRestoringRef.current = false;
     let frame: number | null = null;
     let attempts = 0;
     const focusAnchor = () => {
@@ -233,6 +234,8 @@ export function useReaderScroll({
     frame = requestAnimationFrame(focusAnchor);
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
+      // Leaving the target re-enables the saved-position restore.
+      restoredChapterRef.current = null;
     };
   }, [chapter?.id, chapterId, ready, targetAnchor]);
 
@@ -308,5 +311,6 @@ export function useReaderScroll({
       window.removeEventListener("pagehide", handlePageLifecycle);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- a new anchor target is a navigation trigger: its cleanup must flush the pending capture before the reader jumps.
   }, [chapterId, novelId, proseRef, ready, targetAnchor, toolbarRef]);
 }

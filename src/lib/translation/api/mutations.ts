@@ -58,7 +58,7 @@ export const cancelTranslationRunsForUser = createServerOnlyFn(
           .innerJoin(chapters, eq(translationJobs.chapterId, chapters.id))
           .innerJoin(novels, eq(chapters.novelId, novels.id))
           .where(and(inArray(translationJobs.id, [...target.jobIds]), eq(novels.userId, userId)));
-        const novelIds = [...new Set(parents.map((parent) => parent.novelId))].sort((a, b) =>
+        const novelIds = [...new Set(parents.map((parent) => parent.novelId))].toSorted((a, b) =>
           a < b ? -1 : a > b ? 1 : 0,
         );
         const lockedNovelIds: string[] = [];

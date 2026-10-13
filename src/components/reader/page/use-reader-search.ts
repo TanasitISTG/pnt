@@ -124,21 +124,16 @@ export function useReaderSearch({
   const next = useCallback(() => step(1), [step]);
   const previous = useCallback(() => step(-1), [step]);
 
-  const activeKey = useMemo(() => {
-    const match = matches[activeIndex];
-    if (!match) return null;
-    return `${match.paragraphIndex}:${match.column ?? "none"}:${match.start}:${match.end}`;
-  }, [activeIndex, matches]);
-
   useEffect(() => {
-    if (!open || activeKey === null) return;
+    const match = matches[activeIndex];
+    if (!open || !match) return;
     const frame = requestAnimationFrame(() => {
       document
         .getElementById(READER_SEARCH_ACTIVE_MARK_ID)
         ?.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeKey, open, matches]);
+  }, [activeIndex, matches, open]);
 
   const highlightsFor = useCallback(
     (paragraphIndex: number, column: ReaderColumn | null) =>

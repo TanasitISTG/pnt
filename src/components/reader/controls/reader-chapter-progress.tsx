@@ -10,8 +10,6 @@ export interface ReaderChapterProgressProps {
   proseRef: RefObject<HTMLDivElement | null>;
   proseNode?: HTMLDivElement | null;
   toolbarRef: RefObject<HTMLElement | null>;
-  // Layout identity: reattach observers when the rendered prose node can differ.
-  layoutKey: string;
 }
 
 // Read-only chapter progress drawn as a hairline on the toolbar edge. It measures the
@@ -21,15 +19,14 @@ export function ReaderChapterProgress({
   proseRef,
   proseNode,
   toolbarRef,
-  layoutKey,
 }: ReaderChapterProgressProps) {
   const [progress, setProgress] = useState({ percent: 0, scrollable: false });
 
   useEffect(() => {
     let frame: number | null = null;
 
+    const prose = proseNode ?? proseRef.current;
     const measure = () => {
-      const prose = proseRef.current;
       if (!prose) return null;
       const inset = toolbarRef.current ? getReaderTopInset(toolbarRef.current) : 0;
       const range = getReaderScrollRange(prose, inset);
@@ -51,7 +48,7 @@ export function ReaderChapterProgress({
     };
 
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
-    if (proseRef.current) observer?.observe(proseRef.current);
+    if (prose) observer?.observe(prose);
     if (toolbarRef.current) observer?.observe(toolbarRef.current);
 
     update();
@@ -63,7 +60,7 @@ export function ReaderChapterProgress({
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
     };
-  }, [layoutKey, proseRef, proseNode, toolbarRef]);
+  }, [proseNode, proseRef, toolbarRef]);
 
   if (!progress.scrollable) return null;
 

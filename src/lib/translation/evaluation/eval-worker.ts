@@ -344,7 +344,7 @@ export async function runTranslationEvalReport(reportId: string) {
       .where(and(eq(glossaryTerms.novelId, novel.id), eq(glossaryTerms.status, "approved")));
     const approvedTerms = terms
       .filter((term) => term.source.trim().length > 0 && term.target.trim().length > 0)
-      .sort(compareTerms);
+      .toSorted(compareTerms);
     const languagePair = `${novel.sourceLang}->${novel.targetLang}`;
     const contextFingerprint = createEvalContextFingerprint(
       novel.sourceLang,

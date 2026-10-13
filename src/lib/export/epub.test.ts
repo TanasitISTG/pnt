@@ -16,6 +16,21 @@ const CHAPTERS = [
   { title: "Chapter 2 — Next", paragraphs: ["Only para."] },
 ];
 
+async function* allChapters() {
+  for (const chapter of CHAPTERS) yield chapter;
+}
+
+async function* truncatedChapters() {
+  yield CHAPTERS[0];
+}
+
+async function* throwingChapters() {
+  yield CHAPTERS[0];
+  throw new Error("iteration failed");
+}
+
+async function* emptyChapters() {}
+
 describe("buildEpub", () => {
   const zip = buildEpub(META, CHAPTERS);
   const entries = unzipSync(zip);
@@ -28,12 +43,8 @@ describe("buildEpub", () => {
 
   describe("createEpubStream", () => {
     it("streams a valid archive without a base64 copy", async () => {
-      async function* chapters() {
-        for (const chapter of CHAPTERS) yield chapter;
-      }
-
       const bytes = new Uint8Array(
-        await new Response(createEpubStream(META, chapters())).arrayBuffer(),
+        await new Response(createEpubStream(META, allChapters())).arrayBuffer(),
       );
       const streamedEntries = unzipSync(bytes);
       expect(strFromU8(streamedEntries["mimetype"])).toBe("application/epub+zip");
@@ -41,46 +52,35 @@ describe("buildEpub", () => {
     });
 
     it("emits nav/spine matching consumed chapters even when iteration stops early", async () => {
-      async function* truncated() {
-        yield CHAPTERS[0];
-      }
-
-      const entries = unzipSync(
-        new Uint8Array(await new Response(createEpubStream(META, truncated())).arrayBuffer()),
+      const streamedEntries = unzipSync(
+        new Uint8Array(
+          await new Response(createEpubStream(META, truncatedChapters())).arrayBuffer(),
+        ),
       );
-      const nav = strFromU8(entries["OEBPS/nav.xhtml"]);
+      const nav = strFromU8(streamedEntries["OEBPS/nav.xhtml"]);
       expect(nav).toContain("Start");
       expect(nav).not.toContain("Next");
-      const opf = strFromU8(entries["OEBPS/content.opf"]);
+      const opf = strFromU8(streamedEntries["OEBPS/content.opf"]);
       expect(opf).toContain('idref="ch1"');
       expect(opf).not.toContain('idref="ch2"');
-      expect(strFromU8(entries["OEBPS/chapter-1.xhtml"])).toContain("First para.");
-      expect(Object.keys(entries).some((name) => name.includes("chapter-2"))).toBe(false);
+      expect(strFromU8(streamedEntries["OEBPS/chapter-1.xhtml"])).toContain("First para.");
+      expect(Object.keys(streamedEntries).some((name) => name.includes("chapter-2"))).toBe(false);
     });
 
     it("propagates iteration errors as stream errors", async () => {
-      async function* throwing() {
-        yield CHAPTERS[0];
-        throw new Error("iteration failed");
-      }
-
-      await expect(new Response(createEpubStream(META, throwing())).arrayBuffer()).rejects.toThrow(
-        "iteration failed",
-      );
+      await expect(
+        new Response(createEpubStream(META, throwingChapters())).arrayBuffer(),
+      ).rejects.toThrow("iteration failed");
     });
 
     it("propagates a zero-chapter stream as a valid empty archive", async () => {
-      async function* empty() {
-        // yields nothing
-      }
-
-      const entries = unzipSync(
-        new Uint8Array(await new Response(createEpubStream(META, empty())).arrayBuffer()),
+      const streamedEntries = unzipSync(
+        new Uint8Array(await new Response(createEpubStream(META, emptyChapters())).arrayBuffer()),
       );
-      const opf = strFromU8(entries["OEBPS/content.opf"]);
+      const opf = strFromU8(streamedEntries["OEBPS/content.opf"]);
       expect(opf).not.toContain('idref="ch1"');
-      expect(entries["OEBPS/chapter-1.xhtml"]).toBeUndefined();
-      expect(strFromU8(entries["OEBPS/nav.xhtml"])).not.toContain("chapter-1.xhtml");
+      expect(streamedEntries["OEBPS/chapter-1.xhtml"]).toBeUndefined();
+      expect(strFromU8(streamedEntries["OEBPS/nav.xhtml"])).not.toContain("chapter-1.xhtml");
     });
 
     it("applies backpressure so unread data halts producer advancement", async () => {
@@ -98,7 +98,11 @@ describe("buildEpub", () => {
         }
       }
       const reader = createEpubStream(META, chapters()).getReader();
-      while (consumed === 0) await reader.read();
+      let producerAdvanced = false;
+      while (!producerAdvanced) {
+        await reader.read();
+        producerAdvanced = consumed > 0;
+      }
       await vi.runAllTimersAsync();
       const pausedAt = consumed;
       expect(pausedAt).toBe(1);
@@ -121,7 +125,11 @@ describe("buildEpub", () => {
       }
 
       const reader = createEpubStream(META, cancellable()).getReader();
-      while (!started) await reader.read();
+      let producerStarted = false;
+      while (!producerStarted) {
+        await reader.read();
+        producerStarted = started;
+      }
       await reader.cancel();
       await Promise.resolve();
       expect(finallyRan).toBe(true);

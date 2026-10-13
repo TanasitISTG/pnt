@@ -41,17 +41,6 @@ export function ReaderPage({ novelId, chapterId, signedIn }: ReaderPageProps) {
     proseRef.current = node;
     setProseNode(node);
   }, []);
-  const proseLayoutKey = [
-    chapterId,
-    settings.viewMode,
-    settings.fontSize,
-    settings.typeface,
-    settings.lineHeight,
-    settings.measure,
-    chapter?.translatedContent ? "translated" : "raw",
-    chapter?.editedAt ? String(chapter.editedAt) : "",
-  ].join("|");
-
   useReaderThemeScope(settings.pageTheme, settingsReady);
   useReaderScroll({
     novelId,
@@ -63,7 +52,6 @@ export function ReaderPage({ novelId, chapterId, signedIn }: ReaderPageProps) {
     proseRef,
     proseNode,
     toolbarRef,
-    layoutKey: proseLayoutKey,
   });
 
   if (chapterQuery.isError || chaptersQuery.isError || novelQuery.isError) {

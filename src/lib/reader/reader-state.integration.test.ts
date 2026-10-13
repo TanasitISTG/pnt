@@ -409,7 +409,7 @@ integrationDescribe("reader state service", () => {
       }),
     ]);
     expect(results[0].id).toBe(results[1].id);
-    expect(results.map(({ duplicate }) => duplicate).sort()).toEqual([false, true]);
+    expect(results.map(({ duplicate }) => duplicate).toSorted()).toEqual([false, true]);
     const winnerIndex = results.findIndex(({ duplicate }) => !duplicate);
     const state = await getReaderNovelStateForUser(fixture.userId, fixture.novelId);
     expect(state.bookmarks).toMatchObject([

@@ -258,12 +258,7 @@ export function ReaderToolbar({
         {search.open ? <ReaderFindBar search={search} /> : null}
         {jobRunning ? <ReaderJobStatus activeJob={activeJob} /> : null}
       </div>
-      <ReaderChapterProgress
-        proseRef={proseRef}
-        proseNode={proseNode}
-        toolbarRef={toolbarRef}
-        layoutKey={`${chapterId}|${settings.viewMode}|${settings.fontSize}|${settings.typeface}|${settings.lineHeight}|${settings.measure}|${editing}|${hasTranslation}`}
-      />
+      <ReaderChapterProgress proseRef={proseRef} proseNode={proseNode} toolbarRef={toolbarRef} />
     </header>
   );
 }

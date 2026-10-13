@@ -54,6 +54,6 @@ export async function withSafeHandler<T>(fn: () => Promise<T>): Promise<T> {
       throw new UnauthorizedError();
     }
     log("error", "Unhandled server function error", { error: message });
-    throw new Error("Something went wrong.");
+    throw new Error("Something went wrong.", { cause: err });
   }
 }

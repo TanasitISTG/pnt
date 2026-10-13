@@ -424,7 +424,7 @@ function compareStatusAggregates(
 
 function buildStatusCounts(rows: readonly JobStatusAggregateRow[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const row of [...rows].sort(compareStatusAggregates)) {
+  for (const row of rows.toSorted(compareStatusAggregates)) {
     counts[row.status] = Number(row.count);
   }
   return counts;
