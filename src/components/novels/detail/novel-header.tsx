@@ -28,6 +28,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { NovelCover } from "@/components/novels/novel-cover";
 import { PublishMenu } from "@/components/publish-menu";
 import { ReportNovelButton } from "@/components/reports/report-novel-button";
+import { NovelRatingSummary } from "@/components/reviews/novel-rating-summary";
 import type { ChapterRow } from "@/components/chapters/types";
 import { cn, formatCost, formatTokens } from "@/lib/utils";
 import { parseLanguagePair } from "@/lib/language-pair";
@@ -205,7 +206,7 @@ function NovelDescription({ description }: { description: string }) {
   );
 }
 
-function NovelMeta({ novel }: Pick<NovelHeaderProps, "novel">) {
+function NovelMeta({ novel, novelId }: Pick<NovelHeaderProps, "novel" | "novelId">) {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
@@ -216,6 +217,8 @@ function NovelMeta({ novel }: Pick<NovelHeaderProps, "novel">) {
           {novel.sourceLang} → {novel.targetLang}
         </Badge>
       </div>
+      {/* Renders nothing until the novel has a rating, so a fresh novel never shows 0.0. */}
+      <NovelRatingSummary novelId={novelId} className="mt-2" />
       {novel.originalTitle ? (
         <p className="mt-1 text-body font-medium text-muted-foreground">{novel.originalTitle}</p>
       ) : null}
@@ -450,7 +453,7 @@ export function NovelHeader({
           />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
-          <NovelMeta novel={novel} />
+          <NovelMeta novel={novel} novelId={novelId} />
           <ReadingActions {...readingActionsProps} />
           {isAdmin ? (
             <NovelProgress

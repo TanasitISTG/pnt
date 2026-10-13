@@ -18,6 +18,11 @@ vi.mock("@/components/publish-menu", () => ({
   PublishMenu: () => createElement("button", { type: "button" }, "Publishing options"),
 }));
 
+// The rating summary is covered on its own; this file is about the description.
+vi.mock("@/components/reviews/novel-rating-summary", () => ({
+  NovelRatingSummary: () => null,
+}));
+
 const DESCRIPTION_LIMIT = 240;
 const SHORT_DESCRIPTION = "s".repeat(DESCRIPTION_LIMIT);
 const LONG_DESCRIPTION = `${"l".repeat(DESCRIPTION_LIMIT)}!`;

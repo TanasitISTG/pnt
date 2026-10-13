@@ -85,6 +85,7 @@ export function NovelDetailController({
         novelId={novelId}
         isAdmin={canManage}
         canReport={signedIn && !novel.canManage}
+        signedIn={signedIn}
         section={section}
         addVisited={addVisited}
         reviewSearch={reviewSearch}

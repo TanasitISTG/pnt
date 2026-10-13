@@ -7,6 +7,7 @@ import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 import { ReaderContent } from "@/components/reader/content/chapter-content";
 import { ChapterEditor } from "@/components/reader/editor/chapter-editor";
 import { ChapterTitleRow } from "@/components/reader/editor/chapter-title-row";
+import { ChapterDiscussion } from "@/components/comments/chapter-discussion";
 import type { ReaderSearchApi } from "./use-reader-search";
 import { ReaderDialogs } from "./reader-dialogs";
 import type { ReaderChapterSummary } from "@/components/reader/controls/reader-toolbar";
@@ -241,6 +242,15 @@ export function ReaderPageView({
         prevChapter={prevChapter}
         nextChapter={nextChapter}
         onGoToChapter={onGoToChapter}
+      />
+
+      {/* Below the navigation on purpose: the end of a chapter is a fork toward the next
+          one, and the discussion is what a reader turns to afterwards. */}
+      <ChapterDiscussion
+        novelId={novelId}
+        chapterId={chapterId}
+        chapterNumber={chapter.number}
+        signedIn={signedIn}
       />
 
       <ReaderDialogs

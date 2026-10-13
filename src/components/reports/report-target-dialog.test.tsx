@@ -3,17 +3,18 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ReportNovelDialog } from "./report-novel-dialog";
-import type { ReportNovelDialogProps } from "./report-novel-dialog";
+import { ReportTargetDialog } from "./report-target-dialog";
+import type { ReportTargetDialogProps } from "./report-target-dialog";
 
 afterEach(cleanup);
 
-function renderDialog(overrides: Partial<ReportNovelDialogProps> = {}) {
+function renderDialog(overrides: Partial<ReportTargetDialogProps> = {}) {
   const onConfirm = vi.fn();
   render(
-    <ReportNovelDialog
+    <ReportTargetDialog
       open
-      novelTitle="The Hidden Map"
+      title="Report this novel?"
+      description="An operator reviews every report about “The Hidden Map”."
       onOpenChange={() => undefined}
       onConfirm={onConfirm}
       {...overrides}
@@ -41,7 +42,7 @@ function typeDetails(value: string): void {
   fireEvent.change(screen.getByLabelText("What is wrong?"), { target: { value } });
 }
 
-describe("ReportNovelDialog", () => {
+describe("ReportTargetDialog", () => {
   it("will not send a report without a reason", () => {
     const { onConfirm } = renderDialog();
 
@@ -94,5 +95,16 @@ describe("ReportNovelDialog", () => {
     submitButton().click();
 
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("quotes the reported words for a comment report, truncated to a readable size", () => {
+    const longBody = "x".repeat(600);
+    renderDialog({
+      title: "Report this comment?",
+      description: "An operator reviews every report.",
+      preview: longBody,
+    });
+
+    expect(screen.getByText(/^x+\.\.\.$/).textContent).toHaveLength(500);
   });
 });

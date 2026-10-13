@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createCommentReportSchema,
   createNovelReportSchema,
+  createReviewReportSchema,
+  removeReportedTargetSchema,
   reportQueueInputSchema,
   reportQueueSearchSchema,
   resolveReportCaseSchema,
 } from "@/lib/reports/schemas";
-import { describeReportReason, describeReportStatus, isReportReason } from "@/lib/reports/reasons";
+import {
+  describeReportReason,
+  describeReportStatus,
+  describeReportTarget,
+  isReportReason,
+} from "@/lib/reports/reasons";
 
 describe("createNovelReportSchema", () => {
   it("accepts a reason with a short explanation", () => {
@@ -49,6 +57,33 @@ describe("createNovelReportSchema", () => {
   });
 });
 
+describe("report schemas for the other targets", () => {
+  it("applies the same reason-and-details rule to comments and reviews", () => {
+    expect(
+      createCommentReportSchema.safeParse({ commentId: "comment-1", reason: "other" }).success,
+    ).toBe(false);
+    expect(
+      createReviewReportSchema.safeParse({
+        reviewId: "review-1",
+        reason: "other",
+        details: "  A drive-by rating.  ",
+      }).success,
+    ).toBe(true);
+    expect(
+      createCommentReportSchema.parse({ commentId: "comment-1", reason: "spam_or_scam" }),
+    ).toMatchObject({ commentId: "comment-1" });
+  });
+
+  it("requires a reason to remove reported content", () => {
+    expect(
+      removeReportedTargetSchema.safeParse({ caseKey: "comment-1", reason: "  " }).success,
+    ).toBe(false);
+    expect(
+      removeReportedTargetSchema.parse({ caseKey: "comment-1", reason: "  Spoilers.  " }).reason,
+    ).toBe("Spoilers.");
+  });
+});
+
 describe("resolveReportCaseSchema", () => {
   it("requires a note to uphold a case", () => {
     const parsed = resolveReportCaseSchema.safeParse({ caseKey: "novel-1", decision: "upheld" });
@@ -78,7 +113,12 @@ describe("reportQueueSearchSchema", () => {
   it("degrades a hand-edited URL to the default view", () => {
     const parsed = reportQueueInputSchema.parse({ tab: "nonsense", page: "-3", q: "  spam  " });
 
-    expect(parsed).toEqual({ tab: "open", q: "spam", page: 1, pageSize: 25 });
+    expect(parsed).toEqual({ tab: "open", target: "all", q: "spam", page: 1, pageSize: 25 });
+  });
+
+  it("keeps a target filter and degrades an unknown one to every target", () => {
+    expect(reportQueueInputSchema.parse({ target: "comment" }).target).toBe("comment");
+    expect(reportQueueInputSchema.parse({ target: "nonsense" }).target).toBe("all");
   });
 
   it("keeps a valid tab and page", () => {
@@ -99,5 +139,12 @@ describe("report vocabulary", () => {
   it("recognizes only declared reasons", () => {
     expect(isReportReason("other")).toBe(true);
     expect(isReportReason("whatever")).toBe(false);
+  });
+
+  it("names every report target", () => {
+    expect(describeReportTarget("novel")).toBe("Novel");
+    expect(describeReportTarget("comment")).toBe("Comment");
+    expect(describeReportTarget("review")).toBe("Review");
+    expect(describeReportTarget("unknown")).toBe("unknown");
   });
 });

@@ -16,11 +16,19 @@ let sql: Sql;
  * disposable one.
  */
 let createNovelReportForUser: typeof import("./report.service.server").createNovelReportForUser;
+let createCommentReportForUser: typeof import("./report.service.server").createCommentReportForUser;
+let createReviewReportForUser: typeof import("./report.service.server").createReviewReportForUser;
 let getOpenNovelReportForUser: typeof import("./report.service.server").getOpenNovelReportForUser;
 let countOpenReportCases: typeof import("./report.service.server").countOpenReportCases;
 let listReportCases: typeof import("./report.service.server").listReportCases;
 let listReportHistory: typeof import("./report.service.server").listReportHistory;
 let resolveReportCaseForOperator: typeof import("./report.service.server").resolveReportCaseForOperator;
+let removeReportedTargetForOperator: typeof import("./report.service.server").removeReportedTargetForOperator;
+let createCommentForUser: typeof import("@/lib/comments/comment.service.server").createCommentForUser;
+let listChapterCommentsForViewer: typeof import("@/lib/comments/comment.service.server").listChapterCommentsForViewer;
+let saveReviewForUser: typeof import("@/lib/reviews/review.service.server").saveReviewForUser;
+let getNovelRatingForViewer: typeof import("@/lib/reviews/review.service.server").getNovelRatingForViewer;
+let listNovelReviewsForViewer: typeof import("@/lib/reviews/review.service.server").listNovelReviewsForViewer;
 
 let authorId: string;
 let authorEmail: string;
@@ -32,6 +40,7 @@ let operatorId: string;
 let operatorEmail: string;
 
 let liveNovelId: string;
+let liveChapterId: string;
 let draftNovelId: string;
 let ownNovelId: string;
 let deletedNovelId: string;
@@ -45,7 +54,14 @@ const searchTitle = "Queue Search Fixture";
 let deletedCaseKey: string;
 
 function queue(overrides: Partial<ReportQueueInput> = {}): ReportQueueInput {
-  return { tab: "open", q: "", page: 1, pageSize: REPORT_CASE_PAGE_SIZE, ...overrides };
+  return {
+    tab: "open",
+    target: "all",
+    q: "",
+    page: 1,
+    pageSize: REPORT_CASE_PAGE_SIZE,
+    ...overrides,
+  };
 }
 
 /**
@@ -90,12 +106,19 @@ integrationDescribe("novel reporting", () => {
     sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
     ({
       createNovelReportForUser,
+      createCommentReportForUser,
+      createReviewReportForUser,
       getOpenNovelReportForUser,
       countOpenReportCases,
       listReportCases,
       listReportHistory,
       resolveReportCaseForOperator,
+      removeReportedTargetForOperator,
     } = await import("./report.service.server"));
+    ({ createCommentForUser, listChapterCommentsForViewer } =
+      await import("@/lib/comments/comment.service.server"));
+    ({ saveReviewForUser, getNovelRatingForViewer, listNovelReviewsForViewer } =
+      await import("@/lib/reviews/review.service.server"));
 
     // The reports table belongs to this suite and the database is disposable, so the
     // queue counts below are exact numbers rather than a baseline plus an offset.
@@ -151,6 +174,16 @@ integrationDescribe("novel reporting", () => {
       title: searchTitle,
       publishedAt: new Date(Date.now() - 3_600_000),
     });
+
+    // A live, translated chapter on the first novel: comments can only be written on one,
+    // and the report path follows the chapter's publication exactly as the discussion does.
+    liveChapterId = `chapter-${randomUUID()}`;
+    const now = new Date();
+    await sql`
+      INSERT INTO "chapters"
+        ("id", "novel_id", "number", "title", "raw_content", "status", "raw_char_count", "published_at", "created_at", "updated_at")
+      VALUES (${liveChapterId}, ${liveNovelId}, '1', 'Chapter One', 'raw text', 'translated', 8, ${timestamp(new Date(Date.now() - 3_600_000))}, ${timestamp(now)}, ${timestamp(now)})
+    `;
   });
 
   afterAll(async () => {
@@ -271,7 +304,13 @@ integrationDescribe("novel reporting", () => {
       WHERE "actor_id" = ${operatorId} AND "action" = 'report.upheld'
     `;
     expect(audit).toMatchObject({ action: "report.upheld", target_user_id: authorId });
-    expect(audit!.detail).toEqual({ novelId: liveNovelId, novelTitle: liveTitle, reports: 2 });
+    expect(audit!.detail).toEqual({
+      targetType: "novel",
+      targetId: liveNovelId,
+      novelId: liveNovelId,
+      novelTitle: liveTitle,
+      reports: 2,
+    });
 
     // Deciding closes the case, so the reporter is free to report the novel again and the
     // queue no longer holds a case with nothing left to do.
@@ -379,5 +418,205 @@ integrationDescribe("novel reporting", () => {
     // A page past the end comes back empty rather than repeating the last one.
     const beyond = await listReportCases(queue({ page: 99 }));
     expect(beyond).toMatchObject({ page: 99, cases: [] });
+  });
+
+  it("groups comment cases per comment and takes the reported words down on demand", async () => {
+    const comment = await createCommentForUser(authorId, {
+      chapterId: liveChapterId,
+      body: "Chapter 12 spoilers ahead.",
+    });
+    const reply = await createCommentForUser(secondReporterId, {
+      chapterId: liveChapterId,
+      parentId: comment.id,
+      body: "Thanks for the warning.",
+    });
+
+    // One level of replies, enforced where the row is written rather than by the reader.
+    await expect(
+      createCommentForUser(reporterId, {
+        chapterId: liveChapterId,
+        parentId: reply.id,
+        body: "A reply to a reply.",
+      }),
+    ).rejects.toThrow("Replies go to a comment, not to another reply.");
+
+    await createCommentReportForUser(reporterId, {
+      commentId: comment.id,
+      reason: "hate_or_harassment",
+      details: "Targeted at another reader.",
+    });
+    const secondComment = await createCommentForUser(authorId, {
+      chapterId: liveChapterId,
+      body: "A second, unrelated comment.",
+    });
+    await createCommentReportForUser(reporterId, {
+      commentId: secondComment.id,
+      reason: "spam_or_scam",
+    });
+
+    // Authors do not report their own words, and the index refuses a repeat from the same
+    // account on the same comment.
+    await expect(
+      createCommentReportForUser(authorId, { commentId: comment.id, reason: "spam_or_scam" }),
+    ).rejects.toThrow("You cannot report your own comment.");
+    await expect(
+      createCommentReportForUser(reporterId, {
+        commentId: comment.id,
+        reason: "other",
+        details: "More.",
+      }),
+    ).rejects.toThrow("You already have an open report for this comment.");
+
+    const commentCases = await listReportCases(queue({ target: "comment" }));
+    expect(commentCases.rowCount).toBe(2);
+    const reportedCase = commentCases.cases.find((entry) => entry.caseKey === comment.id);
+    expect(reportedCase?.target).toMatchObject({
+      type: "comment",
+      title: liveTitle,
+      excerpt: "Chapter 12 spoilers ahead.",
+      chapterNumber: 1,
+      chapterId: liveChapterId,
+      authorId,
+      authorEmail,
+      deleted: false,
+    });
+    expect(reportedCase?.target.novelId).toBe(liveNovelId);
+
+    // A per-comment case is not folded into the novel's own case, and the novel filter
+    // never returns a comment case.
+    const novelCases = await listReportCases(queue({ target: "novel" }));
+    expect(novelCases.cases.some((entry) => entry.caseKey === comment.id)).toBe(false);
+    expect(novelCases.cases.every((entry) => entry.target.type === "novel")).toBe(true);
+
+    // Removal is its own audited action, not the decision.
+    const removal = await removeReportedTargetForOperator(
+      { id: operatorId, email: operatorEmail },
+      { caseKey: comment.id, reason: "Spoilers outside the spoiler window." },
+    );
+    expect(removal).toEqual({ removed: true, targetType: "comment" });
+
+    const [removalAudit] = await sql<
+      { action: string; target_user_id: string | null; detail: Record<string, unknown> }[]
+    >`
+      SELECT "action", "target_user_id", "detail" FROM "admin_audit_log"
+      WHERE "actor_id" = ${operatorId} AND "action" = 'comment.removed'
+    `;
+    expect(removalAudit).toMatchObject({ action: "comment.removed", target_user_id: authorId });
+    expect(removalAudit!.detail).toMatchObject({ commentId: comment.id, novelId: liveNovelId });
+
+    // A second operator finds it already down rather than rewriting the note.
+    await expect(
+      removeReportedTargetForOperator(
+        { id: operatorId, email: operatorEmail },
+        { caseKey: comment.id, reason: "Again." },
+      ),
+    ).rejects.toThrow("That comment was already removed.");
+
+    // Enforcement is per target: clearing one case leaves the words in another case alone.
+    const secondRemoval = await removeReportedTargetForOperator(
+      { id: operatorId, email: operatorEmail },
+      { caseKey: secondComment.id, reason: "Advertises an unrelated service." },
+    );
+    expect(secondRemoval).toEqual({ removed: true, targetType: "comment" });
+
+    // The words are gone for everyone but the author, and because the comment carries a
+    // reply the thread stays readable - other readers' words are not collateral.
+    const publicView = await listChapterCommentsForViewer(null, {
+      chapterId: liveChapterId,
+      page: 1,
+    });
+    const tombstone = publicView.threads.find((thread) => thread.id === comment.id);
+    expect(tombstone?.removedAt).toBeInstanceOf(Date);
+    expect(tombstone?.replies.map((entry) => entry.body)).toEqual(["Thanks for the warning."]);
+
+    const authorView = await listChapterCommentsForViewer(authorId, {
+      chapterId: liveChapterId,
+      page: 1,
+    });
+    expect(authorView.threads.find((thread) => thread.id === comment.id)?.removalReason).toBe(
+      "Spoilers outside the spoiler window.",
+    );
+
+    // The second comment has no replies, so there is no thread left to preserve: it is
+    // gone from the public discussion entirely and survives only for its author.
+    expect(publicView.threads.some((thread) => thread.id === secondComment.id)).toBe(false);
+    const authorSecond = authorView.threads.find((thread) => thread.id === secondComment.id);
+    expect(authorSecond?.removedAt).toBeInstanceOf(Date);
+    expect(authorSecond?.removalReason).toBe("Advertises an unrelated service.");
+  });
+
+  it("takes a reported review down and drops its rating from the average", async () => {
+    const review = await saveReviewForUser(secondReporterId, {
+      novelId: liveNovelId,
+      rating: 2,
+      body: "The translation slips in chapter 3.",
+    });
+
+    const own = await saveReviewForUser(reporterId, { novelId: liveNovelId, rating: 5 });
+    expect(own.id).toBeTruthy();
+    expect(await getNovelRatingForViewer(null, liveNovelId)).toMatchObject({
+      average: 3.5,
+      count: 2,
+    });
+
+    // Authors rate other people's novels; the novel's owner is refused outright.
+    await expect(saveReviewForUser(authorId, { novelId: liveNovelId, rating: 5 })).rejects.toThrow(
+      "You cannot review your own novel.",
+    );
+
+    await createReviewReportForUser(reporterId, {
+      reviewId: review.id,
+      reason: "spam_or_scam",
+      details: "A drive-by rating.",
+    });
+
+    const reviewCases = await listReportCases(queue({ target: "review" }));
+    const reportedCase = reviewCases.cases.find((entry) => entry.caseKey === review.id);
+    expect(reportedCase?.target).toMatchObject({
+      type: "review",
+      rating: 2,
+      excerpt: "The translation slips in chapter 3.",
+      authorEmail: secondReporterEmail,
+      title: liveTitle,
+    });
+
+    await expect(
+      createReviewReportForUser(reporterId, {
+        reviewId: review.id,
+        reason: "other",
+        details: "Again.",
+      }),
+    ).rejects.toThrow("You already have an open report for this review.");
+
+    const removal = await removeReportedTargetForOperator(
+      { id: operatorId, email: operatorEmail },
+      { caseKey: review.id, reason: "Rating manipulation." },
+    );
+    expect(removal).toEqual({ removed: true, targetType: "review" });
+
+    // The removed rating leaves the average immediately, and the words leave the public
+    // list while the author keeps a reason.
+    expect(await getNovelRatingForViewer(null, liveNovelId)).toMatchObject({
+      average: 5,
+      count: 1,
+    });
+    const publicReviews = await listNovelReviewsForViewer(null, { novelId: liveNovelId, page: 1 });
+    expect(publicReviews.reviews.some((row) => row.id === review.id)).toBe(false);
+    const authorReviews = await listNovelReviewsForViewer(secondReporterId, {
+      novelId: liveNovelId,
+      page: 1,
+    });
+    expect(authorReviews.reviews.find((row) => row.id === review.id)?.removalReason).toBe(
+      "Rating manipulation.",
+    );
+
+    const [reviewAudit] = await sql<{ action: string; target_user_id: string | null }[]>`
+      SELECT "action", "target_user_id" FROM "admin_audit_log"
+      WHERE "actor_id" = ${operatorId} AND "action" = 'review.removed'
+    `;
+    expect(reviewAudit).toMatchObject({
+      action: "review.removed",
+      target_user_id: secondReporterId,
+    });
   });
 });

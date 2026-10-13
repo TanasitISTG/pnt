@@ -5,13 +5,37 @@ import { toast } from "sonner";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { resolveReportCase } from "@/lib/reports/functions";
+import { describeReportTarget } from "@/lib/reports/reasons";
+import { removeReportedTarget, resolveReportCase } from "@/lib/reports/functions";
 import { reportCaseQueueQueryOptions, reportHistoryQueryOptions } from "@/lib/reports/query";
-import { REPORT_CASE_PAGE_SIZE, type ReportQueueSearch } from "@/lib/reports/schemas";
+import {
+  REPORT_CASE_PAGE_SIZE,
+  REPORT_TARGET_FILTERS,
+  type ReportQueueSearch,
+  type ReportTargetFilter,
+} from "@/lib/reports/schemas";
 import type { ReportCase } from "@/lib/reports/types";
 
-import { ReportCaseDialog, type ReportCaseDecisionSubmission } from "./report-case-dialog";
+import {
+  ReportCaseDialog,
+  type ReportCaseDecisionSubmission,
+  type ReportContentRemovalSubmission,
+} from "./report-case-dialog";
+
+const TARGET_FILTER_ITEMS: Record<string, string> = {
+  all: "All targets",
+  novel: describeReportTarget("novel"),
+  comment: describeReportTarget("comment"),
+  review: describeReportTarget("review"),
+};
 import { ReportCaseTable } from "./report-case-table";
 import { ReportHistoryTable } from "./report-history-table";
 
@@ -41,6 +65,7 @@ export function ReportsPage({ search, onSearchChange }: ReportsPageProps) {
 
   const [pendingCase, setPendingCase] = useState<ReportCase | null>(null);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   const resolve = async (submission: ReportCaseDecisionSubmission) => {
     const target = pendingCase;
@@ -67,6 +92,24 @@ export function ReportsPage({ search, onSearchChange }: ReportsPageProps) {
     }
   };
 
+  const removeContent = async (submission: ReportContentRemovalSubmission) => {
+    const target = pendingCase;
+    if (!target) return;
+
+    setRemoving(true);
+    try {
+      await removeReportedTarget({ data: { caseKey: target.caseKey, reason: submission.reason } });
+      // Removal is not the decision: the case stays open so the operator can still record
+      // why it was upheld or dismissed, which is what the queue is for.
+      toast.success("Content removed. The case is still open for a decision.");
+      await queryClient.invalidateQueries({ queryKey: ["reportQueue"] });
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "That removal did not go through");
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   const changePage = (next: number) => {
     onSearchChange({ page: next <= 1 ? undefined : next });
   };
@@ -83,23 +126,46 @@ export function ReportsPage({ search, onSearchChange }: ReportsPageProps) {
             the case and is recorded in the activity trail.
           </p>
         </div>
-        <div className="relative sm:w-72">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            className="pl-9"
-            type="search"
-            value={search.q ?? ""}
-            placeholder="Search novel or owner"
-            aria-label="Search reports"
-            onChange={(event) =>
-              // Any change to the query invalidates the current offset, so paging
-              // resets with the search rather than pointing past the new result set.
-              onSearchChange({ q: event.target.value || undefined, page: undefined })
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Select
+            value={search.target ?? "all"}
+            items={TARGET_FILTER_ITEMS}
+            onValueChange={(value) =>
+              onSearchChange({
+                target: value === "all" ? undefined : (value as ReportTargetFilter),
+                page: undefined,
+              })
             }
-          />
+          >
+            <SelectTrigger aria-label="Filter by target" className="h-10 w-full sm:w-44">
+              <SelectValue placeholder={TARGET_FILTER_ITEMS.all} />
+            </SelectTrigger>
+            <SelectContent>
+              {REPORT_TARGET_FILTERS.map((target) => (
+                <SelectItem key={target} value={target}>
+                  {TARGET_FILTER_ITEMS[target]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="relative sm:w-72">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              className="pl-9"
+              type="search"
+              value={search.q ?? ""}
+              placeholder="Search title, excerpt, or account"
+              aria-label="Search reports"
+              onChange={(event) =>
+                // Any change to the query invalidates the current offset, so paging
+                // resets with the search rather than pointing past the new result set.
+                onSearchChange({ q: event.target.value || undefined, page: undefined })
+              }
+            />
+          </div>
         </div>
       </div>
 
@@ -168,10 +234,12 @@ export function ReportsPage({ search, onSearchChange }: ReportsPageProps) {
         open={pendingCase !== null}
         reportCase={pendingCase}
         busy={busy}
+        removing={removing}
         onOpenChange={(open) => {
           if (!open) setPendingCase(null);
         }}
         onResolve={(submission) => void resolve(submission)}
+        onRemove={(submission) => void removeContent(submission)}
       />
     </div>
   );

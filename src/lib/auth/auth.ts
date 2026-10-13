@@ -178,6 +178,17 @@ export const auth = betterAuth({
         },
       },
       delete: {
+        before: async (user) => {
+          // The account's words leave with it, but the thread does not: a comment is
+          // tombstoned (and its author nulled by the foreign key) so replies by other
+          // readers survive, while the reviews go entirely, taking a departed account's
+          // rating out of every average.
+          const now = new Date();
+          await db
+            .update(schema.comments)
+            .set({ body: null, deletedAt: now, updatedAt: now })
+            .where(eq(schema.comments.userId, user.id));
+        },
         after: async (user) => {
           const image = typeof user["image"] === "string" ? user["image"] : null;
           await deleteAvatarSet(image);

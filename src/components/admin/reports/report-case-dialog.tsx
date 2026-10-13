@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +14,11 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { describeReportReason, type ReportDecision } from "@/lib/reports/reasons";
+import {
+  describeReportReason,
+  describeReportTarget,
+  type ReportDecision,
+} from "@/lib/reports/reasons";
 import { REPORT_NOTE_MAX_LENGTH } from "@/lib/reports/schemas";
 import type { ReportCase } from "@/lib/reports/types";
 
@@ -22,36 +27,54 @@ export interface ReportCaseDecisionSubmission {
   note?: string;
 }
 
+export interface ReportContentRemovalSubmission {
+  reason: string;
+}
+
 export interface ReportCaseDialogProps {
   open: boolean;
   reportCase: ReportCase | null;
   busy: boolean;
+  /** In flight while the reported content is being taken down. */
+  removing?: boolean;
   onOpenChange: (open: boolean) => void;
   onResolve: (submission: ReportCaseDecisionSubmission) => void;
+  /** Only sent for a comment or review case; a novel is enforced through its own controls. */
+  onRemove?: (submission: ReportContentRemovalSubmission) => void;
 }
 
 /**
- * One case, end to end: every open report on a novel, and the decision that closes all
- * of them at once.
+ * One case, end to end: every open report on a target, and the decision that closes all of
+ * them at once.
  *
  * The decision is a status and a note, never an enforcement step - the copy says so
- * because an operator who expected the novel to come down would otherwise trust a
- * decision that only recorded their intent.
+ * because an operator who expected the content to come down would otherwise trust a
+ * decision that only recorded their intent. Taking a comment or review down is its own
+ * deliberate, audited action beside it, and it needs a reason of its own so the author
+ * can be told why.
  *
- * The page remounts this per case (keyed by case key), which is how the note starts
- * empty for every case without an effect that clears it.
+ * The page remounts this per case (keyed by case key), which is how the note starts empty
+ * for every case without an effect that clears it.
  */
 export function ReportCaseDialog({
   open,
   reportCase,
   busy,
+  removing = false,
   onOpenChange,
   onResolve,
+  onRemove,
 }: ReportCaseDialogProps) {
   const [note, setNote] = useState("");
   const [pending, setPending] = useState<ReportDecision | null>(null);
+  const [removalOpen, setRemovalOpen] = useState(false);
+  const [removalReason, setRemovalReason] = useState("");
 
   const trimmed = note.trim();
+  const trimmedRemoval = removalReason.trim();
+  const target = reportCase?.target ?? null;
+  const removable = target !== null && target.type !== "novel" && !target.deleted;
+  const alreadyRemoved = target?.removedAt !== null && target?.removedAt !== undefined;
 
   const submit = (decision: ReportDecision) => {
     setPending(decision);
@@ -62,13 +85,20 @@ export function ReportCaseDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setPending(null);
+        if (!next) {
+          setPending(null);
+          setRemovalOpen(false);
+        }
         onOpenChange(next);
       }}
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Reported novel</DialogTitle>
+          <DialogTitle>
+            {target
+              ? `Reported ${describeReportTarget(target.type).toLowerCase()}`
+              : "Reported content"}
+          </DialogTitle>
           <DialogDescription>
             {reportCase ? (
               <>
@@ -76,9 +106,14 @@ export function ReportCaseDialog({
                   ? "One open report on"
                   : `${reportCase.openCount} open reports on`}{" "}
                 <span className="font-medium text-foreground">{reportCase.target.title}</span>
-                {reportCase.target.ownerEmail ? ` by ${reportCase.target.ownerEmail}` : ""}. The
-                decision below is recorded on every one of them; it does not suspend the account or
-                unpublish the novel.
+                {reportCase.target.type === "novel" && reportCase.target.ownerEmail
+                  ? ` by ${reportCase.target.ownerEmail}`
+                  : null}
+                {reportCase.target.type !== "novel" && reportCase.target.authorEmail
+                  ? ` — written by ${reportCase.target.authorEmail}`
+                  : null}
+                . The decision below is recorded on every one of them; it does not suspend the
+                account or take the content down.
                 {reportCase.target.novelId ? (
                   <>
                     {" "}
@@ -94,6 +129,87 @@ export function ReportCaseDialog({
 
         {reportCase ? (
           <div className="flex flex-col gap-3">
+            {reportCase.target.type !== "novel" ? (
+              <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-foreground">Reported content</span>
+                  {alreadyRemoved ? <Badge variant="muted">Removed</Badge> : null}
+                  {reportCase.target.deleted ? <Badge variant="muted">Deleted</Badge> : null}
+                </div>
+                <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+                  {reportCase.target.excerpt ?? "The reported words are no longer available."}
+                </p>
+                {reportCase.target.chapterId && reportCase.target.novelId ? (
+                  <Link
+                    className="text-caption underline underline-offset-4"
+                    to="/novels/$novelId/chapters/$chapterId"
+                    params={{
+                      novelId: reportCase.target.novelId,
+                      chapterId: reportCase.target.chapterId,
+                    }}
+                  >
+                    Open the chapter
+                  </Link>
+                ) : null}
+
+                {removable && onRemove ? (
+                  alreadyRemoved ? (
+                    <p className="text-caption text-muted-foreground">
+                      This content has already been removed; the decision still needs recording.
+                    </p>
+                  ) : removalOpen ? (
+                    <div className="flex flex-col gap-2 pt-1">
+                      <Field>
+                        <FieldLabel htmlFor="report-removal-reason">Reason for removal</FieldLabel>
+                        <Textarea
+                          id="report-removal-reason"
+                          value={removalReason}
+                          maxLength={REPORT_NOTE_MAX_LENGTH}
+                          placeholder="What breaks the rules, in a sentence."
+                          onChange={(event) => setRemovalReason(event.target.value)}
+                        />
+                        <FieldDescription>
+                          Stored with the author's notice and in the activity trail.
+                        </FieldDescription>
+                      </Field>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={removing}
+                          onClick={() => setRemovalOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={removing || trimmedRemoval.length === 0}
+                          onClick={() => {
+                            if (trimmedRemoval.length === 0) return;
+                            onRemove({ reason: trimmedRemoval });
+                          }}
+                        >
+                          {removing ? <Spinner /> : null}
+                          Remove content
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        variant="outlineDestructiveStrong"
+                        size="sm"
+                        onClick={() => setRemovalOpen(true)}
+                      >
+                        Remove content…
+                      </Button>
+                    </div>
+                  )
+                ) : null}
+              </div>
+            ) : null}
+
             <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
               {reportCase.entries.map((entry) => (
                 <li
@@ -148,14 +264,18 @@ export function ReportCaseDialog({
         ) : null}
 
         <DialogFooter>
-          <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={busy || removing} onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => submit("dismissed")}>
+          <Button variant="outline" disabled={busy || removing} onClick={() => submit("dismissed")}>
             {busy && pending === "dismissed" ? <Spinner /> : null}
             Dismiss
           </Button>
-          <Button variant="default" disabled={busy || !trimmed} onClick={() => submit("upheld")}>
+          <Button
+            variant="default"
+            disabled={busy || removing || !trimmed}
+            onClick={() => submit("upheld")}
+          >
             {busy && pending === "upheld" ? <Spinner /> : null}
             Uphold
           </Button>

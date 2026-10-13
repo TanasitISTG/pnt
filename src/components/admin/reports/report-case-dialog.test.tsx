@@ -5,7 +5,11 @@ import { createElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ReportCase } from "@/lib/reports/types";
-import { ReportCaseDialog, type ReportCaseDecisionSubmission } from "./report-case-dialog";
+import {
+  ReportCaseDialog,
+  type ReportCaseDecisionSubmission,
+  type ReportContentRemovalSubmission,
+} from "./report-case-dialog";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => createElement("a", null, children),
@@ -14,6 +18,7 @@ vi.mock("@tanstack/react-router", () => ({
 const REPORT_CASE: ReportCase = {
   caseKey: "novel-1",
   target: {
+    type: "novel",
     novelId: "novel-1",
     title: "The Hidden Map",
     publishedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -22,6 +27,16 @@ const REPORT_CASE: ReportCase = {
     ownerId: "user-2",
     ownerName: "Author",
     ownerEmail: "author@example.test",
+    excerpt: null,
+    authorId: null,
+    authorName: null,
+    authorEmail: null,
+    rating: null,
+    chapterId: null,
+    chapterNumber: null,
+    chapterTitle: null,
+    removedAt: null,
+    deleted: false,
   },
   openCount: 2,
   reasons: ["copyright", "spam_or_scam"],
@@ -40,18 +55,43 @@ const REPORT_CASE: ReportCase = {
   truncated: false,
 };
 
+const COMMENT_CASE: ReportCase = {
+  ...REPORT_CASE,
+  caseKey: "comment-1",
+  target: {
+    ...REPORT_CASE.target,
+    type: "comment",
+    excerpt: "Read chapter 12 before you believe any of this.",
+    authorId: "user-9",
+    authorEmail: "commenter@example.test",
+    ownerEmail: null,
+    ownerId: null,
+    chapterId: "chapter-1",
+    chapterNumber: 12,
+    chapterTitle: "The Map",
+  },
+};
+
 async function renderDialog({
   busy = false,
+  removing = false,
   reportCase = REPORT_CASE,
-}: { busy?: boolean; reportCase?: ReportCase | null } = {}) {
+}: {
+  busy?: boolean;
+  removing?: boolean;
+  reportCase?: ReportCase | null;
+} = {}) {
   const onResolve = vi.fn<(submission: ReportCaseDecisionSubmission) => void>();
+  const onRemove = vi.fn<(submission: ReportContentRemovalSubmission) => void>();
   render(
     <ReportCaseDialog
       open
       reportCase={reportCase}
       busy={busy}
+      removing={removing}
       onOpenChange={() => undefined}
       onResolve={onResolve}
+      onRemove={onRemove}
     />,
   );
 
@@ -60,7 +100,7 @@ async function renderDialog({
   const dismiss = dialog.getByRole("button", { name: "Dismiss" }) as HTMLButtonElement;
   const uphold = dialog.getByRole("button", { name: "Uphold" }) as HTMLButtonElement;
 
-  return { dialog, note, dismiss, uphold, onResolve };
+  return { dialog, note, dismiss, uphold, onResolve, onRemove };
 }
 
 afterEach(cleanup);
@@ -122,5 +162,43 @@ describe("ReportCaseDialog", () => {
 
     expect(dialog.getByText("A deleted novel")).toBeTruthy();
     expect(dialog.queryByText("Open the novel")).toBeNull();
+  });
+
+  it("has no removal action for a novel", async () => {
+    const { dialog } = await renderDialog();
+
+    expect(dialog.queryByRole("button", { name: /Remove content/ })).toBeNull();
+  });
+
+  it("removes reported content only after a reason is written", async () => {
+    const { dialog, onRemove } = await renderDialog({ reportCase: COMMENT_CASE });
+
+    expect(dialog.getByText("Read chapter 12 before you believe any of this.")).toBeTruthy();
+
+    fireEvent.click(dialog.getByRole("button", { name: "Remove content…" }));
+
+    const confirm = dialog.getByRole("button", { name: /Remove content/ }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+
+    fireEvent.change(dialog.getByLabelText("Reason for removal"), {
+      target: { value: "  Spoilers outside the spoiler window.  " },
+    });
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+
+    expect(onRemove).toHaveBeenCalledWith({ reason: "Spoilers outside the spoiler window." });
+  });
+
+  it("says when the reported content is already removed", async () => {
+    const { dialog } = await renderDialog({
+      reportCase: {
+        ...COMMENT_CASE,
+        target: { ...COMMENT_CASE.target, removedAt: new Date("2026-01-04T00:00:00.000Z") },
+      },
+    });
+
+    expect(dialog.getByText("Removed")).toBeTruthy();
+    expect(dialog.getByText(/already been removed/)).toBeTruthy();
+    expect(dialog.queryByRole("button", { name: /Remove content/ })).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -35,9 +36,14 @@ const REASON_ITEMS: Record<string, string> = Object.fromEntries(
 
 const DETAILS_ERROR_ID = "report-details-error";
 
-export interface ReportNovelDialogProps {
+export interface ReportTargetDialogProps {
   open: boolean;
-  novelTitle: string;
+  /** The dialog heading, e.g. "Report this comment?". */
+  title: string;
+  /** What an operator does with the report, written for this target. */
+  description: ReactNode;
+  /** The reported words, quoted above the form; omitted when it is a novel. */
+  preview?: string | null;
   busy?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (submission: ReportSubmission) => void;
@@ -47,17 +53,21 @@ export interface ReportNovelDialogProps {
  * Collects what a report needs and a bare button cannot express: which rule was broken,
  * and what an operator should look at.
  *
- * The form lives here while the request lives in the button that opens it, so a report
- * that fails to send leaves the dialog open with the answers still in it instead of
- * discarding them behind an error toast.
+ * One dialog serves every target - a novel, a comment, a review - because the vocabulary
+ * and the questions are the same; only the heading, the explanation, and the quoted words
+ * differ, and the caller supplies those. The form lives here while the request lives in
+ * the component that opens it, so a report that fails to send leaves the dialog open with
+ * the answers still in it instead of discarding them behind an error toast.
  */
-export function ReportNovelDialog({
+export function ReportTargetDialog({
   open,
-  novelTitle,
+  title,
+  description,
+  preview,
   busy = false,
   onOpenChange,
   onConfirm,
-}: ReportNovelDialogProps) {
+}: ReportTargetDialogProps) {
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
 
@@ -71,13 +81,15 @@ export function ReportNovelDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Report this novel?</DialogTitle>
-          <DialogDescription>
-            An operator reviews every report about “{novelTitle}”. The report records which account
-            filed it, the author is not shown who reported it, and nothing about the novel changes
-            until an operator decides.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+
+        {preview ? (
+          <blockquote className="rounded-lg border border-border bg-muted/40 p-3 text-sm whitespace-pre-wrap break-words text-muted-foreground">
+            {preview.length > 500 ? `${preview.slice(0, 497)}...` : preview}
+          </blockquote>
+        ) : null}
 
         <Field>
           <FieldLabel htmlFor="report-reason">Reason</FieldLabel>

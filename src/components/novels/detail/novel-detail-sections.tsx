@@ -6,6 +6,8 @@ import { NovelDetailChapterPanel } from "@/components/novels/detail/novel-detail
 import type { NovelDetailChapterPanelDetail } from "@/components/novels/detail/novel-detail-chapter-panel";
 import type { ChapterTableProps } from "@/components/chapters/table/chapter-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NovelReviewsSection } from "@/components/reviews/novel-reviews-section";
+import { publishState } from "@/lib/content/publish/publish";
 import { TranslationQualityPanel } from "@/components/translation/evaluation/translation-quality-panel";
 import type { EvalReviewSearch } from "@/lib/translation/evaluation/eval.schemas";
 import type {
@@ -32,6 +34,8 @@ export interface NovelDetailSectionsProps {
   novelId: string;
   isAdmin: boolean;
   canReport: boolean;
+  /** Any session at all; reviews are readable by guests and writable by accounts. */
+  signedIn: boolean;
   section: DetailSection;
   addVisited: boolean;
   reviewSearch: NovelDetailSearch;
@@ -46,6 +50,7 @@ export function NovelDetailSections({
   novelId,
   isAdmin,
   canReport,
+  signedIn,
   section,
   addVisited,
   reviewSearch,
@@ -134,6 +139,15 @@ export function NovelDetailSections({
       ) : (
         panel
       )}
+
+      {/* Reviews sit below the chapters for every viewer: the chapter list is what a
+          reader came for, and the score is what they check before starting. */}
+      <NovelReviewsSection
+        novelId={novelId}
+        signedIn={signedIn}
+        canManage={isAdmin}
+        isLive={publishState(novel.publishedAt) === "live"}
+      />
     </>
   );
 }

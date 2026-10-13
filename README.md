@@ -24,7 +24,9 @@ A novel translation app (EN→TH default, ZH→EN, ZH→TH) with public accounts
 - **Accounts** — public sign-up with optional OAuth (Google/Discord), email verification and password reset through Resend, optional Cloudflare Turnstile, profile photo/name, linked sign-in methods, active-session management, and self-service account deletion
 - **Shared catalog** — `/browse` lists every published novel from every account; a signed-in reader gets per-account bookmarks, progress, and read marks on novels they do not own
 - **Operator screen** — `/admin` (admin role only) lists accounts with search and paging, and can grant or revoke operator access, suspend or restore an account, and delete one. The seeded account from `bun run seed:user` is the only source of the admin role
-- **Member reporting** — a signed-in reader can report a published novel they don't own (copyright, sexual content, sexual cover, hate or harassment, spam, or something else) with an optional explanation. Operators work the reports as one case per novel on `/admin/reports`, decide each case with a note, and see every decision in the activity trail. A decision records; it does not suspend an account or unpublish a novel on its own
+- **Chapter discussion** — every published chapter carries a discussion: readers comment and reply one level deep, edit or delete their own words, and report anything that breaks the rules. Guests read it; writing needs an account, a published chapter, and a per-account rate limit. An author's deletion leaves a tombstone while replies exist, and an operator's removal leaves the author a reason
+- **Ratings & reviews** — signed-in readers give a novel 1–5 stars with an optional written review, one per account per novel, editable and removable. The novel page shows the average, the count, and the 5-to-1 distribution; the header shows the score beside the title. Authors rate other people's novels, never their own
+- **Member reporting** — a signed-in reader can report a published novel they don't own, a chapter comment, or a review (copyright, sexual content, sexual cover, hate or harassment, spam, or something else) with an optional explanation. Operators work the reports as one case per target on `/admin/reports`, decide each case with a note, and see every decision in the activity trail. A decision records; it does not suspend an account or take content down on its own. For a comment or review the case also offers a separate **Remove content** action — deleted for everyone but its author — recorded as its own audited action
 - **Dark mode** — app-wide via `next-themes`, warm charcoal surfaces
 - **Export** — chapter/novel to `.txt` or `.epub`
 - **Batch translate** — multi-select chapters, queued sequentially
@@ -207,13 +209,16 @@ toward taking over the deployment. **Reports** is the member-report queue, and
 **Activity** is the durable record of those actions, read from `admin_audit_log` rather
 than a process log that rotates away.
 
-A report is a member's claim about a published novel: one of a fixed set of reasons with an
-optional explanation. The queue groups every open report on the same novel into one
-**case**, so an operator decides once and the whole pile moves with that decision — a
-status of upheld or dismissed plus a note. Deciding never suspends an account, unpublishes
-a novel, or deletes anything; enforcement stays a separate, deliberate account action, and
-the copy on the screen says so. Each decision appends to the activity trail, recording the
-account the case was about and the novel it named.
+A report is a member's claim about a published novel, a chapter comment, or a novel
+review: one of a fixed set of reasons with an optional explanation. The queue groups every
+open report on the same target into one **case**, so an operator decides once and the
+whole pile moves with that decision — a status of upheld or dismissed plus a note. Deciding
+never suspends an account, unpublishes a novel, or deletes anything. For a comment or
+review the case also offers a separate **Remove content** action, which needs a reason of
+its own, takes the words down for everyone but their author, and is recorded as its own
+audited action; the case stays open, because removing content and deciding the report are
+two different things. Each decision appends to the activity trail, recording the account
+the case was about and the target it named.
 
 A case outlives the novel it is about. The reported title and its owner are snapshotted
 onto each report, and `reports.novel_id` is cleared rather than cascaded when a novel is
@@ -344,11 +349,13 @@ serializes those requests client-side: Postgres then never sees the lock waiter 
   a bucket. The `R2_*` variables are all-or-nothing, and Vercel requires all six.
 - `src/lib/scrape/index.ts` is a client-safe facade over pure parsers. DNS resolution and private-IP
   rejection live in the server-only `src/lib/scrape/network-policy.server.ts` boundary.
-- `reports` holds member claims, not verdicts: the open queue is grouped by novel in SQL and the
-  decision is written across every open report of a case in one statement, so a retry cannot
-  half-close a case and a second operator acting on the same case races to zero rows and is told
-  it was already decided. `src/lib/reports/reasons.ts` is the one vocabulary the reporter's dialog
-  and the operator queue both read.
+- `reports` holds member claims, not verdicts: the open queue is grouped per target - a novel,
+  a comment, or a review - in SQL and the decision is written across every open report of a case
+  in one statement, so a retry cannot half-close a case and a second operator acting on the same
+  case races to zero rows and is told it was already decided. `src/lib/reports/reasons.ts` is the
+  one vocabulary the reporter's dialog and the operator queue both read. Operator removal of a
+  comment or review is its own audited action in `src/lib/comments/` and `src/lib/reviews/`,
+  never a side effect of a decision.
 
 ## Local verification
 

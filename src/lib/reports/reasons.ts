@@ -27,11 +27,12 @@ export const REPORT_DECISIONS = ["upheld", "dismissed"] as const;
 export type ReportDecision = (typeof REPORT_DECISIONS)[number];
 
 /**
- * What a report points at. Only novels exist today; comments would be added here and
- * as a nullable column beside `novel_id`, which is why every read of a report goes
- * through the target helpers rather than assuming a novel.
+ * What a report points at: a novel, a chapter comment, or a novel review. Each type owns
+ * one nullable column on the report (`novel_id`, `comment_id`, `review_id`), which is what
+ * keeps the case key and the one-open-report indexes unambiguous, and every read of a
+ * report goes through the target helpers rather than assuming a novel.
  */
-export const REPORT_TARGET_TYPES = ["novel"] as const;
+export const REPORT_TARGET_TYPES = ["novel", "comment", "review"] as const;
 
 export type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
 
@@ -52,6 +53,8 @@ const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
 
 const REPORT_TARGET_LABELS: Record<ReportTargetType, string> = {
   novel: "Novel",
+  comment: "Comment",
+  review: "Review",
 };
 
 /** Falls back to the raw value so a reason added later still renders something. */

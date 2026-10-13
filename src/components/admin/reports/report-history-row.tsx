@@ -2,7 +2,11 @@ import { Link } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { describeReportReason, describeReportStatus } from "@/lib/reports/reasons";
+import {
+  describeReportReason,
+  describeReportStatus,
+  describeReportTarget,
+} from "@/lib/reports/reasons";
 import type { ReportHistoryRow } from "@/lib/reports/types";
 
 /**
@@ -19,22 +23,30 @@ export function ReportHistoryTableRow({ row }: { row: ReportHistoryRow }) {
     <TableRow>
       <TableCell>
         <div className="flex min-w-0 flex-col gap-0.5">
-          {row.novelId ? (
-            <Link
-              to="/novels/$novelId"
-              params={{ novelId: row.novelId }}
-              className="truncate font-medium text-foreground underline-offset-3 hover:underline"
-            >
-              {row.novelTitle ?? "Untitled novel"}
-            </Link>
-          ) : (
-            <span className="truncate font-medium text-foreground">
-              {row.novelTitle ?? "Deleted novel"}
-            </span>
-          )}
+          <div className="flex min-w-0 items-center gap-2">
+            <Badge variant="outline">{describeReportTarget(row.targetType)}</Badge>
+            {row.novelId ? (
+              <Link
+                to="/novels/$novelId"
+                params={{ novelId: row.novelId }}
+                className="truncate font-medium text-foreground underline-offset-3 hover:underline"
+              >
+                {row.novelTitle ?? "Untitled novel"}
+              </Link>
+            ) : (
+              <span className="truncate font-medium text-foreground">
+                {row.novelTitle ?? "Deleted novel"}
+              </span>
+            )}
+          </div>
           <span className="text-caption text-muted-foreground">
             {describeReportReason(row.reason)}
           </span>
+          {row.excerpt ? (
+            <span className="line-clamp-1 max-w-72 text-caption text-muted-foreground">
+              {row.excerpt}
+            </span>
+          ) : null}
         </div>
       </TableCell>
       <TableCell className="max-w-72 text-muted-foreground">

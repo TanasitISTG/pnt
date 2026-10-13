@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Flag } from "lucide-react";
 import { toast } from "sonner";
 
-import { ReportNovelDialog } from "@/components/reports/report-novel-dialog";
-import type { ReportSubmission } from "@/components/reports/report-novel-dialog";
+import { ReportTargetDialog } from "@/components/reports/report-target-dialog";
+import type { ReportSubmission } from "@/components/reports/report-target-dialog";
 import { Button } from "@/components/ui/button";
 import { createNovelReport } from "@/lib/reports/functions";
 import { myNovelReportQueryOptions } from "@/lib/reports/query";
@@ -74,9 +74,16 @@ export function ReportNovelButton({ novelId, novelTitle, className }: ReportNove
       {/* Mounted only while open: a second report starts from empty fields without an
           effect having to reset them. */}
       {open ? (
-        <ReportNovelDialog
+        <ReportTargetDialog
           open={open}
-          novelTitle={novelTitle}
+          title="Report this novel?"
+          description={
+            <>
+              An operator reviews every report about “{novelTitle}”. The report records which
+              account filed it, the author is not shown who reported it, and nothing about the novel
+              changes until an operator decides.
+            </>
+          }
           busy={busy}
           onOpenChange={setOpen}
           onConfirm={(submission) => void submit(submission)}

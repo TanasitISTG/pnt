@@ -10,3 +10,5 @@ export * from "./rate-limits";
 export * from "./eval-reports";
 export * from "./reader-state";
 export * from "./reports";
+export * from "./comments";
+export * from "./reviews";

@@ -38,7 +38,7 @@ export function ReportCaseTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Novel</TableHead>
+            <TableHead>Target</TableHead>
             <TableHead>Reports</TableHead>
             <TableHead className="hidden sm:table-cell">State</TableHead>
             <TableHead className="hidden md:table-cell">Waiting since</TableHead>
