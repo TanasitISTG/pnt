@@ -12,9 +12,7 @@ export interface TitlePromptOptions {
   customPrompt?: string | null;
 }
 
-// ---------------------------------------------------------------------------
 // Public builders
-// ---------------------------------------------------------------------------
 
 export function buildSystemPrompt(
   pair: string,
@@ -180,9 +178,7 @@ function formatCustomInstructions(customPrompt: string): string {
   return `## Custom Instructions\n${customPrompt.trim()}`;
 }
 
-// ---------------------------------------------------------------------------
 // Internals
-// ---------------------------------------------------------------------------
 
 function getRoleLine(pair: LanguagePair): string {
   const { source, target } = LANG_LABELS[pair];

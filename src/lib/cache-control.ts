@@ -1,9 +1,8 @@
 // Shared Cache-Control builders for public route responses.
 //
-// Vercel's CDN only caches a Function response when the header carries
-// `s-maxage` (or a CDN-Cache-Control variant); `max-age` alone only controls the
-// browser. Vercel consumes and strips `s-maxage` before the response reaches the
-// client, so browsers keep their own `max-age` window while the edge caches.
+// Vercel's CDN caches a Function response only when the header carries `s-maxage`
+// (or a CDN-Cache-Control variant) and strips it before the client sees it, so
+// browsers keep their own `max-age` window while the edge caches.
 
 export const ONE_YEAR_SECONDS = 31_536_000;
 

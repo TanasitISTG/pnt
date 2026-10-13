@@ -1,10 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-// inngest/next is the only fetch-style serve handler with streaming support in
-// SDK 4.13.0 (inngest/edge lacks it by design; upstream main keeps the split).
-// It's framework-agnostic (no next/server imports) — plain (Request) => Response.
-// NOTE: TanStack Start is off Inngest's officially supported streaming matrix
-// (Cloudflare/Express/Next-on-Vercel/Remix). Verified working on Vercel Fluid;
-// revert path if a deploy regresses: inngest/edge without the streaming flag.
+// inngest/next is the only fetch-style serve handler with streaming in SDK 4.13.0
+// (inngest/edge lacks it by design) and is framework-agnostic. TanStack Start is
+// off Inngest's supported streaming matrix; verified on Vercel Fluid, so revert to
+// inngest/edge without the streaming flag if a deploy regresses.
 import { serve } from "inngest/next";
 
 import { inngest } from "@/lib/inngest/client";

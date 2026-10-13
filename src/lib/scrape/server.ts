@@ -99,9 +99,7 @@ export async function directFetch(url: string): Promise<string> {
   return readResponseText(res);
 }
 
-// ---------------------------------------------------------------------------
 // Proxy providers (ZenRows / ScrapingBee / Firecrawl)
-// ---------------------------------------------------------------------------
 
 interface RenderOpts {
   jsRender: string;

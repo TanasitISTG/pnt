@@ -43,9 +43,9 @@ import {
 import { generateSummaryArtifacts } from "./finalize-summary";
 import { suggestAndReviewTerms } from "./finalize-glossary";
 import { retryOperation } from "@/lib/retry";
-// per job, each chunk a single memoized step (analysis + translation) with its
-// own invocation + retries — so no lease, no cron pinger. DB status rows stay
-// the UI's source of truth.
+// Job execution: one run per job, each chunk a memoized step (analysis +
+// translation) with its own invocation and retries, so no DB lease or cron
+// pinger is needed. DB status rows stay the UI's source of truth.
 
 export async function initJob(jobId: string, generation: number) {
   log("info", "step transition", { jobId, step: "init" });
@@ -182,14 +182,9 @@ async function translatePiece(
   return { translation, promptTokens, completionTokens };
 }
 
-// ---------------------------------------------------------------------------
 // Residual-script repair
-// ---------------------------------------------------------------------------
-// Surgical splice first (cheap, precise — the common case is short spans like
-// bracketed system lines and names). Whole-chunk retry only when a long span
-// signals a passage-level failure: spliced prose would have incoherent seams.
-// Both repair strategies have bounded auxiliary retries; whatever survives is
-// kept and surfaced via the admin badge.
+// Repair: splice short spans surgically; retry the whole chunk for a long span;
+// whatever survives bounded retries is kept and flagged in the admin badge.
 const LONG_SPAN_LIMIT = 200;
 
 function countExactOccurrences(text: string, needle: string): number {

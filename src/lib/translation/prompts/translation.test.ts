@@ -70,7 +70,7 @@ const relationshipContext = buildRelationshipPromptContextForText(
   "第一章 许野与林月",
 );
 describe("prompts module", () => {
-  // -- System prompt structure -----------------------------------------------
+  // System prompt structure
 
   it("builds correct system prompt for en->th pair", () => {
     const prompt = buildSystemPrompt("en->th");
@@ -99,7 +99,7 @@ describe("prompts module", () => {
     expect(prompt).toContain("## Thai Target Rules");
   });
 
-  // -- Priority ordering -----------------------------------------------------
+  // Priority ordering
 
   it("includes directed relationship precedence", () => {
     const prompt = buildSystemPrompt("zh->th");
@@ -110,7 +110,7 @@ describe("prompts module", () => {
     expect(prompt).toContain("5. Custom instructions and global style defaults");
   });
 
-  // -- Hard rules ------------------------------------------------------------
+  // Hard rules
 
   it("includes anti-hallucination rule", () => {
     const prompt = buildSystemPrompt("en->th");
@@ -134,7 +134,7 @@ describe("prompts module", () => {
     expect(prompt).toContain("HTML/XML-like tags");
   });
 
-  // -- Style guidelines ------------------------------------------------------
+  // Style guidelines
 
   it("includes meaning-over-wording rule", () => {
     const prompt = buildSystemPrompt("en->th");
@@ -181,7 +181,7 @@ describe("prompts module", () => {
     expect(prompt).not.toContain("Do not make different characters sound alike");
   });
 
-  // -- Few-shot example ------------------------------------------------------
+  // Few-shot example
 
   it("includes few-shot example for each pair", () => {
     for (const pair of ["en->th", "zh->en", "zh->th"]) {
@@ -224,7 +224,7 @@ describe("prompts module", () => {
     expect(examples.match(/[\p{L}\p{M}]+/gu) ?? []).not.toContain("แก");
   });
 
-  // -- Glossary --------------------------------------------------------------
+  // Glossary
 
   it("includes glossary block with authoritative wording", () => {
     const glossary = "- Lin Fan -> หลินฟาน (character)\n- Sun Peak -> ยอดเขาอาทิตย์ (place)";
@@ -250,7 +250,7 @@ describe("prompts module", () => {
     expect(repairPrompt).not.toContain("uppercase Latin rank labels");
   });
 
-  // -- Context ---------------------------------------------------------------
+  // Context
 
   it("includes context block when summary provided", () => {
     const prompt = buildSystemPrompt("en->th", null, {
@@ -265,7 +265,7 @@ describe("prompts module", () => {
     expect(prompt).not.toContain("## Story Context");
   });
 
-  // -- Custom instructions ---------------------------------------------------
+  // Custom instructions
 
   it("includes custom instructions before Output Requirements", () => {
     const prompt = buildSystemPrompt("en->th", null, null, "Use informal pronouns for Lin Fan.");
@@ -276,7 +276,7 @@ describe("prompts module", () => {
     );
   });
 
-  // -- Output contract -------------------------------------------------------
+  // Output contract
 
   it("output contract is the last section", () => {
     const prompt = buildSystemPrompt(
@@ -304,7 +304,7 @@ describe("prompts module", () => {
     expect(prompt).toContain("segment of a longer chapter");
   });
 
-  // -- buildUserMessage ------------------------------------------------------
+  // buildUserMessage
 
   it("buildUserMessage wraps text in delimiters", () => {
     const msg = buildUserMessage("Hello world");
@@ -328,7 +328,7 @@ describe("prompts module", () => {
     expect(buildUserMessage("text", "   ")).not.toContain("Preceding");
   });
 
-  // -- buildSummaryPrompt ----------------------------------------------------
+  // buildSummaryPrompt
 
   it("buildSummaryPrompt returns structured format with English requirement", () => {
     const summaryPrompt = buildSummaryPrompt("zh->th");
@@ -339,7 +339,7 @@ describe("prompts module", () => {
     expect(summaryPrompt).toContain("CONTEXT:");
   });
 
-  // -- buildTitlePrompt ------------------------------------------------------
+  // buildTitlePrompt
 
   it("buildTitlePrompt names the language pair and demands title-only output", () => {
     const prompt = buildTitlePrompt("zh->th");
