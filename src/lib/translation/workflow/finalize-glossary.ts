@@ -134,7 +134,7 @@ export async function suggestAndReviewTerms({
         logs.push(
           createLog(
             "warn",
-            `AI review failed (${reviewErr instanceof Error ? reviewErr.message : "error"}) — no suggestions saved.`,
+            `AI review failed (${reviewErr instanceof Error ? reviewErr.message : "error"}): no suggestions saved.`,
           ),
         );
       }

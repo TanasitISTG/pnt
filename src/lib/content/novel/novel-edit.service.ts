@@ -58,7 +58,7 @@ export async function updateNovelForUser(
         nextSourceLang !== existing.sourceLang || nextTargetLang !== existing.targetLang;
 
       if (!isSupportedLanguagePair(nextSourceLang, nextTargetLang)) {
-        throw new SafeServerError("Unsupported language pair — use EN→TH, ZH→EN, or ZH→TH");
+        throw new SafeServerError("Unsupported language pair. Use EN→TH, ZH→EN, or ZH→TH");
       }
 
       if (languagePairChanged) {

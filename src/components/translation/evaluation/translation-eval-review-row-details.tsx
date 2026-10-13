@@ -99,7 +99,7 @@ function ReviewFindingStatus({
     return (
       <p className="mt-3 flex items-start gap-2 text-sm text-muted-foreground">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <span>Not translated — no quality checks performed</span>
+        <span>Not translated: no quality checks performed</span>
       </p>
     );
   }

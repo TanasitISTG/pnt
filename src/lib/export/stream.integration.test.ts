@@ -77,7 +77,7 @@ integrationDescribe("streaming novel exports", () => {
       const body = await response.text();
       expect(body).toContain("A/B: Novel\nby Test Author");
       expect(
-        [...body.matchAll(/Chapter (\d+) — Title (\d+)/g)].map((match) => [
+        [...body.matchAll(/Chapter (\d+): Title (\d+)/g)].map((match) => [
           Number(match[1]),
           Number(match[2]),
         ]),
@@ -133,9 +133,9 @@ integrationDescribe("streaming novel exports", () => {
       );
       expect([...opf.matchAll(/idref="ch(\d+)"/g)].map((m) => Number(m[1]))).toEqual(numbers);
       for (const number of numbers) {
-        expect(nav).toContain(`Chapter ${number} — Title ${number}</a>`);
+        expect(nav).toContain(`Chapter ${number}: Title ${number}</a>`);
         const chapter = strFromU8(entries[`OEBPS/chapter-${number}.xhtml`]);
-        expect(chapter).toContain(`Chapter ${number} — Title ${number}`);
+        expect(chapter).toContain(`Chapter ${number}: Title ${number}`);
         expect(chapter).toContain(`Unique body ${number}.`);
       }
       expect(Object.keys(entries).filter((name) => /chapter-\d+\.xhtml$/.test(name))).toHaveLength(

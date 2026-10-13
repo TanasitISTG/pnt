@@ -36,7 +36,7 @@ export const createNovelSchema = z
     path: ["coverMime"],
   })
   .refine((data) => isSupportedLanguagePair(data.sourceLang, data.targetLang), {
-    message: "Unsupported language pair — use EN→TH, ZH→EN, or ZH→TH",
+    message: "Unsupported language pair. Use EN→TH, ZH→EN, or ZH→TH",
     path: ["targetLang"],
   });
 

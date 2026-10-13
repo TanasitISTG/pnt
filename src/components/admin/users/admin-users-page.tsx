@@ -306,7 +306,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
         title="Delete this account?"
         description={
           pendingDelete
-            ? `${pendingDelete.email} and everything it owns — novels, chapters, glossary, and reader state — are removed. This cannot be undone.`
+            ? `${pendingDelete.email} and everything it owns (novels, chapters, glossary, and reader state) are removed. This cannot be undone.`
             : ""
         }
         confirmLabel="Delete account"

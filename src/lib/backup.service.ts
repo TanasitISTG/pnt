@@ -242,7 +242,7 @@ export async function* streamBackupForUser(
         backupChapterSchema.parse(mapped);
         const numeric = Number(mapped.number);
         if (seenNumbers.has(numeric)) {
-          throw new SafeServerError("Backup export failed validation — duplicate chapter numbers");
+          throw new SafeServerError("Backup export failed validation: duplicate chapter numbers");
         }
         seenNumbers.add(numeric);
         yield `${firstChapter ? "" : ","}${JSON.stringify(mapped)}`;
@@ -272,7 +272,7 @@ export async function* streamBackupForUser(
         const mapped = termToBackup(term);
         backupTermSchema.parse(mapped);
         if (seenSources.has(mapped.source)) {
-          throw new SafeServerError("Backup export failed validation — duplicate glossary sources");
+          throw new SafeServerError("Backup export failed validation: duplicate glossary sources");
         }
         seenSources.add(mapped.source);
         yield `${firstTerm ? "" : ","}${JSON.stringify(mapped)}`;

@@ -43,7 +43,7 @@ afterEach(cleanup);
 describe("ImpersonationBanner", () => {
   it("names the account being viewed and that it is read-only", () => {
     renderBanner();
-    expect(screen.getByText(/Viewing as E2E Member — read-only/)).toBeTruthy();
+    expect(screen.getByText(/Viewing as E2E Member, read-only/)).toBeTruthy();
     expect(screen.getByText(/Signed in as E2E Admin/)).toBeTruthy();
   });
 

@@ -41,7 +41,7 @@ describe("ReaderChapterDialog", () => {
     render(<ReaderChapterDialogHarness />);
 
     const trigger = screen.getByRole("button", {
-      name: `Choose chapter: Ch. ${CURRENT_CHAPTER.number} — ${LONG_CURRENT_TITLE}`,
+      name: `Choose chapter: Ch. ${CURRENT_CHAPTER.number}: ${LONG_CURRENT_TITLE}`,
     });
     expect(trigger.textContent).not.toContain(LONG_CURRENT_TITLE);
     expect(trigger.textContent).not.toContain(`Ch. ${CURRENT_CHAPTER.number}`);

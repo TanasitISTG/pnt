@@ -317,7 +317,7 @@ export function AppShell({
       </main>
       <footer className="mt-12 border-t border-border bg-background py-6">
         <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-4 px-6 sm:flex-row text-caption text-muted-foreground">
-          <p>© {year} Pnt — Personal Novel Translator</p>
+          <p>© {year} Pnt · Personal Novel Translator</p>
           <div className="flex items-center gap-6">
             <Link to="/privacy" className="hover:text-foreground no-underline">
               Privacy Policy

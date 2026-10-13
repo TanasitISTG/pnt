@@ -642,7 +642,7 @@ function useDirectedRelationshipColumns(
             cell: ({ row }) => (
               <StateBadge
                 active={isActive(row.original)}
-                inactiveLabel={row.original.enabled ? "Inactive — character disabled" : "Disabled"}
+                inactiveLabel={row.original.enabled ? "Inactive: character disabled" : "Disabled"}
               />
             ),
           },
@@ -720,7 +720,7 @@ function RelationshipMobileRows({
             <div className="flex flex-wrap items-center gap-2">
               <StateBadge
                 active={isActive(relationship)}
-                inactiveLabel={relationship.enabled ? "Inactive — character disabled" : "Disabled"}
+                inactiveLabel={relationship.enabled ? "Inactive: character disabled" : "Disabled"}
               />
               <ManagementBadge locked={relationship.locked} />
               <span className="text-caption text-muted-foreground">

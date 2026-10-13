@@ -32,7 +32,7 @@ export function TranslationEvalReviewRow({
         <div className="min-w-0">
           <div className="flex flex-wrap items-start gap-2">
             <h3 className="min-w-0 break-words text-body-lg font-semibold text-foreground">
-              Ch. {Number(row.chapterNumber)} — {row.chapterTitle}
+              Ch. {Number(row.chapterNumber)}: {row.chapterTitle}
             </h3>
             <Badge variant={snapshotVariant(row.snapshotState)}>
               {snapshotLabel(row.snapshotState)}

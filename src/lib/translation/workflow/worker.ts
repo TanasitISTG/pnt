@@ -146,7 +146,7 @@ async function translatePiece(
         logs.push(
           createLog(
             "warn",
-            `${chunkLabel} marker fix didn't match (${fixedMarkers}/${expectedMarkers}) — keeping original.`,
+            `${chunkLabel} marker fix didn't match (${fixedMarkers}/${expectedMarkers}); keeping original.`,
           ),
         );
       }
@@ -154,7 +154,7 @@ async function translatePiece(
       logs.push(
         createLog(
           "warn",
-          `${chunkLabel} marker fix failed (${markerFixErr instanceof Error ? markerFixErr.message : "error"}) — keeping original.`,
+          `${chunkLabel} marker fix failed (${markerFixErr instanceof Error ? markerFixErr.message : "error"}); keeping original.`,
         ),
       );
     }
@@ -238,7 +238,7 @@ async function repairResidualScripts(
   logs.push(
     createLog(
       "warn",
-      `${chunkLabel} has ${residual.letterCount} foreign-script letters — repairing.`,
+      `${chunkLabel} has ${residual.letterCount} foreign-script letters; repairing.`,
     ),
   );
 
@@ -289,7 +289,7 @@ async function repairResidualScripts(
       logs.push(
         createLog(
           "warn",
-          `${chunkLabel} re-translation failed (${fixErr instanceof Error ? fixErr.message : "error"}) — keeping original.`,
+          `${chunkLabel} re-translation failed (${fixErr instanceof Error ? fixErr.message : "error"}); keeping original.`,
         ),
       );
     }
@@ -358,7 +358,7 @@ async function repairResidualScripts(
       logs.push(
         createLog(
           "warn",
-          `${chunkLabel} span repair failed (${spanErr instanceof Error ? spanErr.message : "error"}) — keeping original.`,
+          `${chunkLabel} span repair failed (${spanErr instanceof Error ? spanErr.message : "error"}); keeping original.`,
         ),
       );
     }
@@ -366,7 +366,7 @@ async function repairResidualScripts(
     logs.push(
       createLog(
         "warn",
-        `${chunkLabel} still has ${residual.letterCount} foreign-script letters after retry — keeping anyway.`,
+        `${chunkLabel} still has ${residual.letterCount} foreign-script letters after retry; keeping anyway.`,
       ),
     );
   }

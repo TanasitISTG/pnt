@@ -511,7 +511,7 @@ export function ProviderSettingsCard({
                     aria-invalid={invalid}
                   />
                   <FieldDescription>
-                    Request timeout (seconds) — raise for slow/free APIs; keep ≤270 on Vercel Hobby
+                    Request timeout (seconds). Raise for slow/free APIs; keep ≤270 on Vercel Hobby
                   </FieldDescription>
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>

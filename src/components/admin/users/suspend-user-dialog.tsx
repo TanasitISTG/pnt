@@ -72,7 +72,7 @@ export function SuspendUserDialog({
           <DialogTitle>Suspend this account?</DialogTitle>
           <DialogDescription>
             {email} can no longer sign in, and every session it holds is ended. Published novels
-            stay public — a suspension targets the account, not the catalog.
+            stay public. A suspension targets the account, not the catalog.
           </DialogDescription>
         </DialogHeader>
 

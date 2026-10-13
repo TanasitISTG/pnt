@@ -38,7 +38,7 @@ export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapter
     const chapter = loaderData?.chapterHead;
     const novel = loaderData?.novelHead;
     const chapterTitle = chapter
-      ? `Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`
+      ? `Ch. ${Number(chapter.number)}: ${chapter.translatedTitle ?? chapter.title}`
       : "Chapter";
     const novelTitle = novel?.title ?? "Novel";
     const pageTitle = `${chapterTitle} | ${novelTitle} | Pnt - Personal Novel Translator`;

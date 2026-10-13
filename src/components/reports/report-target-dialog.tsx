@@ -120,7 +120,7 @@ export function ReportTargetDialog({
             id="report-details"
             value={details}
             maxLength={REPORT_DETAILS_MAX_LENGTH}
-            placeholder="Describe the problem — a chapter number or a source link helps."
+            placeholder="Describe the problem. A chapter number or a source link helps."
             aria-invalid={missingDetails}
             aria-describedby={missingDetails ? DETAILS_ERROR_ID : undefined}
             onChange={(event) => setDetails(event.target.value)}

@@ -136,7 +136,7 @@ export function ScrapeImportSection({
           invalidateChapters();
           toast.success(`Added chapter ${result.number}: ${result.title}`);
         } else {
-          toast.info(`Chapter ${result.number} already exists — skipped`);
+          toast.info(`Chapter ${result.number} already exists, skipped`);
         }
         if (result.nextUrl) form.setFieldValue("sourceUrl", result.nextUrl);
       } catch (error: unknown) {

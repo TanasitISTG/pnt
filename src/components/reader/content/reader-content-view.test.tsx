@@ -27,7 +27,7 @@ describe("ReaderContentView", () => {
         />,
       );
 
-      expect(screen.getByText("Not translated yet — showing raw text.")).toBeTruthy();
+      expect(screen.getByText("Not translated yet. Showing raw text.")).toBeTruthy();
       expect(screen.getByText("Raw chapter text")).toBeTruthy();
       expect(screen.queryByRole("button")).toBeNull();
     },

@@ -150,7 +150,7 @@ function firstIssueMessage(error: z.ZodError): string {
 export function parseBackup(value: unknown): Backup {
   const result = backupSchema.safeParse(value);
   if (result.success) return result.data;
-  throw new SafeServerError(`Invalid backup file — ${firstIssueMessage(result.error)}`);
+  throw new SafeServerError(`Invalid backup file: ${firstIssueMessage(result.error)}`);
 }
 
 /**
@@ -160,5 +160,5 @@ export function parseBackup(value: unknown): Backup {
 export function assertExportableBackup(value: unknown): Backup {
   const result = backupSchema.safeParse(value);
   if (result.success) return result.data;
-  throw new SafeServerError(`Backup export failed validation — ${firstIssueMessage(result.error)}`);
+  throw new SafeServerError(`Backup export failed validation: ${firstIssueMessage(result.error)}`);
 }

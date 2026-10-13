@@ -88,7 +88,7 @@ test("admin reorders and edits every chapter field", async ({ page }) => {
 
   await rows.nth(0).getByRole("link", { name: "Source three", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: /Choose chapter: Ch\. 1 — Source three/ }),
+    page.getByRole("button", { name: /Choose chapter: Ch\. 1: Source three/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Back to chapter list" }).click();
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
@@ -236,7 +236,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
   await page.getByRole("button", { name: "Run check" }).click();
   await expect(page.getByText("Quality check queued", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Quality check" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ch. 1 — Alpha arrives" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Ch. 1: Alpha arrives" })).toBeVisible({
     timeout: 90_000,
   });
   await expect(page.getByText(/Paragraph counts differ/)).toBeVisible();
@@ -247,7 +247,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
   expect(firstReportId).toBeTruthy();
   await page.getByRole("combobox", { name: "Show" }).click();
   await page.getByRole("option", { name: "All selected chapters" }).click();
-  await expect(page.getByText("Not translated — no quality checks performed")).toBeVisible();
+  await expect(page.getByText("Not translated: no quality checks performed")).toBeVisible();
 
   await captureReview(page, 390, 844, ".tura/e2e/quality-review-mobile.png");
   const reviewUrlForThemes = page.url();
@@ -256,7 +256,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
   await page.getByRole("button", { name: "Switch to dark mode" }).click();
   await page.goto(reviewUrlForThemes);
   await expect(page.getByRole("heading", { name: "Quality check" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ch. 1 — Alpha arrives" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Ch. 1: Alpha arrives" })).toBeVisible({
     timeout: 90_000,
   });
   await captureReview(page, 1280, 900, ".tura/e2e/quality-review-desktop-dark.png");
@@ -266,7 +266,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
   await page.getByRole("button", { name: "Switch to light mode" }).click();
   await page.goto(reviewUrlForThemes);
   await expect(page.getByRole("heading", { name: "Quality check" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ch. 1 — Alpha arrives" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Ch. 1: Alpha arrives" })).toBeVisible({
     timeout: 90_000,
   });
   await page.getByRole("link", { name: "Open chapter" }).first().click();
@@ -287,11 +287,11 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
     .not.toBe(firstReportId);
   await page.getByRole("combobox", { name: "Show" }).click();
   await page.getByRole("option", { name: "All selected chapters" }).click();
-  await expect(page.getByRole("heading", { name: "Ch. 1 — Alpha arrives" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Ch. 1: Alpha arrives" })).toBeVisible({
     timeout: 90_000,
   });
   await expect(page.getByText("No heuristic issues found in this check")).toBeVisible();
-  await expect(page.getByText("Not translated — no quality checks performed")).toBeVisible();
+  await expect(page.getByText("Not translated: no quality checks performed")).toBeVisible();
   await captureReview(page, 1280, 900, ".tura/e2e/quality-review-corrected.png");
   const correctedReviewUrl = page.url();
   await page.reload();

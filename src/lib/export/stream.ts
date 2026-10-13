@@ -18,7 +18,7 @@ interface ExportChapterRow {
 }
 
 function chapterTitle(chapter: Pick<ExportChapterRow, "number" | "title" | "translatedTitle">) {
-  return `Chapter ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`;
+  return `Chapter ${Number(chapter.number)}: ${chapter.translatedTitle ?? chapter.title}`;
 }
 
 // Export eligibility requires a nonblank body. Unlike guest list queries, this path

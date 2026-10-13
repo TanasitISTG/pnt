@@ -201,7 +201,7 @@ function LoginPage() {
                   Google or Discord has no password to enter here. */}
               {credentialsRejected && (methods.google || methods.discord) && (
                 <p className="text-caption text-muted-foreground">
-                  Signed up with Google or Discord? Use that button below — or reset your password
+                  Signed up with Google or Discord? Use that button below, or reset your password
                   to set one.
                 </p>
               )}

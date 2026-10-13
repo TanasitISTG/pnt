@@ -80,5 +80,5 @@ export function ReaderFooterNav({
 }
 
 function chapterLabel(chapter: ReaderChapterSummary): string {
-  return `Ch. ${Number(chapter.number)} — ${chapter.translatedTitle ?? chapter.title}`;
+  return `Ch. ${Number(chapter.number)}: ${chapter.translatedTitle ?? chapter.title}`;
 }

@@ -575,7 +575,7 @@ function createScrapeHandlers(
         if (r.created) {
           toast.success(`Added chapter ${r.number}: ${r.title}`);
         } else {
-          toast.info(`Chapter ${r.number} already exists — skipped`);
+          toast.info(`Chapter ${r.number} already exists, skipped`);
         }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Import failed");

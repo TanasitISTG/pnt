@@ -57,7 +57,7 @@ export async function generateSummaryArtifacts({
     translatedTitle = titleRes.translated;
     logs.push(createLog("success", `Title translated: "${titleRes.translated}"`));
   } else {
-    logs.push(createLog("warn", "Title translation skipped — keeping raw title."));
+    logs.push(createLog("warn", "Title translation skipped; keeping raw title."));
   }
 
   // Generate chapter summary in English

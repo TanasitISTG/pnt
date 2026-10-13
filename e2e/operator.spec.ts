@@ -71,7 +71,7 @@ test("operator moderates, audits, and views an account read-only", async ({ page
   await openMemberActions(page, "View as this account");
   await page.getByRole("button", { name: "View as this account" }).click();
 
-  await expect(page.getByText(/Viewing as E2E Member — read-only/)).toBeVisible();
+  await expect(page.getByText(/Viewing as E2E Member, read-only/)).toBeVisible();
   await expect(page.getByText(/Signed in as E2E Admin/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
 

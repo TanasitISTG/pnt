@@ -53,7 +53,7 @@ export function TermsNotice({ stale }: TermsNoticeProps) {
           <FileText className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <p className="text-body text-foreground">
             Our terms and privacy policy have changed. Accept the current version (
-            {CURRENT_TERMS_VERSION}) to record it on your account —{" "}
+            {CURRENT_TERMS_VERSION}) to record it on your account:{" "}
             <Link to="/terms" className="underline underline-offset-4 text-foreground">
               read the terms
             </Link>

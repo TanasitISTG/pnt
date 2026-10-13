@@ -110,7 +110,7 @@ export function ReportCaseDialog({
                   ? ` by ${reportCase.target.ownerEmail}`
                   : null}
                 {reportCase.target.type !== "novel" && reportCase.target.authorEmail
-                  ? ` — written by ${reportCase.target.authorEmail}`
+                  ? `, written by ${reportCase.target.authorEmail}`
                   : null}
                 . The decision below is recorded on every one of them; it does not suspend the
                 account or take the content down.

@@ -30,7 +30,7 @@ export function LibraryEmpty({ canManage, signedIn }: LibraryEmptyProps) {
         {canManage
           ? "Create a novel project to start pasting chapters and translating them."
           : signedIn
-            ? "Check back later — published novels from other translators will appear here."
+            ? "Check back later. Published novels from other translators will appear here."
             : "Create a free account to translate your own novels, with a side-by-side reader and glossary."}
       </p>
       {!canManage && !signedIn && (

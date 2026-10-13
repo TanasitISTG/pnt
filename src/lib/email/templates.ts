@@ -83,7 +83,7 @@ function layout({ heading, paragraphs, action, footnote }: LayoutInput): string 
 function textBody(lines: string[], action?: { label: string; url: string }): string {
   const parts = [...lines];
   if (action) parts.push(`${action.label}: ${action.url}`);
-  parts.push("— Pnt, Personal Novel Translator");
+  parts.push("Pnt, Personal Novel Translator");
   return parts.join("\n\n");
 }
 
@@ -118,7 +118,7 @@ export function resetPasswordEmail(input: {
     greeting(input.name),
     "We received a request to reset the password for your Pnt account.",
   ];
-  const footnote = `This link expires in ${input.expiresInMinutes} minutes and can only be used once. If you did not request a reset, no action is needed — your password is unchanged.`;
+  const footnote = `This link expires in ${input.expiresInMinutes} minutes and can only be used once. If you did not request a reset, no action is needed. Your password is unchanged.`;
   return {
     subject: "Reset your password",
     html: layout({
@@ -181,7 +181,7 @@ export function existingUserSignUpEmail(input: { name: string | null; url: strin
     "Someone tried to create a Pnt account with this email address, but one already exists.",
   ];
   const footnote =
-    "If that was you, sign in instead — or reset your password if you no longer remember it. No changes were made to your account.";
+    "If that was you, sign in instead, or reset your password if you no longer remember it. No changes were made to your account.";
   return {
     subject: "You already have a Pnt account",
     html: layout({

@@ -27,7 +27,7 @@ export function ReaderUntranslatedContent({
   return (
     <div className="flex flex-col gap-8">
       <p className="text-caption italic text-muted-foreground">
-        Not translated yet — showing raw text.
+        Not translated yet. Showing raw text.
       </p>
       <ReaderProse
         paragraphs={rawParagraphs}

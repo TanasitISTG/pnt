@@ -55,7 +55,7 @@ export function ImpersonationBanner({ impersonation, viewedName }: Impersonation
           <Eye className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden="true" />
           <div className="space-y-1">
             <p className="text-body font-medium text-foreground">
-              Viewing as {viewedName} — read-only
+              Viewing as {viewedName}, read-only
             </p>
             <p className="text-caption text-muted-foreground">
               Signed in as {impersonation.operatorName ?? "your operator account"}. Reads work;
