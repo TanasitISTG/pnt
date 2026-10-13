@@ -17,7 +17,7 @@ vi.mock("@/lib/relationships/functions", () => ({
   getRelationshipWorkspace: serverFunctions.getRelationshipWorkspace,
 }));
 
-import { Route } from "@/routes/_protected/novels/$novelId/relationships";
+import { Route } from "@/routes/_protected/novels/$novelId/manage.relationships";
 
 const emptyMap = { version: 1 as const, characters: [], relationships: [] };
 

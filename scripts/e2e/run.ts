@@ -57,6 +57,10 @@ const environment = {
   E2E_OPENAI_PORT: "4010",
   LOCAL_PROVIDER_ORIGINS: JSON.stringify([new URL(stubUrl).origin]),
   RATE_LIMIT_TRUSTED_PROXY_HOPS: "1",
+  // The suite signs in from one address a dozen times in about two minutes, which the
+  // shipped ten-per-minute auth limiter would refuse partway through — a spec failing on a
+  // 429 that the product is right to answer. Raised here, never in production.
+  AUTH_RATE_LIMIT_MAX: "100",
   PLAYWRIGHT_CHANNEL: detectBrowserChannel(),
   PORT: "3000",
   NITRO_PORT: "3000",

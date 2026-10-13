@@ -10,7 +10,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { chapterQueryOptions } from "@/lib/content/chapter/chapter.query";
@@ -123,13 +122,6 @@ export function ReaderBookmarksDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger
-        render={<Button variant="ghost" size="icon" className="size-11 shrink-0" />}
-        aria-label="Bookmarks"
-        title="Bookmarks"
-      >
-        <Bookmark className="size-4" aria-hidden="true" />
-      </DialogTrigger>
       <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto overscroll-contain">
         <DialogHeader>
           <DialogTitle>Bookmarks</DialogTitle>

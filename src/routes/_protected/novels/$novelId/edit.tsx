@@ -1,130 +1,15 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
-import { toast } from "sonner";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { updateNovel, setNovelPublished } from "@/lib/content/novel/novel.functions";
-import { novelQueryOptions } from "@/lib/content/novel/novel.query";
-import type { UpdateNovelInput } from "@/lib/content/novel/novel.schemas";
-import { NovelForm } from "@/components/novels/form/novel-form";
-import { PublishMenu } from "@/components/publish-menu";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { emptyRelationshipMap } from "@/lib/relationships/map";
-
+/**
+ * Kept as a redirect: the editing screen is a studio section now, but a bookmark or a
+ * shared link to it should still land on the form rather than a 404.
+ */
 export const Route = createFileRoute("/_protected/novels/$novelId/edit")({
-  loader: ({ params, context }) =>
-    context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
-  component: EditNovelPage,
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/novels/$novelId/manage/settings",
+      params,
+      replace: true,
+    });
+  },
 });
-
-function EditNovelPage() {
-  const { novelId } = Route.useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-
-  const { data: novel } = useQuery(novelQueryOptions(novelId));
-
-  const { mutateAsync: update } = useMutation({
-    mutationFn: (vars: UpdateNovelInput) => updateNovel({ data: vars }),
-    onSuccess: async (_result, variables) => {
-      if (novel) {
-        const nextSourceLang = variables.sourceLang ?? novel.sourceLang;
-        const nextTargetLang = variables.targetLang ?? novel.targetLang;
-        const languagePairChanged =
-          nextSourceLang !== novel.sourceLang || nextTargetLang !== novel.targetLang;
-        if (languagePairChanged) {
-          queryClient.setQueryData(["novel", novelId], {
-            ...novel,
-            sourceLang: nextSourceLang,
-            targetLang: nextTargetLang,
-          });
-          queryClient.setQueryData(["relationshipMap", novelId], emptyRelationshipMap());
-        }
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["novels"] }),
-        queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
-        queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
-        queryClient.invalidateQueries({ queryKey: ["readerNovel", novelId] }),
-        queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] }),
-      ]);
-      toast.success("Novel updated successfully");
-      await navigate({ to: "/novels/$novelId", params: { novelId } });
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update novel");
-    },
-  });
-
-  const { mutate: publish, isPending: publishing } = useMutation({
-    mutationFn: (publishedAt: Date | null) => setNovelPublished({ data: { novelId, publishedAt } }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["novels"] });
-      queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
-      queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
-      toast.success("Publish state updated");
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update publish state");
-    },
-  });
-
-  if (!novel) {
-    return (
-      <div className="text-center py-12">
-        <h2 className="text-card-title font-semibold text-foreground">Novel not found</h2>
-        <p className="text-muted-foreground mt-2">
-          The novel you are trying to edit does not exist or you don't have access.
-        </p>
-        <Button className="mt-4" render={<Link to="/" />}>
-          Back to Library
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          render={<Link to="/novels/$novelId" params={{ novelId }} />}
-          aria-label="Go back"
-        >
-          <ArrowLeft className="size-4" />
-        </Button>
-        <div>
-          <h1 className="text-card-title sm:text-sub md:text-section font-semibold text-foreground tracking-tight">
-            {novel.title}
-          </h1>
-          <p className="text-body text-muted-foreground mt-0.5">
-            Modify your novel details and instructions.
-          </p>
-        </div>
-      </div>
-
-      <NovelForm
-        defaultValues={novel}
-        onSubmit={async (data) => {
-          await update({ ...data, novelId });
-        }}
-        submitLabel="Save Changes"
-      />
-
-      <Card className="max-w-3xl">
-        <CardContent className="p-6 flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-card-title font-semibold text-foreground">Publishing</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Guests can see this novel and its published chapters once it is live. Chapters are
-              published individually from the chapter list.
-            </p>
-          </div>
-          <PublishMenu publishedAt={novel.publishedAt} pending={publishing} onChange={publish} />
-        </CardContent>
-      </Card>
-    </div>
-  );
-}

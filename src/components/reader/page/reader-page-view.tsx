@@ -8,12 +8,17 @@ import { ReaderContent } from "@/components/reader/content/chapter-content";
 import { ChapterEditor } from "@/components/reader/editor/chapter-editor";
 import { ChapterTitleRow } from "@/components/reader/editor/chapter-title-row";
 import { ChapterDiscussion } from "@/components/comments/chapter-discussion";
+import { ReaderBookmarksDialog } from "@/components/reader/controls/reader-bookmarks-dialog";
 import type { ReaderSearchApi } from "./use-reader-search";
 import { ReaderDialogs } from "./reader-dialogs";
-import type { ReaderChapterSummary } from "@/components/reader/controls/reader-toolbar";
+import type {
+  ReaderChapterSummary,
+  ReaderOverlay,
+} from "@/components/reader/controls/reader-toolbar";
 import { ReaderToolbar } from "@/components/reader/controls/reader-toolbar";
 import type { ChapterEditorFormApi } from "@/components/reader/editor/use-chapter-editor";
 import { ReaderFooterNav } from "@/components/reader/controls/reader-footer-nav";
+import { cn } from "@/lib/utils";
 
 export interface ReaderChapterData extends ReaderChapterSummary {
   novelId: string;
@@ -38,6 +43,7 @@ export interface ReaderPageViewProps {
   chapterId: string;
   chapter: ReaderChapterData;
   chapters: ReaderChapterSummary[];
+  readChapterIdSet: ReadonlySet<string>;
   prevChapter: ReaderChapterSummary | null;
   nextChapter: ReaderChapterSummary | null;
   hasTranslation: boolean;
@@ -62,10 +68,11 @@ export interface ReaderPageViewProps {
   activeJob: ActiveJobState | undefined;
   readerState: ReaderStateApi;
   search: ReaderSearchApi;
-  panel: "chapters" | "settings" | "bookmarks" | null;
-  onPanelChange: (panel: "chapters" | "settings" | "bookmarks" | null) => void;
-  actionsOpen: boolean;
-  onActionsOpenChange: (open: boolean) => void;
+  overlay: ReaderOverlay | null;
+  onOverlayChange: (overlay: ReaderOverlay | null) => void;
+  onMenuOpenChange: (open: boolean) => void;
+  focusMode: boolean;
+  onFocusModeChange: (focus: boolean) => void;
   onGoToChapter: (id: string, hash?: string) => void;
   onEditRequest: () => void;
   onTranslateRequest: () => void;
@@ -101,6 +108,7 @@ export function ReaderPageView({
   chapterId,
   chapter,
   chapters,
+  readChapterIdSet,
   prevChapter,
   nextChapter,
   hasTranslation,
@@ -125,10 +133,11 @@ export function ReaderPageView({
   activeJob,
   readerState,
   search,
-  panel,
-  onPanelChange,
-  actionsOpen,
-  onActionsOpenChange,
+  overlay,
+  onOverlayChange,
+  onMenuOpenChange,
+  focusMode,
+  onFocusModeChange,
   onGoToChapter,
   onEditRequest,
   onTranslateRequest,
@@ -157,13 +166,23 @@ export function ReaderPageView({
   onCancel,
 }: ReaderPageViewProps) {
   return (
-    <div className="flex min-w-0 max-w-full flex-col gap-8">
+    <div
+      // Focus mode hides the chrome; a tap back in the prose is how a touch reader asks
+      // for it again. The mode is occasional, so it shows and hides instantly.
+      onClick={focusMode ? () => onFocusModeChange(false) : undefined}
+      className={cn(
+        "flex min-w-0 max-w-full flex-col gap-8",
+        // The thumb bar floats over the page, so the prose needs room to scroll clear of it.
+        focusMode ? undefined : "pb-24 md:pb-0",
+      )}
+    >
       <ReaderToolbar
         novelId={novelId}
         novelTitle={novel.title}
         chapterId={chapterId}
         chapter={chapter}
         chapters={chapters}
+        readChapterIdSet={readChapterIdSet}
         prevChapter={prevChapter}
         nextChapter={nextChapter}
         hasTranslation={hasTranslation}
@@ -171,24 +190,23 @@ export function ReaderPageView({
         update={update}
         theme={theme}
         setTheme={setTheme}
-        signedIn={signedIn}
         canManage={canManage}
         editing={editing}
         jobRunning={jobRunning}
         activeJob={activeJob}
-        readerState={readerState}
         search={search}
-        proseRef={proseRef}
-        proseNode={proseNode}
-        toolbarRef={toolbarRef}
-        panel={panel}
-        onPanelChange={onPanelChange}
-        actionsOpen={actionsOpen}
-        onActionsOpenChange={onActionsOpenChange}
+        overlay={overlay}
+        onOverlayChange={onOverlayChange}
+        onMenuOpenChange={onMenuOpenChange}
         onGoToChapter={onGoToChapter}
         onEditRequest={onEditRequest}
         onTranslateRequest={onTranslateRequest}
         onShortcutsRequest={onShortcutsRequest}
+        focusMode={focusMode}
+        onFocusModeChange={onFocusModeChange}
+        proseRef={proseRef}
+        proseNode={proseNode}
+        toolbarRef={toolbarRef}
       />
       {canManage && translationStatusError ? (
         <QueryErrorState
@@ -251,6 +269,17 @@ export function ReaderPageView({
         chapterId={chapterId}
         chapterNumber={chapter.number}
         signedIn={signedIn}
+      />
+
+      <ReaderBookmarksDialog
+        chapterId={chapterId}
+        chapters={chapters}
+        readerState={readerState}
+        signedIn={signedIn}
+        editing={editing}
+        open={overlay === "bookmarks"}
+        onOpenChange={(open) => onOverlayChange(open ? "bookmarks" : null)}
+        onGoToChapter={onGoToChapter}
       />
 
       <ReaderDialogs

@@ -11,7 +11,10 @@ import { useChapterEditor } from "@/components/reader/editor/use-chapter-editor"
 import { useChapterNav } from "@/components/reader/editor/use-chapter-nav";
 import { useReaderHotkeys } from "./reader-page-hotkeys";
 import { useReaderSearch } from "./use-reader-search";
-import type { ReaderChapterSummary } from "@/components/reader/controls/reader-toolbar";
+import type {
+  ReaderChapterSummary,
+  ReaderOverlay,
+} from "@/components/reader/controls/reader-toolbar";
 import {
   type ReaderChapterData,
   type ReaderNovelData,
@@ -78,8 +81,11 @@ export function useReaderPageController({
   const canManage = chapter.canManage;
   const [retranslateConfirmOpen, setRetranslateConfirmOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [panel, setPanel] = useState<"chapters" | "settings" | "bookmarks" | null>(null);
-  const [actionsOpen, setActionsOpen] = useState(false);
+  // One overlay at a time. `toc` and `appearance` belong to the pointer bar, `toc-sheet`
+  // and `appearance-sheet` to the thumb bar; only one of each pair is ever reachable.
+  const [overlay, setOverlay] = useState<ReaderOverlay | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const {
     start: startTranslate,
     activeJobs,
@@ -114,6 +120,10 @@ export function useReaderPageController({
     [rawParagraphs, translatedParagraphs],
   );
   const hasTranslation = translatedParagraphs.length > 0;
+  const readChapterIdSet = useMemo(
+    () => new Set(readerState.progress.readChapterIds),
+    [readerState.progress.readChapterIds],
+  );
   const search = useReaderSearch({
     viewMode: settings.viewMode,
     hasTranslation,
@@ -124,13 +134,14 @@ export function useReaderPageController({
     enabled: !editor.editing,
   });
   const dialogOpen =
-    panel !== null ||
-    actionsOpen ||
+    overlay !== null ||
+    menuOpen ||
     shortcutsOpen ||
     retranslateConfirmOpen ||
     editor.sourcePolicyDialogOpen ||
     editor.discardDialogOpen ||
     editor.blocker.status === "blocked";
+  // Focus mode is not an overlay: the reader keeps reading, and every shortcut still works.
   const overlayOpen = dialogOpen || search.open;
 
   useReaderHotkeys({
@@ -155,6 +166,9 @@ export function useReaderPageController({
     onOpenFind: search.openFind,
     onCloseFind: search.close,
     findOpen: search.open,
+    focusMode,
+    onToggleFocusMode: () => setFocusMode((current) => !current),
+    onExitFocusMode: () => setFocusMode(false),
   });
 
   const previousJobStatusRef = useRef<string | null>(null);
@@ -191,6 +205,7 @@ export function useReaderPageController({
     chapterId,
     chapter,
     chapters,
+    readChapterIdSet,
     prevChapter,
     nextChapter,
     hasTranslation,
@@ -213,10 +228,11 @@ export function useReaderPageController({
     theme,
     setTheme,
     activeJob,
-    panel,
-    onPanelChange: setPanel,
-    actionsOpen,
-    onActionsOpenChange: setActionsOpen,
+    overlay,
+    onOverlayChange: setOverlay,
+    onMenuOpenChange: setMenuOpen,
+    focusMode,
+    onFocusModeChange: setFocusMode,
     onGoToChapter: goToChapter,
     onEditRequest: editor.beginEditing,
     onTranslateRequest: handleTranslateRequest,

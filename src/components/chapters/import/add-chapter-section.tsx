@@ -41,6 +41,11 @@ const modeDetails: Record<
   },
 };
 
+/**
+ * The three ways to bring source chapters in. The page that renders it owns the title, so
+ * this stays a bare section: the studio's add page is this component and nothing else, and
+ * two "Add chapters" headings on one screen is one too many.
+ */
 export function AddChapterSection({
   novelId,
   chapters,
@@ -80,13 +85,6 @@ export function AddChapterSection({
 
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Add chapters</h2>
-        <p className="text-sm text-muted-foreground">
-          Choose how to bring source chapters into this novel.
-        </p>
-      </header>
-
       <Tabs value={mode} onValueChange={(value) => setMode(value as AddChapterMode)}>
         <TabsList variant="choice">
           {(Object.keys(modeDetails) as AddChapterMode[]).map((method) => {

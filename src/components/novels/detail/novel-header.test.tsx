@@ -14,8 +14,9 @@ vi.mock("@/components/novels/novel-cover", () => ({
   NovelCover: ({ alt }: { alt?: string }) => createElement("img", { alt: alt ?? "" }),
 }));
 
-vi.mock("@/components/publish-menu", () => ({
-  PublishMenu: () => createElement("button", { type: "button" }, "Publishing options"),
+// Filing a report is its own surface; this file is about the description.
+vi.mock("@/components/reports/report-novel-button", () => ({
+  ReportNovelButton: () => null,
 }));
 
 // The rating summary is covered on its own; this file is about the description.
@@ -52,24 +53,13 @@ function renderNovelHeader(description: string): void {
     <NovelHeader
       novel={{ ...BASE_NOVEL, description }}
       novelId={BASE_NOVEL.id}
-      isAdmin={false}
       canReport={false}
-      glossaryStats={undefined}
-      costData={undefined}
       chapters={[]}
       chaptersPending={false}
       readingActionsPending={false}
       lastReadChapter={null}
       firstChapter={null}
       readingProgress={{ readCount: 0, totalCount: 0, percent: 0 }}
-      readyUnpublishedCount={0}
-      unreadyCount={0}
-      exporting={null}
-      publishingNovel={false}
-      onPublishNovel={() => undefined}
-      onExportTxt={() => undefined}
-      onExportEpub={() => undefined}
-      onDeleteNovel={() => undefined}
     />,
   );
 }

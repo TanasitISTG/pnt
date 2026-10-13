@@ -51,6 +51,8 @@ const buttonVariants = cva(
         "icon-sm": "size-9 rounded-full",
         chapterOption: "h-auto min-h-11 px-4 py-2",
         readerNav: "h-auto min-h-11 gap-1.5 px-2.5 py-1 sm:gap-2 sm:px-3",
+        // The reader's thumb bar: an icon over a one-word label, one sixth of the bar.
+        readerBar: "h-auto min-h-14 w-full flex-col gap-1 rounded-md px-1 py-2 text-caption",
       },
     },
     defaultVariants: {

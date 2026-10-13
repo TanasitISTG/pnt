@@ -45,6 +45,10 @@ export function NovelCard({
       to="/novels/$novelId"
       params={{ novelId: novel.id }}
       viewTransition
+      // A link wrapping the card's block content computes an empty accessible name in
+      // Chromium (HTML-AAM), which left every shelf card an unnamed link. Naming it here
+      // gives a screen reader the two things that identify the novel: title and pair.
+      aria-label={`${novel.title}, ${novel.sourceLang.toUpperCase()} to ${novel.targetLang.toUpperCase()}`}
       className="group/card-link block h-full no-underline"
     >
       <article

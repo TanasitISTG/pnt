@@ -27,7 +27,7 @@ import { relationshipMapQueryOptions, type RelationshipMapSearch } from "@/lib/r
 import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import { LANG_LABELS, parseLanguagePair } from "@/lib/language-pair";
 
-const relationshipsRoute = getRouteApi("/_protected/novels/$novelId/relationships");
+const relationshipsRoute = getRouteApi("/_protected/novels/$novelId/manage/relationships");
 
 export function RelationshipsPage() {
   const { novelId } = relationshipsRoute.useParams();

@@ -1,24 +1,28 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ChapterTableProps } from "@/components/chapters/table/chapter-table";
 import { useChapterTitleEdit } from "@/components/chapters/table/use-chapter-title-edit";
 import { useChapterSelection } from "@/components/chapters/toolbar/use-chapter-selection";
-import type { NovelDetailDialogData } from "@/components/novels/detail/novel-detail-dialogs";
-import type { NovelDetailSectionData } from "@/components/novels/detail/novel-detail-sections";
-import { useNovelDetailMutations } from "@/components/novels/detail/use-novel-detail-mutations";
-import { useNovelExport } from "@/components/novels/detail/use-novel-export";
-import type { NovelHeaderProps } from "@/components/novels/detail/novel-header";
+import type { ChapterRow } from "@/components/chapters/types";
+import { useNovelReadingProgress } from "@/components/novels/use-novel-reading-progress";
 import { useTranslationJob } from "@/components/translation/job/use-translation-job";
 import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
 import {
   adminNovelDetailMetricsQueryOptions,
   adminNovelResidualQueryOptions,
-  novelQueryOptions,
 } from "@/lib/content/novel/novel.query";
 import { residualRevisionOf } from "@/lib/content/novel/residual-revision";
 import { useReaderState } from "@/lib/reader/use-reader-state";
+import type { NovelDetailChapterPanelDetail } from "./studio-chapters";
+import type { NovelDetailDialogData } from "./studio-dialogs";
+import { useNovelDetailMutations } from "./use-novel-detail-mutations";
 
+/**
+ * One clock shared by every "is this chapter publishable yet" question on the page, so a
+ * chapter scheduled for later flips its count when its moment arrives instead of on the
+ * next unrelated re-render.
+ */
 let currentTimeSnapshot = 0;
 const clockSubscribers = new Set<{
   notify: () => void;
@@ -71,40 +75,37 @@ function getServerClockSnapshot() {
 const EMPTY_CHAPTERS: never[] = [];
 const EMPTY_RESIDUAL_SCRIPTS: never[] = [];
 
-export interface NovelDetailLoadState {
-  novel: NovelHeaderProps["novel"] | null | undefined;
-  isNovelError: boolean;
-  novelError: unknown;
-  isChaptersError: boolean;
-  chaptersError: unknown;
-  refetchNovel: () => Promise<unknown>;
-  refetchChapters: () => Promise<unknown>;
-}
-
-export interface NovelDetailPageResult {
-  loadState: NovelDetailLoadState;
-  sectionProps: NovelDetailSectionData;
+export interface ChapterWorkspace {
+  chapters: ChapterRow[];
+  /** Per-chapter usage and the glossary counts, read once for the whole workspace. */
+  costData: ChapterTableProps["costData"];
+  glossaryStats: { total: number; approved: number; pending: number } | undefined;
+  /** Dense rows, bulk actions and the read markers the owner sees as a reader too. */
+  chapterPanel: NovelDetailChapterPanelDetail;
   tableProps: Omit<ChapterTableProps, "chapters">;
   dialogProps: NovelDetailDialogData;
-  /** Whether this viewer owns the novel and may manage it. */
-  canManage: boolean;
+  chapterTools: {
+    ready: boolean;
+    invalidateChapters: () => void;
+  };
+  metrics: {
+    isError: boolean;
+    error: unknown;
+    refetch: () => Promise<unknown>;
+  };
 }
 
 /**
- * @param signedIn any session at all, which is what enables account reader state.
- *   Ownership is *not* passed in: it comes from the novel payload, which the server
- *   derives from the viewer's session. That keeps a signed-in reader of someone else's
- *   published novel from being offered manage controls.
+ * The chapter workspace: the owner's chapter rows, their selection, the translation jobs
+ * running against them, and every mutation the toolbar and row menus reach. It owns the
+ * queries only the studio needs — per-chapter cost, residual scripts, the archive of a
+ * finished run — while the novel itself comes from the studio layout, which has already
+ * established that this viewer may manage it.
  */
-export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDetailPageResult {
+export function useChapterWorkspace(novelId: string): ChapterWorkspace {
   const queryClient = useQueryClient();
-  const novelQuery = useQuery(novelQueryOptions(novelId));
   const chaptersQuery = useQuery(chaptersQueryOptions(novelId));
-  const canManage = novelQuery.data?.canManage ?? false;
-  const metricsQuery = useQuery({
-    ...adminNovelDetailMetricsQueryOptions(novelId),
-    enabled: canManage,
-  });
+  const metricsQuery = useQuery(adminNovelDetailMetricsQueryOptions(novelId));
 
   const chapters = chaptersQuery.data ?? EMPTY_CHAPTERS;
   const metrics = metricsQuery.data;
@@ -115,7 +116,7 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
   );
   const residualQuery = useQuery({
     ...adminNovelResidualQueryOptions(novelId, residualRevision),
-    enabled: canManage && chaptersQuery.isSuccess,
+    enabled: chaptersQuery.isSuccess,
   });
   const residualScriptChapters = residualQuery.data ?? EMPTY_RESIDUAL_SCRIPTS;
   const residualScriptMap = useMemo(() => {
@@ -126,40 +127,16 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
     return map;
   }, [residualScriptChapters]);
 
-  const readerState = useReaderState(novelId, signedIn);
-  const readerProgress = readerState.progress;
-  const readChapterIdSet = useMemo(
-    () => new Set(readerProgress.readChapterIds),
-    [readerProgress.readChapterIds],
-  );
+  const readerState = useReaderState(novelId, true);
+  const readingProgress = useNovelReadingProgress(chapters, readerState);
   const [retranslateChapterId, setRetranslateChapterId] = useState<string | null>(null);
-  const [deleteNovelOpen, setDeleteNovelOpen] = useState(false);
   const [deleteAllTranslationsOpen, setDeleteAllTranslationsOpen] = useState(false);
   const [logChapterId, setLogChapterId] = useState<string | null>(null);
   const [reorderOpen, setReorderOpen] = useState(false);
   const [stopSelectedOpen, setStopSelectedOpen] = useState(false);
   const [batchRetranslateOpen, setBatchRetranslateOpen] = useState(false);
-  const lastReadChapter = useMemo(() => {
-    if (!readerProgress.lastChapterId) return null;
-    return chapters.find((chapter) => chapter.id === readerProgress.lastChapterId) ?? null;
-  }, [chapters, readerProgress.lastChapterId]);
 
-  const firstChapter = chapters[0] ?? null;
   const chaptersReady = chaptersQuery.isSuccess && !chaptersQuery.isError;
-  const readingActionsPending = chaptersQuery.isPending || !readerState.ready;
-  const chapterUiLoading = canManage && readingActionsPending;
-  const readingProgress = useMemo(() => {
-    const totalCount = chapters.length;
-    const readCount = chapters.reduce(
-      (count, chapter) => (readChapterIdSet.has(chapter.id) ? count + 1 : count),
-      0,
-    );
-    return {
-      readCount,
-      totalCount,
-      percent: totalCount > 0 ? Math.round((readCount / totalCount) * 100) : 0,
-    };
-  }, [chapters, readChapterIdSet]);
 
   const {
     start: startTranslate,
@@ -171,7 +148,7 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
     activeJobs,
     activeJobsError,
     refetchActiveJobs,
-  } = useTranslationJob(novelId, canManage && chaptersReady);
+  } = useTranslationJob(novelId, chaptersReady);
 
   const handleTranslationsDeleted = useCallback(() => {
     clearActiveJobs();
@@ -214,12 +191,6 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
   );
 
   const {
-    removeNovel,
-    deletingNovel,
-    publishNovel,
-    publishingNovel,
-    removeChapter,
-    deletingChapter,
     deleteChapterId,
     setDeleteChapterId,
     publishChapter,
@@ -230,6 +201,8 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
     backfillingTitles,
     deleteAllTranslations,
     deletingAllTranslations,
+    removeChapter,
+    deletingChapter,
     saveChapterOrder,
     reorderingChapters,
   } = useNovelDetailMutations(novelId, handleTranslationsDeleted);
@@ -242,6 +215,7 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
   );
   const reorderDisabled =
     reorderingChapters || chapters.some((chapter) => isRowTranslating(chapter.id, chapter.status));
+
   const invalidateChapters = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
     queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
@@ -283,13 +257,11 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
     return { readyUnpublishedCount: readyCount, unreadyCount: unreadyChapterCount };
   }, [chapters, now]);
 
-  const { exporting, handleExportTxt, handleExportEpub } = useNovelExport(novelId);
-
   const tableProps: Omit<ChapterTableProps, "chapters"> = {
     novelId,
-    isAdmin: canManage,
+    isAdmin: true,
     activeJobs,
-    readChapterIdSet,
+    readChapterIdSet: readingProgress.readChapterIdSet,
     residualScriptMap,
     costData: metrics?.costData,
     selectedIds,
@@ -310,40 +282,15 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
     onDeleteChapter: setDeleteChapterId,
   };
 
-  const loadState: NovelDetailLoadState = {
-    novel: novelQuery.data,
-    isNovelError: novelQuery.isError,
-    novelError: novelQuery.error,
-    isChaptersError: chaptersQuery.isError,
-    chaptersError: chaptersQuery.error,
-    refetchNovel: novelQuery.refetch,
-    refetchChapters: chaptersQuery.refetch,
-  };
-
-  const sectionProps: NovelDetailSectionData = {
-    header: {
-      glossaryStats: metrics?.glossaryStats,
-      costData: metrics?.costData,
-      chapters,
-      chaptersPending: chapterUiLoading,
-      readingActionsPending,
-      lastReadChapter,
-      firstChapter,
-      readingProgress,
-      readyUnpublishedCount,
-      unreadyCount,
-      exporting,
-      publishingNovel,
-      onPublishNovel: publishNovel,
-      onExportTxt: handleExportTxt,
-      onExportEpub: handleExportEpub,
-      onDeleteNovel: () => setDeleteNovelOpen(true),
-    },
+  return {
+    chapters,
+    costData: metrics?.costData,
+    glossaryStats: metrics?.glossaryStats,
     chapterPanel: {
       chapters,
-      chapterUiLoading,
+      chapterUiLoading: chaptersQuery.isPending || !readerState.ready,
       isChaptersPending: chaptersQuery.isPending,
-      lastReadChapter,
+      lastReadChapter: readingProgress.lastReadChapter,
       selectedIds,
       selectedMissingIds,
       selectedTranslatedIds,
@@ -370,67 +317,65 @@ export function useNovelDetailPage(novelId: string, signedIn: boolean): NovelDet
       deletingAllTranslations,
       setDeleteAllTranslationsOpen,
     },
-    metrics: {
-      error: metricsQuery.error,
-      isError: metricsQuery.isError,
-      refetch: metricsQuery.refetch,
+    tableProps,
+    dialogProps: {
+      novelId,
+      reorder: {
+        chapters,
+        open: reorderOpen,
+        onOpenChange: setReorderOpen,
+        onSave: handleSaveChapterOrder,
+      },
+      deleteNovel: {
+        open: false,
+        onOpenChange: () => {},
+        onConfirm: () => {},
+        pending: false,
+      },
+      deleteTranslations: {
+        open: deleteAllTranslationsOpen,
+        onOpenChange: setDeleteAllTranslationsOpen,
+        onConfirm: deleteAllTranslations,
+        pending: deletingAllTranslations,
+      },
+      deleteChapter: {
+        chapterId: deleteChapterId,
+        setChapterId: setDeleteChapterId,
+        remove: removeChapter,
+        pending: deletingChapter,
+      },
+      logs: {
+        chapterId: logChapterId,
+        setChapterId: setLogChapterId,
+      },
+      retranslate: {
+        chapterId: retranslateChapterId,
+        setChapterId: setRetranslateChapterId,
+        start: startTranslate,
+      },
+      batchRetranslate: {
+        chapterIds: selectedTranslatedIds,
+        open: batchRetranslateOpen,
+        onOpenChange: setBatchRetranslateOpen,
+        pending: batchStarting,
+        onConfirm: confirmBatchRetranslate,
+      },
+      stopSelected: {
+        count: selectedActiveIds.length,
+        open: stopSelectedOpen,
+        onOpenChange: setStopSelectedOpen,
+        pending: batchStopping,
+        onConfirm: confirmStopSelectedTranslations,
+      },
     },
     chapterTools: {
       ready: chaptersReady,
       invalidateChapters,
     },
-  };
-
-  const dialogProps: NovelDetailDialogData = {
-    novelId,
-    reorder: {
-      chapters,
-      open: reorderOpen,
-      onOpenChange: setReorderOpen,
-      onSave: handleSaveChapterOrder,
-    },
-    deleteNovel: {
-      open: deleteNovelOpen,
-      onOpenChange: setDeleteNovelOpen,
-      onConfirm: removeNovel,
-      pending: deletingNovel,
-    },
-    deleteTranslations: {
-      open: deleteAllTranslationsOpen,
-      onOpenChange: setDeleteAllTranslationsOpen,
-      onConfirm: deleteAllTranslations,
-      pending: deletingAllTranslations,
-    },
-    deleteChapter: {
-      chapterId: deleteChapterId,
-      setChapterId: setDeleteChapterId,
-      remove: removeChapter,
-      pending: deletingChapter,
-    },
-    logs: {
-      chapterId: logChapterId,
-      setChapterId: setLogChapterId,
-    },
-    retranslate: {
-      chapterId: retranslateChapterId,
-      setChapterId: setRetranslateChapterId,
-      start: startTranslate,
-    },
-    batchRetranslate: {
-      chapterIds: selectedTranslatedIds,
-      open: batchRetranslateOpen,
-      onOpenChange: setBatchRetranslateOpen,
-      pending: batchStarting,
-      onConfirm: confirmBatchRetranslate,
-    },
-    stopSelected: {
-      count: selectedActiveIds.length,
-      open: stopSelectedOpen,
-      onOpenChange: setStopSelectedOpen,
-      pending: batchStopping,
-      onConfirm: confirmStopSelectedTranslations,
+    metrics: {
+      error: metricsQuery.error,
+      isError: metricsQuery.isError,
+      refetch: metricsQuery.refetch,
     },
   };
-
-  return { loadState, sectionProps, tableProps, dialogProps, canManage };
 }

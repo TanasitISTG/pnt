@@ -140,13 +140,15 @@ export const auth = betterAuth({
   rateLimit: {
     enabled: true,
     window: 60,
-    max: 10,
+    max: env.AUTH_RATE_LIMIT_MAX,
     storage: "database",
     // Signup and reset are the endpoints worth guessing at, so they get tighter
     // windows than the shared default.
     customRules: {
       "/sign-up/email": { window: 60, max: 5 },
-      "/sign-in/email": { window: 60, max: 10 },
+      // Signing in shares the global budget; the E2E supervisor raises both through
+      // `AUTH_RATE_LIMIT_MAX` (see `src/lib/env.ts`).
+      "/sign-in/email": { window: 60, max: env.AUTH_RATE_LIMIT_MAX },
       "/request-password-reset": { window: 60, max: 3 },
     },
   },

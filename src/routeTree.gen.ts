@@ -42,8 +42,16 @@ import { Route as ApiExportsSplatRouteImport } from './routes/api/exports/$'
 import { Route as ApiStorageUploadRouteImport } from './routes/api/storage/upload'
 import { Route as ProtectedNovelsNovelIdEditRouteImport } from './routes/_protected/novels/$novelId/edit'
 import { Route as ProtectedNovelsNovelIdGlossaryRouteImport } from './routes/_protected/novels/$novelId/glossary'
+import { Route as ProtectedNovelsNovelIdManageRouteImport } from './routes/_protected/novels/$novelId/manage'
 import { Route as ProtectedNovelsNovelIdRelationshipsRouteImport } from './routes/_protected/novels/$novelId/relationships'
 import { Route as PublicNovelsNovelIdIndexRouteImport } from './routes/_public/novels/$novelId/index'
+import { Route as ProtectedNovelsNovelIdManageIndexRouteImport } from './routes/_protected/novels/$novelId/manage.index'
+import { Route as ProtectedNovelsNovelIdManageAddRouteImport } from './routes/_protected/novels/$novelId/manage.add'
+import { Route as ProtectedNovelsNovelIdManageChaptersRouteImport } from './routes/_protected/novels/$novelId/manage.chapters'
+import { Route as ProtectedNovelsNovelIdManageGlossaryRouteImport } from './routes/_protected/novels/$novelId/manage.glossary'
+import { Route as ProtectedNovelsNovelIdManageQualityRouteImport } from './routes/_protected/novels/$novelId/manage.quality'
+import { Route as ProtectedNovelsNovelIdManageRelationshipsRouteImport } from './routes/_protected/novels/$novelId/manage.relationships'
+import { Route as ProtectedNovelsNovelIdManageSettingsRouteImport } from './routes/_protected/novels/$novelId/manage.settings'
 import { Route as PublicNovelsNovelIdChaptersChapterIdRouteImport } from './routes/_public/novels/$novelId/chapters/$chapterId'
 
 const ProtectedRoute = ProtectedRouteImport.update({
@@ -211,6 +219,12 @@ const ProtectedNovelsNovelIdGlossaryRoute =
     path: '/novels/$novelId/glossary',
     getParentRoute: () => ProtectedRoute,
   } as any)
+const ProtectedNovelsNovelIdManageRoute =
+  ProtectedNovelsNovelIdManageRouteImport.update({
+    id: '/novels/$novelId/manage',
+    path: '/novels/$novelId/manage',
+    getParentRoute: () => ProtectedRoute,
+  } as any)
 const ProtectedNovelsNovelIdRelationshipsRoute =
   ProtectedNovelsNovelIdRelationshipsRouteImport.update({
     id: '/novels/$novelId/relationships',
@@ -222,6 +236,48 @@ const PublicNovelsNovelIdIndexRoute =
     id: '/novels/$novelId/',
     path: '/novels/$novelId/',
     getParentRoute: () => PublicRoute,
+  } as any)
+const ProtectedNovelsNovelIdManageIndexRoute =
+  ProtectedNovelsNovelIdManageIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
+  } as any)
+const ProtectedNovelsNovelIdManageAddRoute =
+  ProtectedNovelsNovelIdManageAddRouteImport.update({
+    id: '/add',
+    path: '/add',
+    getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
+  } as any)
+const ProtectedNovelsNovelIdManageChaptersRoute =
+  ProtectedNovelsNovelIdManageChaptersRouteImport.update({
+    id: '/chapters',
+    path: '/chapters',
+    getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
+  } as any)
+const ProtectedNovelsNovelIdManageGlossaryRoute =
+  ProtectedNovelsNovelIdManageGlossaryRouteImport.update({
+    id: '/glossary',
+    path: '/glossary',
+    getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
+  } as any)
+const ProtectedNovelsNovelIdManageQualityRoute =
+  ProtectedNovelsNovelIdManageQualityRouteImport.update({
+    id: '/quality',
+    path: '/quality',
+    getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
+  } as any)
+const ProtectedNovelsNovelIdManageRelationshipsRoute =
+  ProtectedNovelsNovelIdManageRelationshipsRouteImport.update({
+    id: '/relationships',
+    path: '/relationships',
+    getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
+  } as any)
+const ProtectedNovelsNovelIdManageSettingsRoute =
+  ProtectedNovelsNovelIdManageSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
   } as any)
 const PublicNovelsNovelIdChaptersChapterIdRoute =
   PublicNovelsNovelIdChaptersChapterIdRouteImport.update({
@@ -262,9 +318,17 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof ProtectedAdminIndexRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
+  '/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageRouteWithChildren
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
   '/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
+  '/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
+  '/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
+  '/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
+  '/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
+  '/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
+  '/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
   '/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
+  '/novels/$novelId/manage/': typeof ProtectedNovelsNovelIdManageIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
@@ -299,7 +363,14 @@ export interface FileRoutesByTo {
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
   '/novels/$novelId': typeof PublicNovelsNovelIdIndexRoute
+  '/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
+  '/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
+  '/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
+  '/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
+  '/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
+  '/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
   '/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
+  '/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -336,9 +407,17 @@ export interface FileRoutesById {
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
+  '/_protected/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageRouteWithChildren
   '/_protected/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
   '/_public/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
+  '/_protected/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
+  '/_protected/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
+  '/_protected/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
+  '/_protected/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
+  '/_protected/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
+  '/_protected/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
   '/_public/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
+  '/_protected/novels/$novelId/manage/': typeof ProtectedNovelsNovelIdManageIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -374,9 +453,17 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
+    | '/novels/$novelId/manage'
     | '/novels/$novelId/relationships'
     | '/novels/$novelId/'
+    | '/novels/$novelId/manage/add'
+    | '/novels/$novelId/manage/chapters'
+    | '/novels/$novelId/manage/glossary'
+    | '/novels/$novelId/manage/quality'
+    | '/novels/$novelId/manage/relationships'
+    | '/novels/$novelId/manage/settings'
     | '/novels/$novelId/chapters/$chapterId'
+    | '/novels/$novelId/manage/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -411,7 +498,14 @@ export interface FileRouteTypes {
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/relationships'
     | '/novels/$novelId'
+    | '/novels/$novelId/manage/add'
+    | '/novels/$novelId/manage/chapters'
+    | '/novels/$novelId/manage/glossary'
+    | '/novels/$novelId/manage/quality'
+    | '/novels/$novelId/manage/relationships'
+    | '/novels/$novelId/manage/settings'
     | '/novels/$novelId/chapters/$chapterId'
+    | '/novels/$novelId/manage'
   id:
     | '__root__'
     | '/_protected'
@@ -447,9 +541,17 @@ export interface FileRouteTypes {
     | '/_protected/admin/'
     | '/_protected/novels/$novelId/edit'
     | '/_protected/novels/$novelId/glossary'
+    | '/_protected/novels/$novelId/manage'
     | '/_protected/novels/$novelId/relationships'
     | '/_public/novels/$novelId/'
+    | '/_protected/novels/$novelId/manage/add'
+    | '/_protected/novels/$novelId/manage/chapters'
+    | '/_protected/novels/$novelId/manage/glossary'
+    | '/_protected/novels/$novelId/manage/quality'
+    | '/_protected/novels/$novelId/manage/relationships'
+    | '/_protected/novels/$novelId/manage/settings'
     | '/_public/novels/$novelId/chapters/$chapterId'
+    | '/_protected/novels/$novelId/manage/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -708,6 +810,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedNovelsNovelIdGlossaryRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/novels/$novelId/manage': {
+      id: '/_protected/novels/$novelId/manage'
+      path: '/novels/$novelId/manage'
+      fullPath: '/novels/$novelId/manage'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
     '/_protected/novels/$novelId/relationships': {
       id: '/_protected/novels/$novelId/relationships'
       path: '/novels/$novelId/relationships'
@@ -721,6 +830,55 @@ declare module '@tanstack/react-router' {
       fullPath: '/novels/$novelId/'
       preLoaderRoute: typeof PublicNovelsNovelIdIndexRouteImport
       parentRoute: typeof PublicRoute
+    }
+    '/_protected/novels/$novelId/manage/': {
+      id: '/_protected/novels/$novelId/manage/'
+      path: '/'
+      fullPath: '/novels/$novelId/manage/'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageIndexRouteImport
+      parentRoute: typeof ProtectedNovelsNovelIdManageRoute
+    }
+    '/_protected/novels/$novelId/manage/add': {
+      id: '/_protected/novels/$novelId/manage/add'
+      path: '/add'
+      fullPath: '/novels/$novelId/manage/add'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageAddRouteImport
+      parentRoute: typeof ProtectedNovelsNovelIdManageRoute
+    }
+    '/_protected/novels/$novelId/manage/chapters': {
+      id: '/_protected/novels/$novelId/manage/chapters'
+      path: '/chapters'
+      fullPath: '/novels/$novelId/manage/chapters'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageChaptersRouteImport
+      parentRoute: typeof ProtectedNovelsNovelIdManageRoute
+    }
+    '/_protected/novels/$novelId/manage/glossary': {
+      id: '/_protected/novels/$novelId/manage/glossary'
+      path: '/glossary'
+      fullPath: '/novels/$novelId/manage/glossary'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageGlossaryRouteImport
+      parentRoute: typeof ProtectedNovelsNovelIdManageRoute
+    }
+    '/_protected/novels/$novelId/manage/quality': {
+      id: '/_protected/novels/$novelId/manage/quality'
+      path: '/quality'
+      fullPath: '/novels/$novelId/manage/quality'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageQualityRouteImport
+      parentRoute: typeof ProtectedNovelsNovelIdManageRoute
+    }
+    '/_protected/novels/$novelId/manage/relationships': {
+      id: '/_protected/novels/$novelId/manage/relationships'
+      path: '/relationships'
+      fullPath: '/novels/$novelId/manage/relationships'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageRelationshipsRouteImport
+      parentRoute: typeof ProtectedNovelsNovelIdManageRoute
+    }
+    '/_protected/novels/$novelId/manage/settings': {
+      id: '/_protected/novels/$novelId/manage/settings'
+      path: '/settings'
+      fullPath: '/novels/$novelId/manage/settings'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageSettingsRouteImport
+      parentRoute: typeof ProtectedNovelsNovelIdManageRoute
     }
     '/_public/novels/$novelId/chapters/$chapterId': {
       id: '/_public/novels/$novelId/chapters/$chapterId'
@@ -748,6 +906,38 @@ const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
   ProtectedAdminRouteChildren,
 )
 
+interface ProtectedNovelsNovelIdManageRouteChildren {
+  ProtectedNovelsNovelIdManageAddRoute: typeof ProtectedNovelsNovelIdManageAddRoute
+  ProtectedNovelsNovelIdManageChaptersRoute: typeof ProtectedNovelsNovelIdManageChaptersRoute
+  ProtectedNovelsNovelIdManageGlossaryRoute: typeof ProtectedNovelsNovelIdManageGlossaryRoute
+  ProtectedNovelsNovelIdManageQualityRoute: typeof ProtectedNovelsNovelIdManageQualityRoute
+  ProtectedNovelsNovelIdManageRelationshipsRoute: typeof ProtectedNovelsNovelIdManageRelationshipsRoute
+  ProtectedNovelsNovelIdManageSettingsRoute: typeof ProtectedNovelsNovelIdManageSettingsRoute
+  ProtectedNovelsNovelIdManageIndexRoute: typeof ProtectedNovelsNovelIdManageIndexRoute
+}
+
+const ProtectedNovelsNovelIdManageRouteChildren: ProtectedNovelsNovelIdManageRouteChildren =
+  {
+    ProtectedNovelsNovelIdManageAddRoute: ProtectedNovelsNovelIdManageAddRoute,
+    ProtectedNovelsNovelIdManageChaptersRoute:
+      ProtectedNovelsNovelIdManageChaptersRoute,
+    ProtectedNovelsNovelIdManageGlossaryRoute:
+      ProtectedNovelsNovelIdManageGlossaryRoute,
+    ProtectedNovelsNovelIdManageQualityRoute:
+      ProtectedNovelsNovelIdManageQualityRoute,
+    ProtectedNovelsNovelIdManageRelationshipsRoute:
+      ProtectedNovelsNovelIdManageRelationshipsRoute,
+    ProtectedNovelsNovelIdManageSettingsRoute:
+      ProtectedNovelsNovelIdManageSettingsRoute,
+    ProtectedNovelsNovelIdManageIndexRoute:
+      ProtectedNovelsNovelIdManageIndexRoute,
+  }
+
+const ProtectedNovelsNovelIdManageRouteWithChildren =
+  ProtectedNovelsNovelIdManageRoute._addFileChildren(
+    ProtectedNovelsNovelIdManageRouteChildren,
+  )
+
 interface ProtectedRouteChildren {
   ProtectedAdminRoute: typeof ProtectedAdminRouteWithChildren
   ProtectedJobsRoute: typeof ProtectedJobsRoute
@@ -757,6 +947,7 @@ interface ProtectedRouteChildren {
   ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
   ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
   ProtectedNovelsNovelIdGlossaryRoute: typeof ProtectedNovelsNovelIdGlossaryRoute
+  ProtectedNovelsNovelIdManageRoute: typeof ProtectedNovelsNovelIdManageRouteWithChildren
   ProtectedNovelsNovelIdRelationshipsRoute: typeof ProtectedNovelsNovelIdRelationshipsRoute
 }
 
@@ -769,6 +960,8 @@ const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
   ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,
   ProtectedNovelsNovelIdGlossaryRoute: ProtectedNovelsNovelIdGlossaryRoute,
+  ProtectedNovelsNovelIdManageRoute:
+    ProtectedNovelsNovelIdManageRouteWithChildren,
   ProtectedNovelsNovelIdRelationshipsRoute:
     ProtectedNovelsNovelIdRelationshipsRoute,
 }

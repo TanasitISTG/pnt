@@ -21,7 +21,9 @@ function NewNovelPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["novels"] });
       toast.success("Novel created successfully");
-      navigate({ to: "/novels/$novelId", params: { novelId: data.id } });
+      // A new novel has no chapters, so the next step is the studio's add flow rather than
+      // a reading page that would have nothing to read.
+      navigate({ to: "/novels/$novelId/manage/add", params: { novelId: data.id } });
     },
     onError: (error) => {
       toast.error(error.message || "Failed to create novel");

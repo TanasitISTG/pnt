@@ -22,6 +22,9 @@ export interface ReaderHotkeysProps {
   onOpenFind: () => void;
   onCloseFind: () => void;
   findOpen: boolean;
+  focusMode: boolean;
+  onToggleFocusMode: () => void;
+  onExitFocusMode: () => void;
 }
 
 const SHORTCUT_CONTROL_SELECTOR =
@@ -55,6 +58,7 @@ type ReaderViewHotkeysProps = Pick<
   | "onSetTheme"
   | "onSetShortcutsOpen"
   | "onOpenFind"
+  | "onToggleFocusMode"
 >;
 
 type ReaderEditorHotkeysProps = Pick<
@@ -111,6 +115,19 @@ function toggleTheme(
   if (isReaderShortcutBlocked(event, editing, overlayOpen)) return;
   event.preventDefault();
   onSetTheme(resolvedTheme === "dark" ? "light" : "dark");
+}
+
+// Focus mode is a deliberate, occasional mode, so it may animate no more than an instant
+// state change; the key and the button are the feedback.
+function toggleFocusMode(
+  event: KeyboardEvent,
+  editing: boolean,
+  overlayOpen: boolean,
+  onToggleFocusMode: () => void,
+): void {
+  if (isReaderShortcutBlocked(event, editing, overlayOpen)) return;
+  event.preventDefault();
+  onToggleFocusMode();
 }
 
 function openShortcutHelp(
@@ -199,6 +216,7 @@ function useReaderViewHotkeys({
   onSetTheme,
   onSetShortcutsOpen,
   onOpenFind,
+  onToggleFocusMode,
 }: ReaderViewHotkeysProps) {
   const viewHotkeysEnabled = !editing && !overlayOpen;
   const findHotkeyEnabled = !editing && !dialogOpen;
@@ -218,6 +236,10 @@ function useReaderViewHotkeys({
     (event) => openShortcutHelp(event, editing, overlayOpen, onSetShortcutsOpen),
     { ...PASSIVE_HOTKEY_OPTIONS, enabled: viewHotkeysEnabled },
   );
+  useHotkey("F", (event) => toggleFocusMode(event, editing, overlayOpen, onToggleFocusMode), {
+    ...PASSIVE_HOTKEY_OPTIONS,
+    enabled: viewHotkeysEnabled,
+  });
   useHotkey(
     "Mod+F",
     (event) => {
@@ -231,16 +253,25 @@ function useReaderViewHotkeys({
 
 type ReaderEscapeHotkeysProps = Pick<
   ReaderHotkeysProps,
-  "editing" | "overlayOpen" | "findOpen" | "onRequestCancelEditing" | "onCloseFind"
+  | "editing"
+  | "overlayOpen"
+  | "findOpen"
+  | "focusMode"
+  | "onRequestCancelEditing"
+  | "onCloseFind"
+  | "onExitFocusMode"
 >;
 
-// One Escape owner: leaving the editor wins, otherwise the find bar closes wherever focus sits.
+// One Escape owner: leaving the editor wins, then the find bar closes wherever focus sits,
+// then focus mode steps aside and gives the chrome back.
 function useReaderEscapeHotkey({
   editing,
   overlayOpen,
   findOpen,
+  focusMode,
   onRequestCancelEditing,
   onCloseFind,
+  onExitFocusMode,
 }: ReaderEscapeHotkeysProps) {
   const cancelEnabled = editing && !overlayOpen;
   useHotkey(
@@ -251,9 +282,13 @@ function useReaderEscapeHotkey({
         onRequestCancelEditing();
         return;
       }
-      onCloseFind();
+      if (findOpen) {
+        onCloseFind();
+        return;
+      }
+      if (focusMode) onExitFocusMode();
     },
-    { ...PASSIVE_HOTKEY_OPTIONS, enabled: cancelEnabled || findOpen },
+    { ...PASSIVE_HOTKEY_OPTIONS, enabled: cancelEnabled || findOpen || focusMode },
   );
 }
 

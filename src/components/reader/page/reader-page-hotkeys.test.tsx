@@ -21,6 +21,7 @@ type ReaderHotkeysHarnessProps = {
   jobRunning?: boolean;
   prevChapter?: { id: string } | null;
   nextChapter?: { id: string } | null;
+  focusMode?: boolean;
 };
 
 function ReaderHotkeysHarness({
@@ -36,6 +37,7 @@ function ReaderHotkeysHarness({
   jobRunning = false,
   prevChapter = { id: "previous" },
   nextChapter = { id: "next" },
+  focusMode = false,
 }: ReaderHotkeysHarnessProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("side");
   const [theme, setTheme] = useState(initialTheme ?? resolvedTheme);
@@ -47,6 +49,8 @@ function ReaderHotkeysHarness({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [findCount, setFindCount] = useState(0);
   const [closeFindCount, setCloseFindCount] = useState(0);
+  const [focusToggles, setFocusToggles] = useState(0);
+  const [focusExits, setFocusExits] = useState(0);
 
   useReaderHotkeys({
     viewMode,
@@ -73,6 +77,9 @@ function ReaderHotkeysHarness({
     onOpenFind: () => setFindCount((count) => count + 1),
     onCloseFind: () => setCloseFindCount((count) => count + 1),
     findOpen,
+    focusMode,
+    onToggleFocusMode: () => setFocusToggles((count) => count + 1),
+    onExitFocusMode: () => setFocusExits((count) => count + 1),
   });
 
   return (
@@ -88,6 +95,8 @@ function ReaderHotkeysHarness({
       <div data-testid="shortcuts">{shortcutsOpen ? "open" : "closed"}</div>
       <div data-testid="find">{findCount}</div>
       <div data-testid="close-find">{closeFindCount}</div>
+      <div data-testid="focus-toggles">{focusToggles}</div>
+      <div data-testid="focus-exits">{focusExits}</div>
       <input aria-label="Editor input" />
       <button type="button">Reader control</button>
     </div>
@@ -173,6 +182,35 @@ describe("useReaderHotkeys", () => {
     expect(screen.getByTestId("shortcuts").textContent).toBe("open");
   });
 
+  it("toggles focus mode with body F and stands aside while an overlay is open", () => {
+    const rendered = render(<ReaderHotkeysHarness />);
+
+    pressBody("f", { code: "KeyF" });
+    expect(screen.getByTestId("focus-toggles").textContent).toBe("1");
+
+    rendered.rerender(<ReaderHotkeysHarness overlayOpen />);
+    pressBody("f", { code: "KeyF" });
+
+    expect(screen.getByTestId("focus-toggles").textContent).toBe("1");
+  });
+
+  it("gives the chrome back when Escape finds focus mode on", () => {
+    render(<ReaderHotkeysHarness focusMode />);
+
+    pressBody("Escape", { code: "Escape" });
+
+    expect(screen.getByTestId("focus-exits").textContent).toBe("1");
+  });
+
+  it("keeps the find bar's Escape ahead of focus mode", () => {
+    render(<ReaderHotkeysHarness focusMode findOpen />);
+
+    pressBody("Escape", { code: "Escape" });
+
+    expect(screen.getByTestId("close-find").textContent).toBe("1");
+    expect(screen.getByTestId("focus-exits").textContent).toBe("0");
+  });
+
   it("opens find with Mod+F while no dialog or editor owns the page", () => {
     render(<ReaderHotkeysHarness />);
 
@@ -238,6 +276,7 @@ describe("useReaderHotkeys", () => {
       keyDown(target, { key: "v", code: "KeyV" });
       keyDown(target, { key: "t", code: "KeyT" });
       keyDown(target, { key: "e", code: "KeyE" });
+      keyDown(target, { key: "f", code: "KeyF" });
       pressHelp(target);
     }
 
@@ -246,6 +285,7 @@ describe("useReaderHotkeys", () => {
     expect(screen.getByTestId("theme").textContent).toBe("dark");
     expect(screen.getByTestId("begin-editing").textContent).toBe("0");
     expect(screen.getByTestId("shortcuts").textContent).toBe("closed");
+    expect(screen.getByTestId("focus-toggles").textContent).toBe("0");
   });
 
   it("keeps Mod+S active in an editor input while editing", () => {
@@ -276,6 +316,7 @@ describe("useReaderHotkeys", () => {
     pressBody("v", { code: "KeyV" });
     pressBody("t", { code: "KeyT" });
     pressBody("e", { code: "KeyE" });
+    pressBody("f", { code: "KeyF" });
     pressHelp();
 
     expect(screen.getByTestId("navigation").textContent).toBe("0:");
@@ -283,6 +324,7 @@ describe("useReaderHotkeys", () => {
     expect(screen.getByTestId("theme").textContent).toBe("dark");
     expect(screen.getByTestId("begin-editing").textContent).toBe("0");
     expect(screen.getByTestId("shortcuts").textContent).toBe("closed");
+    expect(screen.getByTestId("focus-toggles").textContent).toBe("0");
 
     rendered.rerender(<ReaderHotkeysHarness overlayOpen editing />);
     const input = screen.getByRole("textbox", { name: "Editor input" });

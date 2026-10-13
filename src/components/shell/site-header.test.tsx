@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -84,5 +84,18 @@ describe("SiteHeader navigation", () => {
     // The account trigger is named by the account, which is how the profile specs find it.
     expect(screen.getByRole("button", { name: /E2E Admin/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Appearance: Light" })).toBeTruthy();
+  });
+
+  it("opens the appearance menu with all three choices", async () => {
+    render(<SiteHeader user={member} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Appearance: Light" }));
+
+    // The items are a Base UI radio group under a group label, and a label outside a
+    // group throws while the popup renders — so reaching the choices at all is the
+    // assertion that the menu is well-formed, not just that three labels exist.
+    expect(await screen.findByRole("menuitemradio", { name: "Light" })).toBeTruthy();
+    expect(screen.getByRole("menuitemradio", { name: "Dark" })).toBeTruthy();
+    expect(screen.getByRole("menuitemradio", { name: "System" })).toBeTruthy();
   });
 });

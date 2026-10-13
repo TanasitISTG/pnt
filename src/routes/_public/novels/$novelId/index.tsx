@@ -1,26 +1,18 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useCallback } from "react";
 
-import { NovelDetailController } from "@/components/novels/detail/novel-detail-controller";
+import { NovelPublicPage } from "@/components/novels/detail/novel-public-page";
 import { NovelPending } from "@/components/novels/detail/novel-detail-pending";
 import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
 import { hydrateAdminNovelDetailCore, novelQueryOptions } from "@/lib/content/novel/novel.query";
 import { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
 import { readerStateQueryOptions } from "@/lib/reader/query";
-import {
-  novelDetailSearchSchema,
-  type NovelDetailSearch,
-} from "@/components/novels/detail/novel-detail-search";
 
 export const Route = createFileRoute("/_public/novels/$novelId/")({
-  validateSearch: novelDetailSearchSchema,
-  loaderDeps: () => ({}),
-  shouldReload: false,
   loader: async ({ params, context }) => {
-    // The owner path is tried first because it is the only one that may see drafts and
-    // manage state. A signed-in viewer who does not own this novel falls through to the
-    // readable path rather than 404ing, which is what a shared catalog requires: the
-    // server still decides both, since the core query filters on the viewer's own id.
+    // The owner path is tried first because it is the only one that may see drafts. A
+    // signed-in viewer who does not own this novel falls through to the readable path
+    // rather than 404ing, which is what a shared catalog requires: the server still decides
+    // both, since the core query filters on the viewer's own id.
     if (context.user) {
       const core = await getAdminNovelDetailCore({ data: { novelId: params.novelId } });
       if (core) {
@@ -106,41 +98,6 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
 function NovelDetailRoute() {
   const { novelId } = Route.useParams();
   const { user } = Route.useRouteContext();
-  const reviewSearch = Route.useSearch();
-  const navigate = Route.useNavigate();
-  const onReviewSearchChange = useCallback(
-    (patch: Partial<NovelDetailSearch>) => {
-      const includesReport = Object.prototype.hasOwnProperty.call(patch, "reviewReport");
-      void navigate({
-        search: (previous) => {
-          const next = { ...previous, ...patch };
-          if (includesReport && patch.reviewReport === undefined) {
-            return {
-              ...next,
-              reviewReport: undefined,
-              reviewFilter: "attention",
-              reviewPage: 1,
-              reviewPageSize: 25,
-            };
-          }
-          if (includesReport && patch.reviewReport !== undefined) {
-            return { ...next, section: "quality" };
-          }
-          return next;
-        },
-        replace: !includesReport || patch.reviewReport === undefined,
-        resetScroll: false,
-      });
-    },
-    [navigate],
-  );
 
-  return (
-    <NovelDetailController
-      novelId={novelId}
-      signedIn={Boolean(user)}
-      reviewSearch={reviewSearch}
-      onReviewSearchChange={onReviewSearchChange}
-    />
-  );
+  return <NovelPublicPage novelId={novelId} signedIn={Boolean(user)} />;
 }

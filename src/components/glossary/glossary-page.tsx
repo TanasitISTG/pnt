@@ -12,7 +12,7 @@ import { glossaryStatsQueryOptions, glossaryTermsQueryOptions } from "@/lib/glos
 import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import type { GlossaryListSearch } from "@/lib/glossary/schemas";
 
-const glossaryRoute = getRouteApi("/_protected/novels/$novelId/glossary");
+const glossaryRoute = getRouteApi("/_protected/novels/$novelId/manage/glossary");
 function GlossaryNotFound() {
   return (
     <div className="py-12 text-center">

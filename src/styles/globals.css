@@ -397,6 +397,14 @@
   transition-duration: var(--dur-modal);
 }
 
+/*
+ * The home indicator's inset, as a class: a fixed bar or a bottom sheet that sits against
+ * the screen edge clears it, and no caller has to write the env() value itself.
+ */
+@utility pb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 :root {
   color-scheme: light;
   --background: #f7f4ed;
@@ -634,6 +642,45 @@
   .overlay-slide-end[data-starting-style],
   .overlay-slide-end[data-ending-style] {
     translate: 100% 0;
+  }
+
+  /*
+   * Base UI Drawer: the panel tracks the pointer 1:1 through
+   * `--drawer-swipe-movement-*`, so a drag has to own its translate. The resting
+   * transition is the drawer curve; a release that already carries velocity scales its
+   * own duration down through `--drawer-swipe-strength`.
+   */
+  .overlay-drawer-bottom {
+    translate: 0 calc(var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px));
+    transition: translate var(--dur-panel) var(--ease-drawer);
+  }
+
+  .overlay-drawer-bottom[data-swiping] {
+    transition: none;
+  }
+
+  .overlay-drawer-bottom[data-starting-style],
+  .overlay-drawer-bottom[data-ending-style] {
+    translate: 0 100%;
+  }
+
+  .overlay-drawer-end {
+    translate: var(--drawer-swipe-movement-x, 0px) 0;
+    transition: translate var(--dur-panel) var(--ease-drawer);
+  }
+
+  .overlay-drawer-end[data-swiping] {
+    transition: none;
+  }
+
+  .overlay-drawer-end[data-starting-style],
+  .overlay-drawer-end[data-ending-style] {
+    translate: 100% 0;
+  }
+
+  .overlay-drawer-bottom[data-ending-style],
+  .overlay-drawer-end[data-ending-style] {
+    transition-duration: calc(var(--dur-panel) * var(--drawer-swipe-strength, 1));
   }
 
   /* Keyboard-triggered, so it appears instantly: motion here would read as lag. */

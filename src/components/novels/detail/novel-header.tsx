@@ -1,70 +1,21 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  BookOpen,
-  ChevronDown,
-  Edit,
-  FileText,
-  FileType,
-  MoreHorizontal,
-  Network,
-  Trash2,
-} from "lucide-react";
+import { BookOpen, ChevronDown } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
-import { Spinner } from "@/components/ui/spinner";
 import { NovelCover } from "@/components/novels/novel-cover";
-import { PublishMenu } from "@/components/publish-menu";
 import { ReportNovelButton } from "@/components/reports/report-novel-button";
 import { NovelRatingSummary } from "@/components/reviews/novel-rating-summary";
 import type { ChapterRow } from "@/components/chapters/types";
-import { cn, formatCost, formatTokens } from "@/lib/utils";
-import { parseLanguagePair } from "@/lib/language-pair";
+import { cn } from "@/lib/utils";
 import type { getNovel } from "@/lib/content/novel/novel.functions";
-import type { getGlossaryStats } from "@/lib/glossary/functions";
-import type { getNovelCosts } from "@/lib/translation/api/queries";
 
 type Novel = NonNullable<Awaited<ReturnType<typeof getNovel>>>;
-type GlossaryStats = Awaited<ReturnType<typeof getGlossaryStats>> | undefined;
-type CostData = Awaited<ReturnType<typeof getNovelCosts>> | undefined;
 
 const DESCRIPTION_COLLAPSE_THRESHOLD = 240;
-
-export interface NovelHeaderProps {
-  novel: Novel;
-  novelId: string;
-  isAdmin: boolean;
-  /** A member reading someone else's novel; the owner manages it instead. */
-  canReport: boolean;
-  glossaryStats: GlossaryStats;
-  costData: CostData;
-  chapters: ChapterRow[];
-  chaptersPending: boolean;
-  readingActionsPending: boolean;
-  lastReadChapter: ChapterRow | null;
-  firstChapter: ChapterRow | null;
-  readingProgress: ReadingProgressSummary;
-  readyUnpublishedCount: number;
-  unreadyCount: number;
-  exporting: "txt" | "epub" | null;
-  publishingNovel: boolean;
-  onPublishNovel: (publishedAt: Date | null) => void;
-  onExportTxt: () => void;
-  onExportEpub: () => void;
-  onDeleteNovel: () => void;
-}
 
 export interface ReadingProgressSummary {
   readCount: number;
@@ -72,102 +23,17 @@ export interface ReadingProgressSummary {
   percent: number;
 }
 
-type AdminActionsProps = Pick<
-  NovelHeaderProps,
-  | "novel"
-  | "novelId"
-  | "glossaryStats"
-  | "exporting"
-  | "publishingNovel"
-  | "onPublishNovel"
-  | "onExportTxt"
-  | "onExportEpub"
-  | "onDeleteNovel"
->;
-
-function AdminActions({
-  novel,
-  novelId,
-  glossaryStats,
-  exporting,
-  publishingNovel,
-  onPublishNovel,
-  onExportTxt,
-  onExportEpub,
-  onDeleteNovel,
-}: AdminActionsProps) {
-  const showRelationships = Boolean(parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`));
-
-  return (
-    <div className="flex w-full flex-wrap justify-end gap-1.5 sm:ml-auto sm:w-auto sm:gap-2">
-      <PublishMenu
-        publishedAt={novel.publishedAt}
-        pending={publishingNovel}
-        onChange={onPublishNovel}
-        ariaLabel="Novel publishing options"
-      />
-      <Button
-        variant="outline"
-        size="sm"
-        render={<Link to="/novels/$novelId/glossary" params={{ novelId }} />}
-        aria-label="Glossary"
-        title="Glossary"
-      >
-        <BookOpen className="size-4" />
-        <span className="hidden sm:inline">Glossary</span>
-        {glossaryStats && glossaryStats.total > 0 ? (
-          <Badge variant="secondary" size="count" className="ml-1">
-            {glossaryStats.total}
-          </Badge>
-        ) : null}
-        {glossaryStats && glossaryStats.pending > 0 ? (
-          <span className="ml-0.5 size-2 animate-pulse rounded-full bg-warning" />
-        ) : null}
-      </Button>
-      {showRelationships ? (
-        <Button
-          variant="outline"
-          size="sm"
-          render={<Link to="/novels/$novelId/relationships" params={{ novelId }} />}
-          aria-label="Relationships"
-          title="Character and relationship map"
-        >
-          <Network className="size-4" />
-          <span className="hidden sm:inline">Relationships</span>
-        </Button>
-      ) : null}
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={<Button variant="outline" size="sm" aria-label="Novel actions" />}
-        >
-          <MoreHorizontal className="size-4" />
-          <span className="hidden sm:inline">More</span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuGroup>
-            <DropdownMenuItem render={<Link to="/novels/$novelId/edit" params={{ novelId }} />}>
-              <Edit className="size-4" />
-              Edit novel
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onExportTxt} disabled={exporting !== null}>
-              <FileText className="size-4" />
-              Novel as .txt
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onExportEpub} disabled={exporting !== null}>
-              <FileType className="size-4" />
-              Novel as .epub
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={onDeleteNovel}>
-            <Trash2 className="size-4" />
-            Delete novel
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {exporting ? <Spinner className="sr-only" aria-label="Exporting" /> : null}
-    </div>
-  );
+export interface NovelHeaderProps {
+  novel: Novel;
+  novelId: string;
+  /** A member reading someone else's novel; the owner manages it in the studio instead. */
+  canReport: boolean;
+  chapters: ChapterRow[];
+  chaptersPending: boolean;
+  readingActionsPending: boolean;
+  lastReadChapter: ChapterRow | null;
+  firstChapter: ChapterRow | null;
+  readingProgress: ReadingProgressSummary;
 }
 
 function NovelDescription({ description }: { description: string }) {
@@ -319,126 +185,33 @@ function ReadingActions({
   );
 }
 
-type NovelProgressProps = Pick<
-  NovelHeaderProps,
-  "chapters" | "chaptersPending" | "costData" | "readyUnpublishedCount" | "unreadyCount"
->;
-
-function NovelProgress({
-  chapters,
-  chaptersPending,
-  costData,
-  readyUnpublishedCount,
-  unreadyCount,
-}: NovelProgressProps) {
-  const translatedChapterCount = chaptersPending
-    ? 0
-    : chapters.filter((chapter) => chapter.status === "translated").length;
-  const progressPercent =
-    chaptersPending || chapters.length === 0
-      ? 0
-      : Math.round((translatedChapterCount / chapters.length) * 100);
-  const hasUsage =
-    costData &&
-    (costData.totals.promptTokens > 0 ||
-      costData.totals.completionTokens > 0 ||
-      costData.totals.unpricedChapterCount > 0);
-  const costQualifier =
-    costData && costData.totals.unpricedChapterCount > 0
-      ? `${costData.totals.unpricedChapterCount} unpriced`
-      : costData && costData.totals.estimatedChapterCount > 0
-        ? `${costData.totals.estimatedChapterCount} estimated`
-        : null;
-
-  return (
-    <div className="flex max-w-md flex-col gap-1.5 pt-2">
-      <div className="flex justify-between text-caption text-muted-foreground">
-        <span>Overall translation progress</span>
-        <span>
-          {chaptersPending
-            ? "Loading chapter progress…"
-            : `${progressPercent}% (${translatedChapterCount}/${chapters.length} chapters)`}
-        </span>
-      </div>
-      <Progress value={chaptersPending ? null : progressPercent} className="h-2" />
-      {!chaptersPending ? (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
-          <span>{readyUnpublishedCount} ready to publish</span>
-          <span>{unreadyCount} not ready</span>
-        </div>
-      ) : null}
-      {hasUsage && costData ? (
-        <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 font-mono text-caption text-muted-foreground">
-          <span>Translation usage</span>
-          <span>
-            {formatTokens(costData.totals.promptTokens)} in /{" "}
-            {formatTokens(costData.totals.completionTokens)} out
-            {costData.totals.cost != null ? ` · ${formatCost(costData.totals.cost)}` : null}
-            {costQualifier ? ` · ${costQualifier}` : null}
-          </span>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
+/**
+ * The novel as a reader meets it: cover, title, the language pair it is being translated
+ * into, the score, the description, and the way into the text. Everything the owner does to
+ * the novel — publishing, exporting, editing, deleting — lives in the studio, so this page
+ * shows one primary action instead of two toolbars.
+ */
 export function NovelHeader({
   novel,
   novelId,
-  isAdmin,
   canReport,
-  glossaryStats,
-  costData,
   chapters,
   chaptersPending,
   readingActionsPending,
   lastReadChapter,
   firstChapter,
   readingProgress,
-  readyUnpublishedCount,
-  unreadyCount,
-  exporting,
-  publishingNovel,
-  onPublishNovel,
-  onExportTxt,
-  onExportEpub,
-  onDeleteNovel,
 }: NovelHeaderProps) {
-  const adminActionsProps = {
-    novel,
-    novelId,
-    glossaryStats,
-    exporting,
-    publishingNovel,
-    onPublishNovel,
-    onExportTxt,
-    onExportEpub,
-    onDeleteNovel,
-  };
-  const readingActionsProps = {
-    novelId,
-    chapters,
-    chaptersPending,
-    readingActionsPending,
-    lastReadChapter,
-    firstChapter,
-    readingProgress,
-  };
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
-        <Button variant="ghost" size="icon" render={<Link to="/" />} aria-label="Go to Library">
-          <ArrowLeft className="size-4" />
-        </Button>
-        {isAdmin ? <AdminActions {...adminActionsProps} /> : null}
-        {/* Hidden from the owner (who manages the novel instead) and from guests, whose
-            filing call would fail; the control never appears without a way to use it. */}
-        {canReport ? (
-          <ReportNovelButton novelId={novelId} novelTitle={novel.title} className="ml-auto" />
-        ) : null}
-      </div>
-      <div className="grid grid-cols-[96px_1fr] items-start gap-4 md:grid-cols-[200px_1fr] md:gap-6">
+      {/* Hidden from the owner (who has no reason to report their own novel) and from
+          guests, whose filing call would fail. */}
+      {canReport ? (
+        <div className="flex justify-end">
+          <ReportNovelButton novelId={novelId} novelTitle={novel.title} />
+        </div>
+      ) : null}
+      <div className="grid grid-cols-[104px_1fr] items-start gap-4 md:grid-cols-[200px_1fr] md:gap-6">
         <div className="relative aspect-3/4 w-full overflow-hidden rounded-xl border border-border bg-foreground/3">
           <NovelCover
             novelId={novel.hasCover ? novel.id : null}
@@ -446,7 +219,7 @@ export function NovelHeader({
             coverUrl={novel.coverUrl}
             coverSrcSet={novel.coverSrcSet}
             alt={novel.title}
-            sizes="(max-width: 767px) 96px, 200px"
+            sizes="(max-width: 767px) 104px, 200px"
             priority
             className="h-full w-full object-cover"
             fallbackSize={16}
@@ -454,16 +227,15 @@ export function NovelHeader({
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           <NovelMeta novel={novel} novelId={novelId} />
-          <ReadingActions {...readingActionsProps} />
-          {isAdmin ? (
-            <NovelProgress
-              chapters={chapters}
-              chaptersPending={chaptersPending}
-              costData={costData}
-              readyUnpublishedCount={readyUnpublishedCount}
-              unreadyCount={unreadyCount}
-            />
-          ) : null}
+          <ReadingActions
+            novelId={novelId}
+            chapters={chapters}
+            chaptersPending={chaptersPending}
+            readingActionsPending={readingActionsPending}
+            lastReadChapter={lastReadChapter}
+            firstChapter={firstChapter}
+            readingProgress={readingProgress}
+          />
         </div>
       </div>
     </div>

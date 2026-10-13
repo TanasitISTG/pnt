@@ -83,11 +83,15 @@ test("operator moderates, audits, and views an account read-only", async ({ page
   // failure. A read that still demanded a writable session would fail this whole step.
   await page.goto("/novels/e2e-member-novel");
   await expect(page.getByRole("heading", { name: memberNovelTitle })).toBeVisible();
-  await expect(page.getByRole("link", { name: memberChapterTitle, exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0);
   await expect(
     page.getByText("Actions are unavailable while you are viewing as another account."),
   ).toHaveCount(0);
+  // Reading-first: the chapter is still a draft, and a draft collects no reader, so the
+  // reading page does not offer it even to its owner. The owner's copy of it is the studio.
+  await expect(page.getByRole("link", { name: memberChapterTitle, exact: true })).toHaveCount(0);
+  await page.goto("/novels/e2e-member-novel/manage/chapters");
+  await expect(page.getByRole("row", { name: new RegExp(memberChapterTitle) })).toBeVisible();
 
   // Writes stay refused: the same session cannot rename the account.
   await page.goto("/profile");

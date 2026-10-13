@@ -12,6 +12,11 @@ export interface ReaderFooterNavProps {
   onGoToChapter: (id: string) => void;
 }
 
+/**
+ * The end of a chapter is a fork, so the fork gets one obvious action: the next chapter,
+ * named. Continuing is what most readers do here, and the chapter they are about to open
+ * is worth more than the word "Next".
+ */
 export function ReaderFooterNav({
   novelId,
   prevChapter,
@@ -29,7 +34,7 @@ export function ReaderFooterNav({
             onClick={() => onGoToChapter(prevChapter.id)}
             title={`Previous: ${chapterLabel(prevChapter)}`}
           >
-            <ChevronLeft className="size-3.5 shrink-0" />
+            <ChevronLeft className="size-3.5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1 overflow-hidden">
               <span className="block text-caption text-muted-foreground">Previous chapter</span>
               <span className="block truncate">{chapterLabel(prevChapter)}</span>
@@ -44,22 +49,22 @@ export function ReaderFooterNav({
               !prevChapter && "sm:col-start-2",
             )}
             onClick={() => onGoToChapter(nextChapter.id)}
-            title={`Next: ${chapterLabel(nextChapter)}`}
+            title={`Up next: ${chapterLabel(nextChapter)}`}
           >
             <span className="min-w-0 flex-1 overflow-hidden">
-              <span className="block text-caption opacity-75">Next chapter</span>
+              <span className="block text-caption opacity-75">Up next</span>
               <span className="block truncate">{chapterLabel(nextChapter)}</span>
             </span>
-            <ChevronRight className="size-3.5 shrink-0" />
+            <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
           </Button>
         ) : (
           <p
             className={cn(
-              "flex min-h-11 min-w-0 max-w-full items-center justify-end overflow-hidden text-right text-sm text-muted-foreground",
+              "flex min-h-11 min-w-0 max-w-full items-center justify-end overflow-hidden text-right text-body text-muted-foreground",
               !prevChapter && "sm:col-start-2",
             )}
           >
-            You’ve reached the last available chapter.
+            This is the last available chapter.
           </p>
         )}
       </div>
@@ -71,7 +76,7 @@ export function ReaderFooterNav({
           render={<Link to="/novels/$novelId" params={{ novelId }} />}
           aria-label="All chapters"
         >
-          <List className="size-4" />
+          <List className="size-4" aria-hidden="true" />
           All chapters
         </Button>
       </div>
