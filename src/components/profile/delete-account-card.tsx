@@ -38,7 +38,7 @@ export function DeleteAccountCard({ email }: DeleteAccountCardProps) {
       }
       setSent(true);
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("The request did not finish. Try again.");
     } finally {
       setPending(false);
     }

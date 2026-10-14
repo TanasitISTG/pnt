@@ -81,7 +81,9 @@ export function ProviderSelectionSection({
               key={option.value}
               value={option.value}
               appearance="provider"
-              className="h-auto min-w-0 flex-1 basis-0 flex-col whitespace-normal"
+              // `self-stretch` because the group centres its items: a two-line label beside a
+              // one-line one otherwise made the two cards different heights.
+              className="h-auto min-w-0 flex-1 basis-0 flex-col self-stretch whitespace-normal"
             >
               <span className="w-full font-medium text-foreground">{option.label}</span>
               <span className="w-full text-caption text-muted-foreground">

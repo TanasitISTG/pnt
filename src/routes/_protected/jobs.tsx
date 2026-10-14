@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_protected/jobs")({
     hydrateJobDashboardQueries(context.queryClient, search, dashboard);
   },
   head: () => ({
-    meta: [{ title: "Job activity | Pnt - Personal Novel Translator" }],
+    meta: [{ title: "Activity | Pnt - Personal Novel Translator" }],
   }),
   component: JobsPage,
 });

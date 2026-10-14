@@ -54,9 +54,9 @@ export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Key className="size-5 text-muted-foreground" />
-          <CardTitle>Account & Security</CardTitle>
+          <CardTitle>Password</CardTitle>
         </div>
-        <CardDescription>Update your admin account password.</CardDescription>
+        <CardDescription>Change the password this account signs in with.</CardDescription>
       </CardHeader>
       <CardContent>
         <form

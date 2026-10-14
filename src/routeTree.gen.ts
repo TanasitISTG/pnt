@@ -35,6 +35,12 @@ import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/adm
 import { Route as ProtectedAdminActivityRouteImport } from './routes/_protected/admin.activity'
 import { Route as ProtectedAdminReportsRouteImport } from './routes/_protected/admin.reports'
 import { Route as ProtectedNovelsNewRouteImport } from './routes/_protected/novels/new'
+import { Route as ProtectedSettingsIndexRouteImport } from './routes/_protected/settings.index'
+import { Route as ProtectedSettingsAccountRouteImport } from './routes/_protected/settings.account'
+import { Route as ProtectedSettingsAppearanceRouteImport } from './routes/_protected/settings.appearance'
+import { Route as ProtectedSettingsDataRouteImport } from './routes/_protected/settings.data'
+import { Route as ProtectedSettingsProviderRouteImport } from './routes/_protected/settings.provider'
+import { Route as ProtectedSettingsSecurityRouteImport } from './routes/_protected/settings.security'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
@@ -182,6 +188,40 @@ const ProtectedNovelsNewRoute = ProtectedNovelsNewRouteImport.update({
   path: '/novels/new',
   getParentRoute: () => ProtectedRoute,
 } as any)
+const ProtectedSettingsIndexRoute = ProtectedSettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProtectedSettingsRoute,
+} as any)
+const ProtectedSettingsAccountRoute =
+  ProtectedSettingsAccountRouteImport.update({
+    id: '/account',
+    path: '/account',
+    getParentRoute: () => ProtectedSettingsRoute,
+  } as any)
+const ProtectedSettingsAppearanceRoute =
+  ProtectedSettingsAppearanceRouteImport.update({
+    id: '/appearance',
+    path: '/appearance',
+    getParentRoute: () => ProtectedSettingsRoute,
+  } as any)
+const ProtectedSettingsDataRoute = ProtectedSettingsDataRouteImport.update({
+  id: '/data',
+  path: '/data',
+  getParentRoute: () => ProtectedSettingsRoute,
+} as any)
+const ProtectedSettingsProviderRoute =
+  ProtectedSettingsProviderRouteImport.update({
+    id: '/provider',
+    path: '/provider',
+    getParentRoute: () => ProtectedSettingsRoute,
+  } as any)
+const ProtectedSettingsSecurityRoute =
+  ProtectedSettingsSecurityRouteImport.update({
+    id: '/security',
+    path: '/security',
+    getParentRoute: () => ProtectedSettingsRoute,
+  } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -302,7 +342,7 @@ export interface FileRoutesByFullPath {
   '/jobs': typeof ProtectedJobsRoute
   '/library': typeof ProtectedLibraryRoute
   '/profile': typeof ProtectedProfileRoute
-  '/settings': typeof ProtectedSettingsRoute
+  '/settings': typeof ProtectedSettingsRouteWithChildren
   '/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
@@ -310,12 +350,18 @@ export interface FileRoutesByFullPath {
   '/admin/activity': typeof ProtectedAdminActivityRoute
   '/admin/reports': typeof ProtectedAdminReportsRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
+  '/settings/account': typeof ProtectedSettingsAccountRoute
+  '/settings/appearance': typeof ProtectedSettingsAppearanceRoute
+  '/settings/data': typeof ProtectedSettingsDataRoute
+  '/settings/provider': typeof ProtectedSettingsProviderRoute
+  '/settings/security': typeof ProtectedSettingsSecurityRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
   '/admin/': typeof ProtectedAdminIndexRoute
+  '/settings/': typeof ProtectedSettingsIndexRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageRouteWithChildren
@@ -345,7 +391,6 @@ export interface FileRoutesByTo {
   '/jobs': typeof ProtectedJobsRoute
   '/library': typeof ProtectedLibraryRoute
   '/profile': typeof ProtectedProfileRoute
-  '/settings': typeof ProtectedSettingsRoute
   '/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
@@ -353,12 +398,18 @@ export interface FileRoutesByTo {
   '/admin/activity': typeof ProtectedAdminActivityRoute
   '/admin/reports': typeof ProtectedAdminReportsRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
+  '/settings/account': typeof ProtectedSettingsAccountRoute
+  '/settings/appearance': typeof ProtectedSettingsAppearanceRoute
+  '/settings/data': typeof ProtectedSettingsDataRoute
+  '/settings/provider': typeof ProtectedSettingsProviderRoute
+  '/settings/security': typeof ProtectedSettingsSecurityRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
   '/admin': typeof ProtectedAdminIndexRoute
+  '/settings': typeof ProtectedSettingsIndexRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
@@ -390,7 +441,7 @@ export interface FileRoutesById {
   '/_protected/jobs': typeof ProtectedJobsRoute
   '/_protected/library': typeof ProtectedLibraryRoute
   '/_protected/profile': typeof ProtectedProfileRoute
-  '/_protected/settings': typeof ProtectedSettingsRoute
+  '/_protected/settings': typeof ProtectedSettingsRouteWithChildren
   '/_public/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
@@ -399,12 +450,18 @@ export interface FileRoutesById {
   '/_protected/admin/activity': typeof ProtectedAdminActivityRoute
   '/_protected/admin/reports': typeof ProtectedAdminReportsRoute
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
+  '/_protected/settings/account': typeof ProtectedSettingsAccountRoute
+  '/_protected/settings/appearance': typeof ProtectedSettingsAppearanceRoute
+  '/_protected/settings/data': typeof ProtectedSettingsDataRoute
+  '/_protected/settings/provider': typeof ProtectedSettingsProviderRoute
+  '/_protected/settings/security': typeof ProtectedSettingsSecurityRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
+  '/_protected/settings/': typeof ProtectedSettingsIndexRoute
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/_protected/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageRouteWithChildren
@@ -445,12 +502,18 @@ export interface FileRouteTypes {
     | '/admin/activity'
     | '/admin/reports'
     | '/novels/new'
+    | '/settings/account'
+    | '/settings/appearance'
+    | '/settings/data'
+    | '/settings/provider'
+    | '/settings/security'
     | '/api/auth/$'
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
     | '/admin/'
+    | '/settings/'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/manage'
@@ -480,7 +543,6 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/library'
     | '/profile'
-    | '/settings'
     | '/catalog'
     | '/api/backups'
     | '/api/inngest'
@@ -488,12 +550,18 @@ export interface FileRouteTypes {
     | '/admin/activity'
     | '/admin/reports'
     | '/novels/new'
+    | '/settings/account'
+    | '/settings/appearance'
+    | '/settings/data'
+    | '/settings/provider'
+    | '/settings/security'
     | '/api/auth/$'
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
     | '/admin'
+    | '/settings'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/relationships'
@@ -533,12 +601,18 @@ export interface FileRouteTypes {
     | '/_protected/admin/activity'
     | '/_protected/admin/reports'
     | '/_protected/novels/new'
+    | '/_protected/settings/account'
+    | '/_protected/settings/appearance'
+    | '/_protected/settings/data'
+    | '/_protected/settings/provider'
+    | '/_protected/settings/security'
     | '/api/auth/$'
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
     | '/_protected/admin/'
+    | '/_protected/settings/'
     | '/_protected/novels/$novelId/edit'
     | '/_protected/novels/$novelId/glossary'
     | '/_protected/novels/$novelId/manage'
@@ -761,6 +835,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedNovelsNewRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/settings/': {
+      id: '/_protected/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof ProtectedSettingsIndexRouteImport
+      parentRoute: typeof ProtectedSettingsRoute
+    }
+    '/_protected/settings/account': {
+      id: '/_protected/settings/account'
+      path: '/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof ProtectedSettingsAccountRouteImport
+      parentRoute: typeof ProtectedSettingsRoute
+    }
+    '/_protected/settings/appearance': {
+      id: '/_protected/settings/appearance'
+      path: '/appearance'
+      fullPath: '/settings/appearance'
+      preLoaderRoute: typeof ProtectedSettingsAppearanceRouteImport
+      parentRoute: typeof ProtectedSettingsRoute
+    }
+    '/_protected/settings/data': {
+      id: '/_protected/settings/data'
+      path: '/data'
+      fullPath: '/settings/data'
+      preLoaderRoute: typeof ProtectedSettingsDataRouteImport
+      parentRoute: typeof ProtectedSettingsRoute
+    }
+    '/_protected/settings/provider': {
+      id: '/_protected/settings/provider'
+      path: '/provider'
+      fullPath: '/settings/provider'
+      preLoaderRoute: typeof ProtectedSettingsProviderRouteImport
+      parentRoute: typeof ProtectedSettingsRoute
+    }
+    '/_protected/settings/security': {
+      id: '/_protected/settings/security'
+      path: '/security'
+      fullPath: '/settings/security'
+      preLoaderRoute: typeof ProtectedSettingsSecurityRouteImport
+      parentRoute: typeof ProtectedSettingsRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -906,6 +1022,27 @@ const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
   ProtectedAdminRouteChildren,
 )
 
+interface ProtectedSettingsRouteChildren {
+  ProtectedSettingsAccountRoute: typeof ProtectedSettingsAccountRoute
+  ProtectedSettingsAppearanceRoute: typeof ProtectedSettingsAppearanceRoute
+  ProtectedSettingsDataRoute: typeof ProtectedSettingsDataRoute
+  ProtectedSettingsProviderRoute: typeof ProtectedSettingsProviderRoute
+  ProtectedSettingsSecurityRoute: typeof ProtectedSettingsSecurityRoute
+  ProtectedSettingsIndexRoute: typeof ProtectedSettingsIndexRoute
+}
+
+const ProtectedSettingsRouteChildren: ProtectedSettingsRouteChildren = {
+  ProtectedSettingsAccountRoute: ProtectedSettingsAccountRoute,
+  ProtectedSettingsAppearanceRoute: ProtectedSettingsAppearanceRoute,
+  ProtectedSettingsDataRoute: ProtectedSettingsDataRoute,
+  ProtectedSettingsProviderRoute: ProtectedSettingsProviderRoute,
+  ProtectedSettingsSecurityRoute: ProtectedSettingsSecurityRoute,
+  ProtectedSettingsIndexRoute: ProtectedSettingsIndexRoute,
+}
+
+const ProtectedSettingsRouteWithChildren =
+  ProtectedSettingsRoute._addFileChildren(ProtectedSettingsRouteChildren)
+
 interface ProtectedNovelsNovelIdManageRouteChildren {
   ProtectedNovelsNovelIdManageAddRoute: typeof ProtectedNovelsNovelIdManageAddRoute
   ProtectedNovelsNovelIdManageChaptersRoute: typeof ProtectedNovelsNovelIdManageChaptersRoute
@@ -943,7 +1080,7 @@ interface ProtectedRouteChildren {
   ProtectedJobsRoute: typeof ProtectedJobsRoute
   ProtectedLibraryRoute: typeof ProtectedLibraryRoute
   ProtectedProfileRoute: typeof ProtectedProfileRoute
-  ProtectedSettingsRoute: typeof ProtectedSettingsRoute
+  ProtectedSettingsRoute: typeof ProtectedSettingsRouteWithChildren
   ProtectedNovelsNewRoute: typeof ProtectedNovelsNewRoute
   ProtectedNovelsNovelIdEditRoute: typeof ProtectedNovelsNovelIdEditRoute
   ProtectedNovelsNovelIdGlossaryRoute: typeof ProtectedNovelsNovelIdGlossaryRoute
@@ -956,7 +1093,7 @@ const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedJobsRoute: ProtectedJobsRoute,
   ProtectedLibraryRoute: ProtectedLibraryRoute,
   ProtectedProfileRoute: ProtectedProfileRoute,
-  ProtectedSettingsRoute: ProtectedSettingsRoute,
+  ProtectedSettingsRoute: ProtectedSettingsRouteWithChildren,
   ProtectedNovelsNewRoute: ProtectedNovelsNewRoute,
   ProtectedNovelsNovelIdEditRoute: ProtectedNovelsNovelIdEditRoute,
   ProtectedNovelsNovelIdGlossaryRoute: ProtectedNovelsNovelIdGlossaryRoute,

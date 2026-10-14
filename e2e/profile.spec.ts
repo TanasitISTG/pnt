@@ -60,29 +60,30 @@ test.afterEach(async () => {
   }
 });
 
-test("profile owns the display name, photo, and account security", async ({ page }) => {
+test("the account section owns the display name and photo", async ({ page }) => {
   test.setTimeout(120_000);
   await signIn(page);
 
-  // The account menu now offers Profile, which carries the account card.
+  // The account menu offers Account, which opens the settings hub's account section.
   await page.getByRole("button", { name: new RegExp(seededName) }).click();
-  await expect(page.getByRole("menuitem", { name: "Profile" })).toBeVisible();
-  await page.getByRole("menuitem", { name: "Profile" }).click();
-  await expect(page).toHaveURL(/\/profile$/);
-  await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
-  await expect(page.getByText("Account & Security")).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Account" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Account" }).click();
+  await expect(page).toHaveURL(/\/settings\/account$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Account" })).toBeVisible();
   // Exact: the change-email form on the same page also carries an "Email" label.
   await expect(page.getByLabel("Email", { exact: true })).toHaveValue(adminEmail);
 
-  // Settings kept the provider work and hands account details over to Profile.
+  // The bare hub opens on the same section, and the sections are real destinations
+  // rather than one page's worth of stacked cards.
   await page.goto("/settings");
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await expect(page.getByText("Account & Security")).toHaveCount(0);
-  // A document load renders the shell from the server, so the crossing has to be
-  // hydrated before the link is a client-side navigation rather than a reload.
-  await waitForReactHydration(page, 'a[href="/profile"]');
-  await page.getByRole("link", { name: "Profile" }).click();
-  await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/account$/);
+  await waitForReactHydration(page, 'a[href="/settings/security"]');
+  await page.getByRole("link", { name: "Security" }).click();
+  await expect(page).toHaveURL(/\/settings\/security$/);
+  await expect(page.getByRole("heading", { level: 2, name: "Security" })).toBeVisible();
+  await page.getByRole("link", { name: "Account" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Account" })).toBeVisible();
 
   await saveName(page, renamedTo);
 

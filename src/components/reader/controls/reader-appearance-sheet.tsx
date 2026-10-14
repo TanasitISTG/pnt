@@ -15,6 +15,12 @@ import type { ReaderAppearanceControlsProps } from "./reader-appearance-controls
 export interface ReaderAppearanceSheetProps extends ReaderAppearanceControlsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * `icon` is the 44px square the top bar uses; `readerBar` is the thumb bar's
+   * icon-over-label cell. The trigger used to be the icon shape in both bars, so the
+   * bottom bar showed one bare glyph among four labelled buttons.
+   */
+  triggerSize?: "icon" | "readerBar";
 }
 
 /**
@@ -26,16 +32,24 @@ export interface ReaderAppearanceSheetProps extends ReaderAppearanceControlsProp
 export function ReaderAppearanceSheet({
   open,
   onOpenChange,
+  triggerSize = "icon",
   ...controls
 }: ReaderAppearanceSheetProps) {
   return (
     <Drawer open={open} onOpenChange={onOpenChange} swipeDirection="down">
       <DrawerTrigger
-        render={<Button variant="ghost" size="icon" className="size-11 shrink-0" />}
+        render={
+          <Button
+            variant="ghost"
+            size={triggerSize}
+            className={triggerSize === "icon" ? "size-11 shrink-0" : undefined}
+          />
+        }
         aria-label="Reading settings"
         title="Reading settings"
       >
-        <Settings2 className="size-4" aria-hidden="true" />
+        <Settings2 className={triggerSize === "icon" ? "size-4" : "size-5"} aria-hidden="true" />
+        {triggerSize === "readerBar" ? "Settings" : null}
       </DrawerTrigger>
       <DrawerContent side="bottom">
         <DrawerHeader>

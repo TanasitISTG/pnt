@@ -95,13 +95,15 @@ export function RelationshipsWorkspace({
       ) : null}
 
       <Tabs value={search.view} onValueChange={onViewChange}>
+        {/* The icons step aside on a phone: two tab labels and two glyphs do not fit on
+            one line at 390px, and the labels are what carry the meaning. */}
         <TabsList aria-label="Relationship map views">
           <TabsTrigger value="characters">
-            <Users className="size-4" aria-hidden="true" />
+            <Users className="size-4 max-sm:hidden" aria-hidden="true" />
             Characters ({map.characters.length})
           </TabsTrigger>
           <TabsTrigger value="relationships">
-            <Network className="size-4" aria-hidden="true" />
+            <Network className="size-4 max-sm:hidden" aria-hidden="true" />
             Directed relationships ({map.relationships.length})
           </TabsTrigger>
         </TabsList>

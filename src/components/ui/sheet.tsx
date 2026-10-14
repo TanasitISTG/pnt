@@ -25,9 +25,14 @@ function SheetClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="sheet-close" {...props} />;
 }
 
+/*
+ * A side sheet is defined by `inset-y-0` alone, never by a `dvh` height: the two together
+ * resolve to the height, so on a phone whose dynamic viewport is shorter than the layout
+ * viewport the panel stopped above the bottom edge and left the page showing underneath.
+ */
 const SIDE_CLASSES = {
-  start: "inset-y-0 left-0 h-dvh w-[min(20rem,88vw)] border-r border-border overlay-slide-start",
-  end: "inset-y-0 right-0 h-dvh w-[min(24rem,88vw)] border-l border-border overlay-slide-end",
+  start: "inset-y-0 left-0 w-[min(20rem,88vw)] border-r border-border overlay-slide-start",
+  end: "inset-y-0 right-0 w-[min(24rem,88vw)] border-l border-border overlay-slide-end",
   bottom: "inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl border-t border-border overlay-sheet",
 } as const;
 

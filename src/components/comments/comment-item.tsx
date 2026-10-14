@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Flag, MoreHorizontal, Pencil, Reply, Trash2 } from "lucide-react";
 
+import { DiscussionTombstone } from "@/components/discussion/discussion-parts";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,7 +61,7 @@ export function CommentItem({
       />
       <div className="min-w-0 flex-1">
         <header className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="truncate text-sm font-medium text-foreground">
+          <span className="truncate text-body font-medium text-foreground">
             {comment.author.name ?? (comment.author.id ? "Reader" : "Deleted account")}
           </span>
           <time
@@ -119,18 +120,13 @@ export function CommentItem({
         </header>
 
         {comment.removedAt !== null ? (
-          <p className="mt-1 text-sm text-muted-foreground italic">
-            Removed by an operator
-            {comment.removalReason ? `: ${comment.removalReason}` : "."}
-          </p>
+          <DiscussionTombstone kind="removed" reason={comment.removalReason} />
         ) : comment.deletedAt !== null ? (
-          <p className="mt-1 text-sm text-muted-foreground italic">
-            Comment deleted by its author.
-          </p>
+          <DiscussionTombstone kind="deleted">Comment deleted by its author.</DiscussionTombstone>
         ) : editor ? (
           <div className="mt-2">{editor}</div>
         ) : (
-          <p className="mt-1 text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground">
+          <p className="mt-1 text-body leading-relaxed break-words whitespace-pre-wrap text-foreground">
             {comment.body}
           </p>
         )}

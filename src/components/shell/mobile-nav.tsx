@@ -8,7 +8,9 @@ import { useSignOut } from "@/components/shell/use-sign-out";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
+import { UserAvatar } from "@/components/user-avatar";
 import type { ViewerUser } from "@/lib/profile/types";
+import { useViewerAvatar } from "@/lib/profile/use-viewer-avatar";
 
 interface MobileNavProps {
   user: ViewerUser | null;
@@ -16,7 +18,7 @@ interface MobileNavProps {
 }
 
 interface MobileNavLink {
-  to: "/catalog" | "/library" | "/jobs" | "/profile" | "/settings" | "/admin";
+  to: "/catalog" | "/library" | "/jobs" | "/settings" | "/settings/account" | "/admin";
   label: string;
   /** Only rendered for a signed-in session. */
   requiresSession?: boolean;
@@ -27,8 +29,8 @@ interface MobileNavLink {
 const MOBILE_LINKS: readonly MobileNavLink[] = [
   { to: "/catalog", label: "Catalog" },
   { to: "/library", label: "Library", requiresSession: true },
-  { to: "/jobs", label: "Jobs", requiresSession: true },
-  { to: "/profile", label: "Profile", requiresSession: true },
+  { to: "/jobs", label: "Activity", requiresSession: true },
+  { to: "/settings/account", label: "Account", requiresSession: true },
   { to: "/settings", label: "Settings", requiresSession: true },
   { to: "/admin", label: "Admin", requiresSession: true, requiresAdmin: true },
 ];
@@ -52,6 +54,7 @@ const ITEM_VARIANTS = {
 export function MobileNav({ user, isAdmin }: MobileNavProps) {
   const [open, setOpen] = React.useState(false);
   const { signingOut, signOut } = useSignOut();
+  const avatar = useViewerAvatar();
   const reduceMotion = useReducedMotion();
 
   const links = MOBILE_LINKS.filter((link) => {
@@ -71,8 +74,24 @@ export function MobileNav({ user, isAdmin }: MobileNavProps) {
       <SheetContent side="start" className="md:hidden">
         <SheetHeader>
           <SheetTitle>Menu</SheetTitle>
+          {/* The drawer carries the identity the header's account menu used to show: on a
+              phone the avatar and the address belong at the top of the list you just
+              opened, not behind a second control in the bar. */}
+          {user ? (
+            <div className="flex min-w-0 items-center gap-2 pt-1">
+              <UserAvatar name={user.name || user.email} avatar={avatar} size="sm" />
+              <div className="min-w-0">
+                <p className="truncate text-caption font-semibold text-foreground">
+                  {user.name || user.email}
+                </p>
+                <p className="truncate text-micro text-muted-foreground">{user.email}</p>
+              </div>
+            </div>
+          ) : null}
         </SheetHeader>
-        <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto p-2">
+        {/* `overscroll-contain` so a flick that reaches the end of the list stays in the
+            panel instead of chaining to the page behind it. */}
+        <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
           <m.ul
             initial={reduceMotion ? false : "hidden"}
             animate="visible"
@@ -96,21 +115,10 @@ export function MobileNav({ user, isAdmin }: MobileNavProps) {
         </nav>
         <div className="border-t border-border p-3">
           {user ? (
-            <div className="flex items-center justify-between gap-3">
-              <span className="min-w-0 truncate text-caption text-muted-foreground">
-                {user.email}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0"
-                onClick={signOut}
-                disabled={signingOut}
-              >
-                {signingOut ? <Spinner /> : <LogOut className="size-4" aria-hidden="true" />}
-                {signingOut ? "Signing out…" : "Sign out"}
-              </Button>
-            </div>
+            <Button variant="ghost" className="w-full" onClick={signOut} disabled={signingOut}>
+              {signingOut ? <Spinner /> : <LogOut className="size-4" aria-hidden="true" />}
+              {signingOut ? "Signing out…" : "Sign out"}
+            </Button>
           ) : (
             <div className="flex flex-col gap-2">
               <Button

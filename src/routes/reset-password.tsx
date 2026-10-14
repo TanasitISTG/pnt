@@ -70,7 +70,7 @@ function ResetPasswordPage() {
         toast.success("Password updated. Sign in with your new password.");
         await navigate({ to: "/login", replace: true });
       } catch {
-        setError("Something went wrong. Please try again.");
+        setError("The request did not finish. Try again.");
       }
     },
   });

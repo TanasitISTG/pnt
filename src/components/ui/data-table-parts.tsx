@@ -11,6 +11,8 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Updater } from "@tanstack/react-table";
 
+import { cn } from "@/lib/utils";
+
 import { Button } from "./button";
 import {
   DropdownMenu,
@@ -24,6 +26,7 @@ import {
 } from "./dropdown-menu";
 import { Input } from "./input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
+import { Skeleton } from "./skeleton";
 import { Spinner } from "./spinner";
 import { TableBody, TableCell, TableHead, TableRow } from "./table";
 
@@ -45,7 +48,7 @@ function DataTableSkeletonRows({ columnCount }: { columnCount: number }) {
         <TableRow key={`skeleton-${skeletonIndex}`} aria-hidden="true">
           {Array.from({ length: columnCount }, (_cellPlaceholder, cellIndex) => (
             <TableCell key={`skeleton-${skeletonIndex}-${cellIndex}`}>
-              <div className="h-4 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+              <Skeleton className="h-4" />
             </TableCell>
           ))}
         </TableRow>
@@ -162,13 +165,28 @@ export function DataTableSection({
 
 export function DataTableDesktopRegion({
   ariaLabel,
+  scroll = false,
   children,
 }: {
   ariaLabel: string;
+  /**
+   * Bound the region's height and scroll it, which is what makes a `sticky` table head
+   * actually stick: a header cannot pin to the viewport while an ancestor is the
+   * scroll container. Console surfaces want this — the toolbar and the lead bands stay
+   * in view while the page's rows move under the head.
+   */
+  scroll?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="hidden overflow-x-auto md:block" role="region" aria-label={ariaLabel}>
+    <div
+      className={cn(
+        "hidden overflow-x-auto md:block",
+        scroll && "max-h-[70vh] overflow-y-auto overscroll-contain",
+      )}
+      role="region"
+      aria-label={ariaLabel}
+    >
       {children}
     </div>
   );

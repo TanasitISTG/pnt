@@ -1,12 +1,26 @@
 import { useEffect } from "react";
-import { Link, type ErrorComponentProps } from "@tanstack/react-router";
-import { Home, RefreshCw, TriangleAlert } from "lucide-react";
+import { Link, useRouterState, type ErrorComponentProps } from "@tanstack/react-router";
+import { RefreshCw, TriangleAlert } from "lucide-react";
 
+import { QuietPage } from "@/components/quiet-page";
+import { QuietShell, hasPageFrame } from "@/components/shell/quiet-shell";
 import { Button } from "@/components/ui/button";
 import { captureException } from "@/lib/posthog";
 
+/**
+ * The screen a thrown route error lands on, both as the router's default and for every
+ * route that does not override it.
+ *
+ * The copy states what happened and what to do next, and it says the reassuring thing that
+ * is true: a failed load is not a lost write. The thrown message is surfaced only in
+ * development, because a redirect, a not-found or a server refusal is not a defect and its
+ * wording is written for a caller, not a reader.
+ */
 export function ErrorPage({ error, reset }: ErrorComponentProps) {
   const errorMessage = error instanceof Error ? error.message : undefined;
+  const framed = useRouterState({
+    select: (state) => hasPageFrame(state.matches.map((match) => match.routeId)),
+  });
 
   useEffect(() => {
     if (error) {
@@ -14,27 +28,25 @@ export function ErrorPage({ error, reset }: ErrorComponentProps) {
     }
   }, [error]);
 
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center px-4">
-      <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
-        <TriangleAlert className="size-7 text-muted-foreground" />
-      </div>
-      <h1 className="text-card-title font-semibold text-foreground">Something went wrong</h1>
-      <p className="mt-2 max-w-sm text-body text-muted-foreground">
-        {import.meta.env.DEV && errorMessage
+  const page = (
+    <QuietPage
+      icon={<TriangleAlert />}
+      title="This page did not load"
+      description={
+        import.meta.env.DEV && errorMessage
           ? errorMessage
-          : "An unexpected error occurred. Please try again or return to the library."}
-      </p>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-        <Button onClick={() => (reset ? reset() : window.location.reload())}>
-          <RefreshCw className="size-4" />
-          Try again
-        </Button>
-        <Button variant="outline" render={<Link to="/" />}>
-          <Home className="size-4" />
-          Back to Library
-        </Button>
-      </div>
-    </div>
+          : "The request did not finish, so the page is incomplete. Trying again usually works, and nothing you have saved is affected."
+      }
+    >
+      <Button onClick={() => (reset ? reset() : window.location.reload())}>
+        <RefreshCw className="size-4" aria-hidden="true" />
+        Try again
+      </Button>
+      <Button variant="outline" render={<Link to="/catalog" />}>
+        Back to catalog
+      </Button>
+    </QuietPage>
   );
+
+  return framed ? page : <QuietShell>{page}</QuietShell>;
 }

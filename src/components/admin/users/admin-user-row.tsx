@@ -119,7 +119,7 @@ export function AdminUserTableRow({
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" className="size-9" />}
+              render={<Button variant="ghost" size="icon-sm" />}
               aria-label={`Actions for ${row.email}`}
               disabled={busy}
             >

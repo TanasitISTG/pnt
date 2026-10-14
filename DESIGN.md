@@ -38,27 +38,27 @@ The rules below are what that difference changes.
 
 Four tiers. A page never invents a value, and no component picks a hue directly.
 
-| Tier | Role | Tokens |
-| ---- | ---- | ------ |
-| 0 | Constant palette — never flips with the theme | `cream` `#f7f4ed`, `charcoal` `#1c1c1c`, `off-white` `#fcfbf8` |
-| 1 | Surfaces — flip per theme and per reader page theme | `surface-0` · `surface` · `surface-2` · `surface-3` · `surface-inset` |
-| 2 | Foregrounds and borders | `foreground` · `muted-foreground` · `fg-3` · `border` · `border-strong` |
-| 3 | The accent | `ink` · `ink-foreground` · `ink-quiet` |
+| Tier | Role                                                | Tokens                                                                  |
+| ---- | --------------------------------------------------- | ----------------------------------------------------------------------- |
+| 0    | Constant palette — never flips with the theme       | `cream` `#f7f4ed`, `charcoal` `#1c1c1c`, `off-white` `#fcfbf8`          |
+| 1    | Surfaces — flip per theme and per reader page theme | `surface-0` · `surface` · `surface-2` · `surface-3` · `surface-inset`   |
+| 2    | Foregrounds and borders                             | `foreground` · `muted-foreground` · `fg-3` · `border` · `border-strong` |
+| 3    | The accent                                          | `ink` · `ink-foreground` · `ink-quiet`                                  |
 
 ### 2.1 Surfaces, foregrounds, borders
 
-| Token | Light | Dark | Where it is used |
-| ----- | ----- | ---- | ---------------- |
-| `background` / `surface-0` | `#f7f4ed` | `#1c1c1c` | The page |
-| `surface` (`card`) | `#fbf9f4` | `#232320` | Panels, cards, table headers |
-| `surface-2` (`popover`) | `#fdfcf9` | `#2a2a27` | Popovers, menus, sheets, dialogs |
-| `surface-3` | `#fefdfa` | `#333330` | Tooltips, the topmost layer |
-| `surface-inset` | `rgba(28,28,28,.04)` | `rgba(247,244,237,.06)` | Recessed fills: hover, skeletons, icon wells |
-| `foreground` | `#1c1c1c` | `#f7f4ed` | Body and headings |
-| `muted-foreground` | `#5f5f5d` | `#a3a3a0` | Secondary copy, metadata |
-| `fg-3` | `#7a7a76` | `#8a8a86` | Tertiary: disabled labels, placeholder tabular data |
-| `border` | `#eceae4` | `rgba(247,244,237,.1)` | Passive division |
-| `border-strong` | `rgba(28,28,28,.28)` | `rgba(247,244,237,.28)` | Interactive boundary: outline buttons, chips, inputs on tinted surfaces |
+| Token                      | Light                | Dark                    | Where it is used                                                        |
+| -------------------------- | -------------------- | ----------------------- | ----------------------------------------------------------------------- |
+| `background` / `surface-0` | `#f7f4ed`            | `#1c1c1c`               | The page                                                                |
+| `surface` (`card`)         | `#fbf9f4`            | `#232320`               | Panels, cards, table headers                                            |
+| `surface-2` (`popover`)    | `#fdfcf9`            | `#2a2a27`               | Popovers, menus, sheets, dialogs                                        |
+| `surface-3`                | `#fefdfa`            | `#333330`               | Tooltips, the topmost layer                                             |
+| `surface-inset`            | `rgba(28,28,28,.04)` | `rgba(247,244,237,.06)` | Recessed fills: hover, skeletons, icon wells                            |
+| `foreground`               | `#1c1c1c`            | `#f7f4ed`               | Body and headings                                                       |
+| `muted-foreground`         | `#5f5f5d`            | `#a3a3a0`               | Secondary copy, metadata                                                |
+| `fg-3`                     | `#7a7a76`            | `#8a8a86`               | Tertiary: disabled labels, placeholder tabular data                     |
+| `border`                   | `#eceae4`            | `rgba(247,244,237,.1)`  | Passive division                                                        |
+| `border-strong`            | `rgba(28,28,28,.28)` | `rgba(247,244,237,.28)` | Interactive boundary: outline buttons, chips, inputs on tinted surfaces |
 
 Every neutral is charcoal in light and cream in dark at some opacity — the tonal model is
 opacity-driven, which is why a new grey is never a new hex value.
@@ -68,11 +68,11 @@ opacity-driven, which is why a new grey is never a new hex value.
 Ink is the only accent, and it is used for exactly four things: links, `aria-current` emphasis, the
 focus ring, and text selection.
 
-| Token | Light | Dark |
-| ----- | ----- | ---- |
-| `ink` | `#33507a` | `#a8c0e2` |
-| `ink-foreground` | `#fcfbf8` | `#16233a` |
-| `ink-quiet` | `rgba(51,80,122,.08)` | `rgba(168,192,226,.14)` |
+| Token            | Light                 | Dark                    |
+| ---------------- | --------------------- | ----------------------- |
+| `ink`            | `#33507a`             | `#a8c0e2`               |
+| `ink-foreground` | `#fcfbf8`             | `#16233a`               |
+| `ink-quiet`      | `rgba(51,80,122,.08)` | `rgba(168,192,226,.14)` |
 
 `ink-quiet` is the selection wash and the tint behind an ink-on-surface moment. Ink is never a
 button fill (primary is charcoal/cream), never a status, and never decorative.
@@ -82,15 +82,15 @@ button fill (primary is charcoal/cream), never a status, and never decorative.
 Statuses are **text plus a tinted surface plus a border at 30–40% of the same tone** — never a solid
 fill, so a screen full of statuses stays calm.
 
-| Token | Light | Dark | Meaning |
-| ----- | ----- | ---- | ------- |
-| `success` | `#53604b` | `#bcc7b5` | Live, published, completed |
-| `warning` | `#735735` | `#d5b991` | Needs attention, scheduled, stale |
-| `info` | `#505f65` | `#b8c5ca` | Neutral information |
-| `destructive` | `#a8442f` | `#a8442f` | Destructive **fills** only |
+| Token              | Light           | Dark      | Meaning                                  |
+| ------------------ | --------------- | --------- | ---------------------------------------- |
+| `success`          | `#53604b`       | `#bcc7b5` | Live, published, completed               |
+| `warning`          | `#735735`       | `#d5b991` | Needs attention, scheduled, stale        |
+| `info`             | `#505f65`       | `#b8c5ca` | Neutral information                      |
+| `destructive`      | `#a8442f`       | `#a8442f` | Destructive **fills** only               |
 | `destructive-text` | `= destructive` | `#e6a18f` | Destructive outlines, ghosts, error text |
 
-Rule: a red *outline* or *ghost* action, a destructive badge and every error message use
+Rule: a red _outline_ or _ghost_ action, a destructive badge and every error message use
 `destructive-text`; only a filled destructive button uses `destructive`.
 
 ### 2.4 Reader page themes
@@ -99,11 +99,11 @@ The reader overrides the tier-1/2/3 tokens for its own luminance needs. They are
 `.dark` so they win on equal specificity, and each sets `color-scheme` with `!important` because
 `next-themes` writes it inline on `<html>`.
 
-| Theme | Background | Foreground | Character |
-| ----- | ---------- | ---------- | --------- |
-| `app` | the app theme | — | Default; no override |
-| `sepia` | `#f4ecd8` | `#5b4636` | Long-form, warm |
-| `paper` | `#f6f6f2` | `#1f1f1c` | Long-form, neutral |
+| Theme   | Background    | Foreground | Character            |
+| ------- | ------------- | ---------- | -------------------- |
+| `app`   | the app theme | —          | Default; no override |
+| `sepia` | `#f4ecd8`     | `#5b4636`  | Long-form, warm      |
+| `paper` | `#f6f6f2`     | `#1f1f1c`  | Long-form, neutral   |
 
 A page theme beats an app dark theme — that is the point of the override — and turning it off
 restores the app theme with its own `color-scheme`.
@@ -129,21 +129,21 @@ display alternative.
 
 ### 3.1 Ramp
 
-| Token | Size | Weight | Tracking | Line height | Use |
-| ----- | ---- | ------ | -------- | ----------- | --- |
-| `text-display` | `clamp(2.25rem, 1.55rem + 3.1vw, 3.25rem)` | 600 | -0.03em | 1.04 | Quiet pages: auth, legal, 404 |
-| `text-display-alt` | `clamp(2rem, 1.5rem + 2.2vw, 2.75rem)` | 480 | -0.02em | 1.08 | The alternative display voice |
-| `text-section` | `clamp(1.75rem, 1.35rem + 1.7vw, 2.375rem)` | 600 | -0.024em | 1.08 | A page's `h1` |
-| `text-sub` | `clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem)` | 600 | -0.018em | 1.15 | Section `h2` |
-| `text-title` | `clamp(1.5rem, 1.25rem + 1.1vw, 2rem)` | 600 | -0.02em | 1.12 | A novel title on its own page |
-| `text-card-title` | `1.0625rem` | 600 | -0.01em | 1.3 | Card and panel titles |
-| `text-body-lg` | `1.0625rem` | 400 | — | 1.55 | Lead paragraphs, nav links |
-| `text-body` | `1rem` | 400 | — | 1.6 | Body and controls |
-| `text-caption` | `0.8125rem` | 400 | — | 1.5 | Metadata, helper text |
-| `text-micro` | `0.6875rem` | 400 | — | — | Dense counters |
-| `text-badge-count` | `0.625rem` | 400 | — | — | Count inside a pill |
-| `text-metric` | `clamp(1.75rem, 1.3rem + 2vw, 2.25rem)` | 600 | — | — | A single number that answers a question |
-| `tracking-overline` | — | — | 0.14em | — | The only place tracking opens up |
+| Token               | Size                                        | Weight | Tracking | Line height | Use                                     |
+| ------------------- | ------------------------------------------- | ------ | -------- | ----------- | --------------------------------------- |
+| `text-display`      | `clamp(2.25rem, 1.55rem + 3.1vw, 3.25rem)`  | 600    | -0.03em  | 1.04        | Quiet pages: auth, legal, 404           |
+| `text-display-alt`  | `clamp(2rem, 1.5rem + 2.2vw, 2.75rem)`      | 480    | -0.02em  | 1.08        | The alternative display voice           |
+| `text-section`      | `clamp(1.75rem, 1.35rem + 1.7vw, 2.375rem)` | 600    | -0.024em | 1.08        | A page's `h1`                           |
+| `text-sub`          | `clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem)`  | 600    | -0.018em | 1.15        | Section `h2`                            |
+| `text-title`        | `clamp(1.5rem, 1.25rem + 1.1vw, 2rem)`      | 600    | -0.02em  | 1.12        | A novel title on its own page           |
+| `text-card-title`   | `1.0625rem`                                 | 600    | -0.01em  | 1.3         | Card and panel titles                   |
+| `text-body-lg`      | `1.0625rem`                                 | 400    | —        | 1.55        | Lead paragraphs, nav links              |
+| `text-body`         | `1rem`                                      | 400    | —        | 1.6         | Body and controls                       |
+| `text-caption`      | `0.8125rem`                                 | 400    | —        | 1.5         | Metadata, helper text                   |
+| `text-micro`        | `0.6875rem`                                 | 400    | —        | —           | Dense counters                          |
+| `text-badge-count`  | `0.625rem`                                  | 400    | —        | —           | Count inside a pill                     |
+| `text-metric`       | `clamp(1.75rem, 1.3rem + 2vw, 2.25rem)`     | 600    | —        | —           | A single number that answers a question |
+| `tracking-overline` | —                                           | —      | 0.14em   | —           | The only place tracking opens up        |
 
 The ramp is fluid on purpose: it is an application viewed on a phone at 320px and a 27-inch monitor
 in the same hour, so a step is a range, not a size.
@@ -166,7 +166,7 @@ in the same hour, so a step is a range, not a size.
   `gap-8`–`gap-12`. Choose from the ladder; never an arbitrary margin.
 - **Container**: `max-w-[1200px]` centred, `px-4` at 320–640px and `px-6` above, in both the header
   and the page body so their edges align.
-- **Density**: a surface is *spacious* (catalog, reading home, quiet pages) or *dense* (studio
+- **Density**: a surface is _spacious_ (catalog, reading home, quiet pages) or _dense_ (studio
   tables, console). Dense surfaces reduce padding and type step, never touch-target size.
 - **Targets**: 44px minimum for any icon control. 36px (`icon-sm`) is permitted only inside dense
   console rows and overlay corners, and is the only documented exception.
@@ -180,24 +180,24 @@ in the same hour, so a step is a range, not a size.
 
 ### 5.1 Radius
 
-| Token | Value | Use |
-| ----- | ----- | --- |
-| `rounded-sm` | 3px | Badges, chips, tiny wells |
-| `rounded-md` | 6px | Buttons, inputs, skeletons |
-| `rounded-lg` | 8px | Menus, compact panels |
-| `rounded-xl` | 10px | Cards, panels, notices, dialogs |
-| `rounded-2xl` | 14px | Large containers, drawer sheets |
-| `rounded-full` | — | Icon toggles and counting pills **only** |
+| Token          | Value | Use                                      |
+| -------------- | ----- | ---------------------------------------- |
+| `rounded-sm`   | 3px   | Badges, chips, tiny wells                |
+| `rounded-md`   | 6px   | Buttons, inputs, skeletons               |
+| `rounded-lg`   | 8px   | Menus, compact panels                    |
+| `rounded-xl`   | 10px  | Cards, panels, notices, dialogs          |
+| `rounded-2xl`  | 14px  | Large containers, drawer sheets          |
+| `rounded-full` | —     | Icon toggles and counting pills **only** |
 
 ### 5.2 Elevation
 
-| Level | Treatment | Use |
-| ----- | --------- | --- |
-| Flat | no shadow | Page, most content |
-| Bordered | `border` on `surface` | Cards, panels, tables |
-| Inset | `shadow-button-inset` | Primary/`pill`/`cream` buttons |
-| Focus | `outline-ring` at 2px with offset | Keyboard focus (§7.4) |
-| Pop | `shadow-pop` | Menus, popovers, dialogs, sheets |
+| Level    | Treatment                         | Use                              |
+| -------- | --------------------------------- | -------------------------------- |
+| Flat     | no shadow                         | Page, most content               |
+| Bordered | `border` on `surface`             | Cards, panels, tables            |
+| Inset    | `shadow-button-inset`             | Primary/`pill`/`cream` buttons   |
+| Focus    | `outline-ring` at 2px with offset | Keyboard focus (§7.4)            |
+| Pop      | `shadow-pop`                      | Menus, popovers, dialogs, sheets |
 
 `shadow-pop` is warm and diffused in light, deeper in dark; it is the only lift in the system. A
 card never floats.
@@ -208,31 +208,31 @@ card never floats.
 
 ### 6.1 Tokens
 
-| Token | Value | Budget for |
-| ----- | ----- | ---------- |
-| `--dur-press` | 120ms | Press feedback |
-| `--dur-micro` | 160ms | Hover, colour and border changes, chips |
-| `--dur-ui` | 200ms | Dropdowns, selects, popovers, dialogs |
-| `--dur-panel` | 280ms | Sheets, drawers, route transitions |
-| `--dur-modal` | 360ms | Large modals |
-| `--ease-out-quint` | `cubic-bezier(.22,1,.36,1)` | Default for anything entering |
-| `--ease-in-out-quart` | `cubic-bezier(.76,0,.24,1)` | Symmetrical moves |
-| `--ease-drawer` | `cubic-bezier(.32,.72,0,1)` | Panels travelling from an edge |
+| Token                 | Value                       | Budget for                              |
+| --------------------- | --------------------------- | --------------------------------------- |
+| `--dur-press`         | 120ms                       | Press feedback                          |
+| `--dur-micro`         | 160ms                       | Hover, colour and border changes, chips |
+| `--dur-ui`            | 200ms                       | Dropdowns, selects, popovers, dialogs   |
+| `--dur-panel`         | 280ms                       | Sheets, drawers, route transitions      |
+| `--dur-modal`         | 360ms                       | Large modals                            |
+| `--ease-out-quint`    | `cubic-bezier(.22,1,.36,1)` | Default for anything entering           |
+| `--ease-in-out-quart` | `cubic-bezier(.76,0,.24,1)` | Symmetrical moves                       |
+| `--ease-drawer`       | `cubic-bezier(.32,.72,0,1)` | Panels travelling from an edge          |
 
 Tailwind has no duration namespace, so each budget is also a utility: `duration-press`, `duration-micro`,
 `duration-ui`, `duration-panel`, `duration-modal` (plus `transition-width`).
 
 ### 6.2 What animates, and why
 
-| Moment | Budget | Purpose |
-| ------ | ------ | ------- |
-| Press | 120ms, `scale(.98)` | Feedback |
-| Hover on card/row | 160ms, border or fill | Feedback |
-| Menu / select / popover | 200ms, scale from the trigger | Spatial consistency |
-| Dialog | 200–280ms | Preventing a jarring change |
-| Sheet / drawer | 280ms, `--ease-drawer`, panel travels | Spatial consistency |
-| Route change | 200–280ms View Transition | Preventing a jarring change |
-| Mobile nav links | 280ms + 40ms stagger | Occasional surface; sequence is legible |
+| Moment                  | Budget                                | Purpose                                 |
+| ----------------------- | ------------------------------------- | --------------------------------------- |
+| Press                   | 120ms, `scale(.98)`                   | Feedback                                |
+| Hover on card/row       | 160ms, border or fill                 | Feedback                                |
+| Menu / select / popover | 200ms, scale from the trigger         | Spatial consistency                     |
+| Dialog                  | 200–280ms                             | Preventing a jarring change             |
+| Sheet / drawer          | 280ms, `--ease-drawer`, panel travels | Spatial consistency                     |
+| Route change            | 200–280ms View Transition             | Preventing a jarring change             |
+| Mobile nav links        | 280ms + 40ms stagger                  | Occasional surface; sequence is legible |
 
 ### 6.3 What deliberately does not
 
@@ -250,12 +250,22 @@ element and `data-starting-style` / `data-ending-style` supply the "from" state:
 `.overlay-sheet`, `.overlay-slide-start`, `.overlay-slide-end`, and `.skip-link` (instant, because a
 keyboard-triggered affordance that animates reads as lag).
 
+A modal overlay also locks the page it covers. Base UI marks `body`, which Chromium propagates to the
+viewport; `globals.css` declares the lock on the root element as well, keyed off `:has()` of the
+sheet, drawer and dialog slots, so it holds in the engines that do not and releases itself when the
+last popup unmounts. Non-modal popups — selects, popovers, menus — are deliberately not in that list,
+and a side sheet is sized by `inset-y-0` alone rather than by a `dvh` height, so it always reaches the
+bottom of the viewport it is covering. A bottom sheet is the mirror image: it fills the width of the
+viewport it covers, capped at 32rem and centred — a sheet on a phone, still a sheet on a tablet, and
+never a panel sized by whatever happens to be inside it.
+
 ### 6.5 Reduced motion
 
 The global `@media (prefers-reduced-motion: reduce)` rule stops looping animation and collapses
 transitions to 0.01ms. Surfaces driven by Motion branch on `useReducedMotion()` and drop spatial
 movement while keeping the state change legible — never by hiding the change. `animate-pulse` on a
-skeleton is `motion-safe:`, because a looping pulse is decorative.
+skeleton is `motion-safe:`, because a looping pulse is decorative; the `Spinner` is the one looping
+animation that keeps turning, because there it _is_ the state rather than decoration beside it.
 
 ---
 
@@ -264,30 +274,33 @@ skeleton is `motion-safe:`, because a looping pulse is decorative.
 Built on Base UI through the shadcn convention. Every primitive in `src/components/ui/` owns its
 geometry, colour, spacing and shape; a call site passes content and, at most, layout.
 
-| Group | Components |
-| ----- | ---------- |
-| Actions | `Button`, `Toggle`, `ToggleGroup`, `SegmentedControl` |
+| Group             | Components                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| Actions           | `Button`, `Toggle`, `ToggleGroup`, `SegmentedControl`                                       |
 | Status & feedback | `Badge`, `InlineNotice`, `EmptyState`, `ErrorState`, `Skeleton`, `Spinner`, `sonner` toasts |
-| Surfaces | `Card`, `Dialog`, `Sheet`, `Popover`, `Tooltip`, `Accordion`, `Collapsible` |
-| Forms | `Field`/`FieldGroup`, `Input`, `Textarea`, `Select`, `Label`, `Checkbox`, `Slider` |
-| Data | `Table` + `data-table-parts`, `use-data-table`, `Sortable`, `Progress`, `Avatar` |
-| Domain | `LangPair` (the `EN → TH` unit), `NovelCover`, `UserAvatar` |
+| Surfaces          | `Card`, `Dialog`, `Sheet`, `Popover`, `Tooltip`, `Accordion`, `Collapsible`                 |
+| Forms             | `Field`/`FieldGroup`, `Input`, `Textarea`, `Select`, `Label`, `Checkbox`, `Slider`          |
+| Data              | `Table` + `data-table-parts`, `use-data-table`, `Sortable`, `Progress`, `Avatar`            |
+| Domain            | `LangPair` (the `EN → TH` unit), `NovelCover`, `UserAvatar`                                 |
 
 ### 7.1 Button
 
 Three treatments, plus status tones that only re-tone text and hover:
 
-| Family | Variants | Use |
-| ------ | -------- | --- |
-| Filled | `default`, `destructive` | One primary action per view |
-| Outline | `outline`, `outlineWarning`, `outlineDestructive`, `outlineDestructiveStrong` | Secondary actions |
-| Borderless | `ghost`, `ghostPrimary`, `ghostMuted`, `ghostWarning`, `ghostDestructive` | Tertiary, toolbars, rows |
-| Surface | `cream`, `pill` | Tertiary on a tinted surface; icon toggles |
-| Text | `link` | Inline navigation inside prose |
+| Family     | Variants                                                                      | Use                                        |
+| ---------- | ----------------------------------------------------------------------------- | ------------------------------------------ |
+| Filled     | `default`, `destructive`                                                      | One primary action per view                |
+| Outline    | `outline`, `outlineWarning`, `outlineDestructive`, `outlineDestructiveStrong` | Secondary actions                          |
+| Borderless | `ghost`, `ghostPrimary`, `ghostMuted`, `ghostWarning`, `ghostDestructive`     | Tertiary, toolbars, rows                   |
+| Surface    | `cream`, `pill`                                                               | Tertiary on a tinted surface; icon toggles |
+| Text       | `link`                                                                        | Inline navigation inside prose             |
 
 Sizes: `default` 40px, `sm` 36px, `lg` 44px, `icon` 44px round, `icon-sm` 36px round (the documented
-dense exception), `chapterOption`, `readerNav`. A `render={<Link/>}` button renders an anchor with
-`role="button"` — which is why specs address "Sign in" as a button, not a link.
+dense exception), `iconPill` — 44px round where only an avatar fits, a labelled pill from `lg` (the
+header's account control) — `chapterOption`, `readerNav`. A `render={<Link/>}` button renders an
+anchor with `role="button"` — which is why specs address "Sign in" as a button, not a link.
+`SegmentedControl` sizes: `sm` 28px, `default` 36px, and `compact` at the same 36px with a narrower
+padding, for a control that shares its line with the label naming it (§9, 320px).
 
 ### 7.2 Badge
 
@@ -299,13 +312,19 @@ because it lives inside another control). Badges are informational; a badge neve
 ### 7.3 State primitives
 
 - **`Skeleton`** — data-only shapes, no icons or copy. `shape="default"` for text rows,
-  `panel` for a card-sized block, `media` for the 3:4 cover (square corners). One pending language
-  per surface: a pending region matches the layout it becomes, so the swap does not move the page.
+  `panel` for a card-sized block, `media` for the 3:4 cover (square corners), `avatar` for the
+  circle a conversation row's avatar arrives in (its own shape is the round one, so the shape prop
+  is where that lives). One pending language per surface: a pending region matches the layout it
+  becomes, so the swap does not move the page.
 - **`EmptyState`** — `icon`, `title`, `description`, an `h2`, and one obvious action. `size="compact"`
   fits inside a panel. It is an invitation, not a mood: no dashed container, no illustration.
 - **`ErrorState`** — `variant="page"` owns a region; `variant="panel"` is a single tinted row for a
-  failed section inside a working page. `retryLabel` defaults to "Try again"; a failed *read* keeps
+  failed section inside a working page. `retryLabel` defaults to "Try again"; a failed _read_ keeps
   the word "Retry" (the query wrapper).
+- **`QuietPage`** — the page-level member of the ladder, not a region: centred, single column, one
+  action, and the document's only `h1`. It is what the 404 and a thrown route error are made of,
+  which is why `EmptyState` keeps its `h2` at the card-title step — a 404 is a page, not a gap in
+  one.
 
 ### 7.4 Focus
 
@@ -324,6 +343,11 @@ new variant added to the primitive. `Skeleton`'s `shape` prop exists because a s
 genuinely needs square corners — that is how a design decision gets recorded in the system instead of
 in a className.
 
+The second guardrail is `cn` itself: `src/lib/utils.ts` registers the §3.1 type-scale tokens with
+tailwind-merge, so `text-caption` is a font size and `text-primary-foreground` is a colour. Without
+that list tailwind-merge treats both as one class group and silently keeps whichever came last, which
+is what stripped the ink from a filled `size="sm"` button and the size from a segmented control.
+
 ---
 
 ## 8. Patterns
@@ -338,22 +362,35 @@ owns its own toolbar.
   drawer trigger. Sticky on the default layout only.
 - Primary nav: reading destinations only. **Guest: Catalog.** Signed in: Catalog · Library · Jobs.
 - Account menu: Profile, Settings, Admin (operators), Sign out. Operator duties never sit in the
-  primary nav.
+  primary nav. From `md` up only: below it the drawer carries the same destinations plus the
+  identity, because one phone screen does not need two doors to the same room.
 - Every landmark is named (`nav aria-label="Primary"`, `main#main`), and the active item carries
   `aria-current="page"`.
 
+`QuietShell` is the second frame, for the pages that cannot describe a session: the 404, a thrown
+route error that outlived every layout, and the auth screens. It is skip link → brand link home →
+`main#main` → the same `SiteFooter`, with no primary nav, because on the auth screens a header
+"Sign in" button would point at the page it is already on. Two rules keep it to one frame per page:
+a not-found is resolved at the root, so `NotFoundPage` always brings this frame; an error renders
+inside whatever layout survived, so `ErrorPage` consults the match list and adds a frame only when
+nothing is left standing above it.
+
 ### 8.2 Route map (shipped)
 
-| Route | Surface | Audience |
-| ----- | ------- | -------- |
-| `/` | Reading home when signed in; the shared catalog for a guest | Both |
-| `/catalog` | The shared catalog (`/browse` redirects here, query string preserved) | Both |
-| `/library` | The account's own shelf | Signed in |
-| `/novels/:novelId` | Public reading page | Both |
-| `/novels/:novelId/chapters/:chapterId` | The reader | Both |
-| `/jobs`, `/settings`, `/profile`, `/admin` | Console, settings, account, operator | Signed in |
-
-Studio sub-routes (`/manage/*`) land in a later phase — see `REDESIGN.md` §2.
+| Route                                                                       | Surface                                                                | Audience  |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------- |
+| `/`                                                                         | Reading home when signed in; the shared catalog for a guest            | Both      |
+| `/catalog`                                                                  | The shared catalog (`/browse` redirects here, query string preserved)  | Both      |
+| `/library`                                                                  | The account's own shelf                                                | Signed in |
+| `/novels/:novelId`                                                          | Public reading page                                                    | Both      |
+| `/novels/:novelId/chapters/:chapterId`                                      | The reader                                                             | Both      |
+| `/novels/:novelId/manage/*`                                                 | The studio (chapters, add, quality, glossary, relationships, settings) | Owner     |
+| `/jobs`                                                                     | Activity console                                                       | Signed in |
+| `/settings/*`, `/profile`                                                   | Settings sections (Data is operator-only); account                     | Signed in |
+| `/admin`, `/admin/reports`, `/admin/activity`                               | Operator console tabs                                                  | Operator  |
+| `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/verify-email` | Quiet pages with no shell                                              | Both      |
+| `/terms`, `/privacy`, `/cookie-policy`                                      | Quiet documents, inside the shell                                      | Both      |
+| anything else                                                               | The quiet 404                                                          | Both      |
 
 ### 8.3 The state ladder
 
@@ -384,9 +421,13 @@ Non-negotiable, checked per surface:
 - Every landmark named; `aria-current` on the active nav item; one `h1` per page.
 - 44px minimum targets (§4), 36px only in documented dense contexts.
 - Body text ≥4.5:1; borders, icons and status text ≥3:1 against their surface.
-- Keyboard-only pass through every flow; focus never trapped outside an overlay.
+- Keyboard-only pass through every flow; focus never trapped outside an overlay. A modal overlay
+  covers the viewport it locks, and the page behind it does not scroll or chain scroll.
 - `prefers-reduced-motion` honoured without hiding state changes (§6.5).
-- One column at 320px, no horizontal scroll, Thai line-breaking intact in both languages.
+- One column at 320px, no horizontal scroll, Thai line-breaking intact in both languages. A data
+  table stacks into rows below `md` (`DataTableMobileRegion`); only the desktop region may scroll
+  sideways. A group of tabs never wraps — it scrolls, and the labels carry the meaning when the
+  icons have to step aside.
 - Live regions (`role="status"`, `aria-live`) for counts and async results; `role="alert"` for
   destructive notices.
 

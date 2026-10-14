@@ -37,7 +37,10 @@ export function AccountEmailCard({ email }: AccountEmailCardProps) {
       setError(null);
       try {
         const { newEmail } = changeEmailSchema.parse(value);
-        const { error: changeError } = await changeEmail({ newEmail, callbackURL: "/profile" });
+        const { error: changeError } = await changeEmail({
+          newEmail,
+          callbackURL: "/settings/account",
+        });
         if (changeError) {
           setError(changeError.message || "Could not start the email change.");
           return;
@@ -45,7 +48,7 @@ export function AccountEmailCard({ email }: AccountEmailCardProps) {
         setSentTo(newEmail);
         form.reset();
       } catch {
-        setError("Something went wrong. Please try again.");
+        setError("The request did not finish. Try again.");
       }
     },
   });

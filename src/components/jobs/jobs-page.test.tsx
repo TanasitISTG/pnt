@@ -68,9 +68,8 @@ const scrapeFunctions = vi.hoisted(() => ({
 }));
 
 const detailMocks = vi.hoisted(() => ({
-  JobLogsDialog: ({ open }: { open: boolean }) => (open ? <div>Translation details</div> : null),
-  ImportJobDetailsDialog: ({ open }: { open: boolean }) =>
-    open ? <div>Import details</div> : null,
+  JobLogDrawer: ({ open }: { open: boolean }) => (open ? <div>Translation details</div> : null),
+  ImportJobDrawer: ({ open }: { open: boolean }) => (open ? <div>Import details</div> : null),
 }));
 vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({
@@ -81,8 +80,8 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@/lib/job-dashboard/functions", () => serverFunctions);
 vi.mock("@/lib/translation/api/mutations", () => mutationFunctions);
 vi.mock("@/lib/scrape/functions", () => scrapeFunctions);
-vi.mock("@/components/translation/job/job-logs-dialog", () => detailMocks);
-vi.mock("@/components/jobs/import-job-details-dialog", () => detailMocks);
+vi.mock("@/components/translation/job/job-log-drawer", () => detailMocks);
+vi.mock("@/components/jobs/import-job-drawer", () => detailMocks);
 
 import { JobsPage } from "@/components/jobs/jobs-page";
 
@@ -244,14 +243,31 @@ afterEach(() => {
 });
 
 describe("JobsPage dashboard", () => {
-  it("consolidates health metrics and renders mixed history in one table", () => {
+  it("leads with live work and failures, then the retained history", () => {
     renderJobsPage();
 
-    expect(screen.getByText("Needs attention")).toBeTruthy();
+    const live = within(screen.getByRole("region", { name: "Running jobs" }));
+    const attention = within(screen.getByRole("region", { name: "Jobs needing attention" }));
+
+    // Both bands lead with the number that answers "how many?", and both describe it in
+    // the same two terms the page always used.
+    expect(live.getByText("Active jobs")).toBeTruthy();
+    expect(live.getByText("Translation 1 · Import 1")).toBeTruthy();
+    expect(attention.getByText("Needs attention")).toBeTruthy();
+    expect(attention.getByText("Translation 1 · Import 1")).toBeTruthy();
+    // The running row and the failed rows are the bands' content, not just table rows.
+    expect(live.getByText("Scrape Novel")).toBeTruthy();
+    expect(attention.getByText("Provider timed out")).toBeTruthy();
+    // Retry is offered where the row's own rules allow it: the two failed jobs that can
+    // be retried carry it, the failed EPUB import does not.
+    expect(attention.getAllByRole("button", { name: "Retry job" })).toHaveLength(2);
+    expect(attention.getByText("Invalid chapter")).toBeTruthy();
+
+    // The two whole-queue numbers stay a compact pair, not four detached cards.
     expect(screen.getByText("Avg chunk latency")).toBeTruthy();
     expect(screen.getByText("Tokens")).toBeTruthy();
-    expect(screen.getAllByText("Translation 1 · Import 1")).toHaveLength(2);
     expect(screen.getByText("Prompt 1,200 · Completion 800")).toBeTruthy();
+    expect(screen.getAllByText("Translation 1 · Import 1")).toHaveLength(2);
     const desktopHistory = within(screen.getByRole("table"));
     expect(desktopHistory.getByText("Translation Novel")).toBeTruthy();
     expect(desktopHistory.getByText("Scrape Novel")).toBeTruthy();
@@ -288,7 +304,9 @@ describe("JobsPage dashboard", () => {
     for (const button of mobileHistory.getAllByRole("button", {
       name: /^(Copy job ID|Details|Novel|Chapter|Cancel job|Retry job)$/,
     })) {
-      expect(button.className).toContain("min-h-11");
+      // The documented `lg` size (44px), not an arbitrary minimum-height override.
+      expect(button.className).toContain("h-11");
+      expect(button.className).not.toContain("min-h");
     }
     for (const card of [translationCard, scrapeCard, epubCard]) {
       expect(card.getByRole("button", { name: "Copy job ID" })).toBeTruthy();

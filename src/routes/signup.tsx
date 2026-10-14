@@ -103,7 +103,7 @@ function SignupPage() {
         await router.invalidate();
         await navigate({ to: isInternal ? redirectPath : "/", replace: true });
       } catch {
-        setError("Something went wrong. Please try again.");
+        setError("The request did not finish. Try again.");
         setCaptchaToken(null);
       }
     },
@@ -328,5 +328,5 @@ function signUpErrorMessage(message: string | undefined, code: string | undefine
   if (normalized.includes("captcha") || normalized.includes("verification")) {
     return "The verification challenge failed. Reload the page and try again.";
   }
-  return message || "Could not create your account. Please try again.";
+  return message || "Could not create your account. Try again.";
 }

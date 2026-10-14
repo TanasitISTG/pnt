@@ -37,12 +37,17 @@ export function AccountMenu({ user, isAdmin }: AccountMenuProps) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" />} disabled={signingOut}>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="iconPill" />}
+        disabled={signingOut}
+      >
         <UserAvatar name={displayName} avatar={avatar} size="sm" />
         {/* Visually hidden on small screens but never from assistive technology: the
             button is named by the account's display name at every width. */}
         <span className="sr-only max-w-32 truncate lg:not-sr-only lg:inline">{displayName}</span>
-        <ChevronDown className="size-4 opacity-60" aria-hidden="true" />
+        {/* Below `lg` the trigger is the avatar alone: the name is hidden, so a chevron
+            pointing at nothing left the header with an uneven, crowded right edge. */}
+        <ChevronDown className="hidden size-4 opacity-60 lg:block" aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuGroup>
@@ -62,9 +67,9 @@ export function AccountMenu({ user, isAdmin }: AccountMenuProps) {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem render={<Link to="/profile" className={MENU_LINK_CLASS} />}>
+          <DropdownMenuItem render={<Link to="/settings/account" className={MENU_LINK_CLASS} />}>
             <UserRound className="size-4" aria-hidden="true" />
-            Profile
+            Account
           </DropdownMenuItem>
           <DropdownMenuItem render={<Link to="/settings" className={MENU_LINK_CLASS} />}>
             <Settings className="size-4" aria-hidden="true" />

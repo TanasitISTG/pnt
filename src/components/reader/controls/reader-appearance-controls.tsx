@@ -126,12 +126,16 @@ function AppearanceRow<T extends string>({
   onChange,
 }: AppearanceRowProps<T>) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+    // `justify-between` supplies the visible spacing; the gap is only the minimum that
+    // decides whether the row can still hold both, so it is kept tight on purpose.
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
       <span className="text-caption text-muted-foreground">{label}</span>
+      {/* `compact` so the label keeps the choice on its own line down to 320px. */}
       <SegmentedControl
         label={label}
         value={value}
         options={options}
+        size="compact"
         onValueChange={onChange}
         className="max-w-full"
       />

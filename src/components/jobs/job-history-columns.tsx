@@ -41,7 +41,7 @@ const typeLabels: Record<JobHistoryType, string> = {
   epub: "EPUB",
 };
 
-function jobSecondaryLine(job: JobHistoryRow) {
+export function jobSecondaryLine(job: JobHistoryRow) {
   if (job.type === "translation") {
     return `Ch. ${job.chapterNumber} · ${job.chapterTitle}`;
   }

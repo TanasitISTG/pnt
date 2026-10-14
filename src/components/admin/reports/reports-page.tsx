@@ -118,9 +118,7 @@ export function ReportsPage({ search, onSearchChange }: ReportsPageProps) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-sub font-semibold tracking-tight text-foreground sm:text-section">
-            Reports
-          </h1>
+          <h1 className="text-section font-semibold text-foreground">Reports</h1>
           <p className="mt-1 text-body text-muted-foreground">
             Member reports, grouped into one case per novel. A decision closes every open report on
             the case and is recorded in the activity trail.

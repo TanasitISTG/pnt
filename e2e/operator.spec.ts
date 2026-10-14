@@ -51,6 +51,11 @@ async function openAccounts(page: Page) {
   await waitForReactHydration(page, `button[aria-label="Actions for ${memberEmail}"]`);
 }
 
+/** The operator console's own sub-navigation, as opposed to the site header. */
+function operatorNav(page: Page) {
+  return page.getByRole("navigation", { name: "Operator sections" });
+}
+
 /** Narrows the account list to the seeded member. */
 function memberRow(page: Page) {
   return page.getByRole("row").filter({ hasText: memberEmail });
@@ -83,7 +88,7 @@ test("operator moderates, audits, and views an account read-only", async ({ page
   // failure. A read that still demanded a writable session would fail this whole step.
   await page.goto("/novels/e2e-member-novel");
   await expect(page.getByRole("heading", { name: memberNovelTitle })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "This page did not load" })).toHaveCount(0);
   await expect(
     page.getByText("Actions are unavailable while you are viewing as another account."),
   ).toHaveCount(0);
@@ -94,7 +99,7 @@ test("operator moderates, audits, and views an account read-only", async ({ page
   await expect(page.getByRole("row", { name: new RegExp(memberChapterTitle) })).toBeVisible();
 
   // Writes stay refused: the same session cannot rename the account.
-  await page.goto("/profile");
+  await page.goto("/settings/account");
   await waitForReactHydration(page);
   await page.getByLabel("Display Name").fill("Should Not Persist");
   await page.getByRole("button", { name: "Save Changes" }).click();
@@ -120,7 +125,9 @@ test("operator moderates, audits, and views an account read-only", async ({ page
 
   // Every operator action landed in the durable trail. Cells are asserted by role:
   // the same words are also in the success toasts, which prove nothing here.
-  await page.getByRole("link", { name: "Activity" }).click();
+  // Scoped to the console's own sub-navigation: the site header also offers an
+  // "Activity" link since the jobs console took that name.
+  await operatorNav(page).getByRole("link", { name: "Activity" }).click();
   await expect(page.getByRole("heading", { name: "Operator activity" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Account suspended" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Viewed as account" })).toBeVisible();
@@ -148,6 +155,6 @@ test("operator moderates, audits, and views an account read-only", async ({ page
   await expect(page.getByText(suspensionReason)).toHaveCount(0);
   await expect(memberRow(page).getByText("Verified")).toBeVisible();
 
-  await page.getByRole("link", { name: "Activity" }).click();
+  await operatorNav(page).getByRole("link", { name: "Activity" }).click();
   await expect(page.getByRole("cell", { name: "Account restored" })).toBeVisible();
 });

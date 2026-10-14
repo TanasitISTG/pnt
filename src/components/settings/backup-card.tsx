@@ -14,6 +14,14 @@ const backupImportSchema = z.object({
   }),
 });
 
+/**
+ * The operator's backup tools.
+ *
+ * Operator-only on purpose: an export streams every novel and chapter an account owns, and
+ * on a metered production database that transfer is the most expensive thing a reader could
+ * trigger by accident. The route, the API handler and `importBackup` all refuse a non-operator
+ * too — hiding the card is the courtesy, not the control.
+ */
 export function BackupCard() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -66,12 +74,22 @@ export function BackupCard() {
           included. Imported novels are created as drafts with new IDs.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 sm:flex-row">
-        <Button type="button" onClick={() => void onExport()} disabled={exporting}>
+      {/* Two columns, so the two halves of one job are the same size: side by side on a
+          wide card, stacked full width on a narrow one. The form is a grid cell like the
+          button beside it, which is what the old `sm:flex-row` row got wrong — the button
+          stretched and the wrapped button did not. */}
+      <CardContent className="grid gap-3 sm:grid-cols-2">
+        <Button
+          type="button"
+          className="w-full"
+          onClick={() => void onExport()}
+          disabled={exporting}
+        >
           {exporting && <Spinner />}
           {exporting ? "Exporting…" : "Export JSON"}
         </Button>
         <form
+          className="grid"
           onSubmit={(event) => {
             event.preventDefault();
             void importForm.handleSubmit();
@@ -80,6 +98,7 @@ export function BackupCard() {
           <Button
             type="button"
             variant="outline"
+            className="w-full"
             onClick={() => inputRef.current?.click()}
             disabled={importing}
           >

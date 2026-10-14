@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Flag, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
+import { DiscussionTombstone } from "@/components/discussion/discussion-parts";
 import { StarRating } from "@/components/reviews/star-rating";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemPro
       />
       <div className="min-w-0 flex-1">
         <header className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="truncate text-sm font-medium text-foreground">
+          <span className="truncate text-body font-medium text-foreground">
             {review.author.name ?? (review.author.id ? "Reader" : "Deleted account")}
           </span>
           {!removed ? (
@@ -102,17 +103,14 @@ export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemPro
         </header>
 
         {removed ? (
-          <p className="mt-1 text-sm text-muted-foreground italic">
-            Removed by an operator
-            {review.removalReason ? `: ${review.removalReason}` : "."}
-          </p>
+          <DiscussionTombstone kind="removed" reason={review.removalReason} />
         ) : showBody ? (
           <>
             <p
               className={
                 longBody && !expanded
-                  ? "mt-1 line-clamp-6 text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground"
-                  : "mt-1 text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground"
+                  ? "mt-1 line-clamp-6 text-body leading-relaxed break-words whitespace-pre-wrap text-foreground"
+                  : "mt-1 text-body leading-relaxed break-words whitespace-pre-wrap text-foreground"
               }
             >
               {review.body}

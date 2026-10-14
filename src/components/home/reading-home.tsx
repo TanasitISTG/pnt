@@ -145,7 +145,10 @@ function ContinueReadingCard({
       to="/novels/$novelId/chapters/$chapterId"
       params={{ novelId: novel.id, chapterId }}
       viewTransition
-      className="group flex items-center gap-3.5 rounded-xl border border-border bg-card p-3 no-underline transition-colors duration-micro hover:border-border-strong"
+      // `min-w-0` is load-bearing: a grid item's automatic minimum width is its content's
+      // min-content width, and a truncated Thai title has no spaces to break at, so without
+      // it the card refuses to shrink below the full title and pushes the page sideways.
+      className="group flex min-w-0 items-center gap-3.5 rounded-xl border border-border bg-card p-3 no-underline transition-colors duration-micro hover:border-border-strong"
     >
       <div className="relative h-16 w-11 shrink-0 overflow-hidden rounded-md bg-surface-inset">
         <NovelCover
@@ -171,7 +174,8 @@ function ContinueReadingCard({
         />
       </div>
       <span className="flex shrink-0 items-center gap-1 text-caption font-medium text-ink">
-        Continue
+        {/* The word costs a third of the title's room on a phone; the arrow still says it. */}
+        <span className="hidden sm:inline">Continue</span>
         <ArrowRight
           className="size-4 transition-transform duration-micro ease-out-quint group-hover:translate-x-0.5 motion-reduce:transition-none"
           aria-hidden="true"

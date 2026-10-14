@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import { QuietShell } from "@/components/shell/quiet-shell";
 
 interface AuthCardProps {
   title: string;
@@ -8,35 +9,27 @@ interface AuthCardProps {
 }
 
 /**
- * Shell for every auth screen. One place owns the centred card, the mark, and the
- * alternate-action row so sign in, sign up, and the two recovery screens cannot
- * drift apart visually.
+ * Shell for every auth screen. One place owns the frame, the centred card, and the
+ * alternate-action row so sign in, sign up, and the recovery screens cannot drift apart
+ * visually.
  *
- * Sign-up is the tightest case this shell has to hold — four fields, a consent row,
- * and a verification challenge — so the header stays short: a 48px mark and a
- * `text-card-title` heading, the same step every other page title in the app starts
- * at. The 64px mark and 36px title it replaced grew the card past the height of a
- * short window, which put the submit button and the provider row below the fold.
+ * The frame is `QuietShell`, which supplies the parts a bare page used to be missing: the
+ * skip link, the one `<main>` landmark, a brand link home, and the legal links. The card
+ * itself therefore carries no mark - the frame's brand bar sits directly above it, and two
+ * logos on one screen is one logo too many.
  *
- * The heading is a real `h1` so the screen has one document outline entry, and the
- * mark carries an empty `alt` the way the app shell's does: it is decoration beside
- * a title that already names the page.
+ * Sign-up is the tightest case this shell has to hold - four fields, a consent row, and a
+ * verification challenge - so the header stays short: a `text-card-title` heading, the same
+ * step every other card title in the app starts at.
  *
- * Centring comes from `m-auto` on the wrapper rather than `items-center` on the flex
- * parent. A centred flex item that overflows its container is clipped above the top
- * of the viewport, where scrolling cannot reach it; auto margins collapse to zero
- * instead and let the tall card scroll normally.
+ * The heading is a real `h1` so the screen has one document outline entry.
  */
 export function AuthCard({ title, description, children, footer }: AuthCardProps) {
   return (
-    <div className="flex min-h-dvh bg-background px-5 py-8">
+    <QuietShell>
       <div className="m-auto w-full max-w-md">
         <Card>
-          {/* CardHeader is a grid, so centring needs `justify-items`: `items-center`
-              only aligns along the block axis and leaves the mark pinned to the
-              left edge of its column while the text centres itself. */}
           <CardHeader className="items-center justify-items-center gap-1.5 text-center">
-            <img src="/logo-256.png" alt="" width={48} height={48} className="size-12 rounded-lg" />
             <h1 className="text-card-title font-semibold tracking-tight text-foreground">
               {title}
             </h1>
@@ -52,6 +45,6 @@ export function AuthCard({ title, description, children, footer }: AuthCardProps
           </CardContent>
         </Card>
       </div>
-    </div>
+    </QuietShell>
   );
 }

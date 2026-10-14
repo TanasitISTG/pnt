@@ -1,5 +1,4 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { MessageSquare } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -7,12 +6,17 @@ import { toast } from "sonner";
 import { CommentComposer } from "@/components/comments/comment-composer";
 import { CommentItem } from "@/components/comments/comment-item";
 import { useCommentMutations } from "@/components/comments/use-comment-mutations";
+import {
+  DiscussionHeading,
+  DiscussionSignInPrompt,
+  DiscussionSkeleton,
+} from "@/components/discussion/discussion-parts";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { QueryErrorState } from "@/components/query-error-state";
 import { ReportTargetDialog } from "@/components/reports/report-target-dialog";
 import type { ReportSubmission } from "@/components/reports/report-target-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { chapterCommentsQueryOptions } from "@/lib/comments/query";
 import { COMMENT_VISIBLE_REPLIES } from "@/lib/comments/schemas";
 import type { ChapterComment, CommentThread } from "@/lib/comments/types";
@@ -116,20 +120,12 @@ export function ChapterDiscussion({
       aria-labelledby="chapter-discussion-heading"
       className="flex min-w-0 max-w-full flex-col gap-4 border-t border-border pt-6"
     >
-      <header className="flex items-center gap-2">
-        <MessageSquare className="size-4 text-muted-foreground" aria-hidden="true" />
-        <h2
-          id="chapter-discussion-heading"
-          className="text-body-lg font-semibold tracking-tight text-foreground"
-        >
-          Discussion
-        </h2>
-        {total > 0 ? (
-          <Badge variant="muted" size="count" aria-hidden="true">
-            {total}
-          </Badge>
-        ) : null}
-      </header>
+      <DiscussionHeading
+        id="chapter-discussion-heading"
+        icon={<MessageSquare />}
+        title="Discussion"
+        count={total}
+      />
 
       {signedIn ? (
         <CommentComposer
@@ -138,16 +134,9 @@ export function ChapterDiscussion({
           onSubmit={(body) => submitComment(body)}
         />
       ) : (
-        <p className="text-sm text-muted-foreground">
-          <Link
-            to="/login"
-            search={{ redirect: `/novels/${novelId}/chapters/${chapterId}` }}
-            className="font-medium text-foreground underline underline-offset-4"
-          >
-            Sign in
-          </Link>{" "}
+        <DiscussionSignInPrompt redirect={`/novels/${novelId}/chapters/${chapterId}`}>
           to join the discussion. Reading stays open to everyone.
-        </p>
+        </DiscussionSignInPrompt>
       )}
 
       {query.isError ? (
@@ -158,23 +147,15 @@ export function ChapterDiscussion({
           className="my-0 min-h-0"
         />
       ) : query.isPending ? (
-        <div className="flex flex-col gap-4" aria-hidden="true">
-          {[0, 1, 2].map((row) => (
-            <div key={row} className="flex animate-pulse gap-3">
-              <div className="size-7 shrink-0 rounded-full bg-muted" />
-              <div className="flex flex-1 flex-col gap-2">
-                <div className="h-3 w-32 rounded bg-muted" />
-                <div className="h-3 w-full rounded bg-muted" />
-              </div>
-            </div>
-          ))}
-        </div>
+        <DiscussionSkeleton rows={3} />
       ) : threads.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
-          {signedIn
-            ? `No comments yet. Be the first to share your thoughts on ${chapterLabel}.`
-            : "No comments yet."}
-        </p>
+        <EmptyState
+          size="compact"
+          title="No comments yet"
+          description={
+            signedIn ? `Be the first to share your thoughts on ${chapterLabel}.` : undefined
+          }
+        />
       ) : (
         <div className="flex flex-col gap-6">
           {threads.map((thread) => (

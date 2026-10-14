@@ -48,7 +48,7 @@ export function ReviewForm({
     >
       <div className="flex flex-wrap items-center gap-3">
         <StarRatingInput value={rating} onChange={setRating} disabled={pending} />
-        <span className="text-sm text-muted-foreground" aria-live="polite">
+        <span className="text-caption text-muted-foreground" aria-live="polite">
           {rating > 0 ? `${rating} of 5` : "Pick a rating"}
         </span>
       </div>

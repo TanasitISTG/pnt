@@ -44,6 +44,48 @@ function describeDetail(detail: Record<string, unknown> | null): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
+/**
+ * The same row as a block for a phone.
+ *
+ * The trail has five columns and two long account strings, so at 390px the table was
+ * 679px wide and scrolling sideways under a header that no longer lined up with
+ * anything. Stacked, every field keeps its own line and the row stays readable.
+ */
+export function AdminActivityMobileRow({ row }: { row: AdminActivityRow }) {
+  const detail = describeDetail(row.detail);
+
+  return (
+    <article className="space-y-2 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <p className="font-medium text-foreground">{describeAdminAction(row.action)}</p>
+        <p className="text-caption text-muted-foreground">
+          {new Date(row.createdAt).toLocaleString()}
+        </p>
+      </div>
+      <dl className="space-y-1 text-caption">
+        <div className="flex gap-2">
+          <dt className="shrink-0 text-muted-foreground">Operator</dt>
+          <dd className="min-w-0 truncate text-foreground">
+            {accountLabel(row.actorEmail, row.actorId)}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="shrink-0 text-muted-foreground">Account</dt>
+          <dd className="min-w-0 truncate text-foreground">
+            {accountLabel(row.targetEmail, row.targetUserId)}
+          </dd>
+        </div>
+        {detail ? (
+          <div className="flex gap-2">
+            <dt className="shrink-0 text-muted-foreground">Details</dt>
+            <dd className="min-w-0 whitespace-normal text-muted-foreground">{detail}</dd>
+          </div>
+        ) : null}
+      </dl>
+    </article>
+  );
+}
+
 export function AdminActivityTableRow({ row }: { row: AdminActivityRow }) {
   const detail = describeDetail(row.detail);
 

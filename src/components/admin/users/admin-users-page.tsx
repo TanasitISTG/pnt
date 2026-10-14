@@ -4,8 +4,11 @@ import { Search } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { TablePager } from "@/components/admin/table-pager";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { QueryErrorState } from "@/components/query-error-state";
-import { Button } from "@/components/ui/button";
+import { DataTableSection } from "@/components/ui/data-table-parts";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -14,8 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatTableRange } from "@/components/ui/data-table-parts";
-import { Input } from "@/components/ui/input";
 import { adminUsersQueryOptions } from "@/lib/admin/query";
 import {
   removeUser,
@@ -26,7 +27,6 @@ import {
 } from "@/lib/admin/functions";
 import { ADMIN_USERS_PAGE_SIZE, type AdminUserListSearch } from "@/lib/admin/schemas";
 import { AdminUserTableRow } from "./admin-user-row";
-import { ConfirmActionDialog } from "./confirm-action-dialog";
 import { SuspendUserDialog, type SuspendSubmission } from "./suspend-user-dialog";
 
 export interface AdminUsersPageProps {
@@ -56,7 +56,6 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
   const pageSize = search.pageSize ?? ADMIN_USERS_PAGE_SIZE;
   const data = query.data;
   const rowCount = data?.rowCount ?? 0;
-  const pageCount = Math.max(1, Math.ceil(rowCount / pageSize));
 
   const refresh = async (): Promise<void> => {
     // Every action also appends to the activity trail, so both lists are refreshed
@@ -107,9 +106,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-sub font-semibold tracking-tight text-foreground sm:text-section">
-            Accounts
-          </h1>
+          <h1 className="text-section font-semibold text-foreground">Accounts</h1>
           <p className="mt-1 text-body text-muted-foreground">
             Every account, with the operator controls that apply to it.
           </p>
@@ -142,7 +139,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
           className="min-h-[40vh]"
         />
       ) : (
-        <div className="rounded-xl border border-border bg-card">
+        <DataTableSection ariaLabel="Accounts" busy={query.isFetching || query.isPlaceholderData}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -194,35 +191,15 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
               )}
             </TableBody>
           </Table>
-          <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3">
-            <span className="text-caption text-muted-foreground">
-              {formatTableRange(
-                rowCount === 0 ? 0 : (page - 1) * pageSize + 1,
-                Math.min(page * pageSize, rowCount),
-                rowCount,
-                "accounts",
-              )}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || query.isPending}
-                onClick={() => onSearchChange({ page: page - 1 <= 1 ? undefined : page - 1 })}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= pageCount || query.isPending}
-                onClick={() => onSearchChange({ page: page + 1 })}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        </div>
+          <TablePager
+            page={page}
+            pageSize={pageSize}
+            rowCount={rowCount}
+            noun="accounts"
+            isPending={query.isPending}
+            onPageChange={(next) => onSearchChange({ page: next <= 1 ? undefined : next })}
+          />
+        </DataTableSection>
       )}
 
       <SuspendUserDialog
@@ -254,7 +231,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
         }}
       />
 
-      <ConfirmActionDialog
+      <ConfirmDialog
         open={pendingRevoke !== null}
         title="Sign this account out everywhere?"
         description={
@@ -262,9 +239,9 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
             ? `Every session ${pendingRevoke.email} holds is ended, including any the account is signed in on right now. It can sign back in with its password.`
             : ""
         }
-        confirmLabel="Sign out all devices"
-        cancelLabel="Keep sessions"
-        busy={busyUserId === pendingRevoke?.id}
+        confirmText="Sign out all devices"
+        cancelText="Keep sessions"
+        pending={busyUserId === pendingRevoke?.id}
         onOpenChange={(open) => {
           if (!open) setPendingRevoke(null);
         }}
@@ -279,7 +256,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
         }}
       />
 
-      <ConfirmActionDialog
+      <ConfirmDialog
         open={pendingViewAs !== null}
         title="View as this account?"
         description={
@@ -287,9 +264,9 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
             ? `You will browse Pnt as ${pendingViewAs.email} for up to 30 minutes. The view is read-only: nothing you do can change that account's novels, chapters, or reader state. A banner at the top of every page returns you to your operator account.`
             : ""
         }
-        confirmLabel="View as this account"
-        cancelLabel="Cancel"
-        busy={busyUserId === pendingViewAs?.id}
+        confirmText="View as this account"
+        cancelText="Cancel"
+        pending={busyUserId === pendingViewAs?.id}
         onOpenChange={(open) => {
           if (!open) setPendingViewAs(null);
         }}
@@ -301,7 +278,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
         }}
       />
 
-      <ConfirmActionDialog
+      <ConfirmDialog
         open={pendingDelete !== null}
         title="Delete this account?"
         description={
@@ -309,10 +286,10 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
             ? `${pendingDelete.email} and everything it owns (novels, chapters, glossary, and reader state) are removed. This cannot be undone.`
             : ""
         }
-        confirmLabel="Delete account"
-        cancelLabel="Keep account"
-        destructive
-        busy={busyUserId === pendingDelete?.id}
+        confirmText="Delete account"
+        cancelText="Keep account"
+        variant="destructive"
+        pending={busyUserId === pendingDelete?.id}
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
         }}

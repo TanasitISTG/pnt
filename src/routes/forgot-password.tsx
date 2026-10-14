@@ -56,13 +56,13 @@ function ForgotPasswordPage() {
         // A challenge cannot be replayed, so every attempt needs a fresh one.
         setCaptchaToken(null);
         if (resetError) {
-          setError(resetError.message || "Could not send the reset email. Please try again.");
+          setError(resetError.message || "Could not send the reset email. Try again.");
           return;
         }
         setSubmitted(true);
       } catch {
         setCaptchaToken(null);
-        setError("Something went wrong. Please try again.");
+        setError("The request did not finish. Try again.");
       }
     },
   });

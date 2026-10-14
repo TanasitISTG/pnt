@@ -63,7 +63,7 @@ export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
   const handleLink = async (provider: SocialProvider) => {
     setBusyProvider(provider);
     try {
-      const { error } = await linkSocial({ provider, callbackURL: "/profile" });
+      const { error } = await linkSocial({ provider, callbackURL: "/settings/account" });
       if (error) toast.error(error.message || `Could not connect ${PROVIDER_LABELS[provider]}`);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Could not connect that account");

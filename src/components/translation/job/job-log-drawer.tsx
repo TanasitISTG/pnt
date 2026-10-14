@@ -1,8 +1,19 @@
-import { useHydrated } from "@/lib/use-hydrated";
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Cpu, Terminal, XCircle, Zap } from "lucide-react";
+
+import { ChapterStatusBadge } from "@/components/chapters/table/chapter-status-badge";
+import type { ChapterStatus } from "@/components/chapters/types";
+import { QueryErrorState } from "@/components/query-error-state";
 import { Badge } from "@/components/ui/badge";
+import {
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -11,19 +22,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Spinner } from "@/components/ui/spinner";
+import { useHydrated } from "@/lib/use-hydrated";
+import { useIsDesktop } from "@/lib/use-media-query";
 import { getTranslationJobDetails, getTranslationJobProgress } from "@/lib/translation/api/queries";
-import { QueryErrorState } from "@/components/query-error-state";
-import type { LogEntry } from "@/lib/translation/types/workflow";
 import type {
   SlimChunkProgress,
   TranslationJobDetails,
   TranslationJobProgress,
 } from "@/lib/translation/types/api";
-import { ChapterStatusBadge } from "@/components/chapters/table/chapter-status-badge";
-import type { ChapterStatus } from "@/components/chapters/types";
+import type { LogEntry } from "@/lib/translation/types/workflow";
 import { formatLocalDateTime, formatLocalTime, parseDateTime } from "@/lib/date-time";
-import { Cpu, Terminal, XCircle, Zap } from "lucide-react";
 
 function isRunningStatus(status: string | undefined): boolean {
   return status === "running" || status === "pending";
@@ -94,44 +102,39 @@ function parseJobUsage(value: string | null | undefined): JobUsage | null {
   }
 }
 
-interface JobLogsDialogHeaderProps {
+interface JobLogHeaderProps {
   jobData: TranslationJobDetails | null | undefined;
   status: TranslationJobProgress["status"] | undefined;
 }
 
-function JobLogsDialogHeader({ jobData, status }: JobLogsDialogHeaderProps) {
+function JobLogHeader({ jobData, status }: JobLogHeaderProps) {
   const running = isRunningStatus(status);
   return (
-    <DialogHeader
-      variant="divided"
-      className="flex shrink-0 flex-col items-start gap-3 pb-4 pr-8 sm:flex-row sm:items-center sm:justify-between"
-    >
+    <DrawerHeader>
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10">
-          <Terminal className="size-5 text-primary" />
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-inset">
+          <Terminal className="size-4 text-muted-foreground" aria-hidden="true" />
         </div>
         <div className="min-w-0">
-          <DialogTitle className="text-body-lg font-semibold tracking-tight sm:text-section">
-            Translation Job Logs
-          </DialogTitle>
+          <DrawerTitle>Translation job</DrawerTitle>
           {jobData?.chapterTitle ? (
-            <p className="mt-0.5 break-words text-body font-medium text-muted-foreground">
+            <p className="mt-0.5 break-words text-caption text-muted-foreground">
               {jobData.chapterTitle}
             </p>
           ) : null}
         </div>
       </div>
       {status ? (
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex items-center gap-2">
           <ChapterStatusBadge status={status as ChapterStatus} />
           {running ? <Spinner variant="muted" className="size-4" /> : null}
         </div>
       ) : null}
-    </DialogHeader>
+    </DrawerHeader>
   );
 }
 
-interface JobLogsDialogProps {
+export interface JobLogDrawerProps {
   jobId?: string | null;
   chapterId?: string | null;
   open: boolean;
@@ -165,7 +168,7 @@ function LogEntryRow({ log, mounted }: { log: LogEntry; mounted: boolean }) {
         [{timestampLabel}]
       </time>
       <span className={getLogLevelClassName(log.level)}>[{log.level.toUpperCase()}]</span>
-      <span className="col-span-2 min-w-0 whitespace-pre-wrap break-words text-foreground sm:col-span-1">
+      <span className="col-span-2 min-w-0 break-words whitespace-pre-wrap text-foreground sm:col-span-1">
         {log.message}
       </span>
     </div>
@@ -174,9 +177,9 @@ function LogEntryRow({ log, mounted }: { log: LogEntry; mounted: boolean }) {
 
 function LogConsole({ logs, mounted }: { logs: LogEntry[]; mounted: boolean }) {
   return (
-    <div className="flex flex-col gap-2 shrink-0">
-      <h4 className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
-        Live Execution Console
+    <div className="flex shrink-0 flex-col gap-2">
+      <h4 className="text-caption font-semibold tracking-wider text-muted-foreground uppercase">
+        Execution log
       </h4>
       <div className="flex h-64 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface-2 p-3 font-mono text-xs text-foreground sm:gap-2 sm:p-4">
         {logs.length === 0 ? (
@@ -193,20 +196,18 @@ function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
   if (chunks.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
-      <h4 className="text-caption font-semibold uppercase tracking-wider text-muted-foreground">
-        Chunk Details & Metrics
+      <h4 className="text-caption font-semibold tracking-wider text-muted-foreground uppercase">
+        Chunks
       </h4>
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <Table className="min-w-[680px]">
+        <Table className="min-w-[620px]">
           <TableHeader>
             <TableRow className="h-10 bg-muted/20">
-              <TableHead className="w-16 h-10 font-semibold">Chunk #</TableHead>
-              <TableHead className="h-10 font-semibold">Raw Content Size</TableHead>
+              <TableHead className="h-10 w-16 font-semibold">Chunk</TableHead>
+              <TableHead className="h-10 font-semibold">Raw size</TableHead>
               <TableHead className="h-10 font-semibold">Status</TableHead>
               <TableHead className="h-10 font-semibold">Latency</TableHead>
-              <TableHead className="h-10 font-semibold text-right">
-                Tokens (Prompt + Completion)
-              </TableHead>
+              <TableHead className="h-10 text-right font-semibold">Tokens</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -218,17 +219,11 @@ function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
                 </TableCell>
                 <TableCell>
                   {chunk.hasTranslation ? (
-                    <Badge variant="success" className="text-xs font-medium">
-                      Completed
-                    </Badge>
+                    <Badge variant="success">Completed</Badge>
                   ) : chunk.error ? (
-                    <Badge variant="destructive" className="text-xs font-medium">
-                      Failed
-                    </Badge>
+                    <Badge variant="destructive">Failed</Badge>
                   ) : (
-                    <Badge variant="secondary" className="text-xs font-medium">
-                      Pending
-                    </Badge>
+                    <Badge variant="secondary">Pending</Badge>
                   )}
                 </TableCell>
                 <TableCell className="font-mono text-muted-foreground">
@@ -236,7 +231,7 @@ function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
                 </TableCell>
                 <TableCell className="text-right font-mono font-medium text-foreground">
                   {chunk.promptTokens !== undefined && chunk.completionTokens !== undefined
-                    ? `${(chunk.promptTokens + chunk.completionTokens).toLocaleString()} (${chunk.promptTokens} + ${chunk.completionTokens})`
+                    ? (chunk.promptTokens + chunk.completionTokens).toLocaleString()
                     : "—"}
                 </TableCell>
               </TableRow>
@@ -248,7 +243,7 @@ function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
   );
 }
 
-interface JobMetricsBarProps {
+interface JobMetricsProps {
   provider: string | null;
   model: string;
   isLegacyProviderFallback: boolean;
@@ -258,7 +253,7 @@ interface JobMetricsBarProps {
   completionTokens: number;
 }
 
-function JobMetricsBar({
+function JobMetrics({
   provider,
   model,
   isLegacyProviderFallback,
@@ -266,52 +261,63 @@ function JobMetricsBar({
   totalChunks,
   promptTokens,
   completionTokens,
-}: JobMetricsBarProps) {
+}: JobMetricsProps) {
   return (
-    <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-      <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col gap-1 min-w-0">
-        <span className="text-caption text-muted-foreground font-medium flex items-center gap-1.5 whitespace-nowrap">
-          <Cpu className="size-4 text-muted-foreground" /> Model
-        </span>
-        <span className="truncate text-body-lg font-semibold text-foreground" title={model}>
-          {model}
-        </span>
-        <span className="truncate text-caption text-muted-foreground" title={provider ?? undefined}>
-          {provider ?? "Current provider settings"}
-          {isLegacyProviderFallback ? " · legacy fallback" : ""}
-        </span>
+    <dl className="grid shrink-0 grid-cols-2 gap-3">
+      <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-surface-inset p-3">
+        <dt className="flex items-center gap-1.5 text-caption text-muted-foreground">
+          <Cpu className="size-3.5" aria-hidden="true" /> Model
+        </dt>
+        <dd className="min-w-0">
+          <span className="block truncate text-caption font-semibold text-foreground" title={model}>
+            {model}
+          </span>
+          <span
+            className="block truncate text-micro text-muted-foreground"
+            title={provider ?? undefined}
+          >
+            {provider ?? "Current provider settings"}
+            {isLegacyProviderFallback ? " · legacy fallback" : ""}
+          </span>
+        </dd>
       </div>
-      <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col gap-1 min-w-0">
-        <span className="text-caption text-muted-foreground font-medium flex items-center gap-1.5 whitespace-nowrap">
-          <Zap className="size-4 text-muted-foreground" /> Progress
-        </span>
-        <span className="text-body-lg font-semibold text-foreground">
+      <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-surface-inset p-3">
+        <dt className="flex items-center gap-1.5 text-caption text-muted-foreground">
+          <Zap className="size-3.5" aria-hidden="true" /> Progress
+        </dt>
+        <dd className="text-caption font-semibold tabular-nums text-foreground">
           {doneChunks} / {totalChunks} chunks
-        </span>
+        </dd>
       </div>
-      <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col gap-1 min-w-0">
-        <span className="text-caption text-muted-foreground font-medium whitespace-nowrap">
-          Prompt Tokens
-        </span>
-        <span className="text-body-lg font-semibold text-foreground">
+      <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-surface-inset p-3">
+        <dt className="text-caption text-muted-foreground">Prompt tokens</dt>
+        <dd className="text-caption font-semibold tabular-nums text-foreground">
           {promptTokens ? promptTokens.toLocaleString() : "—"}
-        </span>
+        </dd>
       </div>
-      <div className="bg-muted/30 border border-border rounded-xl p-4 flex flex-col gap-1 min-w-0">
-        <span className="text-caption text-muted-foreground font-medium whitespace-nowrap">
-          Completion Tokens
-        </span>
-        <span className="text-body-lg font-semibold text-foreground">
+      <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-surface-inset p-3">
+        <dt className="text-caption text-muted-foreground">Completion tokens</dt>
+        <dd className="text-caption font-semibold tabular-nums text-foreground">
           {completionTokens ? completionTokens.toLocaleString() : "—"}
-        </span>
+        </dd>
       </div>
-    </div>
+    </dl>
   );
 }
 
-export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsDialogProps) {
+/**
+ * One translation run's detail, as a drawer.
+ *
+ * It was a centred modal, which put the console behind a scrim: the point of opening a
+ * run is to compare it against the queue it came from. The panel travels from the right
+ * on a pointer screen and from the bottom under a thumb, and the queue stays visible
+ * beside it. Nothing about the content moved — the live log, the chunk table and the
+ * usage figures are the ones the modal rendered.
+ */
+export function JobLogDrawer({ jobId, chapterId, open, onOpenChange }: JobLogDrawerProps) {
   const { progressQuery, detailsQuery } = useJobLogsQueries(jobId, chapterId, open);
   const mounted = useHydrated();
+  const isDesktop = useIsDesktop();
   const progress = progressQuery.data;
   const jobData = detailsQuery.data;
   const status = progress?.status ?? jobData?.status;
@@ -331,75 +337,77 @@ export function JobLogsDialog({ jobId, chapterId, open, onOpenChange }: JobLogsD
     chunks.reduce((sum, chunk) => sum + (chunk.completionTokens || 0), 0);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col gap-4 overflow-hidden p-4 sm:h-[85vh] sm:max-h-[90vh] sm:w-[92vw] sm:max-w-4xl sm:gap-5 sm:p-6 lg:max-w-5xl">
-        <JobLogsDialogHeader jobData={jobData} status={status} />
-
-        {queryError && !jobData ? (
-          <QueryErrorState
-            title="Unable to load job details"
-            error={queryError}
-            onRetry={() => void Promise.all([progressQuery.refetch(), detailsQuery.refetch()])}
-            className="my-8"
-          />
-        ) : progressQuery.isPending && !progress && !jobData ? (
-          <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-            <Spinner variant="primary" className="mb-3 size-8" />
-            <p className="text-body">Loading job progress…</p>
-          </div>
-        ) : detailsQuery.isPending && !jobData ? (
-          <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-            <Spinner variant="primary" className="mb-3 size-8" />
-            <p className="text-body">Loading job details and logs…</p>
-          </div>
-        ) : detailsQuery.data === null ? (
-          <div className="flex-1 py-16 text-center text-muted-foreground">
-            Job details not found.
-          </div>
-        ) : jobData ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6 sm:pr-2">
-            {detailsQuery.isError ? (
+    <Drawer open={open} onOpenChange={onOpenChange} swipeDirection={isDesktop ? "right" : "down"}>
+      <DrawerContent side={isDesktop ? "end" : "bottom"}>
+        <JobLogHeader jobData={jobData} status={status} />
+        <DrawerBody>
+          <div className="flex min-h-full flex-col gap-4">
+            {queryError && !jobData ? (
               <QueryErrorState
-                variant="panel"
-                title="Unable to refresh job details"
-                error={detailsQuery.error}
-                onRetry={() => void detailsQuery.refetch()}
-                className="my-0 min-h-0 shrink-0"
+                title="Unable to load job details"
+                error={queryError}
+                onRetry={() => void Promise.all([progressQuery.refetch(), detailsQuery.refetch()])}
+                className="my-0"
               />
-            ) : null}
-            {progressQuery.isError ? (
-              <QueryErrorState
-                variant="panel"
-                title="Unable to refresh job progress"
-                error={progressQuery.error}
-                onRetry={() => void progressQuery.refetch()}
-                className="my-0 min-h-0 shrink-0"
-              />
-            ) : null}
-            <JobMetricsBar
-              provider={jobData.provider}
-              model={jobData.model}
-              isLegacyProviderFallback={jobData.isLegacyProviderFallback}
-              doneChunks={progress?.doneChunks ?? jobData.doneChunks}
-              totalChunks={progress?.totalChunks ?? jobData.totalChunks}
-              promptTokens={livePromptTokens}
-              completionTokens={liveCompletionTokens}
-            />
-            {jobData.error ? (
-              <div className="flex shrink-0 items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-body font-medium text-destructive-text">
-                <XCircle className="mt-0.5 size-5 shrink-0" />
-                <span className="break-all">{jobData.error}</span>
+            ) : (progressQuery.isPending && !progress && !jobData) ||
+              (detailsQuery.isPending && !jobData) ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+                <Spinner variant="primary" className="size-7" aria-hidden="true" />
+                <p className="text-body">Loading job details…</p>
               </div>
-            ) : null}
-            <LogConsole logs={logs} mounted={mounted} />
-            <ChunkMetricsTable chunks={chunks} />
+            ) : jobData === null ? (
+              <p className="py-16 text-center text-body text-muted-foreground">
+                Job details not found.
+              </p>
+            ) : jobData ? (
+              <>
+                {detailsQuery.isError ? (
+                  <QueryErrorState
+                    variant="panel"
+                    title="Unable to refresh job details"
+                    error={detailsQuery.error}
+                    onRetry={() => void detailsQuery.refetch()}
+                    className="my-0 min-h-0"
+                  />
+                ) : null}
+                {progressQuery.isError ? (
+                  <QueryErrorState
+                    variant="panel"
+                    title="Unable to refresh job progress"
+                    error={progressQuery.error}
+                    onRetry={() => void progressQuery.refetch()}
+                    className="my-0 min-h-0"
+                  />
+                ) : null}
+                <JobMetrics
+                  provider={jobData.provider}
+                  model={jobData.model}
+                  isLegacyProviderFallback={jobData.isLegacyProviderFallback}
+                  doneChunks={progress?.doneChunks ?? jobData.doneChunks}
+                  totalChunks={progress?.totalChunks ?? jobData.totalChunks}
+                  promptTokens={livePromptTokens}
+                  completionTokens={liveCompletionTokens}
+                />
+                {jobData.error ? (
+                  <div
+                    className="flex shrink-0 items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-caption text-destructive-text"
+                    role="alert"
+                  >
+                    <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                    <span className="break-all">{jobData.error}</span>
+                  </div>
+                ) : null}
+                <LogConsole logs={logs} mounted={mounted} />
+                <ChunkMetricsTable chunks={chunks} />
+              </>
+            ) : (
+              <p className="py-16 text-center text-body text-muted-foreground">
+                Job details are still loading.
+              </p>
+            )}
           </div>
-        ) : (
-          <div className="flex-1 py-16 text-center text-muted-foreground">
-            Job details are still loading.
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }

@@ -1,33 +1,37 @@
 import { Button } from "@/components/ui/button";
 import { formatTableRange } from "@/components/ui/data-table-parts";
 
-export interface ReportTableFooterProps {
+export interface TablePagerProps {
   page: number;
   pageSize: number;
   rowCount: number;
-  /** The noun the range is counted in, e.g. "cases" or "reports". */
+  /** The noun the range is counted in, e.g. "cases", "accounts" or "actions". */
   noun: string;
   isPending: boolean;
   onPageChange: (page: number) => void;
 }
 
 /**
- * The pager both report tables share. Page one is expressed by omitting the search
+ * The pager every console table shares.
+ *
+ * The operator tables list a bounded, ordered set, so they page by range rather than by
+ * a react-table instance: the tools that need sorting and column visibility already own
+ * their own pager, and these three do not. Page one is expressed by omitting the search
  * parameter rather than writing `page=1`, so the queue's default URL stays clean.
  */
-export function ReportTableFooter({
+export function TablePager({
   page,
   pageSize,
   rowCount,
   noun,
   isPending,
   onPageChange,
-}: ReportTableFooterProps) {
+}: TablePagerProps) {
   const pageCount = Math.max(1, Math.ceil(rowCount / pageSize));
 
   return (
     <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3">
-      <span className="text-caption text-muted-foreground">
+      <span className="text-caption tabular-nums text-muted-foreground">
         {formatTableRange(
           rowCount === 0 ? 0 : (page - 1) * pageSize + 1,
           Math.min(page * pageSize, rowCount),

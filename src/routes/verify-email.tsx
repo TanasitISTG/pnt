@@ -48,12 +48,12 @@ function VerifyEmailPage() {
           callbackURL: "/verify-email?verified=1",
         });
         if (sendError) {
-          setError(sendError.message || "Could not send the email. Please try again.");
+          setError(sendError.message || "Could not send the email. Try again.");
           return;
         }
         setSentTo(email);
       } catch {
-        setError("Something went wrong. Please try again.");
+        setError("The request did not finish. Try again.");
       }
     },
   });

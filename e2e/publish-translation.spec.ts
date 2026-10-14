@@ -141,7 +141,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(completionToast).toBeVisible({ timeout: 15_000 });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/jobs");
-  await expect(page.getByRole("heading", { name: "Job activity" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
   const mobileJobHistory = page.getByRole("region", { name: "Mobile job history" });
   await expect(mobileJobHistory).toBeVisible();
   const translatedJobCard = mobileJobHistory

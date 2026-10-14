@@ -201,35 +201,19 @@ function JobHistoryMobileRows({
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="min-h-11"
-                onClick={() => actions.onCopyJobId(job)}
-              >
+              <Button size="lg" variant="outline" onClick={() => actions.onCopyJobId(job)}>
                 Copy job ID
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="min-h-11"
-                onClick={() => actions.onViewDetails(job)}
-              >
+              <Button size="lg" variant="outline" onClick={() => actions.onViewDetails(job)}>
                 Details
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="min-h-11"
-                onClick={() => actions.onOpenNovel(job.novelId)}
-              >
+              <Button size="lg" variant="outline" onClick={() => actions.onOpenNovel(job.novelId)}>
                 Novel
               </Button>
               {job.type === "translation" ? (
                 <Button
-                  size="sm"
+                  size="lg"
                   variant="outline"
-                  className="min-h-11"
                   onClick={() => actions.onOpenChapter(job as JobHistoryTranslationRow)}
                 >
                   Chapter
@@ -237,21 +221,15 @@ function JobHistoryMobileRows({
               ) : null}
               {job.canCancel ? (
                 <Button
-                  size="sm"
+                  size="lg"
                   variant="destructive"
-                  className="min-h-11"
                   disabled={pending}
                   onClick={() => actions.onCancel(job)}
                 >
                   {pending ? "Working…" : "Cancel job"}
                 </Button>
               ) : job.canRetry ? (
-                <Button
-                  size="sm"
-                  className="min-h-11"
-                  disabled={pending}
-                  onClick={() => actions.onRetry(job)}
-                >
+                <Button size="lg" disabled={pending} onClick={() => actions.onRetry(job)}>
                   {pending ? "Working…" : "Retry job"}
                 </Button>
               ) : null}
@@ -387,9 +365,9 @@ export function JobHistoryTable({
         )}
       </DataTableMobileRegion>
 
-      <DataTableDesktopRegion ariaLabel="Desktop job history">
+      <DataTableDesktopRegion ariaLabel="Desktop job history" scroll>
         <Table className="min-w-[1080px] text-caption">
-          <TableHeader className="bg-muted/20">
+          <TableHeader className="sticky top-0 z-10 bg-muted/20">
             <DataTableHeaderGroups
               groups={table.getHeaderGroups()}
               renderHeader={(header) => <table.FlexRender header={header} />}

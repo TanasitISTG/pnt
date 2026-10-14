@@ -121,7 +121,7 @@ function ReadingActions({
   if (readingActionsPending || chaptersPending) {
     return (
       <div
-        className="h-10 w-48 animate-pulse rounded-md bg-muted"
+        className="h-10 w-48 motion-safe:animate-pulse rounded-md bg-surface-inset"
         aria-label="Loading reading actions"
       />
     );

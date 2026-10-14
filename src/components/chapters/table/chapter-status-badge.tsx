@@ -21,7 +21,7 @@ export function ChapterStatusBadge({ status }: ChapterStatusBadgeProps) {
       );
     case "translating":
       return (
-        <Badge variant="warningSubtle" className="capitalize font-medium animate-pulse">
+        <Badge variant="warningSubtle" className="capitalize font-medium motion-safe:animate-pulse">
           Translating
         </Badge>
       );

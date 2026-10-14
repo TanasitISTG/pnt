@@ -18,7 +18,13 @@ interface SegmentedControlProps<T extends string> {
   onValueChange: (value: T) => void;
   /** Names the group for assistive technology; never rendered. */
   label: string;
-  size?: "sm" | "default";
+  /**
+   * `compact` is the same height as `default` and narrower, for a control that shares its
+   * line with the label naming it. The reader's seven settings rows put the widest of them
+   * — "Compact · Normal · Relaxed" — onto a second line at 320px, and the padding is what
+   * buys the words back onto the label's line without dropping a step of the type scale.
+   */
+  size?: "sm" | "compact" | "default";
   className?: string;
 }
 
@@ -55,7 +61,9 @@ export function SegmentedControl<T extends string>({
             onClick={() => onValueChange(option.value)}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors duration-micro",
-              size === "sm" ? "h-7 px-2 text-micro" : "h-9 px-3 text-caption",
+              size === "sm" && "h-7 px-2 text-micro",
+              size === "compact" && "h-9 px-1.5 text-caption",
+              size === "default" && "h-9 px-3 text-caption",
               selected
                 ? "bg-surface-2 text-foreground"
                 : "text-muted-foreground hover:text-foreground",

@@ -68,18 +68,18 @@ describe("SiteHeader navigation", () => {
     expect(screen.getByRole("link", { name: "Catalog" })).toBeTruthy();
     // A guest owns no novels, so the shelf link is absent rather than dead.
     expect(screen.queryByRole("link", { name: "Library" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Jobs" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Activity" })).toBeNull();
     // Both are links styled as buttons, which is how the specs address them.
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Create account" })).toBeTruthy();
   });
 
-  it("offers a signed-in account its shelf and jobs, with the account menu", () => {
+  it("offers a signed-in account its shelf and activity, with the account menu", () => {
     render(<SiteHeader user={member} />);
 
     expect(screen.getByRole("link", { name: "Catalog" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Library" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Jobs" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Activity" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
     // The account trigger is named by the account, which is how the profile specs find it.
     expect(screen.getByRole("button", { name: /E2E Admin/ })).toBeTruthy();

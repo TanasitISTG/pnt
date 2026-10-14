@@ -4,7 +4,7 @@ import { formatCost } from "@/lib/utils";
 import { ChapterReorderDialog } from "@/components/chapters/reorder/chapter-reorder-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { JobLogsDialog } from "@/components/translation/job/job-logs-dialog";
+import { JobLogDrawer } from "@/components/translation/job/job-log-drawer";
 import type { ChapterRow } from "@/components/chapters/types";
 import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 
@@ -163,7 +163,7 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
         }}
         pending={deleteChapter.pending}
       />
-      <JobLogsDialog
+      <JobLogDrawer
         chapterId={logs.chapterId}
         open={logs.chapterId !== null}
         onOpenChange={(open) => !open && logs.setChapterId(null)}

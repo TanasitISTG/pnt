@@ -24,7 +24,7 @@ export function NovelRatingSummary({ novelId, className }: NovelRatingSummaryPro
     <div className={className}>
       <a
         href="#reviews"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground no-underline hover:text-foreground"
+        className="inline-flex items-center gap-2 text-caption text-muted-foreground no-underline hover:text-foreground"
       >
         <StarRating value={summary.average} />
         <span className="font-medium text-foreground">{summary.average.toFixed(1)}</span>

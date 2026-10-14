@@ -95,7 +95,7 @@ function LoginPage() {
         await router.invalidate();
         await navigate({ to: isInternal ? redirectPath : "/", replace: true });
       } catch {
-        setError("Something went wrong. Please try again.");
+        setError("The request did not finish. Try again.");
         setCaptchaToken(null);
       }
     },
@@ -201,8 +201,8 @@ function LoginPage() {
                   Google or Discord has no password to enter here. */}
               {credentialsRejected && (methods.google || methods.discord) && (
                 <p className="text-caption text-muted-foreground">
-                  Signed up with Google or Discord? Use that button below, or reset your password
-                  to set one.
+                  Signed up with Google or Discord? Use that button below, or reset your password to
+                  set one.
                 </p>
               )}
             </div>

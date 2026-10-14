@@ -370,6 +370,7 @@ export function ReaderToolbar({
             </Button>
             <ReaderAppearanceSheet
               {...appearanceControls}
+              triggerSize="readerBar"
               open={overlay === "appearance-sheet"}
               onOpenChange={(open) => onOverlayChange(open ? "appearance-sheet" : null)}
             />

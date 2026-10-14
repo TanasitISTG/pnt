@@ -9,6 +9,8 @@ const SHAPE_CLASSES = {
   panel: "rounded-xl",
   /** A placeholder for cover art, which is always 3:4 and never rounded inside a card. */
   media: "aspect-3/4 rounded-none",
+  /** The circle an avatar arrives in, so a pending row matches the row it becomes. */
+  avatar: "rounded-full",
 } as const;
 
 interface SkeletonProps extends React.ComponentProps<"div"> {

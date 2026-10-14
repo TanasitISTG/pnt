@@ -6,23 +6,26 @@ import { DateCell } from "@/components/jobs/date-cell";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { QueryErrorState } from "@/components/query-error-state";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
+import { useIsDesktop } from "@/lib/use-media-query";
 import { getImportJobStatus } from "@/lib/scrape/functions";
 import type { JobHistoryStatus } from "@/lib/job-dashboard/contracts";
 
-export interface ImportJobDetailsDialogProps {
+export interface ImportJobDrawerProps {
   jobId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
 interface ImportJobDetails {
   id: string;
   novelTitle: string;
@@ -71,13 +74,17 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
         <StatusBadge status={job.status as JobHistoryStatus} />
         <Badge variant="outline">{job.kind === "epub" ? "EPUB" : "Scrape"}</Badge>
         {updating ? (
-          <span className="ml-auto inline-flex items-center gap-1.5 text-caption text-muted-foreground">
+          <span
+            className="ml-auto inline-flex items-center gap-1.5 text-caption text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
             <Spinner className="size-3.5" aria-hidden="true" />
             Updating…
           </span>
         ) : null}
       </div>
-      <dl className="grid gap-3 rounded-lg border border-border bg-muted/20 p-4 sm:grid-cols-2">
+      <dl className="grid gap-3 rounded-lg border border-border bg-surface-inset p-4 sm:grid-cols-2">
         <Detail label="Novel" value={job.novelTitle} />
         <Detail label="Job ID" value={job.id} mono />
         <Detail label="Source" value={source} breakWords />
@@ -98,13 +105,16 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
         <Counter label="Failed" value={job.failed} />
       </div>
       {job.error ? (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-caption text-destructive-text">
+        <div
+          className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-caption text-destructive-text"
+          role="alert"
+        >
           <p className="font-semibold">Worker error</p>
-          <p className="mt-1 whitespace-pre-wrap break-words">{job.error}</p>
+          <p className="mt-1 break-words whitespace-pre-wrap">{job.error}</p>
         </div>
       ) : null}
       {showReupload ? (
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-caption text-muted-foreground">
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-inset p-3 text-caption text-muted-foreground">
           <Upload className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>Re-upload the EPUB from the novel page to retry.</p>
         </div>
@@ -113,7 +123,7 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
   );
 }
 
-interface ImportDialogBodyProps {
+interface ImportDrawerBodyProps {
   job: ImportJobDetails | null | undefined;
   loading: boolean;
   updating: boolean;
@@ -122,19 +132,19 @@ interface ImportDialogBodyProps {
   onRetry: () => void;
 }
 
-function ImportDialogBody({
+function ImportDrawerBody({
   job,
   loading,
   updating,
   isError,
   error,
   onRetry,
-}: ImportDialogBodyProps) {
+}: ImportDrawerBodyProps) {
   if (loading) {
     return (
       <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-muted-foreground">
         <Spinner className="size-7" aria-hidden="true" />
-        <p>Loading job details…</p>
+        <p>Loading import details…</p>
       </div>
     );
   }
@@ -150,15 +160,21 @@ function ImportDialogBody({
   }
   if (!job) {
     return (
-      <div className="flex min-h-48 items-center justify-center text-center text-muted-foreground">
+      <p className="flex min-h-48 items-center justify-center text-center text-body text-muted-foreground">
         Job details not found.
-      </div>
+      </p>
     );
   }
   return <ImportJobDetailsContent job={job} updating={updating} />;
 }
 
-export function ImportJobDetailsDialog({ jobId, open, onOpenChange }: ImportJobDetailsDialogProps) {
+/**
+ * One import run's detail, as a drawer — the same surface the translation log uses, so a
+ * reader who opens either kind of run from the console meets one container rather than a
+ * dialog for one and a panel for the other.
+ */
+export function ImportJobDrawer({ jobId, open, onOpenChange }: ImportJobDrawerProps) {
+  const isDesktop = useIsDesktop();
   const jobQuery = useQuery({
     queryKey: ["import-job-details", jobId],
     queryFn: () => getImportJobStatus({ data: { jobId: jobId! } }),
@@ -177,34 +193,38 @@ export function ImportJobDetailsDialog({ jobId, open, onOpenChange }: ImportJobD
   const isLoading = jobQuery.isPending && !job;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
-        <DialogHeader className="pr-8">
-          <DialogTitle>Import job details</DialogTitle>
-          <DialogDescription>
-            Inspect the source, range, counters, and worker result for this import run.
-          </DialogDescription>
-        </DialogHeader>
-        {jobQuery.isError && job ? (
-          <QueryErrorState
-            title="Unable to refresh import details"
-            error={jobQuery.error}
-            onRetry={() => void jobQuery.refetch()}
-            variant="panel"
-            className="my-0 min-h-0"
-          />
-        ) : null}
+    <Drawer open={open} onOpenChange={onOpenChange} swipeDirection={isDesktop ? "right" : "down"}>
+      <DrawerContent side={isDesktop ? "end" : "bottom"}>
+        <DrawerHeader>
+          <DrawerTitle>Import job</DrawerTitle>
+          <DrawerDescription>
+            The source, range, counters, and worker result for this run.
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
+          <div className="flex min-h-full flex-col gap-4">
+            {jobQuery.isError && job ? (
+              <QueryErrorState
+                title="Unable to refresh import details"
+                error={jobQuery.error}
+                onRetry={() => void jobQuery.refetch()}
+                variant="panel"
+                className="my-0 min-h-0"
+              />
+            ) : null}
 
-        <ImportDialogBody
-          job={job}
-          loading={isLoading}
-          updating={jobQuery.isFetching}
-          isError={jobQuery.isError}
-          error={jobQuery.error}
-          onRetry={() => void jobQuery.refetch()}
-        />
-      </DialogContent>
-    </Dialog>
+            <ImportDrawerBody
+              job={job}
+              loading={isLoading}
+              updating={jobQuery.isFetching}
+              isError={jobQuery.isError}
+              error={jobQuery.error}
+              onRetry={() => void jobQuery.refetch()}
+            />
+          </div>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
@@ -221,7 +241,7 @@ function Detail({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-micro font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="text-micro font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </dt>
       <dd
@@ -235,7 +255,7 @@ function Detail({
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-border bg-muted/20 px-2 py-3">
+    <div className="rounded-lg border border-border bg-surface-inset px-2 py-3">
       <div className="font-semibold tabular-nums text-foreground">{value.toLocaleString()}</div>
       <div className="mt-1 text-micro text-muted-foreground">{label}</div>
     </div>

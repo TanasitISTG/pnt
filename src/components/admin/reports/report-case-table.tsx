@@ -1,3 +1,5 @@
+import { TablePager } from "@/components/admin/table-pager";
+import { DataTableSection } from "@/components/ui/data-table-parts";
 import {
   Table,
   TableBody,
@@ -9,7 +11,6 @@ import {
 import type { ReportCase } from "@/lib/reports/types";
 
 import { ReportCaseTableRow } from "./report-case-row";
-import { ReportTableFooter } from "./report-table-footer";
 
 export interface ReportCaseTableProps {
   cases: ReportCase[];
@@ -34,7 +35,7 @@ export function ReportCaseTable({
   onReview,
 }: ReportCaseTableProps) {
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <DataTableSection ariaLabel="Open report cases" busy={isPending}>
       <Table>
         <TableHeader>
           <TableRow>
@@ -64,7 +65,7 @@ export function ReportCaseTable({
           )}
         </TableBody>
       </Table>
-      <ReportTableFooter
+      <TablePager
         page={page}
         pageSize={pageSize}
         rowCount={rowCount}
@@ -72,6 +73,6 @@ export function ReportCaseTable({
         isPending={isPending}
         onPageChange={onPageChange}
       />
-    </div>
+    </DataTableSection>
   );
 }

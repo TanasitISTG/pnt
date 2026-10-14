@@ -7,6 +7,25 @@ import { hydrateAdminNovelDetailCore, novelQueryOptions } from "@/lib/content/no
 import { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
 import { readerStateQueryOptions } from "@/lib/reader/query";
 
+/**
+ * A read that reports its own failure instead of throwing it.
+ *
+ * The route starts three reads at once, and the novel is the one that decides what the page
+ * is; the other two have to be allowed to fail without that failure escaping while the novel
+ * is still in flight, or it arrives as an unhandled rejection. Settling each one keeps the
+ * outcome in hand so the route can decide which failure is the page's and which is the
+ * companion refusal of a novel nobody may read.
+ */
+async function settle<T>(
+  promise: Promise<T>,
+): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
+  try {
+    return { ok: true, value: await promise };
+  } catch (error: unknown) {
+    return { ok: false, error };
+  }
+}
+
 export const Route = createFileRoute("/_public/novels/$novelId/")({
   loader: async ({ params, context }) => {
     // The owner path is tried first because it is the only one that may see drafts. A
@@ -22,19 +41,34 @@ export const Route = createFileRoute("/_public/novels/$novelId/")({
       }
     }
 
-    const novelPromise = context.queryClient.ensureQueryData(novelQueryOptions(params.novelId));
-    await Promise.all([
-      novelPromise,
+    // The three reads start together, so a readable novel costs one round trip.
+    const chaptersRead = settle(
       context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
-      // A signed-in reader of someone else's published novel still gets per-account
-      // progress and bookmarks; a guest keeps the local-storage reader state.
-      context.user
-        ? context.queryClient.ensureQueryData(readerStateQueryOptions(params.novelId))
-        : Promise.resolve(null),
-    ]);
-    const novel = await novelPromise;
-    if (!novel) throw notFound();
-    return { novel };
+    );
+    // A signed-in reader of someone else's published novel still gets per-account
+    // progress and bookmarks; a guest keeps the local-storage reader state.
+    const readerRead = context.user
+      ? settle(context.queryClient.ensureQueryData(readerStateQueryOptions(params.novelId)))
+      : null;
+
+    const novelRead = await settle(
+      context.queryClient.ensureQueryData(novelQueryOptions(params.novelId)),
+    );
+    // A novel nobody may read has no chapters to list and no progress to restore, and both
+    // of those reads refuse in the same breath. That refusal is not a broken page: it is
+    // this page being missing, which the novel's own answer decides. Reaching the last two
+    // lines with a novel in hand is exactly when a failed chapter or progress read has to
+    // keep surfacing as a failure.
+    if (!novelRead.ok) throw novelRead.error;
+    if (!novelRead.value) throw notFound();
+
+    const chapters = await chaptersRead;
+    if (!chapters.ok) throw chapters.error;
+    if (readerRead) {
+      const reader = await readerRead;
+      if (!reader.ok) throw reader.error;
+    }
+    return { novel: novelRead.value };
   },
   pendingMs: 100,
   pendingMinMs: 200,

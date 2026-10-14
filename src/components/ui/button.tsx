@@ -49,6 +49,9 @@ const buttonVariants = cva(
         icon: "size-11 rounded-full",
         // 36px: the documented dense exception for console rows and overlay corners.
         "icon-sm": "size-9 rounded-full",
+        // The header's account control: a 44px round target on a phone, where only the
+        // avatar fits, that grows into a labelled pill once there is room for the name.
+        iconPill: "size-11 gap-0 rounded-full lg:w-auto lg:gap-2 lg:px-3",
         chapterOption: "h-auto min-h-11 px-4 py-2",
         readerNav: "h-auto min-h-11 gap-1.5 px-2.5 py-1 sm:gap-2 sm:px-3",
         // The reader's thumb bar: an icon over a one-word label, one sixth of the bar.

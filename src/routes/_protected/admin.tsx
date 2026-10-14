@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 
+import { NAV_LINK_ACTIVE_CLASS, NAV_LINK_CLASS } from "@/components/shell/nav-styles";
 import { Badge } from "@/components/ui/badge";
 import { hasAdminRole } from "@/lib/auth/roles";
 import { reportQueueCountsQueryOptions } from "@/lib/reports/query";
+import { cn } from "@/lib/utils";
 
 /**
  * Operator layout. The route gate only keeps a curious member from seeing pages whose
@@ -23,10 +25,6 @@ export const Route = createFileRoute("/_protected/admin")({
   component: AdminLayout,
 });
 
-const TAB_CLASS =
-  "inline-flex min-h-9 items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground no-underline transition-colors hover:bg-muted hover:text-foreground";
-const ACTIVE_TAB_CLASS = "bg-background text-foreground shadow-sm";
-
 /**
  * The queue tab carries its own backlog count, which is how an operator notices new
  * work without opening the tab. The badge is decorative to assistive technology (the
@@ -38,7 +36,11 @@ function ReportsTab() {
   const openCases = counts.data?.openCases ?? 0;
 
   return (
-    <Link to="/admin/reports" className={TAB_CLASS} activeProps={{ className: ACTIVE_TAB_CLASS }}>
+    <Link
+      to="/admin/reports"
+      className={cn(NAV_LINK_CLASS, "shrink-0")}
+      activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
+    >
       Reports
       {openCases > 0 ? (
         <Badge variant="muted" size="count" aria-hidden="true" className="ml-1.5">
@@ -49,26 +51,32 @@ function ReportsTab() {
   );
 }
 
+/**
+ * The console's own sub-navigation, using the same active-item treatment as the site
+ * header and the studio: the current section is a surface, not a colour shift. It was a
+ * bespoke pill strip with its own `shadow-sm`, which was the only shadow in the app that
+ * did not belong to something floating.
+ */
 function AdminLayout() {
   return (
     <div className="flex flex-col gap-6">
       <nav
         aria-label="Operator sections"
-        className="inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"
+        className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 [scrollbar-width:none]"
       >
         <Link
           to="/admin"
           activeOptions={{ exact: true }}
-          className={TAB_CLASS}
-          activeProps={{ className: ACTIVE_TAB_CLASS }}
+          className={cn(NAV_LINK_CLASS, "shrink-0")}
+          activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
         >
           Accounts
         </Link>
         <ReportsTab />
         <Link
           to="/admin/activity"
-          className={TAB_CLASS}
-          activeProps={{ className: ACTIVE_TAB_CLASS }}
+          className={cn(NAV_LINK_CLASS, "shrink-0")}
+          activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
         >
           Activity
         </Link>

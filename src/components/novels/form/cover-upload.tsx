@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { blobToDataUrl } from "@/lib/utils";
 
 interface CoverUploadProps {
@@ -161,7 +162,7 @@ export function CoverUpload({
         className="hidden"
       />
       {loading ? (
-        <div className="aspect-3/4 w-48 rounded-xl border border-border bg-foreground/5 animate-pulse" />
+        <Skeleton shape="panel" className="aspect-3/4 w-48" />
       ) : preview ? (
         <div className="relative group/cover aspect-3/4 w-48 overflow-hidden rounded-xl border border-border bg-muted">
           <img src={preview} alt="Novel Cover Preview" className="h-full w-full object-cover" />

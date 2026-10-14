@@ -87,7 +87,7 @@ export function ProviderButtons({
         setPending(null);
       }
     } catch {
-      onError(`Could not continue with ${provider}. Please try again.`);
+      onError(`Could not continue with ${provider}. Try again.`);
       setPending(null);
     }
   };

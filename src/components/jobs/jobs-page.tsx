@@ -4,11 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ImportJobDetailsDialog } from "@/components/jobs/import-job-details-dialog";
+import { ActivityAttention } from "@/components/jobs/activity-attention";
+import { ActivityLiveRuns } from "@/components/jobs/activity-live-runs";
+import { ImportJobDrawer } from "@/components/jobs/import-job-drawer";
 import { JobHistoryTable } from "@/components/jobs/job-history-table";
-import { JobLogsDialog } from "@/components/translation/job/job-logs-dialog";
 import { Metric } from "@/components/jobs/metric";
+import { JobLogDrawer } from "@/components/translation/job/job-log-drawer";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { InlineNotice } from "@/components/ui/inline-notice";
 import {
   activityQueryOptions,
   historyQueryOptions,
@@ -43,6 +47,8 @@ const EMPTY_STATS: JobStats = {
   failedImportJobs: 0,
 };
 
+const EMPTY_ROWS: JobHistoryRow[] = [];
+
 async function handleCopyJobId(job: JobHistoryRow) {
   try {
     await navigator.clipboard.writeText(job.id);
@@ -52,6 +58,15 @@ async function handleCopyJobId(job: JobHistoryRow) {
   }
 }
 
+/**
+ * The activity console.
+ *
+ * It leads with what needs a decision — a run in flight, a run that failed — and only
+ * then shows the retained history, which is what the page used to be: a strip of four
+ * detached metric cards over a table. The two numbers that describe the whole queue
+ * (latency, tokens) stay as a compact pair above the table, because they answer "how is
+ * it going?" rather than "what should I do now?".
+ */
 export function JobsPage() {
   const search = jobsRoute.useSearch();
   const navigate = jobsRoute.useNavigate();
@@ -226,66 +241,85 @@ export function JobsPage() {
     [totalTokens],
   );
 
+  const rows = history?.rows ?? EMPTY_ROWS;
+  const liveJobs = useMemo(
+    () => rows.filter((row) => row.status === "running" || row.status === "pending"),
+    [rows],
+  );
+  const failedJobs = useMemo(() => rows.filter((row) => row.status === "error"), [rows]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-caption font-semibold uppercase tracking-overline text-muted-foreground">
+          <p className="text-caption font-semibold tracking-overline text-muted-foreground uppercase">
             Operations
           </p>
-          <h1 className="mt-1 text-display-alt font-semibold text-foreground">Job activity</h1>
+          <h1 className="mt-1 text-section font-semibold text-foreground">Activity</h1>
           <p className="mt-1 max-w-2xl text-body-lg text-muted-foreground">
-            Inspect every retained translation and import run, then act on failures without leaving
-            the work queue.
+            Translation and import runs for your account. What is running and what failed lead; the
+            retained history follows.
           </p>
         </div>
         <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
           {isRefreshing ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
+
       {activityQuery.isError ? (
-        <div
-          className="flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text"
-          role="alert"
+        <InlineNotice
+          tone="warning"
+          title="Live progress is unavailable"
+          action={
+            <Button size="sm" variant="outline" onClick={() => void activityQuery.refetch()}>
+              Retry
+            </Button>
+          }
         >
-          <span>Live job progress is unavailable; retained history is still shown.</span>
-          <Button size="sm" variant="outline" onClick={() => void activityQuery.refetch()}>
-            Retry
-          </Button>
-        </div>
+          Retained history is still shown below.
+        </InlineNotice>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric
-          label="Active jobs"
-          value={activeTranslationJobs + activeImportJobs}
-          detail={
-            <>
-              Translation {activeTranslationJobs} · Import {activeImportJobs}
-            </>
-          }
-        />
-        <Metric
-          label="Needs attention"
-          value={stats.failedTranslationJobs + stats.failedImportJobs}
-          detail={
-            <>
-              Translation {stats.failedTranslationJobs} · Import {stats.failedImportJobs}
-            </>
-          }
-        />
-        <Metric label="Avg chunk latency" value={formatDuration(stats.avgChunkLatencyMs)} />
-        <Metric
-          label="Tokens"
-          value={mounted ? compactTokenCount : totalTokens}
-          detail={
-            <>
-              Prompt {stats.promptTokens.toLocaleString()} · Completion{" "}
-              {stats.completionTokens.toLocaleString()}
-            </>
-          }
-        />
-      </div>
+      <ActivityLiveRuns
+        jobs={liveJobs}
+        activeTranslationJobs={activeTranslationJobs}
+        activeImportJobs={activeImportJobs}
+        pendingJobId={pendingJobId}
+        onCancel={handleCancelJob}
+        onViewDetails={handleViewDetails}
+        onOpenNovel={handleOpenNovel}
+      />
+
+      <ActivityAttention
+        jobs={failedJobs}
+        failedTranslationJobs={stats.failedTranslationJobs}
+        failedImportJobs={stats.failedImportJobs}
+        pendingJobId={pendingJobId}
+        onRetry={handleRetryJob}
+        onViewDetails={handleViewDetails}
+        onOpenNovel={handleOpenNovel}
+      />
+
+      <Card size="sm">
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Metric
+            framed={false}
+            label="Avg chunk latency"
+            value={formatDuration(stats.avgChunkLatencyMs)}
+          />
+          <Metric
+            framed={false}
+            label="Tokens"
+            value={mounted ? compactTokenCount : totalTokens}
+            detail={
+              <>
+                Prompt {stats.promptTokens.toLocaleString()} · Completion{" "}
+                {stats.completionTokens.toLocaleString()}
+              </>
+            }
+          />
+        </CardContent>
+      </Card>
 
       <JobHistoryTable
         search={search}
@@ -316,14 +350,14 @@ export function JobsPage() {
         onConfirm={() => void handleConfirmOperation()}
       />
 
-      <JobLogsDialog
+      <JobLogDrawer
         jobId={translationDetails?.jobId ?? null}
         chapterId={translationDetails?.chapterId ?? null}
         open={translationDetails !== null}
         onOpenChange={(open) => !open && setTranslationDetails(null)}
       />
 
-      <ImportJobDetailsDialog
+      <ImportJobDrawer
         jobId={importDetailsJobId}
         open={importDetailsJobId !== null}
         onOpenChange={(open) => !open && setImportDetailsJobId(null)}

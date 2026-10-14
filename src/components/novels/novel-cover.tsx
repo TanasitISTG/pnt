@@ -133,7 +133,7 @@ function DevelopmentCover({
       className={`relative w-full h-full rounded-[inherit] overflow-hidden ${className}`}
     >
       <div
-        className={`absolute inset-0 bg-foreground/5 animate-pulse rounded-[inherit] transition-opacity duration-300 ${
+        className={`absolute inset-0 bg-foreground/5 motion-safe:animate-pulse rounded-[inherit] transition-opacity duration-panel ${
           loaded ? "opacity-0" : "opacity-100"
         }`}
       />

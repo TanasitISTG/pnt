@@ -1,9 +1,13 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { Star } from "lucide-react";
 import { useState } from "react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  DiscussionHeading,
+  DiscussionSignInPrompt,
+  DiscussionSkeleton,
+} from "@/components/discussion/discussion-parts";
 import { QueryErrorState } from "@/components/query-error-state";
 import { ReportTargetDialog } from "@/components/reports/report-target-dialog";
 import type { ReportSubmission } from "@/components/reports/report-target-dialog";
@@ -12,6 +16,7 @@ import { ReviewItem } from "@/components/reviews/review-item";
 import { StarRating } from "@/components/reviews/star-rating";
 import { useReviewMutations } from "@/components/reviews/use-review-mutations";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   myReviewQueryOptions,
   novelRatingQueryOptions,
@@ -97,12 +102,12 @@ export function NovelReviewsSection({
       className="flex scroll-mt-24 flex-col gap-6"
     >
       <div className="flex flex-col gap-4">
-        <h2
+        <DiscussionHeading
           id="novel-reviews-heading"
-          className="text-body-lg font-semibold tracking-tight text-foreground"
-        >
-          Reviews
-        </h2>
+          icon={<Star />}
+          title="Reviews"
+          count={summary?.count ?? 0}
+        />
 
         {summary && summary.count > 0 && summary.average !== null ? (
           <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:gap-8">
@@ -144,21 +149,14 @@ export function NovelReviewsSection({
       </div>
 
       {canManage ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           Ratings come from readers. You cannot review your own novel.
         </p>
       ) : !signedIn ? (
         isLive ? (
-          <p className="text-sm text-muted-foreground">
-            <Link
-              to="/login"
-              search={{ redirect: `/novels/${novelId}` }}
-              className="font-medium text-foreground underline underline-offset-4"
-            >
-              Sign in
-            </Link>{" "}
+          <DiscussionSignInPrompt redirect={`/novels/${novelId}`}>
             to rate this novel and share what you thought.
-          </p>
+          </DiscussionSignInPrompt>
         ) : null
       ) : myReview && !editing ? (
         <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
@@ -202,22 +200,10 @@ export function NovelReviewsSection({
           className="my-0 min-h-0"
         />
       ) : reviews.isPending && isLive ? (
-        <div className="flex flex-col gap-4" aria-hidden="true">
-          {[0, 1].map((row) => (
-            <div key={row} className="flex animate-pulse gap-3">
-              <div className="size-7 shrink-0 rounded-full bg-muted" />
-              <div className="flex flex-1 flex-col gap-2">
-                <div className="h-3 w-40 rounded bg-muted" />
-                <div className="h-3 w-full rounded bg-muted" />
-              </div>
-            </div>
-          ))}
-        </div>
+        <DiscussionSkeleton rows={2} />
       ) : others.length === 0 ? (
         myReview === null ? (
-          <p className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
-            No reviews yet.
-          </p>
+          <EmptyState size="compact" title="No reviews yet" />
         ) : null
       ) : (
         <div className="flex flex-col gap-6">

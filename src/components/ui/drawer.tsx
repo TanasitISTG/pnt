@@ -33,14 +33,22 @@ function DrawerClose({ ...props }: DrawerPrimitive.Close.Props) {
 
 const SIDE_CLASSES = {
   bottom: {
-    viewport: "items-end justify-stretch",
+    // `justify-stretch` is not a `justify-content` value, so the panel fell back to
+    // `normal` (flex-start) and shrank to its content: on a 390px phone the reading
+    // settings sheet measured 290px and hugged the left edge instead of spanning the
+    // bottom. The viewport centres, the popup fills it up to its cap.
+    viewport: "items-end justify-center",
     // A bottom sheet sits against the home indicator, so its own padding clears it; a
-    // caller should never have to reach for the inset.
-    popup: "overlay-drawer-bottom max-h-[85dvh] rounded-t-2xl border-t pb-safe-bottom",
+    // caller should never have to reach for the inset. The cap keeps it a sheet rather
+    // than a full-bleed panel on a tablet.
+    popup:
+      "overlay-drawer-bottom w-full max-w-[min(32rem,100%)] max-h-[85dvh] rounded-t-2xl border-t pb-safe-bottom",
   },
   end: {
+    // The viewport stretches its child, so the panel reaches the bottom of the viewport it
+    // covers without a `dvh` height — which would win over the stretch and could stop short.
     viewport: "items-stretch justify-end",
-    popup: "overlay-drawer-end h-dvh w-[min(24rem,88vw)] border-l",
+    popup: "overlay-drawer-end w-[min(24rem,88vw)] border-l",
   },
 } as const;
 

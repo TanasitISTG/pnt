@@ -7,14 +7,18 @@ type TabsTriggerVariant = "default" | "choice";
 type TabsContentVariant = "default" | "surface";
 
 const tabsListClasses = {
-  default: "inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1",
+  // The list never wraps: a wrapped trigger turns a two-tab switch into a block of
+  // stacked words on a phone. It scrolls instead, which keeps the labels readable and
+  // the active-surface metaphor intact.
+  default:
+    "inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-border bg-muted/40 p-1",
   choice:
     "grid w-full items-center grid-cols-1 gap-2 rounded-none border-0 bg-transparent p-0 min-[640px]:grid-cols-3",
 } satisfies Record<TabsListVariant, string>;
 
 const tabsTriggerClasses = {
   default:
-    "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-active:bg-background data-active:text-foreground data-active:shadow-sm disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-active:bg-background data-active:text-foreground data-active:shadow-sm disabled:pointer-events-none disabled:opacity-50",
   choice:
     "inline-flex min-h-28 items-start justify-start gap-2 rounded-xl border border-border bg-background px-4 py-4 text-left text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 data-active:border-primary data-active:bg-surface-2 data-active:text-foreground data-active:shadow-none disabled:pointer-events-none disabled:opacity-50",
 } satisfies Record<TabsTriggerVariant, string>;

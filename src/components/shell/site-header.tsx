@@ -30,7 +30,7 @@ interface PrimaryLink {
 const PRIMARY_LINKS: readonly PrimaryLink[] = [
   { to: "/catalog", label: "Catalog" },
   { to: "/library", label: "Library", requiresSession: true },
-  { to: "/jobs", label: "Jobs", requiresSession: true },
+  { to: "/jobs", label: "Activity", requiresSession: true },
 ];
 
 export function SiteHeader({ user, layout = "default" }: SiteHeaderProps) {
@@ -70,7 +70,12 @@ export function SiteHeader({ user, layout = "default" }: SiteHeaderProps) {
         <div className="ml-auto flex items-center gap-1">
           <ThemeMenu />
           {user ? (
-            <AccountMenu user={user} isAdmin={isAdmin} />
+            // From `md` up the account menu is the only way to reach the account. Below it
+            // the navigation drawer lists the same destinations (Account, Settings,
+            // Admin, Sign out), so the header kept two doors to one room.
+            <div className="hidden md:flex">
+              <AccountMenu user={user} isAdmin={isAdmin} />
+            </div>
           ) : (
             <div className="hidden items-center gap-2 sm:flex">
               <Button variant="ghost" render={<Link to="/login" />}>

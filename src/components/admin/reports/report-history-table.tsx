@@ -1,3 +1,5 @@
+import { TablePager } from "@/components/admin/table-pager";
+import { DataTableSection } from "@/components/ui/data-table-parts";
 import {
   Table,
   TableBody,
@@ -9,7 +11,6 @@ import {
 import type { ReportHistoryRow } from "@/lib/reports/types";
 
 import { ReportHistoryTableRow } from "./report-history-row";
-import { ReportTableFooter } from "./report-table-footer";
 
 export interface ReportHistoryTableProps {
   rows: ReportHistoryRow[];
@@ -31,7 +32,7 @@ export function ReportHistoryTable({
   onPageChange,
 }: ReportHistoryTableProps) {
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <DataTableSection ariaLabel="Decided reports" busy={isPending}>
       <Table>
         <TableHeader>
           <TableRow>
@@ -57,7 +58,7 @@ export function ReportHistoryTable({
           )}
         </TableBody>
       </Table>
-      <ReportTableFooter
+      <TablePager
         page={page}
         pageSize={pageSize}
         rowCount={rowCount}
@@ -65,6 +66,6 @@ export function ReportHistoryTable({
         isPending={isPending}
         onPageChange={onPageChange}
       />
-    </div>
+    </DataTableSection>
   );
 }

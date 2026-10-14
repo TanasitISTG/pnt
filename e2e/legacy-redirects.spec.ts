@@ -39,6 +39,16 @@ test("legacy addresses redirect into the redesigned app", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
+  // Settings became a hub of its own sections. The old account page and the bare hub both
+  // land on the section the hub opens with.
+  await page.goto("/profile");
+  await expect(page).toHaveURL((url) => url.pathname === "/settings/account");
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Account" })).toBeVisible();
+
+  await page.goto("/settings");
+  await expect(page).toHaveURL((url) => url.pathname === "/settings/account");
+
   // A novel of this spec's own, so the studio redirects are walked by an owner who can see
   // them. Creating one lands in the studio's add flow, which is where the id comes from.
   const novelTitle = `Legacy addresses ${Date.now()}`;

@@ -683,6 +683,20 @@
     transition-duration: calc(var(--dur-panel) * var(--drawer-swipe-strength, 1));
   }
 
+  /*
+   * A modal overlay locks the page it covers. Base UI already marks `body`, which Chromium
+   * propagates to the viewport; declaring it on the root as well is what keeps the page
+   * still in the engines that do not, and `:has()` releases it the moment the last popup
+   * unmounts, so no script has to remember to. Popups that are not modal — selects,
+   * popovers, menus — set their own slot and are deliberately absent from this list.
+   * `scrollbar-gutter: stable` on the root means the lock costs no layout shift.
+   */
+  html:has([data-slot="sheet-content"]),
+  html:has([data-slot="drawer-content"]),
+  html:has([data-slot="dialog-content"]) {
+    overflow: hidden;
+  }
+
   /* Keyboard-triggered, so it appears instantly: motion here would read as lag. */
   .skip-link {
     position: fixed;
