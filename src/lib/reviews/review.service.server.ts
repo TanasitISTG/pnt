@@ -7,6 +7,7 @@ import { novels, reports, reviews, user } from "@/lib/db/schema";
 import { isUniqueViolation } from "@/lib/db/unique-violation";
 import { novelLive, novelReadable } from "@/lib/content/publish/publish";
 import { resolveUserAvatar } from "@/lib/profile/avatar.server";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { nanoid } from "@/lib/utils";
 
@@ -243,9 +244,9 @@ export async function saveReviewForUser(
     .where(and(eq(novels.id, input.novelId), novelLive()))
     .limit(1);
 
-  if (!novel) throw new SafeServerError("Novel not found");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFound"));
   if (novel.userId === userId) {
-    throw new SafeServerError("You cannot review your own novel.");
+    throw new SafeServerError(encodeMessage("errors.ownNovelReview"));
   }
 
   const trimmedBody = (input.body ?? "").slice(0, REVIEW_BODY_MAX_LENGTH);

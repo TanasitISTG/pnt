@@ -73,7 +73,7 @@ export function ReaderFooterNav({
           variant="ghost"
           size="sm"
           className="max-w-full"
-          render={<Link to="/novels/$novelId" params={{ novelId }} />}
+          render={<Link to="/{-$locale}/novels/$novelId" params={{ novelId }} />}
           aria-label="All chapters"
         >
           <List className="size-4" aria-hidden="true" />

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { UserAvatar } from "@/components/user-avatar";
+import { useTranslations } from "use-intl";
 import { useViewerAvatar } from "@/lib/profile/use-viewer-avatar";
 import type { ViewerUser } from "@/lib/profile/types";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ const MENU_LINK_CLASS = "no-underline text-foreground";
  * Reading destinations (catalog, library, jobs) live in the primary navigation instead.
  */
 export function AccountMenu({ user, isAdmin }: AccountMenuProps) {
+  const t = useTranslations("shell");
   const avatar = useViewerAvatar();
   const { signingOut, signOut } = useSignOut();
   const displayName = user.name || user.email;
@@ -69,23 +71,23 @@ export function AccountMenu({ user, isAdmin }: AccountMenuProps) {
         <DropdownMenuGroup>
           <DropdownMenuItem render={<Link to="/settings/account" className={MENU_LINK_CLASS} />}>
             <UserRound className="size-4" aria-hidden="true" />
-            Account
+            {t("account")}
           </DropdownMenuItem>
           <DropdownMenuItem render={<Link to="/settings" className={MENU_LINK_CLASS} />}>
             <Settings className="size-4" aria-hidden="true" />
-            Settings
+            {t("settings")}
           </DropdownMenuItem>
           {isAdmin ? (
             <DropdownMenuItem render={<Link to="/admin" className={MENU_LINK_CLASS} />}>
               <ShieldCheck className="size-4" aria-hidden="true" />
-              Admin
+              {t("admin")}
             </DropdownMenuItem>
           ) : null}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={signOut} disabled={signingOut}>
           {signingOut ? <Spinner /> : <LogOut className="size-4" aria-hidden="true" />}
-          {signingOut ? "Signing out…" : "Sign out"}
+          {signingOut ? t("signingOut") : t("signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

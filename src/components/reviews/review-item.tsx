@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Flag, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { DiscussionTombstone } from "@/components/discussion/discussion-parts";
 import { StarRating } from "@/components/reviews/star-rating";
@@ -11,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relative-time";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/i18n/format";
 import type { NovelReview } from "@/lib/reviews/types";
 
 /** Long bodies collapse behind "Show more" so one review cannot own the whole page. */
@@ -32,6 +33,9 @@ export interface ReviewItemProps {
  * leaving an empty paragraph behind.
  */
 export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemProps) {
+  const t = useTranslations("reviews");
+  const tCommon = useTranslations("common");
+  const locale = useLocale();
   const [expanded, setExpanded] = useState(false);
   const removed = review.removedAt !== null;
   const longBody = (review.body?.length ?? 0) > BODY_COLLAPSE_THRESHOLD;
@@ -41,7 +45,7 @@ export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemPro
   return (
     <article className="flex gap-3">
       <UserAvatar
-        name={review.author.name ?? "Reader"}
+        name={review.author.name ?? tCommon("reader")}
         avatar={review.author.avatar}
         size="sm"
         className="mt-0.5 shrink-0"
@@ -49,7 +53,8 @@ export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemPro
       <div className="min-w-0 flex-1">
         <header className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="truncate text-body font-medium text-foreground">
-            {review.author.name ?? (review.author.id ? "Reader" : "Deleted account")}
+            {review.author.name ??
+              (review.author.id ? tCommon("reader") : tCommon("deletedAccount"))}
           </span>
           {!removed ? (
             <StarRating value={review.rating} iconClassName="size-3.5" className="shrink-0" />
@@ -57,12 +62,14 @@ export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemPro
           <time
             className="shrink-0 text-caption text-muted-foreground"
             dateTime={new Date(review.createdAt).toISOString()}
-            title={formatAbsoluteTime(review.createdAt)}
+            title={formatAbsoluteTime(review.createdAt, locale)}
           >
-            {formatRelativeTime(review.createdAt)}
+            {formatRelativeTime(review.createdAt, locale)}
           </time>
           {review.editedAt && !removed ? (
-            <span className="shrink-0 text-caption text-muted-foreground">· edited</span>
+            <span className="shrink-0 text-caption text-muted-foreground">
+              · {tCommon("edited")}
+            </span>
           ) : null}
           {hasActions ? (
             <DropdownMenu>
@@ -72,7 +79,7 @@ export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemPro
                     variant="ghost"
                     size="icon-sm"
                     className="ml-auto shrink-0"
-                    aria-label="Review actions"
+                    aria-label={t("actionsLabel")}
                   />
                 }
               >
@@ -82,19 +89,19 @@ export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemPro
                 {onEdit ? (
                   <DropdownMenuItem onClick={onEdit}>
                     <Pencil className="size-4" />
-                    Edit
+                    {tCommon("edit")}
                   </DropdownMenuItem>
                 ) : null}
                 {onDelete ? (
                   <DropdownMenuItem variant="destructive" onClick={onDelete}>
                     <Trash2 className="size-4" />
-                    Delete
+                    {tCommon("delete")}
                   </DropdownMenuItem>
                 ) : null}
                 {onReport ? (
                   <DropdownMenuItem disabled={review.viewerReported} onClick={onReport}>
                     <Flag className="size-4" />
-                    {review.viewerReported ? "Reported" : "Report"}
+                    {review.viewerReported ? tCommon("reported") : tCommon("report")}
                   </DropdownMenuItem>
                 ) : null}
               </DropdownMenuContent>
@@ -122,7 +129,7 @@ export function ReviewItem({ review, onEdit, onDelete, onReport }: ReviewItemPro
                 className="-ml-3 mt-1"
                 onClick={() => setExpanded((value) => !value)}
               >
-                {expanded ? "Show less" : "Show more"}
+                {expanded ? t("showLess") : t("showMore")}
               </Button>
             ) : null}
           </>

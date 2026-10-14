@@ -1,11 +1,11 @@
 import { Grid2X2, List, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "use-intl";
 
 import {
   formatLibraryLanguage,
-  LIBRARY_LANGUAGE_ALL_LABEL,
-  LIBRARY_PUBLICATION_LABELS,
-  LIBRARY_SORT_LABELS,
+  LIBRARY_PUBLICATION_KEYS,
+  LIBRARY_SORT_KEYS,
   type LibrarySearch,
 } from "@/components/novels/library/library-search";
 import { Button } from "@/components/ui/button";
@@ -29,13 +29,16 @@ interface LibraryToolbarProps {
 }
 
 const VIEW_OPTIONS = [
-  { value: "grid", label: "Grid", icon: <Grid2X2 />, srLabel: "Grid view" },
-  { value: "list", label: "List", icon: <List />, srLabel: "List view" },
+  { value: "grid", labelKey: "layoutGrid", icon: <Grid2X2 />, srLabelKey: "layoutGridView" },
+  { value: "list", labelKey: "layoutList", icon: <List />, srLabelKey: "layoutListView" },
 ] as const;
 
 /**
  * Filters, not a panel: a sticky row that stays reachable while the shelf scrolls, one
  * line of controls on desktop, and a single results sentence with the way to clear.
+ *
+ * Every option's text comes from the catalog while its value stays the raw filter value, so
+ * a URL keeps `sort=updated` in both languages and only the label a reader sees changes.
  */
 export function LibraryToolbar({
   search,
@@ -45,6 +48,7 @@ export function LibraryToolbar({
   totalCount,
   onSearchChange,
 }: LibraryToolbarProps) {
+  const t = useTranslations("catalog");
   const [queryInputState, setQueryInputState] = useState({ query: search.q, input: search.q });
   let queryInput = queryInputState.input;
   if (queryInputState.query !== search.q) {
@@ -53,10 +57,10 @@ export function LibraryToolbar({
   }
   const onSearchChangeRef = useRef(onSearchChange);
   const languageItems = useMemo(() => {
-    const items: Record<string, string> = { all: LIBRARY_LANGUAGE_ALL_LABEL };
+    const items: Record<string, string> = { all: t("languageAll") };
     for (const language of languages) items[language] = formatLibraryLanguage(language);
     return items;
-  }, [languages]);
+  }, [languages, t]);
 
   useEffect(() => {
     onSearchChangeRef.current = onSearchChange;
@@ -76,19 +80,32 @@ export function LibraryToolbar({
   const hasFilters =
     search.q !== "" || search.language !== "all" || (isAdmin && search.publication !== "all");
 
+  const sortItems = {
+    newest: t(LIBRARY_SORT_KEYS.newest),
+    updated: t(LIBRARY_SORT_KEYS.updated),
+    title: t(LIBRARY_SORT_KEYS.title),
+  };
+
+  const publicationItems = {
+    all: t(LIBRARY_PUBLICATION_KEYS.all),
+    draft: t(LIBRARY_PUBLICATION_KEYS.draft),
+    scheduled: t(LIBRARY_PUBLICATION_KEYS.scheduled),
+    live: t(LIBRARY_PUBLICATION_KEYS.live),
+  };
+
   const sortSelect = (
     <Select
       value={search.sort}
-      items={LIBRARY_SORT_LABELS}
+      items={sortItems}
       onValueChange={(value) => {
         if (value) onSearchChange({ sort: value as LibrarySearch["sort"] });
       }}
     >
-      <SelectTrigger aria-label="Sort by" className="h-9 w-full min-w-0">
-        <SelectValue placeholder={LIBRARY_SORT_LABELS.newest} />
+      <SelectTrigger aria-label={t("sortLabel")} className="h-9 w-full min-w-0">
+        <SelectValue placeholder={sortItems.newest} />
       </SelectTrigger>
       <SelectContent>
-        {Object.entries(LIBRARY_SORT_LABELS).map(([value, label]) => (
+        {Object.entries(sortItems).map(([value, label]) => (
           <SelectItem key={value} value={value}>
             {label}
           </SelectItem>
@@ -99,7 +116,7 @@ export function LibraryToolbar({
 
   return (
     <section
-      aria-label="Library filters"
+      aria-label={t("filtersLabel")}
       className="sticky top-16 z-30 flex flex-col gap-3 border-b border-border bg-background/90 py-3 supports-backdrop-filter:backdrop-blur-sm"
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -109,7 +126,7 @@ export function LibraryToolbar({
             aria-hidden="true"
           />
           <label htmlFor="library-search" className="sr-only">
-            Search novels
+            {t("searchLabel")}
           </label>
           <Input
             id="library-search"
@@ -117,8 +134,8 @@ export function LibraryToolbar({
             autoComplete="off"
             value={queryInput}
             onChange={(event) => setQueryInputState({ query: search.q, input: event.target.value })}
-            placeholder="Search title, author, or original title…"
-            aria-label="Search novels"
+            placeholder={t("searchPlaceholder")}
+            aria-label={t("searchLabel")}
             className="h-9 pl-9"
           />
         </div>
@@ -128,8 +145,8 @@ export function LibraryToolbar({
             items={languageItems}
             onValueChange={(value) => onSearchChange({ language: value ?? "all" })}
           >
-            <SelectTrigger aria-label="Filter by language" className="h-9 w-full min-w-0">
-              <SelectValue placeholder={LIBRARY_LANGUAGE_ALL_LABEL} />
+            <SelectTrigger aria-label={t("languageFilterLabel")} className="h-9 w-full min-w-0">
+              <SelectValue placeholder={languageItems.all} />
             </SelectTrigger>
             <SelectContent>
               {Object.entries(languageItems).map(([value, label]) => (
@@ -142,16 +159,19 @@ export function LibraryToolbar({
           {isAdmin ? (
             <Select
               value={search.publication}
-              items={LIBRARY_PUBLICATION_LABELS}
+              items={publicationItems}
               onValueChange={(value) => {
                 if (value) onSearchChange({ publication: value as LibrarySearch["publication"] });
               }}
             >
-              <SelectTrigger aria-label="Filter by publication" className="h-9 w-full min-w-0">
-                <SelectValue placeholder={LIBRARY_PUBLICATION_LABELS.all} />
+              <SelectTrigger
+                aria-label={t("publicationFilterLabel")}
+                className="h-9 w-full min-w-0"
+              >
+                <SelectValue placeholder={publicationItems.all} />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(LIBRARY_PUBLICATION_LABELS).map(([value, label]) => (
+                {Object.entries(publicationItems).map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
                   </SelectItem>
@@ -161,9 +181,14 @@ export function LibraryToolbar({
           ) : null}
           {isAdmin ? <div className="lg:w-48">{sortSelect}</div> : null}
           <SegmentedControl
-            label="Shelf layout"
+            label={t("layoutLabel")}
             value={search.view}
-            options={VIEW_OPTIONS}
+            options={VIEW_OPTIONS.map((option) => ({
+              value: option.value,
+              label: t(option.labelKey),
+              icon: option.icon,
+              srLabel: t(option.srLabelKey),
+            }))}
             size="sm"
             className="h-9 lg:ml-auto"
             onValueChange={(value) => onSearchChange({ view: value })}
@@ -171,13 +196,11 @@ export function LibraryToolbar({
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-muted-foreground">
-        <span aria-live="polite">
-          {resultCount} of {totalCount} {totalCount === 1 ? "novel" : "novels"}
-        </span>
+        <span aria-live="polite">{t("results", { shown: resultCount, total: totalCount })}</span>
         {hasFilters ? (
           <Button type="button" variant="ghost" size="sm" onClick={clear}>
             <X className="size-3.5" aria-hidden="true" />
-            Clear filters
+            {t("clearFilters")}
           </Button>
         ) : null}
       </div>

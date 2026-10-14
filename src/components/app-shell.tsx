@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslations } from "use-intl";
 
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { SiteFooter } from "@/components/shell/site-footer";
@@ -30,6 +31,7 @@ export function AppShell({
   children,
   layout = "default",
 }: AppShellProps) {
+  const t = useTranslations("shell");
   const { consent, hydrated } = useConsent();
   const reader = layout === "reader";
   // The recorded version is written by the server only, so comparing it against the
@@ -49,7 +51,7 @@ export function AppShell({
       {impersonation ? (
         <ImpersonationBanner
           impersonation={impersonation}
-          viewedName={user?.name || user?.email || "another account"}
+          viewedName={user?.name || user?.email || t("anotherAccount")}
         />
       ) : null}
       <SiteHeader user={user} layout={layout} />

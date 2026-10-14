@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { chapters, comments, novels, reports, user } from "@/lib/db/schema";
 import { chapterVisibleToGuests, novelLive } from "@/lib/content/publish/publish";
 import { resolveUserAvatar } from "@/lib/profile/avatar.server";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { nanoid } from "@/lib/utils";
 
@@ -126,7 +127,7 @@ async function liveChapter(chapterId: string): Promise<{ id: string; novelId: st
     .where(and(eq(chapters.id, chapterId), chapterVisibleToGuests(), novelLive()))
     .limit(1);
 
-  if (!chapter) throw new SafeServerError("Chapter not found");
+  if (!chapter) throw new SafeServerError(encodeMessage("errors.chapterNotFound"));
   return chapter;
 }
 
@@ -284,10 +285,10 @@ export async function createCommentForUser(
       .limit(1);
 
     if (!parent || parent.chapterId !== input.chapterId) {
-      throw new SafeServerError("That comment is no longer here.");
+      throw new SafeServerError(encodeMessage("errors.commentGone"));
     }
     if (parent.parentId !== null) {
-      throw new SafeServerError("Replies go to a comment, not to another reply.");
+      throw new SafeServerError(encodeMessage("errors.replyToReply"));
     }
   }
 
@@ -322,7 +323,7 @@ export async function updateCommentForUser(
     )
     .returning({ id: comments.id });
 
-  if (updated.length === 0) throw new SafeServerError("Comment not found or cannot be edited");
+  if (updated.length === 0) throw new SafeServerError(encodeMessage("errors.commentEditNotFound"));
   return { id: input.commentId };
 }
 
@@ -343,7 +344,7 @@ export async function deleteCommentForUser(
       .for("update")
       .limit(1);
 
-    if (!comment) throw new SafeServerError("Comment not found");
+    if (!comment) throw new SafeServerError(encodeMessage("errors.commentMissing"));
 
     const [replyCount] = await tx
       .select({ value: count() })

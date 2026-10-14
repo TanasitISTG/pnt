@@ -40,7 +40,7 @@ export function GlossaryHeader({
         <Button
           variant="ghost"
           size="icon"
-          render={<Link to="/novels/$novelId" params={{ novelId }} />}
+          render={<Link to="/{-$locale}/novels/$novelId" params={{ novelId }} />}
           aria-label="Back to novel details"
         >
           <ArrowLeft className="size-4" />

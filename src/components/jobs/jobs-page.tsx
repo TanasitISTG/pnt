@@ -183,7 +183,7 @@ export function JobsPage() {
 
   const handleOpenNovel = useCallback(
     (novelId: string) => {
-      void navigate({ to: "/novels/$novelId", params: { novelId } });
+      void navigate({ to: "/{-$locale}/novels/$novelId", params: { novelId } });
     },
     [navigate],
   );
@@ -191,7 +191,7 @@ export function JobsPage() {
   const handleOpenChapter = useCallback(
     (job: JobHistoryTranslationRow) => {
       void navigate({
-        to: "/novels/$novelId/chapters/$chapterId",
+        to: "/{-$locale}/novels/$novelId/chapters/$chapterId",
         params: { novelId: job.novelId, chapterId: job.chapterId },
       });
     },

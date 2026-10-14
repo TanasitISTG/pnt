@@ -332,12 +332,12 @@ describe("JobsPage dashboard", () => {
 
     fireEvent.click(getMobileCard("Translation Novel").getByRole("button", { name: "Novel" }));
     expect(routerState.navigate).toHaveBeenCalledWith({
-      to: "/novels/$novelId",
+      to: "/{-$locale}/novels/$novelId",
       params: { novelId: "novel-translation" },
     });
     fireEvent.click(getMobileCard("Translation Novel").getByRole("button", { name: "Chapter" }));
     expect(routerState.navigate).toHaveBeenCalledWith({
-      to: "/novels/$novelId/chapters/$chapterId",
+      to: "/{-$locale}/novels/$novelId/chapters/$chapterId",
       params: { novelId: "novel-translation", chapterId: "chapter-1" },
     });
 
@@ -431,7 +431,7 @@ describe("JobsPage dashboard", () => {
     expect(within(screen.getByRole("table")).getByText("Translation Novel")).toBeTruthy();
     fireEvent.click(
       within(screen.getByRole("region", { name: "Job history" })).getByRole("button", {
-        name: "Retry",
+        name: "Try again",
       }),
     );
     expect(onRetry).toHaveBeenCalledOnce();
@@ -723,7 +723,7 @@ describe("JobsPage dashboard", () => {
     await waitFor(() => expect(screen.getByText("Unable to load job history")).toBeTruthy());
     const historyError = screen.getByText("Unable to load job history").parentElement;
     expect(historyError).toBeTruthy();
-    fireEvent.click(within(historyError!).getByRole("button", { name: "Retry" }));
+    fireEvent.click(within(historyError!).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(serverFunctions.getJobHistory).toHaveBeenCalledTimes(2));
   });
 });

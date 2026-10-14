@@ -2,11 +2,26 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql } from "postgres";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
+import en from "@/lib/i18n/messages/en";
+
 import type { ReportQueueInput } from "./schemas";
 import { REPORT_CASE_PAGE_SIZE } from "./schemas";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+
+/**
+ * The wire form of a refusal (i18n.md §3).
+ *
+ * Server copy is a key, not a sentence: the surface that reads it renders it in the
+ * reader's own language, so the assertion pins the key rather than one language's wording.
+ * Typing the argument against the catalog keeps a renamed key a compile error here instead
+ * of a stored string nothing can resolve.
+ */
+function messageCode(key: keyof (typeof en)["errors"]): string {
+  return encodeMessage(`errors.${key}`);
+}
 
 let sql: Sql;
 /**
@@ -264,13 +279,13 @@ integrationDescribe("novel reporting", () => {
   it("refuses a novel the reporter cannot read and a novel of their own", async () => {
     await expect(
       createNovelReportForUser(secondReporterId, { novelId: draftNovelId, reason: "spam_or_scam" }),
-    ).rejects.toThrow("Novel not found or unauthorized");
+    ).rejects.toThrow(messageCode("novelNotFoundOrUnauthorized"));
 
     // A live novel of the reporter's own is readable, so this refusal is the self-report
     // rule rather than visibility: authors report content, they do not report themselves.
     await expect(
       createNovelReportForUser(reporterId, { novelId: ownNovelId, reason: "copyright" }),
-    ).rejects.toThrow("You cannot report your own novel.");
+    ).rejects.toThrow(messageCode("ownNovelReport"));
   });
 
   it("decides every report in a case at once and refuses a second decision", async () => {
@@ -438,7 +453,7 @@ integrationDescribe("novel reporting", () => {
         parentId: reply.id,
         body: "A reply to a reply.",
       }),
-    ).rejects.toThrow("Replies go to a comment, not to another reply.");
+    ).rejects.toThrow(messageCode("replyToReply"));
 
     await createCommentReportForUser(reporterId, {
       commentId: comment.id,
@@ -458,7 +473,7 @@ integrationDescribe("novel reporting", () => {
     // account on the same comment.
     await expect(
       createCommentReportForUser(authorId, { commentId: comment.id, reason: "spam_or_scam" }),
-    ).rejects.toThrow("You cannot report your own comment.");
+    ).rejects.toThrow(messageCode("ownCommentReport"));
     await expect(
       createCommentReportForUser(reporterId, {
         commentId: comment.id,
@@ -561,7 +576,7 @@ integrationDescribe("novel reporting", () => {
 
     // Authors rate other people's novels; the novel's owner is refused outright.
     await expect(saveReviewForUser(authorId, { novelId: liveNovelId, rating: 5 })).rejects.toThrow(
-      "You cannot review your own novel.",
+      messageCode("ownNovelReview"),
     );
 
     await createReviewReportForUser(reporterId, {

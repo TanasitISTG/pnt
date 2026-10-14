@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { BookOpen } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { QuietPage } from "@/components/quiet-page";
 import { QuietShell } from "@/components/shell/quiet-shell";
@@ -17,17 +18,18 @@ import { Button } from "@/components/ui/button";
  * checks before framing itself and this page does not.
  */
 export function NotFoundPage() {
+  const t = useTranslations("errors");
   return (
     <QuietShell>
       <QuietPage
         code="404"
         icon={<BookOpen />}
-        title="Page not found"
-        description="Nothing is published at this address. It may have been renamed, removed, or never existed."
+        title={t("notFoundTitle")}
+        description={t("notFoundDescription")}
       >
         {/* One action, and the same one for everybody: the catalog is reachable whether or
             not anyone is signed in, which a 404 page cannot assume. */}
-        <Button render={<Link to="/catalog" />}>Back to catalog</Button>
+        <Button render={<Link to="/{-$locale}/catalog" />}>{t("backToCatalog")}</Button>
       </QuietPage>
     </QuietShell>
   );

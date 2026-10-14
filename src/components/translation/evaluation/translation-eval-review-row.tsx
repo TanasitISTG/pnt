@@ -44,7 +44,7 @@ export function TranslationEvalReviewRow({
         <div className="flex flex-wrap gap-2 lg:justify-end">
           {canOpenChapter ? (
             <Link
-              to="/novels/$novelId/chapters/$chapterId"
+              to="/{-$locale}/novels/$novelId/chapters/$chapterId"
               params={{ novelId, chapterId: row.chapterId }}
               className="inline-flex min-h-11 items-center justify-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >

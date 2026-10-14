@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { ErrorState } from "@/components/ui/error-state";
 
 interface QueryErrorStateProps {
@@ -16,19 +18,19 @@ interface QueryErrorStateProps {
  * and the label is part of what callers and tests already depend on.
  */
 export function QueryErrorState({
-  title = "Failed to load content",
+  title,
   error,
   onRetry,
   className = "my-8",
   variant = "page",
 }: QueryErrorStateProps) {
+  const t = useTranslations("errors");
   return (
     <ErrorState
       variant={variant}
-      title={title}
+      title={title ?? t("queryFailed")}
       error={error}
       onRetry={onRetry}
-      retryLabel="Retry"
       className={className}
     />
   );

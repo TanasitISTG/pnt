@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_protected")({
   beforeLoad: ({ context, location }) => {
     if (!context.user) {
       throw redirect({
-        to: "/login",
+        to: "/{-$locale}/login",
         search: { redirect: location.href },
       });
     }
@@ -40,7 +40,7 @@ function ProtectedErrorComponent(props: ErrorComponentProps) {
     error?.cause?.name === "UnauthorizedError"
   ) {
     throw redirect({
-      to: "/login",
+      to: "/{-$locale}/login",
       search: { redirect: location.href },
     });
   }

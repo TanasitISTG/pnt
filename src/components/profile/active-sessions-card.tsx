@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Monitor, ShieldOff } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useLocale } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,9 +13,11 @@ import {
   revokeOtherSessions,
   revokeSession,
 } from "@/lib/auth/auth-client";
+import { localizedPath } from "@/lib/i18n/locales";
 import { describeUserAgent } from "./session-label";
 
 export function ActiveSessionsCard() {
+  const locale = useLocale();
   const queryClient = useQueryClient();
   const [busyToken, setBusyToken] = useState<string | null>(null);
   const sessionsQuery = useQuery({
@@ -42,7 +45,10 @@ export function ActiveSessionsCard() {
       }
       toast.success(isCurrent ? "Signed out on this device" : "Session ended");
       // Revoking the session in use clears the cookie, so the shell has to re-read it.
-      if (isCurrent) window.location.assign("/login");
+      // This is a whole-document navigation rather than a router one, so the language is
+      // spelled into the address: a signed-out reader would otherwise land on the Thai
+      // sign-in page from an English session.
+      if (isCurrent) window.location.assign(localizedPath("/login", locale));
       else await refresh();
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Could not end that session");

@@ -51,6 +51,9 @@ test("legacy addresses redirect into the redesigned app", async ({ page }) => {
 
   // A novel of this spec's own, so the studio redirects are walked by an owner who can see
   // them. Creating one lands in the studio's add flow, which is where the id comes from.
+  // The control lives on the reading home and the shelf, not in the settings hub this spec
+  // has just walked, so the flow comes back to the home screen to reach it.
+  await page.goto("/");
   const novelTitle = `Legacy addresses ${Date.now()}`;
   await page.getByRole("button", { name: "New novel" }).click();
   await waitForReactHydration(page);

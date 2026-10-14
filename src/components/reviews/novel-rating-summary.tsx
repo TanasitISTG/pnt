@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "use-intl";
 
 import { StarRating } from "@/components/reviews/star-rating";
 import { novelRatingQueryOptions } from "@/lib/reviews/query";
@@ -16,6 +17,7 @@ export interface NovelRatingSummaryProps {
  * section further down the page, which is where the rating widget lives.
  */
 export function NovelRatingSummary({ novelId, className }: NovelRatingSummaryProps) {
+  const t = useTranslations("reviews");
   const rating = useQuery(novelRatingQueryOptions(novelId));
   const summary = rating.data;
   if (!summary || summary.count === 0 || summary.average === null) return null;
@@ -28,10 +30,8 @@ export function NovelRatingSummary({ novelId, className }: NovelRatingSummaryPro
       >
         <StarRating value={summary.average} />
         <span className="font-medium text-foreground">{summary.average.toFixed(1)}</span>
-        <span>
-          · {summary.count} {summary.count === 1 ? "rating" : "ratings"}
-        </span>
-        <span className="underline underline-offset-4">Read reviews</span>
+        <span>· {t("ratingCount", { count: summary.count })}</span>
+        <span className="underline underline-offset-4">{t("readReviews")}</span>
       </a>
     </div>
   );

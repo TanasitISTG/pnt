@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Flag } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { ReportTargetDialog } from "@/components/reports/report-target-dialog";
 import type { ReportSubmission } from "@/components/reports/report-target-dialog";
@@ -25,6 +26,8 @@ export interface ReportNovelButtonProps {
  * is guaranteed to fail would be worse than saying "Reported".
  */
 export function ReportNovelButton({ novelId, novelTitle, className }: ReportNovelButtonProps) {
+  const t = useTranslations("reports");
+  const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -40,11 +43,11 @@ export function ReportNovelButton({ novelId, novelTitle, className }: ReportNove
           details: submission.details,
         },
       });
-      toast.success("Report sent. An operator will review it.");
+      toast.success(t("sent"));
       setOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["novelReport", novelId] });
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "That report did not go through");
+      toast.error(error instanceof Error ? error.message : t("failed"));
     } finally {
       setBusy(false);
     }
@@ -57,10 +60,10 @@ export function ReportNovelButton({ novelId, novelTitle, className }: ReportNove
         size="sm"
         disabled
         className={cn(className)}
-        title="You already have an open report for this novel."
+        title={t("alreadyOpen")}
       >
         <Flag className="size-4" />
-        Reported
+        {tCommon("reported")}
       </Button>
     );
   }
@@ -69,21 +72,15 @@ export function ReportNovelButton({ novelId, novelTitle, className }: ReportNove
     <>
       <Button variant="outline" size="sm" className={cn(className)} onClick={() => setOpen(true)}>
         <Flag className="size-4" />
-        Report
+        {tCommon("report")}
       </Button>
       {/* Mounted only while open: a second report starts from empty fields without an
           effect having to reset them. */}
       {open ? (
         <ReportTargetDialog
           open={open}
-          title="Report this novel?"
-          description={
-            <>
-              An operator reviews every report about “{novelTitle}”. The report records which
-              account filed it, the author is not shown who reported it, and nothing about the novel
-              changes until an operator decides.
-            </>
-          }
+          title={t("reportNovelTitle")}
+          description={t("reportNovelDescription", { title: novelTitle })}
           busy={busy}
           onOpenChange={setOpen}
           onConfirm={(submission) => void submit(submission)}

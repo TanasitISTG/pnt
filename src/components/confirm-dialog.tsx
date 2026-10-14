@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { useTranslations } from "use-intl";
 import {
   Dialog,
   DialogContent,
@@ -27,8 +28,8 @@ export interface ConfirmDialogProps {
 export function ConfirmDialog({
   title,
   description,
-  confirmText = "Confirm",
-  cancelText = "Cancel",
+  confirmText,
+  cancelText,
   variant = "default",
   titleClassName,
   contentClassName,
@@ -37,6 +38,7 @@ export function ConfirmDialog({
   onConfirm,
   pending = false,
 }: ConfirmDialogProps) {
+  const t = useTranslations("common");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={contentClassName}>
@@ -48,7 +50,7 @@ export function ConfirmDialog({
         </DialogHeader>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" disabled={pending} />}>
-            {cancelText}
+            {cancelText ?? t("cancel")}
           </DialogClose>
           <Button
             variant={variant}
@@ -58,7 +60,7 @@ export function ConfirmDialog({
             }}
             disabled={pending}
           >
-            {confirmText}
+            {confirmText ?? t("confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

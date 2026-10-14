@@ -2,10 +2,12 @@
 
 import { useMemo } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { useTranslations } from "use-intl";
 import { cn } from "@/lib/utils";
 
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { translateServerError } from "@/lib/i18n/server-error";
 
 function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
@@ -186,7 +188,14 @@ function FieldError({
 }: React.ComponentProps<"div"> & {
   errors?: Array<{ message?: string } | undefined>;
 }) {
+  // Zod messages are message codes (i18n.md §3), so a field error is rendered through the
+  // catalog the page is already in. A plain sentence - a provider message from Better Auth,
+  // or a string written before this change - passes through exactly as it arrived.
+  const t = useTranslations();
   const content = useMemo(() => {
+    const resolve = (message: string | undefined) =>
+      message ? translateServerError(message, t) : "";
+
     if (children) {
       return children;
     }
@@ -198,15 +207,17 @@ function FieldError({
     const uniqueErrors = [...new Map(errors.map((error) => [error?.message, error])).values()];
 
     if (uniqueErrors?.length == 1) {
-      return uniqueErrors[0]?.message;
+      return resolve(uniqueErrors[0]?.message);
     }
 
     return (
       <ul className="ml-4 flex list-disc flex-col gap-1">
-        {uniqueErrors.map((error, index) => error?.message && <li key={index}>{error.message}</li>)}
+        {uniqueErrors.map((error, index) => (
+          <li key={index}>{resolve(error?.message)}</li>
+        ))}
       </ul>
     );
-  }, [children, errors]);
+  }, [children, errors, t]);
 
   if (!content) {
     return null;

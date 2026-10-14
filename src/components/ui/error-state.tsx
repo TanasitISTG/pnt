@@ -1,5 +1,6 @@
 import * as React from "react";
 import { RotateCw, TriangleAlert } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -22,16 +23,20 @@ interface ErrorStateProps {
  * (`withSafeHandler`); unknown failures fall back to the generic sentence.
  */
 export function ErrorState({
-  title = "That didn't load",
+  title,
   description,
   error,
   onRetry,
-  retryLabel = "Try again",
+  retryLabel,
   className,
   variant = "page",
 }: ErrorStateProps) {
+  const t = useTranslations("errors");
+  const tCommon = useTranslations("common");
   const thrown = error instanceof Error ? error.message : undefined;
-  const message = description ?? thrown ?? "The request did not complete. Try again.";
+  const message = description ?? thrown ?? tCommon("requestFailed");
+  const heading = title ?? t("loadFailedTitle");
+  const action = retryLabel ?? tCommon("tryAgain");
 
   if (variant === "panel") {
     return (
@@ -48,7 +53,7 @@ export function ErrorState({
         </p>
         {onRetry ? (
           <Button variant="outline" size="sm" onClick={onRetry}>
-            {retryLabel}
+            {action}
           </Button>
         ) : null}
       </div>
@@ -68,12 +73,12 @@ export function ErrorState({
       >
         <TriangleAlert className="size-5" />
       </div>
-      <h2 className="text-sub text-foreground">{title}</h2>
+      <h2 className="text-sub text-foreground">{heading}</h2>
       <p className="max-w-md text-body text-muted-foreground">{message}</p>
       {onRetry ? (
         <Button variant="outline" className="mt-2" onClick={onRetry}>
           <RotateCw className="size-4" aria-hidden="true" />
-          {retryLabel}
+          {action}
         </Button>
       ) : null}
     </div>

@@ -24,8 +24,11 @@ const config = defineConfig(({ command }) => {
     test: {
       setupFiles: ["./src/test/setup.ts"],
       // React resolves its production build from an inherited NODE_ENV, which
-      // breaks every render test ("React.act is not a function").
-      env: { NODE_ENV: "test" },
+      // breaks every render test ("React.act is not a function"). The locale is
+      // pinned to English for the same reason tests exist: the strings the suite
+      // asserts are the contract for behaviour, and the Thai default that ships is
+      // covered by the browser suite instead (i18n.md §7).
+      env: { NODE_ENV: "test", VITE_DEFAULT_LOCALE: "en" },
     },
     plugins: [
       devtools(),

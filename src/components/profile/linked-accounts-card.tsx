@@ -127,7 +127,7 @@ export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
                   </div>
                   {social === null ? (
                     <span className="text-caption text-muted-foreground">
-                      Change your password below
+                      Change your password in Security tab.
                     </span>
                   ) : account ? (
                     <Button

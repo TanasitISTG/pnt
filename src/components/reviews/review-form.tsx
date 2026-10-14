@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslations } from "use-intl";
 
 import { StarRatingInput } from "@/components/reviews/star-rating";
 import { Button } from "@/components/ui/button";
@@ -26,11 +27,13 @@ export interface ReviewFormProps {
 export function ReviewForm({
   initialRating = 0,
   initialBody = "",
-  submitLabel = "Post review",
+  submitLabel,
   pending = false,
   onSubmit,
   onCancel,
 }: ReviewFormProps) {
+  const t = useTranslations("reviews");
+  const tCommon = useTranslations("common");
   const [rating, setRating] = useState(initialRating);
   const [body, setBody] = useState(initialBody);
 
@@ -49,12 +52,12 @@ export function ReviewForm({
       <div className="flex flex-wrap items-center gap-3">
         <StarRatingInput value={rating} onChange={setRating} disabled={pending} />
         <span className="text-caption text-muted-foreground" aria-live="polite">
-          {rating > 0 ? `${rating} of 5` : "Pick a rating"}
+          {rating > 0 ? t("ofFive", { value: rating }) : t("pickRating")}
         </span>
       </div>
 
       <label className="sr-only" htmlFor="review-body">
-        Review (optional)
+        {t("bodyLabel")}
       </label>
       <Textarea
         id="review-body"
@@ -62,7 +65,7 @@ export function ReviewForm({
         rows={4}
         maxLength={REVIEW_BODY_MAX_LENGTH}
         disabled={pending}
-        placeholder="What did you think? (optional)"
+        placeholder={t("bodyPlaceholder")}
         onChange={(event) => setBody(event.target.value)}
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -72,12 +75,12 @@ export function ReviewForm({
         <div className="flex items-center gap-2">
           {onCancel ? (
             <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onCancel}>
-              Cancel
+              {tCommon("cancel")}
             </Button>
           ) : null}
           <Button type="submit" size="sm" disabled={!canSubmit}>
             {pending ? <Spinner /> : null}
-            {submitLabel}
+            {submitLabel ?? t("postReview")}
           </Button>
         </div>
       </div>

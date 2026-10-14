@@ -500,7 +500,7 @@ describe("RelationshipsPage workspace", () => {
         "Character 00",
       ),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() =>
       expect(screen.queryByText("Unable to refresh relationship map")).toBeNull(),
     );
@@ -530,6 +530,6 @@ describe("RelationshipsPage workspace", () => {
         <RelationshipsPage />
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy());
   });
 });

@@ -567,6 +567,32 @@
     text-wrap: pretty;
   }
 
+  /*
+   * Thai typography (i18n.md §5, DESIGN.md §3).
+   *
+   * Thai stacks vowels and tone marks above and below the consonant and runs its words
+   * together, so the Latin ramp's negative tracking and its 1.6 leading both work against
+   * it. Nothing below reaches into a type utility: those read their tracking and leading
+   * from these variables, so re-declaring the variables for Thai is the whole fix. `lang`
+   * is set once on `<html>`, which is what the selector reads.
+   *
+   * Latin is left alone because an English document matches none of this. A Latin paragraph
+   * inside a Thai page — the original beside a translated chapter — inherits the looser
+   * leading, which is the harmless direction to be wrong in.
+   */
+  :lang(th) {
+    line-height: 1.7;
+    --text-display--letter-spacing: 0em;
+    --text-display-alt--letter-spacing: 0em;
+    --text-section--letter-spacing: 0em;
+    --text-sub--letter-spacing: 0em;
+    --text-title--letter-spacing: 0em;
+    --text-card-title--letter-spacing: 0em;
+    --text-body--line-height: 1.75;
+    --text-body-lg--line-height: 1.72;
+    --text-caption--line-height: 1.6;
+  }
+
   ::selection {
     background-color: var(--ink-quiet);
   }

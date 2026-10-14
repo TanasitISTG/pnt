@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { ShieldOff, Trash2 } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLocalizedParams } from "@/lib/i18n/use-localized-params";
 
 /**
  * The vocabulary a conversation is written in, shared by chapter discussions and novel
@@ -69,11 +71,17 @@ interface DiscussionTombstoneProps {
  * it was willing to offer.
  */
 export function DiscussionTombstone({ kind, reason, children }: DiscussionTombstoneProps) {
+  const t = useTranslations("comments");
   const Icon = kind === "removed" ? ShieldOff : Trash2;
+  // A removal always says who did it; whether the operator's reason is shown is a second
+  // sentence rather than a suffix, because Thai does not put a colon inside a phrase the way
+  // English does.
   const sentence =
     kind === "removed"
-      ? `Removed by an operator${reason ? `: ${reason}` : "."}`
-      : (children ?? "Deleted by its author.");
+      ? reason
+        ? t("removedByOperatorWithReason", { reason })
+        : t("removedByOperator")
+      : (children ?? t("deletedByAuthor"));
 
   return (
     <p className="mt-2 flex items-start gap-2 rounded-lg border border-border bg-surface-inset px-3 py-2 text-caption text-muted-foreground">
@@ -119,14 +127,18 @@ interface DiscussionSignInPromptProps {
  * one link that lets them do it. Reading never depends on it.
  */
 export function DiscussionSignInPrompt({ redirect, children }: DiscussionSignInPromptProps) {
+  const tShell = useTranslations("shell");
+  const localized = useLocalizedParams();
+
   return (
     <p className="text-body text-muted-foreground">
       <Link
-        to="/login"
+        to="/{-$locale}/login"
+        params={localized}
         search={{ redirect }}
         className="font-medium text-foreground underline underline-offset-4"
       >
-        Sign in
+        {tShell("signIn")}
       </Link>{" "}
       {children}
     </p>

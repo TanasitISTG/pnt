@@ -19,6 +19,7 @@ import {
   sendVerificationEmail,
 } from "@/lib/email/send.server";
 import { fallbackDisplayName } from "@/lib/auth/display-name";
+import { localeFromCurrentRequest } from "@/lib/i18n/request-locale.server";
 import { ADMIN_ROLE } from "@/lib/auth/roles";
 import { env } from "@/lib/env";
 import { log } from "@/lib/log";
@@ -131,10 +132,13 @@ export const auth = betterAuth({
       deleteTokenExpiresIn: DELETE_ACCOUNT_TOKEN_TTL_SECONDS,
     },
     additionalFields: {
-      // Both are written by the create hook only; `input: false` keeps them out of
-      // every request body the client could send.
+      // The first two are written by the create hook only; `input: false` keeps them out
+      // of every request body the client could send. The language is the same shape of
+      // field, written by `setViewerLocale` after a switch and by the create hook at
+      // sign-up, so a client can never stamp it either.
       termsVersion: { type: "string", required: false, input: false },
       termsAcceptedAt: { type: "date", required: false, input: false },
+      locale: { type: "string", required: false, input: false },
     },
   },
   rateLimit: {
@@ -165,6 +169,10 @@ export const auth = betterAuth({
             role: DEFAULT_USER_ROLE,
             termsVersion: CURRENT_TERMS_VERSION,
             termsAcceptedAt: new Date(),
+            // The language the reader signed up in, read from the request's own URL and
+            // cookie. Sign-up is a reading surface, so the URL states it: someone who
+            // created the account on `/en/signup` finds English next time they arrive.
+            locale: localeFromCurrentRequest(),
             // A social profile can arrive without a usable name; the account would then
             // open with a blank one. Providers that do supply a name keep it untouched.
             name: fallbackDisplayName(user),

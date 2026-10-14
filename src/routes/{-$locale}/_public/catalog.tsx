@@ -14,7 +14,7 @@ import {
  * readers alike. It replaces `/browse`, which `/browse` now redirects to, so the two
  * near-identical catalogs the app used to have are one page with one name.
  */
-export const Route = createFileRoute("/_public/catalog")({
+export const Route = createFileRoute("/{-$locale}/_public/catalog")({
   validateSearch: librarySearchSchema,
   loaderDeps: () => ({}),
   shouldReload: false,

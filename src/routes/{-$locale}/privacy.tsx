@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { AppShell } from "@/components/app-shell";
 
-export const Route = createFileRoute("/privacy")({
+export const Route = createFileRoute("/{-$locale}/privacy")({
   head: () => ({
     meta: [
       { title: "Privacy Policy | Pnt - Personal Novel Translator" },
@@ -83,11 +83,14 @@ function PrivacyPage() {
 
         <p className="border-t border-border pt-4 text-caption text-muted-foreground">
           See also the{" "}
-          <Link to="/cookie-policy" className="underline underline-offset-4 text-foreground">
+          <Link
+            to="/{-$locale}/cookie-policy"
+            className="underline underline-offset-4 text-foreground"
+          >
             Cookie Policy
           </Link>{" "}
           and the{" "}
-          <Link to="/terms" className="underline underline-offset-4 text-foreground">
+          <Link to="/{-$locale}/terms" className="underline underline-offset-4 text-foreground">
             Terms of Service
           </Link>
           .

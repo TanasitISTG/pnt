@@ -10,27 +10,26 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProtectedRouteImport } from './routes/_protected'
-import { Route as PublicRouteImport } from './routes/_public'
-import { Route as BrowseRouteImport } from './routes/browse'
-import { Route as CookiePolicyRouteImport } from './routes/cookie-policy'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
-import { Route as SignupRouteImport } from './routes/signup'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as Char123LocaleChar125RouteRouteImport } from './routes/{-$locale}/route'
 import { Route as ProtectedAdminRouteImport } from './routes/_protected/admin'
 import { Route as ProtectedJobsRouteImport } from './routes/_protected/jobs'
 import { Route as ProtectedLibraryRouteImport } from './routes/_protected/library'
 import { Route as ProtectedProfileRouteImport } from './routes/_protected/profile'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected/settings'
-import { Route as PublicIndexRouteImport } from './routes/_public/index'
-import { Route as PublicCatalogRouteImport } from './routes/_public/catalog'
 import { Route as ApiBackupsRouteImport } from './routes/api/backups'
 import { Route as ApiInngestRouteImport } from './routes/api/inngest'
 import { Route as ApiSitemapRouteImport } from './routes/api/sitemap'
+import { Route as Char123LocaleChar125PublicRouteImport } from './routes/{-$locale}/_public'
+import { Route as Char123LocaleChar125BrowseRouteImport } from './routes/{-$locale}/browse'
+import { Route as Char123LocaleChar125CookiePolicyRouteImport } from './routes/{-$locale}/cookie-policy'
+import { Route as Char123LocaleChar125ForgotPasswordRouteImport } from './routes/{-$locale}/forgot-password'
+import { Route as Char123LocaleChar125LoginRouteImport } from './routes/{-$locale}/login'
+import { Route as Char123LocaleChar125PrivacyRouteImport } from './routes/{-$locale}/privacy'
+import { Route as Char123LocaleChar125ResetPasswordRouteImport } from './routes/{-$locale}/reset-password'
+import { Route as Char123LocaleChar125SignupRouteImport } from './routes/{-$locale}/signup'
+import { Route as Char123LocaleChar125TermsRouteImport } from './routes/{-$locale}/terms'
+import { Route as Char123LocaleChar125VerifyEmailRouteImport } from './routes/{-$locale}/verify-email'
 import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin.index'
 import { Route as ProtectedAdminActivityRouteImport } from './routes/_protected/admin.activity'
 import { Route as ProtectedAdminReportsRouteImport } from './routes/_protected/admin.reports'
@@ -46,11 +45,12 @@ import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
 import { Route as ApiExportsSplatRouteImport } from './routes/api/exports/$'
 import { Route as ApiStorageUploadRouteImport } from './routes/api/storage/upload'
+import { Route as Char123LocaleChar125PublicIndexRouteImport } from './routes/{-$locale}/_public/index'
+import { Route as Char123LocaleChar125PublicCatalogRouteImport } from './routes/{-$locale}/_public/catalog'
 import { Route as ProtectedNovelsNovelIdEditRouteImport } from './routes/_protected/novels/$novelId/edit'
 import { Route as ProtectedNovelsNovelIdGlossaryRouteImport } from './routes/_protected/novels/$novelId/glossary'
 import { Route as ProtectedNovelsNovelIdManageRouteImport } from './routes/_protected/novels/$novelId/manage'
 import { Route as ProtectedNovelsNovelIdRelationshipsRouteImport } from './routes/_protected/novels/$novelId/relationships'
-import { Route as PublicNovelsNovelIdIndexRouteImport } from './routes/_public/novels/$novelId/index'
 import { Route as ProtectedNovelsNovelIdManageIndexRouteImport } from './routes/_protected/novels/$novelId/manage.index'
 import { Route as ProtectedNovelsNovelIdManageAddRouteImport } from './routes/_protected/novels/$novelId/manage.add'
 import { Route as ProtectedNovelsNovelIdManageChaptersRouteImport } from './routes/_protected/novels/$novelId/manage.chapters'
@@ -58,44 +58,11 @@ import { Route as ProtectedNovelsNovelIdManageGlossaryRouteImport } from './rout
 import { Route as ProtectedNovelsNovelIdManageQualityRouteImport } from './routes/_protected/novels/$novelId/manage.quality'
 import { Route as ProtectedNovelsNovelIdManageRelationshipsRouteImport } from './routes/_protected/novels/$novelId/manage.relationships'
 import { Route as ProtectedNovelsNovelIdManageSettingsRouteImport } from './routes/_protected/novels/$novelId/manage.settings'
-import { Route as PublicNovelsNovelIdChaptersChapterIdRouteImport } from './routes/_public/novels/$novelId/chapters/$chapterId'
+import { Route as Char123LocaleChar125PublicNovelsNovelIdIndexRouteImport } from './routes/{-$locale}/_public/novels/$novelId/index'
+import { Route as Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRouteImport } from './routes/{-$locale}/_public/novels/$novelId/chapters/$chapterId'
 
 const ProtectedRoute = ProtectedRouteImport.update({
   id: '/_protected',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PublicRoute = PublicRouteImport.update({
-  id: '/_public',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BrowseRoute = BrowseRouteImport.update({
-  id: '/browse',
-  path: '/browse',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CookiePolicyRoute = CookiePolicyRouteImport.update({
-  id: '/cookie-policy',
-  path: '/cookie-policy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
@@ -103,21 +70,12 @@ const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
   path: '/robots.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const VerifyEmailRoute = VerifyEmailRouteImport.update({
-  id: '/verify-email',
-  path: '/verify-email',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const Char123LocaleChar125RouteRoute =
+  Char123LocaleChar125RouteRouteImport.update({
+    id: '/{-$locale}',
+    path: '/{-$locale}',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProtectedAdminRoute = ProtectedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -143,16 +101,6 @@ const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => ProtectedRoute,
 } as any)
-const PublicIndexRoute = PublicIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => PublicRoute,
-} as any)
-const PublicCatalogRoute = PublicCatalogRouteImport.update({
-  id: '/catalog',
-  path: '/catalog',
-  getParentRoute: () => PublicRoute,
-} as any)
 const ApiBackupsRoute = ApiBackupsRouteImport.update({
   id: '/api/backups',
   path: '/api/backups',
@@ -168,6 +116,65 @@ const ApiSitemapRoute = ApiSitemapRouteImport.update({
   path: '/api/sitemap',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char123LocaleChar125PublicRoute =
+  Char123LocaleChar125PublicRouteImport.update({
+    id: '/_public',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125BrowseRoute =
+  Char123LocaleChar125BrowseRouteImport.update({
+    id: '/browse',
+    path: '/browse',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125CookiePolicyRoute =
+  Char123LocaleChar125CookiePolicyRouteImport.update({
+    id: '/cookie-policy',
+    path: '/cookie-policy',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125ForgotPasswordRoute =
+  Char123LocaleChar125ForgotPasswordRouteImport.update({
+    id: '/forgot-password',
+    path: '/forgot-password',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125LoginRoute =
+  Char123LocaleChar125LoginRouteImport.update({
+    id: '/login',
+    path: '/login',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125PrivacyRoute =
+  Char123LocaleChar125PrivacyRouteImport.update({
+    id: '/privacy',
+    path: '/privacy',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125ResetPasswordRoute =
+  Char123LocaleChar125ResetPasswordRouteImport.update({
+    id: '/reset-password',
+    path: '/reset-password',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125SignupRoute =
+  Char123LocaleChar125SignupRouteImport.update({
+    id: '/signup',
+    path: '/signup',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125TermsRoute =
+  Char123LocaleChar125TermsRouteImport.update({
+    id: '/terms',
+    path: '/terms',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125VerifyEmailRoute =
+  Char123LocaleChar125VerifyEmailRouteImport.update({
+    id: '/verify-email',
+    path: '/verify-email',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
 const ProtectedAdminIndexRoute = ProtectedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -247,6 +254,18 @@ const ApiStorageUploadRoute = ApiStorageUploadRouteImport.update({
   path: '/api/storage/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char123LocaleChar125PublicIndexRoute =
+  Char123LocaleChar125PublicIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => Char123LocaleChar125PublicRoute,
+  } as any)
+const Char123LocaleChar125PublicCatalogRoute =
+  Char123LocaleChar125PublicCatalogRouteImport.update({
+    id: '/catalog',
+    path: '/catalog',
+    getParentRoute: () => Char123LocaleChar125PublicRoute,
+  } as any)
 const ProtectedNovelsNovelIdEditRoute =
   ProtectedNovelsNovelIdEditRouteImport.update({
     id: '/novels/$novelId/edit',
@@ -270,12 +289,6 @@ const ProtectedNovelsNovelIdRelationshipsRoute =
     id: '/novels/$novelId/relationships',
     path: '/novels/$novelId/relationships',
     getParentRoute: () => ProtectedRoute,
-  } as any)
-const PublicNovelsNovelIdIndexRoute =
-  PublicNovelsNovelIdIndexRouteImport.update({
-    id: '/novels/$novelId/',
-    path: '/novels/$novelId/',
-    getParentRoute: () => PublicRoute,
   } as any)
 const ProtectedNovelsNovelIdManageIndexRoute =
   ProtectedNovelsNovelIdManageIndexRouteImport.update({
@@ -319,34 +332,40 @@ const ProtectedNovelsNovelIdManageSettingsRoute =
     path: '/settings',
     getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
   } as any)
-const PublicNovelsNovelIdChaptersChapterIdRoute =
-  PublicNovelsNovelIdChaptersChapterIdRouteImport.update({
+const Char123LocaleChar125PublicNovelsNovelIdIndexRoute =
+  Char123LocaleChar125PublicNovelsNovelIdIndexRouteImport.update({
+    id: '/novels/$novelId/',
+    path: '/novels/$novelId/',
+    getParentRoute: () => Char123LocaleChar125PublicRoute,
+  } as any)
+const Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute =
+  Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRouteImport.update({
     id: '/novels/$novelId/chapters/$chapterId',
     path: '/novels/$novelId/chapters/$chapterId',
-    getParentRoute: () => PublicRoute,
+    getParentRoute: () => Char123LocaleChar125PublicRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof PublicIndexRoute
-  '/browse': typeof BrowseRoute
-  '/cookie-policy': typeof CookiePolicyRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/privacy': typeof PrivacyRoute
-  '/reset-password': typeof ResetPasswordRoute
+  '/{-$locale}': typeof Char123LocaleChar125RouteRouteWithChildren
+  '/': typeof ProtectedRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
-  '/signup': typeof SignupRoute
-  '/terms': typeof TermsRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/admin': typeof ProtectedAdminRouteWithChildren
   '/jobs': typeof ProtectedJobsRoute
   '/library': typeof ProtectedLibraryRoute
   '/profile': typeof ProtectedProfileRoute
   '/settings': typeof ProtectedSettingsRouteWithChildren
-  '/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
+  '/{-$locale}/browse': typeof Char123LocaleChar125BrowseRoute
+  '/{-$locale}/cookie-policy': typeof Char123LocaleChar125CookiePolicyRoute
+  '/{-$locale}/forgot-password': typeof Char123LocaleChar125ForgotPasswordRoute
+  '/{-$locale}/login': typeof Char123LocaleChar125LoginRoute
+  '/{-$locale}/privacy': typeof Char123LocaleChar125PrivacyRoute
+  '/{-$locale}/reset-password': typeof Char123LocaleChar125ResetPasswordRoute
+  '/{-$locale}/signup': typeof Char123LocaleChar125SignupRoute
+  '/{-$locale}/terms': typeof Char123LocaleChar125TermsRoute
+  '/{-$locale}/verify-email': typeof Char123LocaleChar125VerifyEmailRoute
   '/admin/activity': typeof ProtectedAdminActivityRoute
   '/admin/reports': typeof ProtectedAdminReportsRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
@@ -360,41 +379,43 @@ export interface FileRoutesByFullPath {
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
+  '/{-$locale}/catalog': typeof Char123LocaleChar125PublicCatalogRoute
   '/admin/': typeof ProtectedAdminIndexRoute
   '/settings/': typeof ProtectedSettingsIndexRoute
+  '/{-$locale}/': typeof Char123LocaleChar125PublicIndexRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageRouteWithChildren
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
-  '/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
   '/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
   '/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
   '/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
   '/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
   '/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
   '/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
-  '/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
   '/novels/$novelId/manage/': typeof ProtectedNovelsNovelIdManageIndexRoute
+  '/{-$locale}/novels/$novelId/': typeof Char123LocaleChar125PublicNovelsNovelIdIndexRoute
+  '/{-$locale}/novels/$novelId/chapters/$chapterId': typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof PublicIndexRoute
-  '/browse': typeof BrowseRoute
-  '/cookie-policy': typeof CookiePolicyRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/privacy': typeof PrivacyRoute
-  '/reset-password': typeof ResetPasswordRoute
+  '/{-$locale}': typeof Char123LocaleChar125PublicIndexRoute
+  '/': typeof ProtectedRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
-  '/signup': typeof SignupRoute
-  '/terms': typeof TermsRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/jobs': typeof ProtectedJobsRoute
   '/library': typeof ProtectedLibraryRoute
   '/profile': typeof ProtectedProfileRoute
-  '/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
+  '/{-$locale}/browse': typeof Char123LocaleChar125BrowseRoute
+  '/{-$locale}/cookie-policy': typeof Char123LocaleChar125CookiePolicyRoute
+  '/{-$locale}/forgot-password': typeof Char123LocaleChar125ForgotPasswordRoute
+  '/{-$locale}/login': typeof Char123LocaleChar125LoginRoute
+  '/{-$locale}/privacy': typeof Char123LocaleChar125PrivacyRoute
+  '/{-$locale}/reset-password': typeof Char123LocaleChar125ResetPasswordRoute
+  '/{-$locale}/signup': typeof Char123LocaleChar125SignupRoute
+  '/{-$locale}/terms': typeof Char123LocaleChar125TermsRoute
+  '/{-$locale}/verify-email': typeof Char123LocaleChar125VerifyEmailRoute
   '/admin/activity': typeof ProtectedAdminActivityRoute
   '/admin/reports': typeof ProtectedAdminReportsRoute
   '/novels/new': typeof ProtectedNovelsNewRoute
@@ -408,45 +429,45 @@ export interface FileRoutesByTo {
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
+  '/{-$locale}/catalog': typeof Char123LocaleChar125PublicCatalogRoute
   '/admin': typeof ProtectedAdminIndexRoute
   '/settings': typeof ProtectedSettingsIndexRoute
   '/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
-  '/novels/$novelId': typeof PublicNovelsNovelIdIndexRoute
   '/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
   '/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
   '/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
   '/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
   '/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
   '/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
-  '/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
   '/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageIndexRoute
+  '/{-$locale}/novels/$novelId': typeof Char123LocaleChar125PublicNovelsNovelIdIndexRoute
+  '/{-$locale}/novels/$novelId/chapters/$chapterId': typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/{-$locale}': typeof Char123LocaleChar125RouteRouteWithChildren
   '/_protected': typeof ProtectedRouteWithChildren
-  '/_public': typeof PublicRouteWithChildren
-  '/browse': typeof BrowseRoute
-  '/cookie-policy': typeof CookiePolicyRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/login': typeof LoginRoute
-  '/privacy': typeof PrivacyRoute
-  '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
-  '/signup': typeof SignupRoute
-  '/terms': typeof TermsRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/_protected/admin': typeof ProtectedAdminRouteWithChildren
   '/_protected/jobs': typeof ProtectedJobsRoute
   '/_protected/library': typeof ProtectedLibraryRoute
   '/_protected/profile': typeof ProtectedProfileRoute
   '/_protected/settings': typeof ProtectedSettingsRouteWithChildren
-  '/_public/catalog': typeof PublicCatalogRoute
   '/api/backups': typeof ApiBackupsRoute
   '/api/inngest': typeof ApiInngestRoute
   '/api/sitemap': typeof ApiSitemapRoute
-  '/_public/': typeof PublicIndexRoute
+  '/{-$locale}/_public': typeof Char123LocaleChar125PublicRouteWithChildren
+  '/{-$locale}/browse': typeof Char123LocaleChar125BrowseRoute
+  '/{-$locale}/cookie-policy': typeof Char123LocaleChar125CookiePolicyRoute
+  '/{-$locale}/forgot-password': typeof Char123LocaleChar125ForgotPasswordRoute
+  '/{-$locale}/login': typeof Char123LocaleChar125LoginRoute
+  '/{-$locale}/privacy': typeof Char123LocaleChar125PrivacyRoute
+  '/{-$locale}/reset-password': typeof Char123LocaleChar125ResetPasswordRoute
+  '/{-$locale}/signup': typeof Char123LocaleChar125SignupRoute
+  '/{-$locale}/terms': typeof Char123LocaleChar125TermsRoute
+  '/{-$locale}/verify-email': typeof Char123LocaleChar125VerifyEmailRoute
   '/_protected/admin/activity': typeof ProtectedAdminActivityRoute
   '/_protected/admin/reports': typeof ProtectedAdminReportsRoute
   '/_protected/novels/new': typeof ProtectedNovelsNewRoute
@@ -460,45 +481,47 @@ export interface FileRoutesById {
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
+  '/{-$locale}/_public/catalog': typeof Char123LocaleChar125PublicCatalogRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/settings/': typeof ProtectedSettingsIndexRoute
+  '/{-$locale}/_public/': typeof Char123LocaleChar125PublicIndexRoute
   '/_protected/novels/$novelId/edit': typeof ProtectedNovelsNovelIdEditRoute
   '/_protected/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/_protected/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageRouteWithChildren
   '/_protected/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
-  '/_public/novels/$novelId/': typeof PublicNovelsNovelIdIndexRoute
   '/_protected/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
   '/_protected/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
   '/_protected/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
   '/_protected/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
   '/_protected/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
   '/_protected/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
-  '/_public/novels/$novelId/chapters/$chapterId': typeof PublicNovelsNovelIdChaptersChapterIdRoute
   '/_protected/novels/$novelId/manage/': typeof ProtectedNovelsNovelIdManageIndexRoute
+  '/{-$locale}/_public/novels/$novelId/': typeof Char123LocaleChar125PublicNovelsNovelIdIndexRoute
+  '/{-$locale}/_public/novels/$novelId/chapters/$chapterId': typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/{-$locale}'
     | '/'
-    | '/browse'
-    | '/cookie-policy'
-    | '/forgot-password'
-    | '/login'
-    | '/privacy'
-    | '/reset-password'
     | '/robots.txt'
-    | '/signup'
-    | '/terms'
-    | '/verify-email'
     | '/admin'
     | '/jobs'
     | '/library'
     | '/profile'
     | '/settings'
-    | '/catalog'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
+    | '/{-$locale}/browse'
+    | '/{-$locale}/cookie-policy'
+    | '/{-$locale}/forgot-password'
+    | '/{-$locale}/login'
+    | '/{-$locale}/privacy'
+    | '/{-$locale}/reset-password'
+    | '/{-$locale}/signup'
+    | '/{-$locale}/terms'
+    | '/{-$locale}/verify-email'
     | '/admin/activity'
     | '/admin/reports'
     | '/novels/new'
@@ -512,41 +535,43 @@ export interface FileRouteTypes {
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
+    | '/{-$locale}/catalog'
     | '/admin/'
     | '/settings/'
+    | '/{-$locale}/'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/manage'
     | '/novels/$novelId/relationships'
-    | '/novels/$novelId/'
     | '/novels/$novelId/manage/add'
     | '/novels/$novelId/manage/chapters'
     | '/novels/$novelId/manage/glossary'
     | '/novels/$novelId/manage/quality'
     | '/novels/$novelId/manage/relationships'
     | '/novels/$novelId/manage/settings'
-    | '/novels/$novelId/chapters/$chapterId'
     | '/novels/$novelId/manage/'
+    | '/{-$locale}/novels/$novelId/'
+    | '/{-$locale}/novels/$novelId/chapters/$chapterId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/{-$locale}'
     | '/'
-    | '/browse'
-    | '/cookie-policy'
-    | '/forgot-password'
-    | '/login'
-    | '/privacy'
-    | '/reset-password'
     | '/robots.txt'
-    | '/signup'
-    | '/terms'
-    | '/verify-email'
     | '/jobs'
     | '/library'
     | '/profile'
-    | '/catalog'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
+    | '/{-$locale}/browse'
+    | '/{-$locale}/cookie-policy'
+    | '/{-$locale}/forgot-password'
+    | '/{-$locale}/login'
+    | '/{-$locale}/privacy'
+    | '/{-$locale}/reset-password'
+    | '/{-$locale}/signup'
+    | '/{-$locale}/terms'
+    | '/{-$locale}/verify-email'
     | '/admin/activity'
     | '/admin/reports'
     | '/novels/new'
@@ -560,44 +585,44 @@ export interface FileRouteTypes {
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
+    | '/{-$locale}/catalog'
     | '/admin'
     | '/settings'
     | '/novels/$novelId/edit'
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/relationships'
-    | '/novels/$novelId'
     | '/novels/$novelId/manage/add'
     | '/novels/$novelId/manage/chapters'
     | '/novels/$novelId/manage/glossary'
     | '/novels/$novelId/manage/quality'
     | '/novels/$novelId/manage/relationships'
     | '/novels/$novelId/manage/settings'
-    | '/novels/$novelId/chapters/$chapterId'
     | '/novels/$novelId/manage'
+    | '/{-$locale}/novels/$novelId'
+    | '/{-$locale}/novels/$novelId/chapters/$chapterId'
   id:
     | '__root__'
+    | '/{-$locale}'
     | '/_protected'
-    | '/_public'
-    | '/browse'
-    | '/cookie-policy'
-    | '/forgot-password'
-    | '/login'
-    | '/privacy'
-    | '/reset-password'
     | '/robots.txt'
-    | '/signup'
-    | '/terms'
-    | '/verify-email'
     | '/_protected/admin'
     | '/_protected/jobs'
     | '/_protected/library'
     | '/_protected/profile'
     | '/_protected/settings'
-    | '/_public/catalog'
     | '/api/backups'
     | '/api/inngest'
     | '/api/sitemap'
-    | '/_public/'
+    | '/{-$locale}/_public'
+    | '/{-$locale}/browse'
+    | '/{-$locale}/cookie-policy'
+    | '/{-$locale}/forgot-password'
+    | '/{-$locale}/login'
+    | '/{-$locale}/privacy'
+    | '/{-$locale}/reset-password'
+    | '/{-$locale}/signup'
+    | '/{-$locale}/terms'
+    | '/{-$locale}/verify-email'
     | '/_protected/admin/activity'
     | '/_protected/admin/reports'
     | '/_protected/novels/new'
@@ -611,36 +636,29 @@ export interface FileRouteTypes {
     | '/api/covers/$'
     | '/api/exports/$'
     | '/api/storage/upload'
+    | '/{-$locale}/_public/catalog'
     | '/_protected/admin/'
     | '/_protected/settings/'
+    | '/{-$locale}/_public/'
     | '/_protected/novels/$novelId/edit'
     | '/_protected/novels/$novelId/glossary'
     | '/_protected/novels/$novelId/manage'
     | '/_protected/novels/$novelId/relationships'
-    | '/_public/novels/$novelId/'
     | '/_protected/novels/$novelId/manage/add'
     | '/_protected/novels/$novelId/manage/chapters'
     | '/_protected/novels/$novelId/manage/glossary'
     | '/_protected/novels/$novelId/manage/quality'
     | '/_protected/novels/$novelId/manage/relationships'
     | '/_protected/novels/$novelId/manage/settings'
-    | '/_public/novels/$novelId/chapters/$chapterId'
     | '/_protected/novels/$novelId/manage/'
+    | '/{-$locale}/_public/novels/$novelId/'
+    | '/{-$locale}/_public/novels/$novelId/chapters/$chapterId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  Char123LocaleChar125RouteRoute: typeof Char123LocaleChar125RouteRouteWithChildren
   ProtectedRoute: typeof ProtectedRouteWithChildren
-  PublicRoute: typeof PublicRouteWithChildren
-  BrowseRoute: typeof BrowseRoute
-  CookiePolicyRoute: typeof CookiePolicyRoute
-  ForgotPasswordRoute: typeof ForgotPasswordRoute
-  LoginRoute: typeof LoginRoute
-  PrivacyRoute: typeof PrivacyRoute
-  ResetPasswordRoute: typeof ResetPasswordRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
-  SignupRoute: typeof SignupRoute
-  TermsRoute: typeof TermsRoute
-  VerifyEmailRoute: typeof VerifyEmailRoute
   ApiBackupsRoute: typeof ApiBackupsRoute
   ApiInngestRoute: typeof ApiInngestRoute
   ApiSitemapRoute: typeof ApiSitemapRoute
@@ -660,55 +678,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_public': {
-      id: '/_public'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof PublicRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/browse': {
-      id: '/browse'
-      path: '/browse'
-      fullPath: '/browse'
-      preLoaderRoute: typeof BrowseRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cookie-policy': {
-      id: '/cookie-policy'
-      path: '/cookie-policy'
-      fullPath: '/cookie-policy'
-      preLoaderRoute: typeof CookiePolicyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/robots.txt': {
       id: '/robots.txt'
       path: '/robots.txt'
@@ -716,25 +685,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RobotsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/verify-email': {
-      id: '/verify-email'
-      path: '/verify-email'
-      fullPath: '/verify-email'
-      preLoaderRoute: typeof VerifyEmailRouteImport
+    '/{-$locale}': {
+      id: '/{-$locale}'
+      path: '/{-$locale}'
+      fullPath: '/{-$locale}'
+      preLoaderRoute: typeof Char123LocaleChar125RouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_protected/admin': {
@@ -772,20 +727,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedSettingsRouteImport
       parentRoute: typeof ProtectedRoute
     }
-    '/_public/': {
-      id: '/_public/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof PublicIndexRouteImport
-      parentRoute: typeof PublicRoute
-    }
-    '/_public/catalog': {
-      id: '/_public/catalog'
-      path: '/catalog'
-      fullPath: '/catalog'
-      preLoaderRoute: typeof PublicCatalogRouteImport
-      parentRoute: typeof PublicRoute
-    }
     '/api/backups': {
       id: '/api/backups'
       path: '/api/backups'
@@ -806,6 +747,76 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/sitemap'
       preLoaderRoute: typeof ApiSitemapRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/{-$locale}/_public': {
+      id: '/{-$locale}/_public'
+      path: ''
+      fullPath: '/{-$locale}'
+      preLoaderRoute: typeof Char123LocaleChar125PublicRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/browse': {
+      id: '/{-$locale}/browse'
+      path: '/browse'
+      fullPath: '/{-$locale}/browse'
+      preLoaderRoute: typeof Char123LocaleChar125BrowseRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/cookie-policy': {
+      id: '/{-$locale}/cookie-policy'
+      path: '/cookie-policy'
+      fullPath: '/{-$locale}/cookie-policy'
+      preLoaderRoute: typeof Char123LocaleChar125CookiePolicyRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/forgot-password': {
+      id: '/{-$locale}/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/{-$locale}/forgot-password'
+      preLoaderRoute: typeof Char123LocaleChar125ForgotPasswordRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/login': {
+      id: '/{-$locale}/login'
+      path: '/login'
+      fullPath: '/{-$locale}/login'
+      preLoaderRoute: typeof Char123LocaleChar125LoginRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/privacy': {
+      id: '/{-$locale}/privacy'
+      path: '/privacy'
+      fullPath: '/{-$locale}/privacy'
+      preLoaderRoute: typeof Char123LocaleChar125PrivacyRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/reset-password': {
+      id: '/{-$locale}/reset-password'
+      path: '/reset-password'
+      fullPath: '/{-$locale}/reset-password'
+      preLoaderRoute: typeof Char123LocaleChar125ResetPasswordRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/signup': {
+      id: '/{-$locale}/signup'
+      path: '/signup'
+      fullPath: '/{-$locale}/signup'
+      preLoaderRoute: typeof Char123LocaleChar125SignupRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/terms': {
+      id: '/{-$locale}/terms'
+      path: '/terms'
+      fullPath: '/{-$locale}/terms'
+      preLoaderRoute: typeof Char123LocaleChar125TermsRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/verify-email': {
+      id: '/{-$locale}/verify-email'
+      path: '/verify-email'
+      fullPath: '/{-$locale}/verify-email'
+      preLoaderRoute: typeof Char123LocaleChar125VerifyEmailRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
     }
     '/_protected/admin/': {
       id: '/_protected/admin/'
@@ -912,6 +923,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStorageUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/{-$locale}/_public/': {
+      id: '/{-$locale}/_public/'
+      path: '/'
+      fullPath: '/{-$locale}/'
+      preLoaderRoute: typeof Char123LocaleChar125PublicIndexRouteImport
+      parentRoute: typeof Char123LocaleChar125PublicRoute
+    }
+    '/{-$locale}/_public/catalog': {
+      id: '/{-$locale}/_public/catalog'
+      path: '/catalog'
+      fullPath: '/{-$locale}/catalog'
+      preLoaderRoute: typeof Char123LocaleChar125PublicCatalogRouteImport
+      parentRoute: typeof Char123LocaleChar125PublicRoute
+    }
     '/_protected/novels/$novelId/edit': {
       id: '/_protected/novels/$novelId/edit'
       path: '/novels/$novelId/edit'
@@ -939,13 +964,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/novels/$novelId/relationships'
       preLoaderRoute: typeof ProtectedNovelsNovelIdRelationshipsRouteImport
       parentRoute: typeof ProtectedRoute
-    }
-    '/_public/novels/$novelId/': {
-      id: '/_public/novels/$novelId/'
-      path: '/novels/$novelId'
-      fullPath: '/novels/$novelId/'
-      preLoaderRoute: typeof PublicNovelsNovelIdIndexRouteImport
-      parentRoute: typeof PublicRoute
     }
     '/_protected/novels/$novelId/manage/': {
       id: '/_protected/novels/$novelId/manage/'
@@ -996,15 +1014,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedNovelsNovelIdManageSettingsRouteImport
       parentRoute: typeof ProtectedNovelsNovelIdManageRoute
     }
-    '/_public/novels/$novelId/chapters/$chapterId': {
-      id: '/_public/novels/$novelId/chapters/$chapterId'
+    '/{-$locale}/_public/novels/$novelId/': {
+      id: '/{-$locale}/_public/novels/$novelId/'
+      path: '/novels/$novelId'
+      fullPath: '/{-$locale}/novels/$novelId/'
+      preLoaderRoute: typeof Char123LocaleChar125PublicNovelsNovelIdIndexRouteImport
+      parentRoute: typeof Char123LocaleChar125PublicRoute
+    }
+    '/{-$locale}/_public/novels/$novelId/chapters/$chapterId': {
+      id: '/{-$locale}/_public/novels/$novelId/chapters/$chapterId'
       path: '/novels/$novelId/chapters/$chapterId'
-      fullPath: '/novels/$novelId/chapters/$chapterId'
-      preLoaderRoute: typeof PublicNovelsNovelIdChaptersChapterIdRouteImport
-      parentRoute: typeof PublicRoute
+      fullPath: '/{-$locale}/novels/$novelId/chapters/$chapterId'
+      preLoaderRoute: typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRouteImport
+      parentRoute: typeof Char123LocaleChar125PublicRoute
     }
   }
 }
+
+interface Char123LocaleChar125PublicRouteChildren {
+  Char123LocaleChar125PublicCatalogRoute: typeof Char123LocaleChar125PublicCatalogRoute
+  Char123LocaleChar125PublicIndexRoute: typeof Char123LocaleChar125PublicIndexRoute
+  Char123LocaleChar125PublicNovelsNovelIdIndexRoute: typeof Char123LocaleChar125PublicNovelsNovelIdIndexRoute
+  Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute: typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute
+}
+
+const Char123LocaleChar125PublicRouteChildren: Char123LocaleChar125PublicRouteChildren =
+  {
+    Char123LocaleChar125PublicCatalogRoute:
+      Char123LocaleChar125PublicCatalogRoute,
+    Char123LocaleChar125PublicIndexRoute: Char123LocaleChar125PublicIndexRoute,
+    Char123LocaleChar125PublicNovelsNovelIdIndexRoute:
+      Char123LocaleChar125PublicNovelsNovelIdIndexRoute,
+    Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute:
+      Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute,
+  }
+
+const Char123LocaleChar125PublicRouteWithChildren =
+  Char123LocaleChar125PublicRoute._addFileChildren(
+    Char123LocaleChar125PublicRouteChildren,
+  )
+
+interface Char123LocaleChar125RouteRouteChildren {
+  Char123LocaleChar125PublicRoute: typeof Char123LocaleChar125PublicRouteWithChildren
+  Char123LocaleChar125BrowseRoute: typeof Char123LocaleChar125BrowseRoute
+  Char123LocaleChar125CookiePolicyRoute: typeof Char123LocaleChar125CookiePolicyRoute
+  Char123LocaleChar125ForgotPasswordRoute: typeof Char123LocaleChar125ForgotPasswordRoute
+  Char123LocaleChar125LoginRoute: typeof Char123LocaleChar125LoginRoute
+  Char123LocaleChar125PrivacyRoute: typeof Char123LocaleChar125PrivacyRoute
+  Char123LocaleChar125ResetPasswordRoute: typeof Char123LocaleChar125ResetPasswordRoute
+  Char123LocaleChar125SignupRoute: typeof Char123LocaleChar125SignupRoute
+  Char123LocaleChar125TermsRoute: typeof Char123LocaleChar125TermsRoute
+  Char123LocaleChar125VerifyEmailRoute: typeof Char123LocaleChar125VerifyEmailRoute
+}
+
+const Char123LocaleChar125RouteRouteChildren: Char123LocaleChar125RouteRouteChildren =
+  {
+    Char123LocaleChar125PublicRoute:
+      Char123LocaleChar125PublicRouteWithChildren,
+    Char123LocaleChar125BrowseRoute: Char123LocaleChar125BrowseRoute,
+    Char123LocaleChar125CookiePolicyRoute:
+      Char123LocaleChar125CookiePolicyRoute,
+    Char123LocaleChar125ForgotPasswordRoute:
+      Char123LocaleChar125ForgotPasswordRoute,
+    Char123LocaleChar125LoginRoute: Char123LocaleChar125LoginRoute,
+    Char123LocaleChar125PrivacyRoute: Char123LocaleChar125PrivacyRoute,
+    Char123LocaleChar125ResetPasswordRoute:
+      Char123LocaleChar125ResetPasswordRoute,
+    Char123LocaleChar125SignupRoute: Char123LocaleChar125SignupRoute,
+    Char123LocaleChar125TermsRoute: Char123LocaleChar125TermsRoute,
+    Char123LocaleChar125VerifyEmailRoute: Char123LocaleChar125VerifyEmailRoute,
+  }
+
+const Char123LocaleChar125RouteRouteWithChildren =
+  Char123LocaleChar125RouteRoute._addFileChildren(
+    Char123LocaleChar125RouteRouteChildren,
+  )
 
 interface ProtectedAdminRouteChildren {
   ProtectedAdminActivityRoute: typeof ProtectedAdminActivityRoute
@@ -1107,37 +1191,10 @@ const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
   ProtectedRouteChildren,
 )
 
-interface PublicRouteChildren {
-  PublicCatalogRoute: typeof PublicCatalogRoute
-  PublicIndexRoute: typeof PublicIndexRoute
-  PublicNovelsNovelIdIndexRoute: typeof PublicNovelsNovelIdIndexRoute
-  PublicNovelsNovelIdChaptersChapterIdRoute: typeof PublicNovelsNovelIdChaptersChapterIdRoute
-}
-
-const PublicRouteChildren: PublicRouteChildren = {
-  PublicCatalogRoute: PublicCatalogRoute,
-  PublicIndexRoute: PublicIndexRoute,
-  PublicNovelsNovelIdIndexRoute: PublicNovelsNovelIdIndexRoute,
-  PublicNovelsNovelIdChaptersChapterIdRoute:
-    PublicNovelsNovelIdChaptersChapterIdRoute,
-}
-
-const PublicRouteWithChildren =
-  PublicRoute._addFileChildren(PublicRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
+  Char123LocaleChar125RouteRoute: Char123LocaleChar125RouteRouteWithChildren,
   ProtectedRoute: ProtectedRouteWithChildren,
-  PublicRoute: PublicRouteWithChildren,
-  BrowseRoute: BrowseRoute,
-  CookiePolicyRoute: CookiePolicyRoute,
-  ForgotPasswordRoute: ForgotPasswordRoute,
-  LoginRoute: LoginRoute,
-  PrivacyRoute: PrivacyRoute,
-  ResetPasswordRoute: ResetPasswordRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
-  SignupRoute: SignupRoute,
-  TermsRoute: TermsRoute,
-  VerifyEmailRoute: VerifyEmailRoute,
   ApiBackupsRoute: ApiBackupsRoute,
   ApiInngestRoute: ApiInngestRoute,
   ApiSitemapRoute: ApiSitemapRoute,
@@ -1152,10 +1209,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

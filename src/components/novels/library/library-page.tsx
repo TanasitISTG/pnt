@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useMemo } from "react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { LibraryEmpty } from "@/components/novels/library/library-empty";
 import { LibraryNoMatches } from "@/components/novels/library/library-no-matches";
@@ -15,6 +16,7 @@ import {
 } from "@/components/novels/library/library-search";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
+import { collatorFor } from "@/lib/i18n/format";
 
 interface LibraryPageProps {
   scope: LibraryScope;
@@ -35,6 +37,8 @@ interface LibraryPageProps {
  * this component is mounted by more than one route with its own search schema.
  */
 export function LibraryPage({ scope, signedIn, search, onSearchChange }: LibraryPageProps) {
+  const t = useTranslations("catalog");
+  const locale = useLocale();
   const {
     data: novels = [],
     isPending,
@@ -51,18 +55,20 @@ export function LibraryPage({ scope, signedIn, search, onSearchChange }: Library
     [novels],
   );
   const selectedNovels = useMemo(
-    () => selectLibraryNovels(novels, search, canManage),
-    [canManage, novels, search],
+    // Sorting a title list is the one place the interface language touches the data: the
+    // collator is what orders Thai titles as a Thai reader expects rather than by code point.
+    () => selectLibraryNovels(novels, search, canManage, collatorFor(locale)),
+    [canManage, locale, novels, search],
   );
 
   if (isPending && novels.length === 0) return <LibraryPending />;
 
-  const heading = canManage ? "Your Library" : "Catalog";
+  const heading = canManage ? t("titleOwn") : t("title");
   const description = canManage
-    ? "Your novels, drafts and translations in one shelf."
+    ? t("descriptionOwn")
     : signedIn
-      ? "Published novels from everyone on Pnt."
-      : "Every novel published on Pnt, from the translators who wrote them.";
+      ? t("descriptionSignedIn")
+      : t("descriptionGuest");
 
   return (
     <div className="flex flex-col gap-6">
@@ -75,14 +81,14 @@ export function LibraryPage({ scope, signedIn, search, onSearchChange }: Library
         {canManage && novels.length > 0 ? (
           <Button className="self-start sm:self-auto" render={<Link to="/novels/new" />}>
             <Plus className="size-4" aria-hidden="true" />
-            New novel
+            {t("newNovel")}
           </Button>
         ) : null}
       </div>
 
       {isError ? (
         <ErrorState
-          title="The shelf didn't load"
+          title={t("loadFailed")}
           error={error}
           onRetry={() => void refetch()}
           className="min-h-[45vh]"

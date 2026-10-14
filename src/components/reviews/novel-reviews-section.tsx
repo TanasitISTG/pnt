@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Star } from "lucide-react";
 import { useState } from "react";
+import { useTranslations } from "use-intl";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
@@ -48,6 +49,8 @@ export function NovelReviewsSection({
   canManage,
   isLive,
 }: NovelReviewsSectionProps) {
+  const t = useTranslations("reviews");
+  const tCommon = useTranslations("common");
   const rating = useQuery(novelRatingQueryOptions(novelId));
   const reviews = useInfiniteQuery({
     ...novelReviewsQueryOptions(novelId),
@@ -105,7 +108,7 @@ export function NovelReviewsSection({
         <DiscussionHeading
           id="novel-reviews-heading"
           icon={<Star />}
-          title="Reviews"
+          title={t("title")}
           count={summary?.count ?? 0}
         />
 
@@ -118,7 +121,7 @@ export function NovelReviewsSection({
               <div className="flex flex-col gap-1">
                 <StarRating value={summary.average} iconClassName="size-4" />
                 <span className="text-caption text-muted-foreground">
-                  {summary.count} {summary.count === 1 ? "rating" : "ratings"}
+                  {t("ratingCount", { count: summary.count })}
                 </span>
               </div>
             </div>
@@ -149,19 +152,17 @@ export function NovelReviewsSection({
       </div>
 
       {canManage ? (
-        <p className="text-body text-muted-foreground">
-          Ratings come from readers. You cannot review your own novel.
-        </p>
+        <p className="text-body text-muted-foreground">{t("ownNovel")}</p>
       ) : !signedIn ? (
         isLive ? (
           <DiscussionSignInPrompt redirect={`/novels/${novelId}`}>
-            to rate this novel and share what you thought.
+            {t("signInPrompt")}
           </DiscussionSignInPrompt>
         ) : null
       ) : myReview && !editing ? (
         <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
           <span className="text-caption tracking-wide text-muted-foreground uppercase">
-            Your review
+            {t("yourReview")}
           </span>
           <ReviewItem
             review={myReview}
@@ -169,9 +170,7 @@ export function NovelReviewsSection({
             onDelete={myReview.removedAt === null ? () => setDeleting(myReview) : undefined}
           />
           {myReview.removedAt !== null ? (
-            <p className="text-caption text-muted-foreground">
-              You can post a new review whenever you like.
-            </p>
+            <p className="text-caption text-muted-foreground">{t("canPostAgain")}</p>
           ) : null}
         </div>
       ) : null}
@@ -181,7 +180,7 @@ export function NovelReviewsSection({
           <ReviewForm
             initialRating={editing ? (myReview?.rating ?? 0) : 0}
             initialBody={editing ? (myReview?.body ?? "") : ""}
-            submitLabel={editing ? "Save review" : "Post review"}
+            submitLabel={editing ? t("saveReview") : t("postReview")}
             pending={save.isPending}
             onCancel={editing ? () => setEditing(false) : undefined}
             onSubmit={async ({ rating: value, body }) => {
@@ -194,7 +193,7 @@ export function NovelReviewsSection({
 
       {reviews.isError ? (
         <QueryErrorState
-          title="Failed to load reviews"
+          title={t("loadFailed")}
           error={reviews.error}
           onRetry={() => void reviews.refetch()}
           className="my-0 min-h-0"
@@ -203,7 +202,7 @@ export function NovelReviewsSection({
         <DiscussionSkeleton rows={2} />
       ) : others.length === 0 ? (
         myReview === null ? (
-          <EmptyState size="compact" title="No reviews yet" />
+          <EmptyState size="compact" title={t("emptyTitle")} />
         ) : null
       ) : (
         <div className="flex flex-col gap-6">
@@ -225,16 +224,16 @@ export function NovelReviewsSection({
             disabled={reviews.isFetchingNextPage}
             onClick={() => void reviews.fetchNextPage()}
           >
-            {reviews.isFetchingNextPage ? "Loading…" : "Load more reviews"}
+            {reviews.isFetchingNextPage ? tCommon("loading") : t("loadMore")}
           </Button>
         </div>
       ) : null}
 
       <ConfirmDialog
         open={deleting !== null}
-        title="Delete your review?"
-        description="The rating leaves the novel's average. You can review it again later."
-        confirmText="Delete"
+        title={t("deleteTitle")}
+        description={t("deleteDescription")}
+        confirmText={tCommon("delete")}
         variant="destructive"
         pending={remove.isPending}
         onOpenChange={(open) => {
@@ -246,8 +245,8 @@ export function NovelReviewsSection({
       {reporting ? (
         <ReportTargetDialog
           open
-          title="Report this review?"
-          description="An operator reviews every report. The report records which account filed it, the author is not shown who reported it, and nothing is removed until an operator decides."
+          title={t("reportTitle")}
+          description={t("reportDescription")}
           preview={reporting.body}
           busy={report.isPending}
           onOpenChange={(open) => {

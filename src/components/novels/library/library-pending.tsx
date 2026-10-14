@@ -1,12 +1,16 @@
+import { useTranslations } from "use-intl";
+
 import { Skeleton } from "@/components/ui/skeleton";
 
 const SHELF_SKELETON_KEYS = ["one", "two", "three", "four", "five", "six", "seven", "eight"];
 
 /** Shapes that match the shelf it will become, so the swap does not move the page. */
 export function LibraryPending() {
+  const t = useTranslations("catalog");
+
   return (
-    <div className="flex flex-col gap-8" role="status" aria-label="Loading library…">
-      <span className="sr-only">Loading library…</span>
+    <div className="flex flex-col gap-8" role="status" aria-label={t("pendingLabel")}>
+      <span className="sr-only">{t("pendingLabel")}</span>
       <div className="flex flex-col gap-3" aria-hidden="true">
         <Skeleton className="h-9 w-52" />
         <Skeleton className="h-4 w-72" />

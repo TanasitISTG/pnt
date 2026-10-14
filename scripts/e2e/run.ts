@@ -33,6 +33,10 @@ const environment = {
   // Pinned so a production NODE_ENV on the host cannot select the production env
   // schema, which requires Inngest Cloud keys this run deliberately leaves empty.
   NODE_ENV: "development",
+  // The app ships Thai by default, and the browser suite asserts the English copy it has
+  // always asserted, so the document language is pinned here exactly as `vite.config.ts`
+  // pins it for the unit suite (i18n.md §7).
+  VITE_DEFAULT_LOCALE: "en",
   DATABASE_URL: requestedUrl,
   // Migrations read the direct URL when one is configured, so it has to point at the
   // disposable database too: otherwise `db:migrate` lands on whatever host the

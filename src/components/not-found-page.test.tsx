@@ -56,7 +56,7 @@ describe("NotFoundPage", () => {
     // The code is decoration: the heading already says the page is missing.
     expect(screen.queryByRole("heading", { name: "404" })).toBeNull();
     expect(screen.getByRole("button", { name: "Back to catalog" }).getAttribute("href")).toBe(
-      "/catalog",
+      "/{-$locale}/catalog",
     );
   });
 });

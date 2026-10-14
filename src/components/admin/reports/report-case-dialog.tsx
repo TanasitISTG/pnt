@@ -117,7 +117,10 @@ export function ReportCaseDialog({
                 {reportCase.target.novelId ? (
                   <>
                     {" "}
-                    <Link to="/novels/$novelId" params={{ novelId: reportCase.target.novelId }}>
+                    <Link
+                      to="/{-$locale}/novels/$novelId"
+                      params={{ novelId: reportCase.target.novelId }}
+                    >
                       Open the novel
                     </Link>
                   </>
@@ -142,7 +145,7 @@ export function ReportCaseDialog({
                 {reportCase.target.chapterId && reportCase.target.novelId ? (
                   <Link
                     className="text-caption underline underline-offset-4"
-                    to="/novels/$novelId/chapters/$chapterId"
+                    to="/{-$locale}/novels/$novelId/chapters/$chapterId"
                     params={{
                       novelId: reportCase.target.novelId,
                       chapterId: reportCase.target.chapterId,

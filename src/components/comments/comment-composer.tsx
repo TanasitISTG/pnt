@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -33,13 +34,15 @@ export interface CommentComposerProps {
 export function CommentComposer({
   label,
   placeholder,
-  submitLabel = "Post comment",
+  submitLabel,
   initialValue = "",
   autoFocus = false,
   disabled = false,
   onSubmit,
   onCancel,
 }: CommentComposerProps) {
+  const t = useTranslations("comments");
+  const tCommon = useTranslations("common");
   const id = useId();
   const [body, setBody] = useState(initialValue);
   const [submitting, setSubmitting] = useState(false);
@@ -86,17 +89,17 @@ export function CommentComposer({
       />
       <div className="flex items-center justify-between gap-3">
         <span className="text-caption text-muted-foreground" aria-live="polite">
-          {remaining <= COUNTER_THRESHOLD ? `${remaining} characters left` : ""}
+          {remaining <= COUNTER_THRESHOLD ? t("charactersLeft", { count: remaining }) : ""}
         </span>
         <div className="flex items-center gap-2">
           {onCancel ? (
             <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onCancel}>
-              Cancel
+              {tCommon("cancel")}
             </Button>
           ) : null}
           <Button type="submit" size="sm" disabled={!canSubmit}>
             {submitting ? <Spinner /> : null}
-            {submitLabel}
+            {submitLabel ?? t("postComment")}
           </Button>
         </div>
       </div>

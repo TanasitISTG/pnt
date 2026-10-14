@@ -27,7 +27,7 @@ export function ReportHistoryTableRow({ row }: { row: ReportHistoryRow }) {
             <Badge variant="outline">{describeReportTarget(row.targetType)}</Badge>
             {row.novelId ? (
               <Link
-                to="/novels/$novelId"
+                to="/{-$locale}/novels/$novelId"
                 params={{ novelId: row.novelId }}
                 className="truncate font-medium text-foreground underline-offset-3 hover:underline"
               >

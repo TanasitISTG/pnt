@@ -19,6 +19,11 @@ export const user = pgTable("user", {
   // create hook, never by the client.
   termsVersion: text("terms_version"),
   termsAcceptedAt: timestamp("terms_accepted_at"),
+  // The interface language this account last chose, one of `SUPPORTED_LOCALES`. Written by
+  // `setViewerLocale` and seeded from the request at sign-up, so a reader who switches
+  // language on one device finds the same language on the next. It never overrides the
+  // language a URL states; see i18n.md §2.
+  locale: text("locale"),
 });
 
 export const session = pgTable(

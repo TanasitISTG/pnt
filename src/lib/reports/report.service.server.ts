@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { chapters, comments, novels, reports, reviews, user } from "@/lib/db/schema";
 import { isUniqueViolation } from "@/lib/db/unique-violation";
 import { getReviewAuthor, removeReviewForOperator } from "@/lib/reviews/review.service.server";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { SafeServerError } from "@/lib/server-fn-error";
 
 import { REPORT_CASE_DETAIL_LIMIT } from "./schemas";
@@ -177,9 +178,9 @@ export async function createNovelReportForUser(
     .where(and(eq(novels.id, input.novelId), novelReadable(reporterId)))
     .limit(1);
 
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   if (novel.userId === reporterId) {
-    throw new SafeServerError("You cannot report your own novel.");
+    throw new SafeServerError(encodeMessage("errors.ownNovelReport"));
   }
 
   const id = nanoid();
@@ -236,9 +237,9 @@ export async function createCommentReportForUser(
     )
     .limit(1);
 
-  if (!comment) throw new SafeServerError("Comment not found or unauthorized");
+  if (!comment) throw new SafeServerError(encodeMessage("errors.commentNotFoundOrUnauthorized"));
   if (comment.userId === reporterId) {
-    throw new SafeServerError("You cannot report your own comment.");
+    throw new SafeServerError(encodeMessage("errors.ownCommentReport"));
   }
 
   const id = nanoid();
@@ -289,9 +290,9 @@ export async function createReviewReportForUser(
     )
     .limit(1);
 
-  if (!review) throw new SafeServerError("Review not found or unauthorized");
+  if (!review) throw new SafeServerError(encodeMessage("errors.reviewNotFoundOrUnauthorized"));
   if (review.userId === reporterId) {
-    throw new SafeServerError("You cannot report your own review.");
+    throw new SafeServerError(encodeMessage("errors.ownReviewReport"));
   }
 
   const id = nanoid();

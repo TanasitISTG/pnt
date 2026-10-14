@@ -59,7 +59,7 @@ export function NovelPublicPage({ novelId, signedIn }: NovelPublicPageProps) {
       <div className="py-12 text-center">
         <h1 className="text-card-title font-semibold text-foreground">Novel not found</h1>
         <p className="mt-2 text-muted-foreground">The novel you are looking for does not exist.</p>
-        <Button className="mt-4" render={<Link to="/catalog" />}>
+        <Button className="mt-4" render={<Link to="/{-$locale}/catalog" />}>
           Browse the catalog
         </Button>
       </div>

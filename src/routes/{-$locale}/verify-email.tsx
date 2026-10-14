@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { AuthCard } from "@/components/auth/auth-card";
@@ -10,27 +11,37 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { sendVerificationEmail } from "@/lib/auth/auth-client";
 import { verifyEmailSearchSchema } from "@/lib/auth/search.schemas";
+import { encodeMessage } from "@/lib/i18n/message-code";
+import { headTranslator } from "@/lib/i18n/route-head";
 
 const resendFormSchema = z.object({
-  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+  email: z
+    .string()
+    .trim()
+    .min(1, encodeMessage("validation.emailRequired"))
+    .email(encodeMessage("validation.emailInvalid")),
 });
 
-export const Route = createFileRoute("/verify-email")({
+export const Route = createFileRoute("/{-$locale}/verify-email")({
   validateSearch: verifyEmailSearchSchema,
   loader: async ({ context }) => ({
     signedInEmail: context.user?.email ?? null,
     alreadyVerified: context.user?.emailVerified ?? false,
   }),
-  head: () => ({
-    meta: [
-      { title: "Verify your email | Pnt - Personal Novel Translator" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [
+        { title: `${t("auth.verifyEmailTitle")} | ${t("meta.siteName")}` },
+        { name: "robots", content: "noindex, nofollow" },
+      ],
+    };
+  },
   component: VerifyEmailPage,
 });
 
 function VerifyEmailPage() {
+  const t = useTranslations("auth");
   const { verified, error: linkError } = Route.useSearch();
   const { signedInEmail, alreadyVerified } = Route.useLoaderData();
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -48,12 +59,12 @@ function VerifyEmailPage() {
           callbackURL: "/verify-email?verified=1",
         });
         if (sendError) {
-          setError(sendError.message || "Could not send the email. Try again.");
+          setError(sendError.message || t("sendEmailFailed"));
           return;
         }
         setSentTo(email);
       } catch {
-        setError("The request did not finish. Try again.");
+        setError(t("requestFailed"));
       }
     },
   });
@@ -67,45 +78,34 @@ function VerifyEmailPage() {
   if (verified) {
     return (
       <AuthCard
-        title="Email confirmed"
-        description="Your address is verified. Nothing else is needed."
+        title={t("emailConfirmedTitle")}
+        description={t("emailConfirmedDescription")}
         footer={
-          <Link to="/" className="underline underline-offset-4 text-foreground">
-            Go to the library
+          <Link to="/{-$locale}" className="underline underline-offset-4 text-foreground">
+            {t("goToLibrary")}
           </Link>
         }
       >
-        <p className="text-body text-muted-foreground">
-          A confirmed address means password recovery reaches you reliably.
-        </p>
+        <p className="text-body text-muted-foreground">{t("emailConfirmedBody")}</p>
       </AuthCard>
     );
   }
 
   return (
     <AuthCard
-      title={linkError ? "That link did not work" : "Confirm your email"}
-      description={
-        linkError
-          ? "The link was already used or has expired."
-          : "Verification is optional, but it keeps your account recoverable."
-      }
+      title={linkError ? t("verifyFailedTitle") : t("verifyEmailTitle")}
+      description={linkError ? t("verifyFailedDescription") : t("verifyEmailDescription")}
       footer={
-        <Link to="/" className="underline underline-offset-4 text-foreground">
-          Continue to the library
+        <Link to="/{-$locale}" className="underline underline-offset-4 text-foreground">
+          {t("continueToLibrary")}
         </Link>
       }
     >
       {alreadyVerified && !sentTo ? (
-        <p className="text-body text-muted-foreground">
-          This account&rsquo;s email is already confirmed.
-        </p>
+        <p className="text-body text-muted-foreground">{t("alreadyConfirmed")}</p>
       ) : sentTo ? (
         <div className="space-y-3">
-          <p className="text-body text-muted-foreground">
-            If an account exists for {sentTo}, a fresh confirmation link is on its way. The link
-            expires in one hour.
-          </p>
+          <p className="text-body text-muted-foreground">{t("verifySentTo", { email: sentTo })}</p>
           <Button
             variant="outline"
             className="w-full"
@@ -114,7 +114,7 @@ function VerifyEmailPage() {
               setError(null);
             }}
           >
-            Use a different address
+            {t("useDifferentAddress")}
           </Button>
         </div>
       ) : (
@@ -131,12 +131,12 @@ function VerifyEmailPage() {
                 const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={invalid || undefined}>
-                    <FieldLabel htmlFor="email">Email</FieldLabel>
+                    <FieldLabel htmlFor="email">{t("emailLabel")}</FieldLabel>
                     <Input
                       id="email"
                       name={field.name}
                       type="email"
-                      placeholder="you@example.com"
+                      placeholder={t("emailPlaceholder")}
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
@@ -145,9 +145,7 @@ function VerifyEmailPage() {
                       required
                     />
                     <FieldDescription>
-                      {linkError
-                        ? "Request a new confirmation link."
-                        : "Send a new confirmation link to this address."}
+                      {linkError ? t("requestLinkHint") : t("sendLinkHint")}
                     </FieldDescription>
                     {invalid && <FieldError errors={field.state.meta.errors} />}
                   </Field>
@@ -163,7 +161,7 @@ function VerifyEmailPage() {
 
             <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
               {isSubmitting && <Spinner />}
-              {isSubmitting ? "Sending…" : "Send confirmation link"}
+              {isSubmitting ? t("sending") : t("sendConfirmationLink")}
             </Button>
           </FieldGroup>
         </form>

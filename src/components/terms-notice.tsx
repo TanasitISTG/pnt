@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -14,6 +16,18 @@ export interface TermsNoticeProps {
   stale: boolean;
 }
 
+/** The link `shell.termsUpdated` wraps its closing sentence in. */
+function TermsLink({ children }: { children: ReactNode }) {
+  return (
+    <Link to="/{-$locale}/terms" className="underline underline-offset-4 text-foreground">
+      {children}
+    </Link>
+  );
+}
+
+/** The tag function for that sentence, at module scope so it is a stable reference. */
+const RENDER_TERMS_LINK = (chunks: ReactNode) => <TermsLink>{chunks}</TermsLink>;
+
 /**
  * A standing notice, not a gate.
  *
@@ -22,6 +36,7 @@ export interface TermsNoticeProps {
  * either way - a reader in the middle of a chapter is not the person to interrupt.
  */
 export function TermsNotice({ stale }: TermsNoticeProps) {
+  const t = useTranslations("shell");
   const queryClient = useQueryClient();
   const router = useRouter();
   const [accepting, setAccepting] = useState(false);
@@ -37,9 +52,7 @@ export function TermsNotice({ stale }: TermsNoticeProps) {
       queryClient.clear();
       await router.invalidate();
     } catch (error: unknown) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not record your acceptance. Try again.",
-      );
+      toast.error(error instanceof Error ? error.message : t("termsAcceptFailed"));
       setAccepting(false);
     }
   };
@@ -47,17 +60,15 @@ export function TermsNotice({ stale }: TermsNoticeProps) {
   return (
     // A labelled landmark rather than a live region: the notice is already on the
     // page when it renders, so nothing about it is an announcement of a change.
-    <section aria-label="Updated terms" className="border-b border-border bg-surface">
+    <section aria-label={t("termsUpdatedTitle")} className="border-b border-border bg-surface">
       <div className="mx-auto flex max-w-[1200px] flex-col gap-3 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <FileText className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <p className="text-body text-foreground">
-            Our terms and privacy policy have changed. Accept the current version (
-            {CURRENT_TERMS_VERSION}) to record it on your account:{" "}
-            <Link to="/terms" className="underline underline-offset-4 text-foreground">
-              read the terms
-            </Link>
-            .
+            {t.rich("termsUpdated", {
+              version: CURRENT_TERMS_VERSION,
+              terms: RENDER_TERMS_LINK,
+            })}
           </p>
         </div>
         <Button
@@ -67,7 +78,7 @@ export function TermsNotice({ stale }: TermsNoticeProps) {
           disabled={accepting}
         >
           {accepting && <Spinner />}
-          {accepting ? "Recording…" : "I accept"}
+          {accepting ? t("termsAccepting") : t("termsAccept")}
         </Button>
       </div>
     </section>

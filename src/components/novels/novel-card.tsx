@@ -1,11 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { BookOpen } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { NovelCover } from "@/components/novels/novel-cover";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { LangPair } from "@/components/ui/lang-pair";
 import { publishState, type PublishState } from "@/lib/content/publish/publish";
+import { useLocalizedParams } from "@/lib/i18n/use-localized-params";
 import type { LibraryNovel } from "@/components/novels/library/library-search";
 
 interface NovelCardProps {
@@ -16,8 +18,9 @@ interface NovelCardProps {
   priorityCover?: boolean;
 }
 
-function formatPublicationState(state: PublishState): string {
-  return state === "live" ? "Live" : state === "scheduled" ? "Scheduled" : "Draft";
+/** The `catalog` key for a publication state, so the badge reads in the reader's language. */
+function publicationStateKey(state: PublishState): "stateLive" | "stateScheduled" | "stateDraft" {
+  return state === "live" ? "stateLive" : state === "scheduled" ? "stateScheduled" : "stateDraft";
 }
 
 /**
@@ -35,6 +38,10 @@ export function NovelCard({
   lazyCover = true,
   priorityCover = false,
 }: NovelCardProps) {
+  const t = useTranslations("catalog");
+  // The card is the same component in the catalog and on the shelf, and the shelf has no
+  // language in its URL, so the language is passed rather than inherited.
+  const localized = useLocalizedParams();
   const percent =
     novel.chapterCount > 0 ? Math.round((novel.translatedCount / novel.chapterCount) * 100) : 0;
   const state = publishState(novel.publishedAt);
@@ -42,13 +49,17 @@ export function NovelCard({
 
   return (
     <Link
-      to="/novels/$novelId"
-      params={{ novelId: novel.id }}
+      to="/{-$locale}/novels/$novelId"
+      params={{ novelId: novel.id, ...localized }}
       viewTransition
       // A link wrapping the card's block content computes an empty accessible name in
       // Chromium (HTML-AAM), which left every shelf card an unnamed link. Naming it here
       // gives a screen reader the two things that identify the novel: title and pair.
-      aria-label={`${novel.title}, ${novel.sourceLang.toUpperCase()} to ${novel.targetLang.toUpperCase()}`}
+      aria-label={t("cardLabel", {
+        title: novel.title,
+        source: novel.sourceLang.toUpperCase(),
+        target: novel.targetLang.toUpperCase(),
+      })}
       className="group/card-link block h-full no-underline"
     >
       <article
@@ -114,7 +125,7 @@ export function NovelCard({
               <LangPair source={novel.sourceLang} target={novel.targetLang} />
               {isAdmin ? (
                 <Badge variant={state === "live" ? "successOutline" : "mutedOutline"}>
-                  {formatPublicationState(state)}
+                  {t(publicationStateKey(state))}
                 </Badge>
               ) : null}
             </div>
@@ -123,7 +134,7 @@ export function NovelCard({
               <div className="flex min-w-0 items-center gap-2">
                 <Progress
                   value={percent}
-                  aria-label={`${novel.title} translation progress`}
+                  aria-label={t("translationProgressLabel", { title: novel.title })}
                   className="h-1 min-w-0 flex-1 gap-0"
                 />
                 <span className="shrink-0 text-micro tabular-nums text-muted-foreground">
@@ -133,7 +144,7 @@ export function NovelCard({
             ) : (
               <p className="flex items-center gap-1.5 text-micro text-muted-foreground">
                 <BookOpen className="size-3.5" aria-hidden="true" />
-                {novel.chapterCount} {novel.chapterCount === 1 ? "chapter" : "chapters"}
+                {t("chapterCount", { count: novel.chapterCount })}
               </p>
             )}
           </div>

@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { CURRENT_TERMS_VERSION } from "@/lib/terms";
 
-export const Route = createFileRoute("/terms")({
+export const Route = createFileRoute("/{-$locale}/terms")({
   head: () => ({
     meta: [
       { title: "Terms of Service | Pnt - Personal Novel Translator" },
@@ -63,11 +63,14 @@ function TermsPage() {
 
         <p className="border-t border-border pt-4 text-caption text-muted-foreground">
           See also the{" "}
-          <Link to="/privacy" className="underline underline-offset-4 text-foreground">
+          <Link to="/{-$locale}/privacy" className="underline underline-offset-4 text-foreground">
             Privacy Policy
           </Link>{" "}
           and the{" "}
-          <Link to="/cookie-policy" className="underline underline-offset-4 text-foreground">
+          <Link
+            to="/{-$locale}/cookie-policy"
+            className="underline underline-offset-4 text-foreground"
+          >
             Cookie Policy
           </Link>
           .

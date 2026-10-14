@@ -214,7 +214,7 @@ export function ReaderToolbar({
                 variant="ghost"
                 size="icon"
                 className="size-11 shrink-0"
-                render={<Link to="/novels/$novelId" params={{ novelId }} />}
+                render={<Link to="/{-$locale}/novels/$novelId" params={{ novelId }} />}
                 aria-label="Back to novel"
                 title="Back to novel"
               >

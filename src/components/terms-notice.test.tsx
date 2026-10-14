@@ -55,7 +55,7 @@ describe("TermsNotice", () => {
     expect(screen.getByLabelText("Updated terms")).toBeTruthy();
     expect(screen.getByText(new RegExp(CURRENT_TERMS_VERSION))).toBeTruthy();
     expect(screen.getByRole("link", { name: "read the terms" }).getAttribute("href")).toBe(
-      "/terms",
+      "/{-$locale}/terms",
     );
   });
 

@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslations } from "use-intl";
 
 import { PublishMenu } from "@/components/publish-menu";
 import { Button } from "@/components/ui/button";
 import { LangPair } from "@/components/ui/lang-pair";
+import { useLocalizedParams } from "@/lib/i18n/use-localized-params";
 import { cn } from "@/lib/utils";
 
 export interface NovelTrailProps {
@@ -32,23 +34,26 @@ export function NovelTrail({
   chapterLabel,
   className,
 }: NovelTrailProps) {
-  const originLabel = origin === "library" ? "Your Library" : "Catalog";
+  const t = useTranslations("catalog");
+  const localized = useLocalizedParams();
+  const originLabel = origin === "library" ? t("titleOwn") : t("title");
 
   return (
     <nav
-      aria-label="Novel"
+      aria-label={t("trailLabel")}
       className={cn("flex min-w-0 items-center gap-1.5 text-caption", className)}
     >
       <Link
-        to={origin === "library" ? "/library" : "/catalog"}
+        to={origin === "library" ? "/library" : "/{-$locale}/catalog"}
+        params={origin === "library" ? undefined : localized}
         className="shrink-0 text-muted-foreground no-underline transition-colors duration-micro hover:text-foreground"
       >
         {originLabel}
       </Link>
       <ChevronRight className="size-3.5 shrink-0 text-fg-3" aria-hidden="true" />
       <Link
-        to="/novels/$novelId"
-        params={{ novelId }}
+        to="/{-$locale}/novels/$novelId"
+        params={{ novelId, ...localized }}
         aria-current={current === "novel" ? "page" : undefined}
         className={cn(
           "min-w-0 truncate no-underline transition-colors duration-micro",
@@ -115,6 +120,7 @@ export function NovelContextBar({
   subNav,
   className,
 }: NovelContextBarProps) {
+  const t = useTranslations("catalog");
   const manageLink = showManageLink ?? canManage;
 
   return (
@@ -129,7 +135,7 @@ export function NovelContextBar({
                 publishedAt={publishedAt}
                 pending={publishing}
                 onChange={onPublishChange}
-                ariaLabel="Novel publishing options"
+                ariaLabel={t("publishMenuLabel")}
               />
             ) : null}
             {manageLink ? (
@@ -139,7 +145,7 @@ export function NovelContextBar({
                 render={<Link to="/novels/$novelId/manage/chapters" params={{ novelId }} />}
               >
                 <Settings2 className="size-4" aria-hidden="true" />
-                Manage
+                {t("manage")}
               </Button>
             ) : null}
           </div>

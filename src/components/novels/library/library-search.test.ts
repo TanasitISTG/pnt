@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  LIBRARY_PUBLICATION_LABELS,
-  LIBRARY_SORT_LABELS,
+  LIBRARY_PUBLICATION_KEYS,
+  LIBRARY_SORT_KEYS,
   librarySearchSchema,
   selectLibraryNovels,
   type LibraryNovel,
@@ -77,20 +77,21 @@ describe("library-search", () => {
     ).toEqual(allSearch);
   });
 
-  it("exposes human-facing labels for selected publication and sort values", () => {
-    expect(LIBRARY_PUBLICATION_LABELS).toEqual({
-      all: "All publication states",
-      draft: "Draft",
-      scheduled: "Scheduled",
-      live: "Live",
+  it("maps every filter value to a catalog key, never to the raw value", () => {
+    expect(LIBRARY_PUBLICATION_KEYS).toEqual({
+      all: "publicationAll",
+      draft: "publicationDraft",
+      scheduled: "publicationScheduled",
+      live: "publicationLive",
     });
-    expect(LIBRARY_SORT_LABELS).toEqual({
-      newest: "Newest first",
-      updated: "Recently updated",
-      title: "Title A–Z",
+    expect(LIBRARY_SORT_KEYS).toEqual({
+      newest: "sortNewest",
+      updated: "sortUpdated",
+      title: "sortTitle",
     });
-    expect(LIBRARY_PUBLICATION_LABELS.all).not.toBe("all");
-    expect(LIBRARY_SORT_LABELS.newest).not.toBe("newest");
+    // The property that matters: no filter value is ever the word a reader reads.
+    expect(Object.values(LIBRARY_PUBLICATION_KEYS)).not.toContain("all");
+    expect(Object.values(LIBRARY_SORT_KEYS)).not.toContain("newest");
   });
 
   it("filters by searchable metadata and sorts titles naturally without mutating input", () => {

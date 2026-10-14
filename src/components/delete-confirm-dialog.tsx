@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface DeleteConfirmDialogProps {
@@ -17,12 +19,13 @@ export function DeleteConfirmDialog({
   onConfirm,
   pending = false,
 }: DeleteConfirmDialogProps) {
+  const t = useTranslations("common");
   return (
     <ConfirmDialog
       title={title}
       description={description}
       titleClassName="text-destructive-text font-semibold"
-      confirmText={pending ? "Deleting..." : "Delete"}
+      confirmText={pending ? t("deleting") : t("delete")}
       variant="destructive"
       open={open}
       onOpenChange={onOpenChange}

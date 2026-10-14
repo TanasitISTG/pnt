@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useRouterState, type ErrorComponentProps } from "@tanstack/react-router";
 import { RefreshCw, TriangleAlert } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { QuietPage } from "@/components/quiet-page";
 import { QuietShell, hasPageFrame } from "@/components/shell/quiet-shell";
@@ -17,6 +18,8 @@ import { captureException } from "@/lib/posthog";
  * wording is written for a caller, not a reader.
  */
 export function ErrorPage({ error, reset }: ErrorComponentProps) {
+  const t = useTranslations("errors");
+  const tCommon = useTranslations("common");
   const errorMessage = error instanceof Error ? error.message : undefined;
   const framed = useRouterState({
     select: (state) => hasPageFrame(state.matches.map((match) => match.routeId)),
@@ -31,19 +34,15 @@ export function ErrorPage({ error, reset }: ErrorComponentProps) {
   const page = (
     <QuietPage
       icon={<TriangleAlert />}
-      title="This page did not load"
-      description={
-        import.meta.env.DEV && errorMessage
-          ? errorMessage
-          : "The request did not finish, so the page is incomplete. Trying again usually works, and nothing you have saved is affected."
-      }
+      title={t("pageTitle")}
+      description={import.meta.env.DEV && errorMessage ? errorMessage : t("pageDescription")}
     >
       <Button onClick={() => (reset ? reset() : window.location.reload())}>
         <RefreshCw className="size-4" aria-hidden="true" />
-        Try again
+        {tCommon("tryAgain")}
       </Button>
-      <Button variant="outline" render={<Link to="/catalog" />}>
-        Back to catalog
+      <Button variant="outline" render={<Link to="/{-$locale}/catalog" />}>
+        {t("backToCatalog")}
       </Button>
     </QuietPage>
   );

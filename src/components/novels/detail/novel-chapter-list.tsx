@@ -41,7 +41,7 @@ function ChapterRowLink({
 }) {
   return (
     <Link
-      to="/novels/$novelId/chapters/$chapterId"
+      to="/{-$locale}/novels/$novelId/chapters/$chapterId"
       params={{ novelId, chapterId: chapter.id }}
       aria-current={current ? "page" : undefined}
       className={cn(

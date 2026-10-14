@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_protected/novels/$novelId/manage")({
     const novel = await context.queryClient.ensureQueryData(novelQueryOptions(params.novelId));
     if (!novel) throw notFound();
     if (!novel.canManage) {
-      throw redirect({ to: "/novels/$novelId", params: { novelId: params.novelId } });
+      throw redirect({ to: "/{-$locale}/novels/$novelId", params: { novelId: params.novelId } });
     }
     return { novel };
   },

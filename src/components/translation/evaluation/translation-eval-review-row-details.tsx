@@ -50,7 +50,7 @@ function FindingList({ novelId, row }: { novelId: string; row: EvalReviewRow }) 
                 </p>
                 {anchor ? (
                   <Link
-                    to="/novels/$novelId/chapters/$chapterId"
+                    to="/{-$locale}/novels/$novelId/chapters/$chapterId"
                     params={{ novelId, chapterId: row.chapterId }}
                     hash={anchor}
                     className="inline-flex min-h-11 shrink-0 items-center rounded-md px-2 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

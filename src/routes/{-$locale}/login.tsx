@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Link, createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { useLocale, useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { AuthCard } from "@/components/auth/auth-card";
@@ -16,37 +17,57 @@ import { captchaFetchOptions } from "@/lib/auth/captcha";
 import { signIn } from "@/lib/auth/auth-client";
 import { getAuthMethods } from "@/lib/auth/functions";
 import { authRedirectSearchSchema } from "@/lib/auth/search.schemas";
+import { encodeMessage } from "@/lib/i18n/message-code";
+import { localeParam, localizedHref } from "@/lib/i18n/locales";
+import { headTranslator } from "@/lib/i18n/route-head";
 
+// The messages are keys, not sentences: a field error is rendered through the catalog of the
+// page it appears on, which is the only place that knows the reader's language.
 const loginFormSchema = z.object({
-  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
-  password: z.string().min(1, "Password is required"),
+  email: z
+    .string()
+    .trim()
+    .min(1, encodeMessage("validation.emailRequired"))
+    .email(encodeMessage("validation.emailInvalid")),
+  password: z.string().min(1, encodeMessage("validation.passwordRequired")),
 });
 
-export const Route = createFileRoute("/login")({
+export const Route = createFileRoute("/{-$locale}/login")({
   validateSearch: authRedirectSearchSchema,
   loader: async () => ({ methods: await getAuthMethods() }),
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, params }) => {
     if (context.user) {
-      throw redirect({ to: "/" });
+      throw redirect({
+        to: "/{-$locale}",
+        params: { locale: localeParam(params.locale) },
+      });
     }
   },
-  head: () => ({
-    meta: [
-      {
-        title: "Login | Pnt - Personal Novel Translator",
-      },
-      {
-        name: "robots",
-        content: "noindex, nofollow",
-      },
-    ],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [
+        {
+          title: `${t("auth.signInTitle")} | ${t("meta.siteName")}`,
+        },
+        {
+          name: "robots",
+          content: "noindex, nofollow",
+        },
+      ],
+    };
+  },
   component: LoginPage,
 });
 
 function LoginPage() {
+  const t = useTranslations("auth");
   const { redirect: redirectPath } = Route.useSearch();
   const { methods } = Route.useLoaderData();
+  // The language this page is being read in, which the layout derives from the URL.
+  // Every navigation out of here carries it, including the whole-document one after
+  // sign-in, which the router would not rewrite on its own.
+  const locale = useLocale();
   const navigate = useNavigate();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -85,7 +106,7 @@ function LoginPage() {
           // wrong password: the account's message stands alone, without the provider
           // hint that only helps someone who got their credentials wrong.
           setCredentialsRejected(isInvalidCredentialsError(signInError.code));
-          setError(signInError.message || "Invalid credentials");
+          setError(signInError.message || t("signInFailed"));
           return;
         }
 
@@ -93,9 +114,12 @@ function LoginPage() {
           redirectPath && redirectPath.startsWith("/") && !redirectPath.startsWith("//");
         queryClient.clear();
         await router.invalidate();
-        await navigate({ to: isInternal ? redirectPath : "/", replace: true });
+        await navigate({
+          href: localizedHref(isInternal ? (redirectPath as string) : "/", locale),
+          replace: true,
+        });
       } catch {
-        setError("The request did not finish. Try again.");
+        setError(t("requestFailed"));
         setCaptchaToken(null);
       }
     },
@@ -108,13 +132,13 @@ function LoginPage() {
 
   return (
     <AuthCard
-      title="Sign in"
-      description="Access your library, or read what others have published."
+      title={t("signInTitle")}
+      description={t("signInDescription")}
       footer={
         <>
-          New here?{" "}
-          <Link to="/signup" className="underline underline-offset-4 text-foreground">
-            Create an account
+          {t("signInFooter")}{" "}
+          <Link to="/{-$locale}/signup" className="underline underline-offset-4 text-foreground">
+            {t("createAccountLink")}
           </Link>
         </>
       }
@@ -133,12 +157,12 @@ function LoginPage() {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <FieldLabel htmlFor="email">{t("emailLabel")}</FieldLabel>
                   <Input
                     id="email"
                     name={field.name}
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder={t("emailPlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
@@ -158,19 +182,19 @@ function LoginPage() {
               return (
                 <Field data-invalid={invalid || undefined}>
                   <div className="flex items-baseline justify-between gap-2">
-                    <FieldLabel htmlFor="password">Password</FieldLabel>
+                    <FieldLabel htmlFor="password">{t("passwordLabel")}</FieldLabel>
                     <Link
-                      to="/forgot-password"
+                      to="/{-$locale}/forgot-password"
                       className="text-caption text-muted-foreground underline underline-offset-4 hover:text-foreground"
                     >
-                      Forgot password?
+                      {t("forgotPasswordLink")}
                     </Link>
                   </div>
                   <Input
                     id="password"
                     name={field.name}
                     type="password"
-                    placeholder="••••••••"
+                    placeholder={t("passwordPlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
@@ -200,10 +224,7 @@ function LoginPage() {
               {/* The most common dead end for a public launch: an account created with
                   Google or Discord has no password to enter here. */}
               {credentialsRejected && (methods.google || methods.discord) && (
-                <p className="text-caption text-muted-foreground">
-                  Signed up with Google or Discord? Use that button below, or reset your password to
-                  set one.
-                </p>
+                <p className="text-caption text-muted-foreground">{t("oauthPasswordHint")}</p>
               )}
             </div>
           )}
@@ -214,12 +235,12 @@ function LoginPage() {
             disabled={!canSubmit || isSubmitting || !challengeSatisfied}
           >
             {isSubmitting && <Spinner />}
-            {isSubmitting ? "Signing in…" : "Sign in"}
+            {isSubmitting ? t("signInSubmitting") : t("signInSubmit")}
           </Button>
 
           {challengeRequired && !challengeSatisfied && (
             <p className="text-center text-caption text-muted-foreground">
-              Waiting for the verification check to finish.
+              {t("challengePending")}
             </p>
           )}
         </FieldGroup>

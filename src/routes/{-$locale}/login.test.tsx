@@ -51,7 +51,7 @@ vi.mock("@/lib/auth/functions", () => ({ getAuthMethods: vi.fn() }));
 vi.mock("@/lib/auth/auth-client", () => ({ signIn: { email: signInEmail } }));
 vi.mock("@/components/auth/provider-buttons", () => ({ ProviderButtons: () => null }));
 
-import { Route } from "@/routes/login";
+import { Route } from "@/routes/{-$locale}/login";
 
 let renderOptions: TurnstileRenderOptions[];
 

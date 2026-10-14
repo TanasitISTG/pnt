@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Flag, MoreHorizontal, Pencil, Reply, Trash2 } from "lucide-react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { DiscussionTombstone } from "@/components/discussion/discussion-parts";
 import { UserAvatar } from "@/components/user-avatar";
@@ -12,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ChapterComment } from "@/lib/comments/types";
-import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relative-time";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/i18n/format";
 
 export interface CommentItemProps {
   comment: ChapterComment;
@@ -47,6 +48,9 @@ export function CommentItem({
   footer,
   children,
 }: CommentItemProps) {
+  const t = useTranslations("comments");
+  const tCommon = useTranslations("common");
+  const locale = useLocale();
   const gone = comment.removedAt !== null || comment.deletedAt !== null;
   const hasActions = !gone && Boolean(onReply || onEdit || onDelete || onReport);
   const reportDisabled = comment.viewerReported;
@@ -54,7 +58,7 @@ export function CommentItem({
   return (
     <article className="flex gap-3">
       <UserAvatar
-        name={comment.author.name ?? "Reader"}
+        name={comment.author.name ?? tCommon("reader")}
         avatar={comment.author.avatar}
         size="sm"
         className="mt-0.5 shrink-0"
@@ -62,17 +66,20 @@ export function CommentItem({
       <div className="min-w-0 flex-1">
         <header className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="truncate text-body font-medium text-foreground">
-            {comment.author.name ?? (comment.author.id ? "Reader" : "Deleted account")}
+            {comment.author.name ??
+              (comment.author.id ? tCommon("reader") : tCommon("deletedAccount"))}
           </span>
           <time
             className="shrink-0 text-caption text-muted-foreground"
             dateTime={new Date(comment.createdAt).toISOString()}
-            title={formatAbsoluteTime(comment.createdAt)}
+            title={formatAbsoluteTime(comment.createdAt, locale)}
           >
-            {formatRelativeTime(comment.createdAt)}
+            {formatRelativeTime(comment.createdAt, locale)}
           </time>
           {comment.editedAt && !gone ? (
-            <span className="shrink-0 text-caption text-muted-foreground">· edited</span>
+            <span className="shrink-0 text-caption text-muted-foreground">
+              · {tCommon("edited")}
+            </span>
           ) : null}
           {hasActions ? (
             <DropdownMenu>
@@ -82,7 +89,7 @@ export function CommentItem({
                     variant="ghost"
                     size="icon-sm"
                     className="ml-auto shrink-0"
-                    aria-label="Comment actions"
+                    aria-label={t("actionsLabel")}
                   />
                 }
               >
@@ -92,26 +99,26 @@ export function CommentItem({
                 {onReply ? (
                   <DropdownMenuItem onClick={onReply}>
                     <Reply className="size-4" />
-                    Reply
+                    {t("reply")}
                   </DropdownMenuItem>
                 ) : null}
                 {onEdit ? (
                   <DropdownMenuItem onClick={onEdit}>
                     <Pencil className="size-4" />
-                    Edit
+                    {tCommon("edit")}
                   </DropdownMenuItem>
                 ) : null}
                 {onDelete ? (
                   <DropdownMenuItem variant="destructive" onClick={onDelete}>
                     <Trash2 className="size-4" />
-                    Delete
+                    {tCommon("delete")}
                   </DropdownMenuItem>
                 ) : null}
                 {onReport && (onReply || onEdit || onDelete) ? <DropdownMenuSeparator /> : null}
                 {onReport ? (
                   <DropdownMenuItem disabled={reportDisabled} onClick={onReport}>
                     <Flag className="size-4" />
-                    {reportDisabled ? "Reported" : "Report"}
+                    {reportDisabled ? tCommon("reported") : tCommon("report")}
                   </DropdownMenuItem>
                 ) : null}
               </DropdownMenuContent>
@@ -122,7 +129,7 @@ export function CommentItem({
         {comment.removedAt !== null ? (
           <DiscussionTombstone kind="removed" reason={comment.removalReason} />
         ) : comment.deletedAt !== null ? (
-          <DiscussionTombstone kind="deleted">Comment deleted by its author.</DiscussionTombstone>
+          <DiscussionTombstone kind="deleted" />
         ) : editor ? (
           <div className="mt-2">{editor}</div>
         ) : (

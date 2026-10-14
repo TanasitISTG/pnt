@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
 import { useState } from "react";
+import { useTranslations } from "use-intl";
 
 import { cn } from "@/lib/utils";
 
@@ -17,13 +18,14 @@ export interface StarRatingProps {
  * as more than 4 - rounding an average to whole stars would overstate it.
  */
 export function StarRating({ value, className, iconClassName }: StarRatingProps) {
+  const t = useTranslations("reviews");
   const percent = Math.max(0, Math.min(100, (value / 5) * 100));
 
   return (
     <span
       className={cn("relative inline-flex shrink-0", className)}
       role="img"
-      aria-label={`${value} out of 5 stars`}
+      aria-label={t("starsLabel", { value })}
     >
       <span className="flex gap-0.5 text-foreground/20" aria-hidden="true">
         {STARS.map((star) => (
@@ -66,15 +68,16 @@ export function StarRatingInput({
   value,
   onChange,
   disabled = false,
-  label = "Your rating",
+  label,
 }: StarRatingInputProps) {
+  const t = useTranslations("reviews");
   const [preview, setPreview] = useState<number | null>(null);
   const shown = preview ?? value;
 
   return (
     <div
       role="group"
-      aria-label={label}
+      aria-label={label ?? t("yourRating")}
       className="flex items-center gap-1"
       onMouseLeave={() => setPreview(null)}
     >
@@ -83,7 +86,7 @@ export function StarRatingInput({
           key={star}
           type="button"
           disabled={disabled}
-          aria-label={`Rate ${star} out of 5`}
+          aria-label={t("rateStar", { star })}
           aria-pressed={value === star}
           className="rounded-md p-2 text-foreground transition-transform outline-none select-none active:scale-95 focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none"
           onClick={() => onChange(star)}

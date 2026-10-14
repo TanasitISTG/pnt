@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link } from "@tanstack/react-router";
 import { LogIn, LogOut, Menu } from "lucide-react";
 import { m, useReducedMotion } from "motion/react";
+import { useTranslations } from "use-intl";
 
 import { NAV_MOBILE_LINK_CLASS } from "@/components/shell/nav-styles";
 import { useSignOut } from "@/components/shell/use-sign-out";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { UserAvatar } from "@/components/user-avatar";
+import { useLocalizedParams } from "@/lib/i18n/use-localized-params";
 import type { ViewerUser } from "@/lib/profile/types";
 import { useViewerAvatar } from "@/lib/profile/use-viewer-avatar";
 
@@ -18,8 +20,9 @@ interface MobileNavProps {
 }
 
 interface MobileNavLink {
-  to: "/catalog" | "/library" | "/jobs" | "/settings" | "/settings/account" | "/admin";
-  label: string;
+  to: "/{-$locale}/catalog" | "/library" | "/jobs" | "/settings" | "/settings/account" | "/admin";
+  /** A key in the `shell` catalog, so the drawer names each destination in the reader's language. */
+  labelKey: "catalog" | "library" | "activity" | "account" | "settings" | "admin";
   /** Only rendered for a signed-in session. */
   requiresSession?: boolean;
   /** Rendered for operators only, after the account destinations. */
@@ -27,12 +30,12 @@ interface MobileNavLink {
 }
 
 const MOBILE_LINKS: readonly MobileNavLink[] = [
-  { to: "/catalog", label: "Catalog" },
-  { to: "/library", label: "Library", requiresSession: true },
-  { to: "/jobs", label: "Activity", requiresSession: true },
-  { to: "/settings/account", label: "Account", requiresSession: true },
-  { to: "/settings", label: "Settings", requiresSession: true },
-  { to: "/admin", label: "Admin", requiresSession: true, requiresAdmin: true },
+  { to: "/{-$locale}/catalog", labelKey: "catalog" },
+  { to: "/library", labelKey: "library", requiresSession: true },
+  { to: "/jobs", labelKey: "activity", requiresSession: true },
+  { to: "/settings/account", labelKey: "account", requiresSession: true },
+  { to: "/settings", labelKey: "settings", requiresSession: true },
+  { to: "/admin", labelKey: "admin", requiresSession: true, requiresAdmin: true },
 ];
 
 /*
@@ -52,6 +55,8 @@ const ITEM_VARIANTS = {
 };
 
 export function MobileNav({ user, isAdmin }: MobileNavProps) {
+  const t = useTranslations("shell");
+  const localized = useLocalizedParams();
   const [open, setOpen] = React.useState(false);
   const { signingOut, signOut } = useSignOut();
   const avatar = useViewerAvatar();
@@ -67,13 +72,13 @@ export function MobileNav({ user, isAdmin }: MobileNavProps) {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
         render={<Button variant="ghost" size="icon" className="md:hidden" />}
-        aria-label="Open menu"
+        aria-label={t("openMenu")}
       >
         <Menu className="size-4" aria-hidden="true" />
       </SheetTrigger>
       <SheetContent side="start" className="md:hidden">
         <SheetHeader>
-          <SheetTitle>Menu</SheetTitle>
+          <SheetTitle>{t("menuLabel")}</SheetTitle>
           {/* The drawer carries the identity the header's account menu used to show: on a
               phone the avatar and the address belong at the top of the list you just
               opened, not behind a second control in the bar. */}
@@ -91,7 +96,10 @@ export function MobileNav({ user, isAdmin }: MobileNavProps) {
         </SheetHeader>
         {/* `overscroll-contain` so a flick that reaches the end of the list stays in the
             panel instead of chaining to the page behind it. */}
-        <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+        <nav
+          aria-label={t("navLabel")}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
+        >
           <m.ul
             initial={reduceMotion ? false : "hidden"}
             animate="visible"
@@ -102,12 +110,13 @@ export function MobileNav({ user, isAdmin }: MobileNavProps) {
               <m.li key={link.to} variants={ITEM_VARIANTS}>
                 <Link
                   to={link.to}
+                  params={link.to === "/{-$locale}/catalog" ? localized : undefined}
                   preload={false}
                   className={NAV_MOBILE_LINK_CLASS}
                   activeProps={{ className: "bg-surface-inset font-semibold" }}
                   onClick={() => setOpen(false)}
                 >
-                  {link.label}
+                  {t(link.labelKey)}
                 </Link>
               </m.li>
             ))}
@@ -117,19 +126,25 @@ export function MobileNav({ user, isAdmin }: MobileNavProps) {
           {user ? (
             <Button variant="ghost" className="w-full" onClick={signOut} disabled={signingOut}>
               {signingOut ? <Spinner /> : <LogOut className="size-4" aria-hidden="true" />}
-              {signingOut ? "Signing out…" : "Sign out"}
+              {signingOut ? t("signingOut") : t("signOut")}
             </Button>
           ) : (
             <div className="flex flex-col gap-2">
               <Button
                 variant="outline"
-                render={<Link to="/login" onClick={() => setOpen(false)} />}
+                render={
+                  <Link to="/{-$locale}/login" params={localized} onClick={() => setOpen(false)} />
+                }
               >
                 <LogIn className="size-4" aria-hidden="true" />
-                Sign in
+                {t("signIn")}
               </Button>
-              <Button render={<Link to="/signup" onClick={() => setOpen(false)} />}>
-                Create account
+              <Button
+                render={
+                  <Link to="/{-$locale}/signup" params={localized} onClick={() => setOpen(false)} />
+                }
+              >
+                {t("createAccount")}
               </Button>
             </div>
           )}

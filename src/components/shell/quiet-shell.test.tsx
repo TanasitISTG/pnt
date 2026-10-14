@@ -23,7 +23,7 @@ describe("hasPageFrame", () => {
   it("ignores addresses that are not frames at all", () => {
     // `/browse` is a redirect and renders nothing; a sibling top-level page such as the
     // auth screens renders without a frame, which is why they carry one themselves.
-    expect(hasPageFrame(["__root__", "/browse"])).toBe(false);
-    expect(hasPageFrame(["__root__", "/login"])).toBe(false);
+    expect(hasPageFrame(["__root__", "/{-$locale}/browse"])).toBe(false);
+    expect(hasPageFrame(["__root__", "/{-$locale}/login"])).toBe(false);
   });
 });

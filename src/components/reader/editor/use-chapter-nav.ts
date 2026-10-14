@@ -19,7 +19,7 @@ export function useChapterNav<T extends { id: string }>(
 
   const goToChapter = (id: string, hash?: string) =>
     navigate({
-      to: "/novels/$novelId/chapters/$chapterId",
+      to: "/{-$locale}/novels/$novelId/chapters/$chapterId",
       params: { novelId, chapterId: id },
       ...(hash ? { hash } : {}),
     });

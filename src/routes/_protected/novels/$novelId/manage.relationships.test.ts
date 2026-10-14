@@ -96,7 +96,7 @@ describe("relationship route data ownership", () => {
 
     expect(isRedirect(error)).toBe(true);
     if (!isRedirect(error)) return;
-    expect(error.options.to).toBe("/novels/$novelId");
+    expect(error.options.to).toBe("/{-$locale}/novels/$novelId");
     expect(serverFunctions.getRelationshipWorkspace).toHaveBeenCalledTimes(1);
     expect(serverFunctions.getRelationshipMap).not.toHaveBeenCalled();
   });

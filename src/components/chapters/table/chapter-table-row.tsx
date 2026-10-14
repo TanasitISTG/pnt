@@ -187,7 +187,7 @@ function ChapterTitleLink({
   return (
     <div className="flex items-center gap-2">
       <Link
-        to="/novels/$novelId/chapters/$chapterId"
+        to="/{-$locale}/novels/$novelId/chapters/$chapterId"
         params={{ novelId, chapterId: chapter.id }}
         className={cn(
           "text-foreground hover:underline underline-offset-4",

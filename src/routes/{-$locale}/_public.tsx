@@ -2,7 +2,7 @@ import { Outlet, createFileRoute, useRouterState } from "@tanstack/react-router"
 
 import { AppShell } from "@/components/app-shell";
 
-export const Route = createFileRoute("/_public")({
+export const Route = createFileRoute("/{-$locale}/_public")({
   component: PublicLayout,
 });
 
@@ -11,7 +11,7 @@ function PublicLayout() {
   const isReader = useRouterState({
     select: (state) =>
       state.matches.some(
-        (match) => match.routeId === "/_public/novels/$novelId/chapters/$chapterId",
+        (match) => match.routeId === "/{-$locale}/_public/novels/$novelId/chapters/$chapterId",
       ),
   });
 

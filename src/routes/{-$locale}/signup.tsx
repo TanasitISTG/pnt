@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Link, createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { useLocale, useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { AuthCard } from "@/components/auth/auth-card";
@@ -14,46 +15,91 @@ import { Spinner } from "@/components/ui/spinner";
 import { captchaFetchOptions } from "@/lib/auth/captcha";
 import { signUp } from "@/lib/auth/auth-client";
 import { getAuthMethods } from "@/lib/auth/functions";
+import { encodeMessage } from "@/lib/i18n/message-code";
+import { localeParam, localizedHref } from "@/lib/i18n/locales";
+import { headTranslator } from "@/lib/i18n/route-head";
+import { translateServerError } from "@/lib/i18n/server-error";
 import { authRedirectSearchSchema } from "@/lib/auth/search.schemas";
 
+// Field messages are keys (i18n.md §3): `FieldError` resolves them through the catalog of the
+// page they are shown on, so a validation error is written once and read in either language.
 const signupFormSchema = z
   .object({
     name: z
       .string()
       .trim()
-      .min(1, "Display name is required")
-      .max(80, "Keep your display name under 80 characters"),
-    email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+      .min(1, encodeMessage("validation.displayNameRequired"))
+      .max(80, encodeMessage("validation.displayNameMax")),
+    email: z
+      .string()
+      .trim()
+      .min(1, encodeMessage("validation.emailRequired"))
+      .email(encodeMessage("validation.emailInvalid")),
     password: z
       .string()
-      .min(8, "Use at least 8 characters")
-      .max(128, "Keep your password under 128 characters"),
-    confirmPassword: z.string().min(1, "Confirm your password"),
+      .min(8, encodeMessage("validation.passwordMin"))
+      .max(128, encodeMessage("validation.passwordMax")),
+    confirmPassword: z.string().min(1, encodeMessage("validation.confirmPasswordRequired")),
   })
   .refine((values) => values.password === values.confirmPassword, {
     path: ["confirmPassword"],
-    message: "Passwords do not match",
+    message: encodeMessage("validation.passwordsDoNotMatch"),
   });
 
-export const Route = createFileRoute("/signup")({
+export const Route = createFileRoute("/{-$locale}/signup")({
   validateSearch: authRedirectSearchSchema,
   loader: async () => ({ methods: await getAuthMethods() }),
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, params }) => {
     if (context.user) {
-      throw redirect({ to: "/" });
+      throw redirect({
+        to: "/{-$locale}",
+        params: { locale: localeParam(params.locale) },
+      });
     }
   },
-  head: () => ({
-    meta: [
-      { title: "Create account | Pnt - Personal Novel Translator" },
-      // A signup form has nothing to index and should not compete with the library.
-      { name: "robots", content: "noindex, nofollow" },
-    ],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [
+        { title: `${t("auth.createAccountTitle")} | ${t("meta.siteName")}` },
+        // A signup form has nothing to index and should not compete with the library.
+        { name: "robots", content: "noindex, nofollow" },
+      ],
+    };
+  },
   component: SignupPage,
 });
 
+/** The two links `auth.termsAgreement` wraps its policy names in. */
+function TermsLink({ children }: { children: ReactNode }) {
+  return (
+    <Link to="/{-$locale}/terms" className="underline underline-offset-4 text-foreground">
+      {children}
+    </Link>
+  );
+}
+
+function PrivacyLink({ children }: { children: ReactNode }) {
+  return (
+    <Link to="/{-$locale}/privacy" className="underline underline-offset-4 text-foreground">
+      {children}
+    </Link>
+  );
+}
+
+/** Both tag functions at module scope, so they are stable references. */
+const AGREEMENT_TAGS = {
+  terms: (chunks: ReactNode) => <TermsLink>{chunks}</TermsLink>,
+  privacy: (chunks: ReactNode) => <PrivacyLink>{chunks}</PrivacyLink>,
+};
+
 function SignupPage() {
+  const t = useTranslations("auth");
+  const tRoot = useTranslations();
+  // The language this page is being read in, which the layout derives from the URL.
+  // Every navigation out of here carries it, including the whole-document one after
+  // sign-up, which the router would not rewrite on its own.
+  const locale = useLocale();
   const { redirect: redirectPath } = Route.useSearch();
   const { methods } = Route.useLoaderData();
   const navigate = useNavigate();
@@ -101,9 +147,12 @@ function SignupPage() {
           redirectPath && redirectPath.startsWith("/") && !redirectPath.startsWith("//");
         queryClient.clear();
         await router.invalidate();
-        await navigate({ to: isInternal ? redirectPath : "/", replace: true });
+        await navigate({
+          href: localizedHref(isInternal ? (redirectPath as string) : "/", locale),
+          replace: true,
+        });
       } catch {
-        setError("The request did not finish. Try again.");
+        setError(t("requestFailed"));
         setCaptchaToken(null);
       }
     },
@@ -119,13 +168,13 @@ function SignupPage() {
 
   return (
     <AuthCard
-      title="Create your account"
-      description="Start translating and publishing your own novels."
+      title={t("createAccountTitle")}
+      description={t("createAccountDescription")}
       footer={
         <>
-          Already have an account?{" "}
-          <Link to="/login" className="underline underline-offset-4 text-foreground">
-            Sign in
+          {t("createAccountFooter")}{" "}
+          <Link to="/{-$locale}/login" className="underline underline-offset-4 text-foreground">
+            {t("signInSubmit")}
           </Link>
         </>
       }
@@ -147,12 +196,12 @@ function SignupPage() {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="name">Display name</FieldLabel>
+                  <FieldLabel htmlFor="name">{t("displayNameLabel")}</FieldLabel>
                   <Input
                     id="name"
                     name={field.name}
                     type="text"
-                    placeholder="The name readers will see"
+                    placeholder={t("displayNamePlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
@@ -171,12 +220,12 @@ function SignupPage() {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <FieldLabel htmlFor="email">{t("emailLabel")}</FieldLabel>
                   <Input
                     id="email"
                     name={field.name}
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder={t("emailPlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
@@ -195,12 +244,12 @@ function SignupPage() {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  <FieldLabel htmlFor="password">{t("passwordLabel")}</FieldLabel>
                   <Input
                     id="password"
                     name={field.name}
                     type="password"
-                    placeholder="At least 8 characters"
+                    placeholder={t("newPasswordPlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
@@ -219,12 +268,12 @@ function SignupPage() {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="confirmPassword">Confirm password</FieldLabel>
+                  <FieldLabel htmlFor="confirmPassword">{t("confirmPasswordLabel")}</FieldLabel>
                   <Input
                     id="confirmPassword"
                     name={field.name}
                     type="password"
-                    placeholder="Repeat your password"
+                    placeholder={t("confirmPasswordPlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
@@ -251,17 +300,7 @@ function SignupPage() {
               onChange={(event) => setAcceptedTerms(event.target.checked)}
               required
             />
-            <span>
-              I agree to the{" "}
-              <Link to="/terms" className="underline underline-offset-4 text-foreground">
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link to="/privacy" className="underline underline-offset-4 text-foreground">
-                Privacy Policy
-              </Link>
-              .
-            </span>
+            <span>{t.rich("termsAgreement", AGREEMENT_TAGS)}</span>
           </label>
 
           {methods.turnstileSiteKey ? (
@@ -274,7 +313,7 @@ function SignupPage() {
 
           {error && (
             <p role="alert" className="text-caption text-destructive-text">
-              {error}
+              {translateServerError(error, tRoot)}
             </p>
           )}
 
@@ -285,12 +324,12 @@ function SignupPage() {
           <div className="flex flex-col gap-2">
             <Button type="submit" className="w-full" disabled={submitDisabled}>
               {isSubmitting && <Spinner />}
-              {isSubmitting ? "Creating account…" : "Create account"}
+              {isSubmitting ? t("createAccountSubmitting") : t("createAccountSubmit")}
             </Button>
 
             {challengeRequired && !challengeSatisfied && (
               <p className="text-center text-caption text-muted-foreground">
-                Waiting for the verification check to finish.
+                {t("challengePending")}
               </p>
             )}
           </div>
@@ -320,13 +359,13 @@ function SignupPage() {
 function signUpErrorMessage(message: string | undefined, code: string | undefined): string {
   const normalized = `${code ?? ""} ${message ?? ""}`.toLowerCase();
   if (normalized.includes("exist")) {
-    return "An account with this email already exists. Sign in instead, or reset your password if you have forgotten it.";
+    return encodeMessage("auth.emailExists");
   }
   if (normalized.includes("password")) {
-    return "That password is not accepted. Use at least 8 characters.";
+    return encodeMessage("auth.passwordRejected");
   }
   if (normalized.includes("captcha") || normalized.includes("verification")) {
-    return "The verification challenge failed. Reload the page and try again.";
+    return encodeMessage("auth.challengeFailed");
   }
-  return message || "Could not create your account. Try again.";
+  return message || encodeMessage("auth.createAccountFailed");
 }

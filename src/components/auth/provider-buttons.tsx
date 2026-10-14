@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { FieldSeparator } from "@/components/ui/field";
@@ -16,9 +17,13 @@ interface ProviderButtonsProps {
   onError: (message: string) => void;
 }
 
-const PROVIDER_LABELS: Record<SocialProvider, string> = {
-  google: "Continue with Google",
-  discord: "Continue with Discord",
+/**
+ * A provider's own name, which is a proper noun and stays put in both languages. The button's
+ * wording around it comes from `auth.continueWith`.
+ */
+const PROVIDER_NAMES: Record<SocialProvider, string> = {
+  google: "Google",
+  discord: "Discord",
 };
 
 /**
@@ -70,6 +75,7 @@ export function ProviderButtons({
   disabled,
   onError,
 }: ProviderButtonsProps) {
+  const t = useTranslations("auth");
   const [pending, setPending] = useState<SocialProvider | null>(null);
   const providers: SocialProvider[] = [
     ...(google ? (["google"] as const) : []),
@@ -83,18 +89,18 @@ export function ProviderButtons({
     try {
       const { error } = await signIn.social({ provider, callbackURL });
       if (error) {
-        onError(error.message || `Could not continue with ${provider}.`);
+        onError(error.message || t("providerFailed", { provider: PROVIDER_NAMES[provider] }));
         setPending(null);
       }
     } catch {
-      onError(`Could not continue with ${provider}. Try again.`);
+      onError(t("providerFailed", { provider: PROVIDER_NAMES[provider] }));
       setPending(null);
     }
   };
 
   return (
     <div className="flex flex-col">
-      <FieldSeparator className="my-4">or</FieldSeparator>
+      <FieldSeparator className="my-4">{t("or")}</FieldSeparator>
       <div className="flex flex-col gap-2">
         {providers.map((provider) => (
           <Button
@@ -106,7 +112,7 @@ export function ProviderButtons({
             disabled={disabled || pending !== null}
           >
             {pending === provider ? <Spinner /> : PROVIDER_ICONS[provider]}
-            {PROVIDER_LABELS[provider]}
+            {t("continueWith", { provider: PROVIDER_NAMES[provider] })}
           </Button>
         ))}
       </div>

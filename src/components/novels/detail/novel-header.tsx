@@ -139,7 +139,7 @@ function ReadingActions({
           className="w-full sm:w-auto"
           render={
             <Link
-              to="/novels/$novelId/chapters/$chapterId"
+              to="/{-$locale}/novels/$novelId/chapters/$chapterId"
               params={{ novelId, chapterId: continueChapter.id }}
             />
           }
@@ -159,7 +159,7 @@ function ReadingActions({
             className="w-full sm:w-auto"
             render={
               <Link
-                to="/novels/$novelId/chapters/$chapterId"
+                to="/{-$locale}/novels/$novelId/chapters/$chapterId"
                 params={{ novelId, chapterId: firstChapter.id }}
               />
             }

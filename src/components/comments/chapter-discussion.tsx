@@ -2,6 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { CommentComposer } from "@/components/comments/comment-composer";
 import { CommentItem } from "@/components/comments/comment-item";
@@ -18,6 +19,7 @@ import type { ReportSubmission } from "@/components/reports/report-target-dialog
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { chapterCommentsQueryOptions } from "@/lib/comments/query";
+import { translateServerError } from "@/lib/i18n/server-error";
 import { COMMENT_VISIBLE_REPLIES } from "@/lib/comments/schemas";
 import type { ChapterComment, CommentThread } from "@/lib/comments/types";
 
@@ -53,6 +55,11 @@ export function ChapterDiscussion({
   chapterNumber,
   signedIn,
 }: ChapterDiscussionProps) {
+  const t = useTranslations("comments");
+  const tCommon = useTranslations("common");
+  // One root translator: a message code carries its own namespace, so nothing here has to
+  // know which one an error came from.
+  const tRoot = useTranslations();
   const query = useInfiniteQuery(chapterCommentsQueryOptions(chapterId));
   const { post, edit, remove, report } = useCommentMutations(chapterId);
 
@@ -66,14 +73,14 @@ export function ChapterDiscussion({
 
   const threads = query.data?.pages.flatMap((page) => page.threads) ?? [];
   const total = query.data?.pages[0]?.rowCount ?? 0;
-  const chapterLabel = `Ch. ${Number(chapterNumber)}`;
+  const chapterLabel = tCommon("chapterShort", { number: Number(chapterNumber) });
 
   const submitComment = async (body: string, parentId?: string): Promise<boolean> => {
     try {
       await post.mutateAsync({ body, parentId });
       return true;
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "That comment did not go through");
+      toast.error(translateServerError(error, tRoot, tCommon("requestFailed")));
       return false;
     }
   };
@@ -84,7 +91,7 @@ export function ChapterDiscussion({
       setEditingId(null);
       return true;
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "That comment could not be saved");
+      toast.error(translateServerError(error, tRoot, tCommon("requestFailed")));
       return false;
     }
   };
@@ -123,25 +130,25 @@ export function ChapterDiscussion({
       <DiscussionHeading
         id="chapter-discussion-heading"
         icon={<MessageSquare />}
-        title="Discussion"
+        title={t("title")}
         count={total}
       />
 
       {signedIn ? (
         <CommentComposer
-          label={`Comment on ${chapterLabel}`}
-          placeholder={`Share your thoughts on ${chapterLabel}…`}
+          label={t("commentOn", { chapter: chapterLabel })}
+          placeholder={t("placeholder", { chapter: chapterLabel })}
           onSubmit={(body) => submitComment(body)}
         />
       ) : (
         <DiscussionSignInPrompt redirect={`/novels/${novelId}/chapters/${chapterId}`}>
-          to join the discussion. Reading stays open to everyone.
+          {t("signInPrompt")}
         </DiscussionSignInPrompt>
       )}
 
       {query.isError ? (
         <QueryErrorState
-          title="Failed to load the discussion"
+          title={t("loadFailed")}
           error={query.error}
           onRetry={() => void query.refetch()}
           className="my-0 min-h-0"
@@ -151,10 +158,8 @@ export function ChapterDiscussion({
       ) : threads.length === 0 ? (
         <EmptyState
           size="compact"
-          title="No comments yet"
-          description={
-            signedIn ? `Be the first to share your thoughts on ${chapterLabel}.` : undefined
-          }
+          title={t("emptyTitle")}
+          description={signedIn ? t("emptyDescription", { chapter: chapterLabel }) : undefined}
         />
       ) : (
         <div className="flex flex-col gap-6">
@@ -186,20 +191,18 @@ export function ChapterDiscussion({
             disabled={query.isFetchingNextPage}
             onClick={() => void query.fetchNextPage()}
           >
-            {query.isFetchingNextPage ? "Loading…" : "Load more comments"}
+            {query.isFetchingNextPage ? tCommon("loading") : t("loadMore")}
           </Button>
         </div>
       ) : null}
 
       <ConfirmDialog
         open={deleting !== null}
-        title="Delete this comment?"
+        title={t("deleteTitle")}
         description={
-          deleting && deleting.replyCount > 0
-            ? "Replies stay, and this comment will read as deleted."
-            : "This removes the comment for everyone."
+          deleting && deleting.replyCount > 0 ? t("deleteWithReplies") : t("deletePlain")
         }
-        confirmText="Delete"
+        confirmText={tCommon("delete")}
         variant="destructive"
         pending={remove.isPending}
         onOpenChange={(open) => {
@@ -211,8 +214,8 @@ export function ChapterDiscussion({
       {reporting ? (
         <ReportTargetDialog
           open
-          title="Report this comment?"
-          description="An operator reviews every report. The report records which account filed it, the comment's author is not shown who reported it, and nothing is removed until an operator decides."
+          title={t("reportTitle")}
+          description={t("reportDescription")}
           preview={reporting.body}
           busy={report.isPending}
           onOpenChange={(open) => {
@@ -259,12 +262,14 @@ function CommentThreadCard({
   onSubmitReply,
   onSubmitEdit,
 }: CommentThreadCardProps) {
+  const t = useTranslations("comments");
+  const tCommon = useTranslations("common");
   const [showAllReplies, setShowAllReplies] = useState(false);
   const replies = showAllReplies
     ? thread.replies
     : thread.replies.slice(0, COMMENT_VISIBLE_REPLIES);
   const hiddenCount = thread.replyCount - replies.length;
-  const authorName = thread.author.name ?? "Reader";
+  const authorName = thread.author.name ?? tCommon("reader");
 
   const renderItem = (
     comment: ChapterComment,
@@ -276,9 +281,9 @@ function CommentThreadCard({
       editor={
         editingId === comment.id ? (
           <CommentComposer
-            label="Edit your comment"
-            placeholder="Edit your comment…"
-            submitLabel="Save changes"
+            label={t("editLabel")}
+            placeholder={t("editPlaceholder")}
+            submitLabel={t("saveChanges")}
             initialValue={comment.body ?? ""}
             autoFocus
             onSubmit={(body) => onSubmitEdit(comment.id, body)}
@@ -301,9 +306,9 @@ function CommentThreadCard({
       footer={
         options.canReply && replyingTo === comment.id ? (
           <CommentComposer
-            label={`Reply to ${authorName}`}
-            placeholder={`Reply to ${authorName}…`}
-            submitLabel="Post reply"
+            label={t("replyLabel", { name: authorName })}
+            placeholder={t("replyPlaceholder", { name: authorName })}
+            submitLabel={t("postReply")}
             autoFocus
             onSubmit={(body) => onSubmitReply(body, comment.id)}
             onCancel={onReplyClose}
@@ -327,12 +332,15 @@ function CommentThreadCard({
             className="self-start"
             onClick={() => setShowAllReplies(true)}
           >
-            Show all {thread.replyCount} replies
+            {t("showAllReplies", { count: thread.replyCount })}
           </Button>
         ) : null}
         {showAllReplies && thread.repliesTruncated ? (
           <p className="text-caption text-muted-foreground">
-            Showing the earliest {thread.replies.length} of {thread.replyCount} replies.
+            {t("repliesTruncated", {
+              shown: thread.replies.length,
+              total: thread.replyCount,
+            })}
           </p>
         ) : null}
       </>

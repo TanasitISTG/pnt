@@ -3,6 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 import { Eye, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -22,6 +23,7 @@ export interface ImpersonationBannerProps {
  * than leaving the operator stuck in someone else's account.
  */
 export function ImpersonationBanner({ impersonation, viewedName }: ImpersonationBannerProps) {
+  const t = useTranslations("shell");
   const queryClient = useQueryClient();
   const router = useRouter();
   const [returning, setReturning] = useState(false);
@@ -38,12 +40,8 @@ export function ImpersonationBanner({ impersonation, viewedName }: Impersonation
       await router.invalidate();
       await router.navigate({ to: "/admin" });
     } catch (error: unknown) {
-      setFailure(
-        "Your operator session could not be restored here. Sign out and sign back in to continue as yourself.",
-      );
-      toast.error(
-        error instanceof Error ? error.message : "Could not return to your operator account.",
-      );
+      setFailure(t("impersonationFailure"));
+      toast.error(error instanceof Error ? error.message : t("impersonationReturnFailed"));
       setReturning(false);
     }
   };
@@ -55,11 +53,12 @@ export function ImpersonationBanner({ impersonation, viewedName }: Impersonation
           <Eye className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden="true" />
           <div className="space-y-1">
             <p className="text-body font-medium text-foreground">
-              Viewing as {viewedName}, read-only
+              {t("impersonationBanner", { name: viewedName })}
             </p>
             <p className="text-caption text-muted-foreground">
-              Signed in as {impersonation.operatorName ?? "your operator account"}. Reads work;
-              anything that would change this account is disabled.
+              {t("impersonationSignedInAs", {
+                operator: impersonation.operatorName ?? t("impersonationOperatorFallback"),
+              })}
             </p>
             {failure && (
               <p role="alert" className="text-caption text-destructive-text">
@@ -76,7 +75,7 @@ export function ImpersonationBanner({ impersonation, viewedName }: Impersonation
           disabled={returning}
         >
           {returning ? <Spinner /> : <Undo2 className="size-4" aria-hidden="true" />}
-          {returning ? "Returning…" : "Return to operator account"}
+          {returning ? t("impersonationReturning") : t("impersonationReturn")}
         </Button>
       </div>
     </div>

@@ -408,6 +408,6 @@ describe("GlossaryPage list workspace", () => {
         <GlossaryPage />
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy());
   });
 });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { AuthCard } from "@/components/auth/auth-card";
@@ -12,28 +13,42 @@ import { Spinner } from "@/components/ui/spinner";
 import { captchaFetchOptions } from "@/lib/auth/captcha";
 import { requestPasswordReset } from "@/lib/auth/auth-client";
 import { getAuthMethods } from "@/lib/auth/functions";
+import { encodeMessage } from "@/lib/i18n/message-code";
+import { localeParam } from "@/lib/i18n/locales";
+import { headTranslator } from "@/lib/i18n/route-head";
 
 const forgotPasswordFormSchema = z.object({
-  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+  email: z
+    .string()
+    .trim()
+    .min(1, encodeMessage("validation.emailRequired"))
+    .email(encodeMessage("validation.emailInvalid")),
 });
 
-export const Route = createFileRoute("/forgot-password")({
+export const Route = createFileRoute("/{-$locale}/forgot-password")({
   loader: async () => ({ methods: await getAuthMethods() }),
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, params }) => {
     if (context.user) {
-      throw redirect({ to: "/" });
+      throw redirect({
+        to: "/{-$locale}",
+        params: { locale: localeParam(params.locale) },
+      });
     }
   },
-  head: () => ({
-    meta: [
-      { title: "Reset your password | Pnt - Personal Novel Translator" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [
+        { title: `${t("auth.resetPasswordTitle")} | ${t("meta.siteName")}` },
+        { name: "robots", content: "noindex, nofollow" },
+      ],
+    };
+  },
   component: ForgotPasswordPage,
 });
 
 function ForgotPasswordPage() {
+  const t = useTranslations("auth");
   const { methods } = Route.useLoaderData();
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,13 +71,13 @@ function ForgotPasswordPage() {
         // A challenge cannot be replayed, so every attempt needs a fresh one.
         setCaptchaToken(null);
         if (resetError) {
-          setError(resetError.message || "Could not send the reset email. Try again.");
+          setError(resetError.message || t("sendResetFailed"));
           return;
         }
         setSubmitted(true);
       } catch {
         setCaptchaToken(null);
-        setError("The request did not finish. Try again.");
+        setError(t("requestFailed"));
       }
     },
   });
@@ -76,31 +91,28 @@ function ForgotPasswordPage() {
   if (submitted) {
     return (
       <AuthCard
-        title="Check your inbox"
-        description="If an account exists for that address, a reset link is on its way."
+        title={t("resetLinkSentTitle")}
+        description={t("resetLinkSentDescription")}
         footer={
-          <Link to="/login" className="underline underline-offset-4 text-foreground">
-            Back to sign in
+          <Link to="/{-$locale}/login" className="underline underline-offset-4 text-foreground">
+            {t("backToSignIn")}
           </Link>
         }
       >
         {/* Deliberately identical whether or not the address exists, so this screen
             cannot be used to enumerate accounts. */}
-        <p className="text-body text-muted-foreground">
-          The link expires in one hour and can only be used once. If it does not arrive within a few
-          minutes, check your spam folder before requesting another.
-        </p>
+        <p className="text-body text-muted-foreground">{t("resetLinkSentBody")}</p>
       </AuthCard>
     );
   }
 
   return (
     <AuthCard
-      title="Reset your password"
-      description="We will email you a link to choose a new password."
+      title={t("resetPasswordTitle")}
+      description={t("resetPasswordDescription")}
       footer={
-        <Link to="/login" className="underline underline-offset-4 text-foreground">
-          Back to sign in
+        <Link to="/{-$locale}/login" className="underline underline-offset-4 text-foreground">
+          {t("backToSignIn")}
         </Link>
       }
     >
@@ -118,12 +130,12 @@ function ForgotPasswordPage() {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <FieldLabel htmlFor="email">{t("emailLabel")}</FieldLabel>
                   <Input
                     id="email"
                     name={field.name}
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder={t("emailPlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
@@ -157,7 +169,7 @@ function ForgotPasswordPage() {
             disabled={!canSubmit || isSubmitting || !challengeSatisfied}
           >
             {isSubmitting && <Spinner />}
-            {isSubmitting ? "Sending…" : "Send reset link"}
+            {isSubmitting ? t("sending") : t("sendResetLink")}
           </Button>
         </FieldGroup>
       </form>

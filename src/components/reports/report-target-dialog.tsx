@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { REPORT_REASONS, describeReportReason, isReportReason } from "@/lib/reports/reasons";
+import { REPORT_REASONS, isReportReason } from "@/lib/reports/reasons";
 import type { ReportReason } from "@/lib/reports/reasons";
 import { REPORT_DETAILS_MAX_LENGTH } from "@/lib/reports/schemas";
 
@@ -29,10 +30,19 @@ export interface ReportSubmission {
   details?: string;
 }
 
-/** The select reads the same vocabulary the operator queue filters on, so they cannot drift. */
-const REASON_ITEMS: Record<string, string> = Object.fromEntries(
-  REPORT_REASONS.map((reason) => [reason, describeReportReason(reason)]),
-);
+/**
+ * The select reads the same vocabulary the operator queue filters on - the values are the
+ * shared ones - while the words come from the catalog, so the reason a reader picks is the
+ * same reason an operator reads, in each of their own languages.
+ */
+const REASON_KEYS = {
+  copyright: "reasonCopyright",
+  sexual_content: "reasonSexualContent",
+  sexual_cover: "reasonSexualCover",
+  hate_or_harassment: "reasonHateOrHarassment",
+  spam_or_scam: "reasonSpamOrScam",
+  other: "reasonOther",
+} as const satisfies Record<ReportReason, string>;
 
 const DETAILS_ERROR_ID = "report-details-error";
 
@@ -68,6 +78,11 @@ export function ReportTargetDialog({
   onOpenChange,
   onConfirm,
 }: ReportTargetDialogProps) {
+  const t = useTranslations("reports");
+  const tCommon = useTranslations("common");
+  const reasonItems: Record<string, string> = Object.fromEntries(
+    REPORT_REASONS.map((entry) => [entry, t(REASON_KEYS[entry])]),
+  );
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
 
@@ -92,59 +107,51 @@ export function ReportTargetDialog({
         ) : null}
 
         <Field>
-          <FieldLabel htmlFor="report-reason">Reason</FieldLabel>
+          <FieldLabel htmlFor="report-reason">{t("reasonLabel")}</FieldLabel>
           <Select
             value={reason}
-            items={REASON_ITEMS}
+            items={reasonItems}
             onValueChange={(nextValue) => setReason(nextValue ?? "")}
           >
-            <SelectTrigger id="report-reason" aria-label="Reason" className="w-full">
-              <SelectValue placeholder="Choose a reason" />
+            <SelectTrigger id="report-reason" aria-label={t("reasonLabel")} className="w-full">
+              <SelectValue placeholder={t("reasonPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(REASON_ITEMS).map(([value, label]) => (
+              {Object.entries(reasonItems).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <FieldDescription>
-            Pick the closest match; the field below carries the detail.
-          </FieldDescription>
+          <FieldDescription>{t("reasonDescription")}</FieldDescription>
         </Field>
 
         <Field data-invalid={missingDetails || undefined}>
-          <FieldLabel htmlFor="report-details">What is wrong?</FieldLabel>
+          <FieldLabel htmlFor="report-details">{t("detailsLabel")}</FieldLabel>
           <Textarea
             id="report-details"
             value={details}
             maxLength={REPORT_DETAILS_MAX_LENGTH}
-            placeholder="Describe the problem. A chapter number or a source link helps."
+            placeholder={t("detailsPlaceholder")}
             aria-invalid={missingDetails}
             aria-describedby={missingDetails ? DETAILS_ERROR_ID : undefined}
             onChange={(event) => setDetails(event.target.value)}
           />
           <FieldDescription className="flex items-center justify-between">
-            <span>
-              {needsDetails
-                ? "Required when the reason is “Something else”."
-                : "Optional. Anything an operator should check first."}
-            </span>
+            <span>{needsDetails ? t("detailsRequired") : t("detailsOptional")}</span>
             <span className="ml-3 shrink-0 tabular-nums">
               {details.length}/{REPORT_DETAILS_MAX_LENGTH}
             </span>
           </FieldDescription>
           {missingDetails ? (
-            <FieldError id={DETAILS_ERROR_ID}>
-              Tell us what is wrong so an operator can act on it
-            </FieldError>
+            <FieldError id={DETAILS_ERROR_ID}>{t("detailsError")}</FieldError>
           ) : null}
         </Field>
 
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
-            Cancel
+            {tCommon("cancel")}
           </Button>
           <Button
             disabled={!canSubmit}
@@ -154,7 +161,7 @@ export function ReportTargetDialog({
             }}
           >
             {busy && <Spinner />}
-            Send report
+            {t("send")}
           </Button>
         </DialogFooter>
       </DialogContent>

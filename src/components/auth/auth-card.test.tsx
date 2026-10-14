@@ -5,7 +5,9 @@ import { createElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // The anchor keeps the props the router would have merged onto it, and drops the
-// router-only ones; see `site-header.test.tsx` for the same stance.
+// router-only ones; see `site-header.test.tsx` for the same stance. The one thing it has to
+// model is the optional locale parameter: `{-$locale}` is filled in with the active language
+// or removed, which is how the Thai URL stays unprefixed.
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
@@ -18,17 +20,22 @@ vi.mock("@tanstack/react-router", () => ({
   }: {
     children?: ReactNode;
     to?: unknown;
-    params?: unknown;
+    params?: { locale?: string };
     preload?: unknown;
     viewTransition?: unknown;
     activeProps?: unknown;
     [key: string]: unknown;
   }) => {
-    void params;
     void preload;
     void viewTransition;
     void activeProps;
-    return createElement("a", { href: typeof to === "string" ? to : "#", ...rest }, children);
+    // `{-$locale}` is the optional locale parameter: it is filled in with the active
+    // language, or removed - and an empty href is not a link, so the stripped root stays `/`.
+    const href =
+      typeof to === "string"
+        ? to.replace("/{-$locale}", params?.locale ? `/${params.locale}` : "") || "/"
+        : "#";
+    return createElement("a", { href, ...rest }, children);
   },
 }));
 

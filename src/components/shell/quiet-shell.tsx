@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 
 import { SkipLink } from "@/components/shell/skip-link";
 import { SiteFooter } from "@/components/shell/site-footer";
+import { useLocalizedParams } from "@/lib/i18n/use-localized-params";
 
 /**
  * The layout route ids that already place a page inside a frame. A page rendered by one of
@@ -39,14 +41,22 @@ export function hasPageFrame(routeIds: readonly string[]): boolean {
  * home, and the legal links are still one tab away.
  */
 export function QuietShell({ children }: { children: ReactNode }) {
+  const t = useTranslations("shell");
+  const localized = useLocalizedParams();
+
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       <SkipLink />
       <header className="border-b border-border">
         <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center px-4 sm:px-6">
-          <Link to="/" preload={false} className="flex items-center gap-2 no-underline">
+          <Link
+            to="/{-$locale}"
+            params={localized}
+            preload={false}
+            className="flex items-center gap-2 no-underline"
+          >
             <img src="/logo-64.png" alt="" width={28} height={28} className="size-7 rounded-md" />
-            <span className="text-card-title text-foreground">Pnt</span>
+            <span className="text-card-title text-foreground">{t("brand")}</span>
           </Link>
         </div>
       </header>

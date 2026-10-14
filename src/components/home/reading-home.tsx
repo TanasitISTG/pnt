@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowRight, BookOpen, Plus } from "lucide-react";
 import { useMemo } from "react";
+import { useTranslations } from "use-intl";
 
 import { novelsQueryOptions } from "@/components/novels/library/library-query";
 import type { LibraryNovel } from "@/components/novels/library/library-search";
@@ -31,6 +32,10 @@ function timestamp(value: Date | string | null | undefined): number {
  * running — the three questions a returning translator actually has.
  */
 export function ReadingHome({ user }: { user: ViewerUser }) {
+  const t = useTranslations("home");
+  // "New novel" belongs to the shelf's vocabulary, not the home screen's, and both screens
+  // reach the same form; the key is read from `catalog` so the two cannot drift apart.
+  const tNovel = useTranslations("catalog");
   const novelsQuery = useQuery(novelsQueryOptions("mine"));
   const novels = useMemo(
     () =>
@@ -52,21 +57,19 @@ export function ReadingHome({ user }: { user: ViewerUser }) {
     <div className="flex flex-col gap-12">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-section text-foreground">Welcome back</h1>
-          <p className="mt-1.5 text-body text-muted-foreground">
-            Pick up where you left off, or start something new.
-          </p>
+          <h1 className="text-section text-foreground">{t("welcome")}</h1>
+          <p className="mt-1.5 text-body text-muted-foreground">{t("lead")}</p>
         </div>
         <Button className="self-start sm:self-auto" render={<Link to="/novels/new" />}>
           <Plus className="size-4" aria-hidden="true" />
-          New novel
+          {tNovel("newNovel")}
         </Button>
       </header>
 
       {continueEntries.length > 0 ? (
         <section className="flex flex-col gap-4" aria-labelledby="continue-reading">
           <h2 id="continue-reading" className="text-sub text-foreground">
-            Continue reading
+            {t("continueReading")}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {continueEntries.map(({ novel, chapterId, readCount }) => (
@@ -84,14 +87,14 @@ export function ReadingHome({ user }: { user: ViewerUser }) {
       <section className="flex flex-col gap-4" aria-labelledby="your-novels">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 id="your-novels" className="text-sub text-foreground">
-            Your novels
+            {t("yourNovels")}
           </h2>
           {novels.length > SHELF_LIMIT ? (
             <Link
               to="/library"
               className="inline-flex items-center gap-1 text-caption font-medium text-ink no-underline hover:underline"
             >
-              All novels
+              {t("allNovels")}
               <ArrowRight className="size-3.5" aria-hidden="true" />
             </Link>
           ) : null}
@@ -104,8 +107,8 @@ export function ReadingHome({ user }: { user: ViewerUser }) {
           // repeating the same control.
           <EmptyState
             icon={<BookOpen />}
-            title="No novels yet"
-            description={`Welcome, ${user.name}. Create a novel project to start pasting chapters and translating them.`}
+            title={tNovel("emptyOwnTitle")}
+            description={t("emptyDescription", { name: user.name })}
             size="compact"
           />
         ) : (
@@ -138,11 +141,12 @@ function ContinueReadingCard({
   chapterId: string;
   readCount: number;
 }) {
+  const t = useTranslations("home");
   const percent = novel.chapterCount > 0 ? Math.round((readCount / novel.chapterCount) * 100) : 0;
 
   return (
     <Link
-      to="/novels/$novelId/chapters/$chapterId"
+      to="/{-$locale}/novels/$novelId/chapters/$chapterId"
       params={{ novelId: novel.id, chapterId }}
       viewTransition
       // `min-w-0` is load-bearing: a grid item's automatic minimum width is its content's
@@ -165,17 +169,17 @@ function ContinueReadingCard({
       <div className="min-w-0 flex-1">
         <p className="truncate text-body font-semibold text-foreground">{novel.title}</p>
         <p className="mt-0.5 text-micro tabular-nums text-muted-foreground">
-          {readCount} of {novel.chapterCount} chapters read
+          {t("readingProgress", { read: readCount, total: novel.chapterCount })}
         </p>
         <Progress
           value={percent}
-          aria-label={`${novel.title} reading progress`}
+          aria-label={t("readingProgressLabel", { title: novel.title })}
           className="mt-2 h-1 gap-0"
         />
       </div>
       <span className="flex shrink-0 items-center gap-1 text-caption font-medium text-ink">
         {/* The word costs a third of the title's room on a phone; the arrow still says it. */}
-        <span className="hidden sm:inline">Continue</span>
+        <span className="hidden sm:inline">{t("continueAction")}</span>
         <ArrowRight
           className="size-4 transition-transform duration-micro ease-out-quint group-hover:translate-x-0.5 motion-reduce:transition-none"
           aria-hidden="true"
@@ -186,6 +190,7 @@ function ContinueReadingCard({
 }
 
 function ActivitySummary() {
+  const t = useTranslations("home");
   const statsQuery = useQuery(statsQueryOptions());
   const stats = statsQuery.data;
   const running = (stats?.activeTranslationJobs ?? 0) + (stats?.activeImportJobs ?? 0);
@@ -194,17 +199,17 @@ function ActivitySummary() {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="activity">
       <h2 id="activity" className="text-sub text-foreground">
-        Activity
+        {t("activity")}
       </h2>
       <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-border bg-card px-4 py-3.5">
         <div>
-          <p className="text-micro text-muted-foreground">Running</p>
+          <p className="text-micro text-muted-foreground">{t("activityRunning")}</p>
           <p className="text-card-title tabular-nums text-foreground">
             {statsQuery.isPending ? "—" : running}
           </p>
         </div>
         <div>
-          <p className="text-micro text-muted-foreground">Needs attention</p>
+          <p className="text-micro text-muted-foreground">{t("activityAttention")}</p>
           <p
             className={
               failed > 0
@@ -216,7 +221,7 @@ function ActivitySummary() {
           </p>
         </div>
         <Button variant="ghost" size="sm" className="ml-auto" render={<Link to="/jobs" />}>
-          Open jobs
+          {t("openJobs")}
           <ArrowRight className="size-4" aria-hidden="true" />
         </Button>
       </div>
@@ -225,13 +230,15 @@ function ActivitySummary() {
 }
 
 function ShelfSkeleton() {
+  const t = useTranslations("home");
+
   return (
     <div
       className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5"
       role="status"
-      aria-label="Loading your novels…"
+      aria-label={t("shelfPendingLabel")}
     >
-      <span className="sr-only">Loading your novels…</span>
+      <span className="sr-only">{t("shelfPendingLabel")}</span>
       {["one", "two", "three"].map((key) => (
         <div
           key={key}

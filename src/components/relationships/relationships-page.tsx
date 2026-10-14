@@ -113,7 +113,10 @@ export function RelationshipsPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           This language pair does not support relationship maps.
         </p>
-        <Button className="mt-4" render={<Link to="/novels/$novelId" params={{ novelId }} />}>
+        <Button
+          className="mt-4"
+          render={<Link to="/{-$locale}/novels/$novelId" params={{ novelId }} />}
+        >
           Back to novel
         </Button>
       </div>

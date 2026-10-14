@@ -1,12 +1,15 @@
 import { Link } from "@tanstack/react-router";
 import { LogIn } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { AccountMenu } from "@/components/shell/account-menu";
+import { LanguageMenu } from "@/components/shell/language-menu";
 import { MobileNav } from "@/components/shell/mobile-nav";
 import { NAV_LINK_ACTIVE_CLASS, NAV_LINK_CLASS } from "@/components/shell/nav-styles";
 import { ThemeMenu } from "@/components/shell/theme-menu";
 import { Button } from "@/components/ui/button";
 import { hasAdminRole } from "@/lib/auth/roles";
+import { useLocalizedParams } from "@/lib/i18n/use-localized-params";
 import type { ViewerUser } from "@/lib/profile/types";
 import { cn } from "@/lib/utils";
 
@@ -16,27 +19,20 @@ interface SiteHeaderProps {
   layout?: "default" | "reader";
 }
 
-interface PrimaryLink {
-  to: "/catalog" | "/library" | "/jobs";
-  label: string;
-  requiresSession?: boolean;
-}
-
 /**
- * Reading destinations only. Account-level pages (profile, settings) and the operator
- * console live in the account menu, so the primary navigation never mixes a reader's
- * chores with an operator's duties.
+ * The frame every page sits in: brand, reading destinations, theme, language, and the
+ * account or the two doors into one. The reader keeps the same identity but a compact bar,
+ * because a chapter page already carries its own toolbar.
+ *
+ * This shell is reachable from both trees, so its links to reading pages carry the language
+ * explicitly: a signed-in reader's own pages have no language in their URLs, and without
+ * that the header would quietly send them back to the default language.
  */
-const PRIMARY_LINKS: readonly PrimaryLink[] = [
-  { to: "/catalog", label: "Catalog" },
-  { to: "/library", label: "Library", requiresSession: true },
-  { to: "/jobs", label: "Activity", requiresSession: true },
-];
-
 export function SiteHeader({ user, layout = "default" }: SiteHeaderProps) {
+  const t = useTranslations("shell");
+  const localized = useLocalizedParams();
   const reader = layout === "reader";
   const isAdmin = hasAdminRole(user?.role);
-  const links = PRIMARY_LINKS.filter((link) => !link.requiresSession || Boolean(user));
 
   return (
     <header
@@ -46,28 +42,55 @@ export function SiteHeader({ user, layout = "default" }: SiteHeaderProps) {
       )}
     >
       <div className="mx-auto flex h-16 max-w-[1200px] items-center gap-3 px-4 sm:px-6">
-        <Link to="/" preload={false} className="flex items-center gap-2 no-underline">
+        <Link
+          to="/{-$locale}"
+          params={localized}
+          preload={false}
+          className="flex items-center gap-2 no-underline"
+        >
           <img src="/logo-64.png" alt="" width={28} height={28} className="size-7 rounded-md" />
-          <span className="text-card-title text-foreground">Pnt</span>
+          <span className="text-card-title text-foreground">{t("brand")}</span>
         </Link>
 
         {reader ? null : (
-          <nav aria-label="Primary" className="ml-2 hidden items-center gap-1 md:flex">
-            {links.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                preload={false}
-                className={NAV_LINK_CLASS}
-                activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
-              >
-                {link.label}
-              </Link>
-            ))}
+          <nav aria-label={t("navLabel")} className="ml-2 hidden items-center gap-1 md:flex">
+            {/* Reading destinations only. Account-level pages and the operator console live
+                in the account menu, so the primary navigation never mixes a reader's chores
+                with an operator's duties. */}
+            <Link
+              to="/{-$locale}/catalog"
+              params={localized}
+              preload={false}
+              className={NAV_LINK_CLASS}
+              activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
+            >
+              {t("catalog")}
+            </Link>
+            {user ? (
+              <>
+                <Link
+                  to="/library"
+                  preload={false}
+                  className={NAV_LINK_CLASS}
+                  activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
+                >
+                  {t("library")}
+                </Link>
+                <Link
+                  to="/jobs"
+                  preload={false}
+                  className={NAV_LINK_CLASS}
+                  activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
+                >
+                  {t("activity")}
+                </Link>
+              </>
+            ) : null}
           </nav>
         )}
 
         <div className="ml-auto flex items-center gap-1">
+          <LanguageMenu signedIn={user !== null} />
           <ThemeMenu />
           {user ? (
             // From `md` up the account menu is the only way to reach the account. Below it
@@ -78,11 +101,13 @@ export function SiteHeader({ user, layout = "default" }: SiteHeaderProps) {
             </div>
           ) : (
             <div className="hidden items-center gap-2 sm:flex">
-              <Button variant="ghost" render={<Link to="/login" />}>
+              <Button variant="ghost" render={<Link to="/{-$locale}/login" params={localized} />}>
                 <LogIn className="size-4" aria-hidden="true" />
-                Sign in
+                {t("signIn")}
               </Button>
-              <Button render={<Link to="/signup" />}>Create account</Button>
+              <Button render={<Link to="/{-$locale}/signup" params={localized} />}>
+                {t("createAccount")}
+              </Button>
             </div>
           )}
           <MobileNav user={user} isAdmin={isAdmin} />

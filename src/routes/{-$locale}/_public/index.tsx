@@ -19,7 +19,7 @@ import {
  * `/library`; `/` used to be both of those at once, which is why a returning reader had
  * nowhere to resume.
  */
-export const Route = createFileRoute("/_public/")({
+export const Route = createFileRoute("/{-$locale}/_public/")({
   validateSearch: librarySearchSchema,
   loaderDeps: () => ({}),
   shouldReload: false,

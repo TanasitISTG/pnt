@@ -85,7 +85,7 @@ export function ReportCaseTableRow({ row, onReview }: { row: ReportCase; onRevie
               <Badge variant="outline">{describeReportTarget(row.target.type)}</Badge>
               {row.target.novelId ? (
                 <Link
-                  to="/novels/$novelId"
+                  to="/{-$locale}/novels/$novelId"
                   params={{ novelId: row.target.novelId }}
                   className="truncate font-medium text-foreground underline-offset-3 hover:underline"
                 >

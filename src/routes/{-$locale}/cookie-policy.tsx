@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { AppShell } from "@/components/app-shell";
 
-export const Route = createFileRoute("/cookie-policy")({
+export const Route = createFileRoute("/{-$locale}/cookie-policy")({
   head: () => ({
     meta: [
       { title: "Cookie Policy | Pnt - Personal Novel Translator" },
@@ -94,11 +94,11 @@ function CookiePolicyPage() {
 
         <p className="border-t border-border pt-4 text-caption text-muted-foreground">
           See also the{" "}
-          <Link to="/privacy" className="underline underline-offset-4 text-foreground">
+          <Link to="/{-$locale}/privacy" className="underline underline-offset-4 text-foreground">
             Privacy Policy
           </Link>{" "}
           and the{" "}
-          <Link to="/terms" className="underline underline-offset-4 text-foreground">
+          <Link to="/{-$locale}/terms" className="underline underline-offset-4 text-foreground">
             Terms of Service
           </Link>
           .

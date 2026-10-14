@@ -10,7 +10,7 @@ import {
   readerNovelQueryOptions,
 } from "@/components/reader/page/reader-queries";
 
-export const Route = createFileRoute("/_public/novels/$novelId/chapters/$chapterId")({
+export const Route = createFileRoute("/{-$locale}/_public/novels/$novelId/chapters/$chapterId")({
   loader: async ({ params, context }) => {
     const [chapter, chapters, novel] = await Promise.all([
       context.queryClient.ensureQueryData(chapterQueryOptions(params.chapterId, params.novelId)),

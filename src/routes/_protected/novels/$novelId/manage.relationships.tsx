@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_protected/novels/$novelId/manage/relatio
       staleTime: 0,
     });
     if (!workspace?.map) {
-      throw redirect({ to: "/novels/$novelId", params: { novelId: params.novelId } });
+      throw redirect({ to: "/{-$locale}/novels/$novelId", params: { novelId: params.novelId } });
     }
     context.queryClient.setQueryData(novelQueryOptions(params.novelId).queryKey, workspace.novel);
     context.queryClient.setQueryData(

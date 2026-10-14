@@ -26,7 +26,7 @@ async function settle<T>(
   }
 }
 
-export const Route = createFileRoute("/_public/novels/$novelId/")({
+export const Route = createFileRoute("/{-$locale}/_public/novels/$novelId/")({
   loader: async ({ params, context }) => {
     // The owner path is tried first because it is the only one that may see drafts. A
     // signed-in viewer who does not own this novel falls through to the readable path
