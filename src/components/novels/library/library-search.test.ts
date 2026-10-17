@@ -1,66 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CATALOG_LANGUAGES,
   LIBRARY_PUBLICATION_KEYS,
   LIBRARY_SORT_KEYS,
+  authorCatalogFilters,
+  catalogLanguage,
+  formatLibraryLanguage,
   librarySearchSchema,
-  selectLibraryNovels,
-  type LibraryNovel,
+  toCatalogFilters,
 } from "./library-search";
 
-const novels: LibraryNovel[] = [
-  {
-    id: "draft-2",
-    title: "Chapter 10",
-    originalTitle: "Ten",
-    author: "Aya",
-    description: null,
-    sourceLang: "zh",
-    targetLang: "en",
-    publishedAt: null,
-    createdAt: new Date("2025-01-01"),
-    updatedAt: new Date("2025-01-03"),
-    hasCover: 0,
-    coverUrl: null,
-    coverSrcSet: null,
-    chapterCount: 2,
-    translatedCount: 1,
-  },
-  {
-    id: "live-1",
-    title: "Chapter 2",
-    originalTitle: "Two",
-    author: "Bo",
-    description: null,
-    sourceLang: "zh",
-    targetLang: "en",
-    publishedAt: new Date("2024-01-01"),
-    createdAt: new Date("2025-02-01"),
-    updatedAt: new Date("2025-02-02"),
-    hasCover: 1,
-    coverUrl: null,
-    coverSrcSet: null,
-    chapterCount: 3,
-    translatedCount: 3,
-  },
-  {
-    id: "scheduled-1",
-    title: "River",
-    originalTitle: "河",
-    author: "Aya",
-    description: null,
-    sourceLang: "en",
-    targetLang: "th",
-    publishedAt: new Date("2099-01-01"),
-    createdAt: new Date("2025-03-01"),
-    updatedAt: new Date("2025-03-02"),
-    hasCover: 0,
-    coverUrl: null,
-    coverSrcSet: null,
-    chapterCount: 0,
-    translatedCount: 0,
-  },
-];
+/**
+ * What is left in this module is the vocabulary and the mapping into a request. The
+ * filtering itself is the database's now, so its behaviour lives in the catalog integration
+ * suite (`src/lib/content/catalog.integration.test.ts`); asserting it here would be testing
+ * a copy that no longer exists.
+ */
 
 const allSearch = librarySearchSchema.parse({});
 
@@ -73,6 +29,7 @@ describe("library-search", () => {
         view: "table",
         language: 9,
         publication: "private",
+        tag: 7,
       }),
     ).toEqual(allSearch);
   });
@@ -94,29 +51,37 @@ describe("library-search", () => {
     expect(Object.values(LIBRARY_SORT_KEYS)).not.toContain("newest");
   });
 
-  it("filters by searchable metadata and sorts titles naturally without mutating input", () => {
-    const source = [...novels];
-    const result = selectLibraryNovels(source, { ...allSearch, q: "chapter", sort: "title" }, true);
-
-    expect(result.map((novel) => novel.title)).toEqual(["Chapter 2", "Chapter 10"]);
-    expect(source.map((novel) => novel.id)).toEqual(["draft-2", "live-1", "scheduled-1"]);
+  it("names every supported pair the way the filter shows it", () => {
+    expect(CATALOG_LANGUAGES).toEqual(["en->th", "zh->en", "zh->th"]);
+    expect(formatLibraryLanguage("zh->en")).toBe("zh → en");
   });
 
-  it("applies publication and language filters only for admins", () => {
-    expect(
-      selectLibraryNovels(novels, { ...allSearch, publication: "draft" }, true).map(
-        (novel) => novel.id,
-      ),
-    ).toEqual(["draft-2"]);
-    expect(
-      selectLibraryNovels(novels, { ...allSearch, publication: "draft" }, false).map(
-        (novel) => novel.id,
-      ),
-    ).toEqual(["scheduled-1", "live-1", "draft-2"]);
-    expect(
-      selectLibraryNovels(novels, { ...allSearch, language: "en->th" }, true).map(
-        (novel) => novel.id,
-      ),
-    ).toEqual(["scheduled-1"]);
+  it("drops a language filter the product does not support", () => {
+    expect(catalogLanguage("zh->th")).toBe("zh->th");
+    expect(catalogLanguage("all")).toBeUndefined();
+    expect(catalogLanguage("th->en")).toBeUndefined();
+  });
+
+  it("turns a search into request filters, omitting what is not filtered", () => {
+    const filters = toCatalogFilters(
+      { ...allSearch, q: "  river  ", sort: "title", tag: " xianxia ", locale: "th" } as never,
+      "th",
+    );
+
+    expect(filters).toMatchObject({ q: "river", sort: "title", tag: "xianxia", locale: "th" });
+    // "all" is the interface's way of saying "no filter", not a value the server receives.
+    expect(catalogLanguage(filters.language)).toBeUndefined();
+  });
+
+  it("gives an author's page the one filter it has, from one shared definition", () => {
+    expect(authorCatalogFilters("en", "author-1")).toEqual({
+      q: "",
+      sort: "newest",
+      language: "all",
+      publication: "all",
+      tag: "",
+      locale: "en",
+      authorId: "author-1",
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -12,6 +12,7 @@ import {
 import { user } from "./auth";
 import { translationJobs } from "./translation-jobs";
 import { glossaryTerms } from "./glossary-terms";
+import { novelAuthors } from "./authors";
 
 export const chapterStatusEnum = pgEnum("chapter_status", [
   "raw",
@@ -30,7 +31,11 @@ export const novels = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     originalTitle: text("original_title"),
+    // The publisher's own words for the author, shown as typed. `author_id` is the identity
+    // behind that text: the catalog groups and links by it, and an operator merge rewrites
+    // this column to the canonical spelling so the two never disagree.
     author: text("author"),
+    authorId: text("author_id").references(() => novelAuthors.id, { onDelete: "set null" }),
     description: text("description"),
     // Object key prefix in the public bucket: `covers/<novelId>/<segment>`.
     // Null means the novel has no cover; byte variants are derived from it.
@@ -53,6 +58,14 @@ export const novels = pgTable(
   (table) => [
     index("novels_published_at_idx").on(table.publishedAt),
     index("novels_user_id_idx").on(table.userId),
+    index("novels_author_id_idx").on(table.authorId),
+    // The catalog's own ordering: newest first, tie-broken by id so a page boundary cannot
+    // repeat or skip a row. Partial, because a draft is never in that list and a scheduled
+    // novel reaches it only once it is live.
+    index("novels_catalog_order_idx")
+      .on(table.createdAt.desc(), table.id)
+      .where(sql`${table.publishedAt} is not null`),
+    index("novels_updated_order_idx").on(table.updatedAt.desc(), table.id),
   ],
 );
 

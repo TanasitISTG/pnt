@@ -91,9 +91,9 @@ test("Thai is a prefixed document of its own, and a content page is never redire
   await page.goto("/th/catalog");
   await expect(page).toHaveURL((url) => url.pathname === "/th/catalog");
   await expect(page.locator("html")).toHaveAttribute("lang", "th");
-  await expect(page).toHaveTitle(`แคตตาล็อก | ${siteName}`);
+  await expect(page).toHaveTitle(`แค็ตตาล็อก | ${siteName}`);
   await expect(
-    page.getByRole("heading", { level: 1, name: "แคตตาล็อก", exact: true }),
+    page.getByRole("heading", { level: 1, name: "แค็ตตาล็อก", exact: true }),
   ).toBeVisible();
 
   // Reading a prefixed URL is how the choice is remembered for the pages that have no prefix
@@ -111,7 +111,7 @@ test("Thai is a prefixed document of its own, and a content page is never redire
   await page.goto("/th/catalog");
   await expect(page).toHaveURL((url) => url.pathname === "/th/catalog");
   await expect(
-    page.getByRole("heading", { level: 1, name: "แคตตาล็อก", exact: true }),
+    page.getByRole("heading", { level: 1, name: "แค็ตตาล็อก", exact: true }),
   ).toBeVisible();
 });
 
@@ -156,16 +156,22 @@ test("a policy page reads in the reader's language, and says which text governs"
   await expect(page.getByText("This page is a translation")).toHaveCount(0);
 
   await page.goto("/th/terms");
-  await expect(page.getByRole("heading", { level: 1, name: "ข้อกำหนดการใช้งาน" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "ข้อกำหนดการใช้งาน", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Pnt เป็นพื้นที่ทำงานสำหรับแปลนิยาย")).toBeVisible();
   await expect(page.getByText("หน้านี้เป็นคำแปล หากเนื้อหาขัดกัน ฉบับภาษาอังกฤษมีผลเหนือกว่า")).toBeVisible();
 
   await page.goto("/th/privacy");
-  await expect(page.getByRole("heading", { level: 1, name: "นโยบายความเป็นส่วนตัว" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "นโยบายความเป็นส่วนตัว", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("เราไม่ขายข้อมูลและไม่ใช้ตัวติดตามโฆษณา")).toBeVisible();
 
   await page.goto("/th/cookie-policy");
-  await expect(page.getByRole("heading", { level: 1, name: "นโยบายคุกกี้" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "นโยบายคุกกี้", exact: true }),
+  ).toBeVisible();
   // A storage key is what the browser writes, so it reads the same on both sides of the
   // translation — a Thai key would name nothing the browser stores.
   await expect(page.getByText("pnt-reader-settings")).toBeVisible();
@@ -191,7 +197,7 @@ test("the switcher moves the URL and the copy, both ways", async ({ page }) => {
   await expect(page).toHaveURL((url) => url.pathname === "/th/catalog");
   await expect(page.locator("html")).toHaveAttribute("lang", "th");
   await expect(
-    page.getByRole("heading", { level: 1, name: "แคตตาล็อก", exact: true }),
+    page.getByRole("heading", { level: 1, name: "แค็ตตาล็อก", exact: true }),
   ).toBeVisible();
 
   // And back: the default language drops the prefix again rather than keeping a second URL.

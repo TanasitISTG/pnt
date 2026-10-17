@@ -19,6 +19,7 @@ export const ADMIN_ACTIONS = [
   "report.dismissed",
   "comment.removed",
   "review.removed",
+  "author.merged",
 ] as const;
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];
@@ -52,6 +53,7 @@ const ADMIN_ACTION_KEYS = {
   "report.dismissed": "actionReportDismissed",
   "comment.removed": "actionCommentRemoved",
   "review.removed": "actionReviewRemoved",
+  "author.merged": "actionAuthorMerged",
 } as const satisfies Record<AdminAction, string>;
 
 export type AdminActionKey = (typeof ADMIN_ACTION_KEYS)[AdminAction];

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { NovelForm } from "@/components/novels/form/novel-form";
+import { NovelTagsCard } from "@/components/novels/form/novel-tags-card";
 import { PublishMenu } from "@/components/publish-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -94,6 +95,10 @@ export function StudioSettingsPage({ novelId }: StudioSettingsPageProps) {
         }}
         submitLabel={t("saveChanges")}
       />
+
+      {/* Tags are their own write: they belong to the vocabulary rather than to the novel
+          row, and the form above saves metadata with one request. */}
+      <NovelTagsCard novelId={novelId} tags={novel.tags} />
 
       <Card className="max-w-3xl">
         <CardContent className="flex items-center justify-between gap-4 p-6">

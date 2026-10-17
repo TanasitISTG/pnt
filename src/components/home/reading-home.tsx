@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowRight, BookOpen, Plus } from "lucide-react";
 import { useMemo } from "react";
-import { useTranslations } from "use-intl";
+import { useLocale, useTranslations } from "use-intl";
 
 import { novelsQueryOptions } from "@/components/novels/library/library-query";
 import type { LibraryNovel } from "@/components/novels/library/library-search";
@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { statsQueryOptions } from "@/lib/job-dashboard/query";
 import { readerStateQueryOptions } from "@/lib/reader/query";
 import type { ViewerUser } from "@/lib/profile/types";
+import type { Locale } from "@/lib/i18n/locales";
 
 /** Reading position is only interesting for the few novels the reader touched last. */
 const CONTINUE_LIMIT = 4;
@@ -33,13 +34,19 @@ function timestamp(value: Date | string | null | undefined): number {
  */
 export function ReadingHome({ user }: { user: ViewerUser }) {
   const t = useTranslations("home");
+  const locale = useLocale() as Locale;
   // "New novel" belongs to the shelf's vocabulary, not the home screen's, and both screens
   // reach the same form; the key is read from `catalog` so the two cannot drift apart.
   const tNovel = useTranslations("catalog");
-  const novelsQuery = useQuery(novelsQueryOptions("mine"));
+  // The home screen is not the directory: it reads the first page of the shelf and links
+  // to `/library` for the rest, which is why it uses the single-page read rather than the
+  // infinite one.
+  const novelsQuery = useQuery(novelsQueryOptions("mine", locale));
   const novels = useMemo(
     () =>
-      (novelsQuery.data ?? []).toSorted((a, b) => timestamp(b.updatedAt) - timestamp(a.updatedAt)),
+      (novelsQuery.data?.novels ?? []).toSorted(
+        (a, b) => timestamp(b.updatedAt) - timestamp(a.updatedAt),
+      ),
     [novelsQuery.data],
   );
 

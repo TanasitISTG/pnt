@@ -167,6 +167,40 @@ Rows are snapshots: every target column is nullable and cleared on delete, while
 
 Ably publishes one message per recipient on `notifications:<userId>`, batched at 100 channels per request, and a browser token is minted per session for `subscribe` on that one channel only. Delivery is deliberately not on the correctness path: the client refetches the notification query on every message and polls every 30 seconds, so an unset `ABLY_API_KEY` disables the socket and nothing else.
 
+## Catalog directory
+
+`listNovels` is the catalog's one read path, for the shared catalog and the account's own
+shelf alike, and it is paged: a request names a scope, a page and the filters, and the
+answer is at most `CATALOG_PAGE_SIZE` rows plus the filtered `total`. Three rules hold it
+together. Visibility is `novelLive()` for the public scope and the viewer's own id for
+`mine` — never the presence of a session, and never a client-supplied flag; the publication
+filter exists only inside `mine`. Every piece of per-row work is bounded by the page:
+chapter counts and tags are read for the returned ids, so a request costs the same at thirty
+novels and at thirty thousand. Ordering is total, because every sort ends in `id`; a page
+boundary can neither repeat nor skip a row when two novels share a timestamp.
+
+Search is `ilike` over `lower(title || ' ' || original_title || ' ' || author)` with a
+`pg_trgm` GIN index over the same expression (`novels_search_trgm_idx`), and `%` and `_` in
+a term are escaped rather than refused. It is deliberately not `to_tsvector`: the default
+text-search parser does not segment Thai or Chinese, so `to_tsvector('simple', 'สนุกมาก')`
+is one lexeme and a search for `สนุก` would find nothing. The old copy was the opposite
+error — an unbounded select, with the filters and the sort applied in the browser.
+
+`novels.author` remains the publisher's text; `novel_authors` is the identity behind it,
+resolved from that text on every save under a fold both the application and the backfill
+migration can reproduce (`trim`, collapse whitespace, lowercase) and unique on it, so a
+concurrent save cannot create a second row. Migration 0048 backfills the existing distinct
+names. The catalog groups and links by `author_id`; an author page is the catalog with that
+one filter applied, never a second query path, and an operator merge repoints novels,
+rewrites their `author` text to the surviving spelling, deletes the duplicate row, and is
+appended to `admin_audit_log` as `author.merged`.
+
+Tags are a vocabulary (`tags`, unique Unicode-preserving `slug`) applied through
+`novel_tags`, at most five per novel, and written as a set: the request says what the novel
+should carry and one transaction converges to it under the novel row's lock. Only live
+novels' tags reach the filter row, so the filter can never advertise a tag whose only
+novels a guest cannot open.
+
 ## Export streaming
 
 Owned TXT/EPUB exports select nonblank retained translations independently of publication

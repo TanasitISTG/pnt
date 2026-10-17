@@ -1,12 +1,25 @@
 import { z } from "zod";
 
-import type { NovelListItem } from "@/lib/content/novel/novel.functions";
-import { publishState } from "@/lib/content/publish/publish";
-import { collatorFor } from "@/lib/i18n/format";
-import { defaultLocale } from "@/lib/i18n/locales";
+import {
+  catalogLanguageSchema,
+  type CatalogLanguage,
+  type CatalogSort,
+  type CatalogPublication,
+} from "@/lib/content/novel/catalog.schemas";
+import type { CatalogNovel } from "@/lib/content/novel/catalog.types";
+import { defaultLocale, type Locale } from "@/lib/i18n/locales";
 
-export type LibrarySort = "newest" | "updated" | "title";
-export type LibraryPublication = "all" | "draft" | "scheduled" | "live";
+export type LibrarySort = CatalogSort;
+export type LibraryPublication = CatalogPublication;
+
+/**
+ * Every language pair the product supports, in the order the filter lists them.
+ *
+ * A fixed list, not one derived from whatever happens to be loaded: the filter is a
+ * property of the product, and with a page of results in hand there is no "everything"
+ * to derive it from.
+ */
+export const CATALOG_LANGUAGES: readonly CatalogLanguage[] = ["en->th", "zh->en", "zh->th"];
 
 /**
  * The `catalog` keys behind each filter value, so a value is only ever a value: nothing in
@@ -34,17 +47,21 @@ export const librarySearchSchema = z
     view: z.enum(["grid", "list"]).optional().catch(undefined),
     language: z.string().optional().catch(undefined),
     publication: z.enum(["all", "draft", "scheduled", "live"]).optional().catch(undefined),
+    tag: z.string().optional().catch(undefined),
   })
-  .transform(({ q, sort, view, language, publication }) => ({
+  .transform(({ q, sort, view, language, publication, tag }) => ({
     q: q ?? "",
     sort: sort ?? "newest",
     view: view ?? "grid",
     language: language ?? "all",
     publication: publication ?? "all",
+    tag: tag ?? "",
   }));
 
 export type LibrarySearch = z.infer<typeof librarySearchSchema>;
-export type LibraryNovel = NovelListItem;
+
+/** A directory row. The same row serves the catalog, the shelf, and an author's page. */
+export type LibraryNovel = CatalogNovel;
 
 /**
  * A language pair as a filter label: "en->th" is an internal value, and a reader sees a pair.
@@ -54,57 +71,53 @@ export function formatLibraryLanguage(value: string): string {
   return value.replace("->", " → ");
 }
 
-function timestamp(value: Date | string | null | undefined): number {
-  const result = value ? new Date(value).getTime() : 0;
-  return Number.isFinite(result) ? result : 0;
+/** A URL language value that names a pair the product supports, or nothing. */
+export function catalogLanguage(value: string): CatalogLanguage | undefined {
+  const parsed = catalogLanguageSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
-function compareNovels(
-  a: LibraryNovel,
-  b: LibraryNovel,
-  sort: LibrarySearch["sort"],
-  collator: Intl.Collator,
-): number {
-  if (sort === "title") {
-    return collator.compare(a.title, b.title) || a.id.localeCompare(b.id);
-  }
-
-  const aDate = timestamp(sort === "updated" ? a.updatedAt : a.createdAt);
-  const bDate = timestamp(sort === "updated" ? b.updatedAt : b.createdAt);
-  return bDate - aDate || a.id.localeCompare(b.id);
+/** Everything one catalog request needs that is not in the URL. */
+export interface CatalogFilters {
+  q: string;
+  sort: LibrarySort;
+  language: string;
+  publication: LibraryPublication;
+  tag: string;
+  locale: Locale;
+  /** Set on an author's page, where the directory is one author's shelf. */
+  authorId?: string;
 }
 
-export function selectLibraryNovels(
-  novels: readonly LibraryNovel[],
+/**
+ * The search a route holds, as the filters a request takes.
+ *
+ * This is the seam that used to be `selectLibraryNovels`: the same inputs, resolved into
+ * what the database is asked for instead of into an array this browser filters. A value the
+ * product cannot express ("all" language, no tag) is absent rather than sent as a sentinel.
+ */
+/**
+ * The filters an author's page reads with.
+ *
+ * Shared by the route's prefetch and the component's query so the two cannot drift: a
+ * loader that prefetched a different set would fill a cache key the page never reads.
+ */
+export function authorCatalogFilters(locale: Locale, authorId: string): CatalogFilters {
+  return { q: "", sort: "newest", language: "all", publication: "all", tag: "", locale, authorId };
+}
+
+export function toCatalogFilters(
   search: LibrarySearch,
-  isAdmin: boolean,
-  /**
-   * The comparison a title sort uses. `new Intl.Collator("en")` orders Thai titles by code
-   * point, so the page passes the collator for the language it is being read in; the
-   * default only serves callers with no reader (a test, a script).
-   */
-  collator: Intl.Collator = collatorFor(defaultLocale),
-): LibraryNovel[] {
-  const query = search.q.trim().toLocaleLowerCase();
-  const result = novels.filter((novel) => {
-    if (
-      isAdmin &&
-      search.publication !== "all" &&
-      search.publication !== publishState(novel.publishedAt)
-    ) {
-      return false;
-    }
-
-    const language = `${novel.sourceLang}->${novel.targetLang}`;
-    if (search.language !== "all" && language !== search.language) {
-      return false;
-    }
-
-    if (!query) return true;
-    return [novel.title, novel.originalTitle, novel.author]
-      .filter((value): value is string => Boolean(value))
-      .some((value) => value.toLocaleLowerCase().includes(query));
-  });
-
-  return result.toSorted((a, b) => compareNovels(a, b, search.sort, collator));
+  locale: Locale = defaultLocale,
+  authorId?: string,
+): CatalogFilters {
+  return {
+    q: search.q.trim(),
+    sort: search.sort,
+    language: search.language,
+    publication: search.publication,
+    tag: search.tag.trim(),
+    locale,
+    authorId,
+  };
 }

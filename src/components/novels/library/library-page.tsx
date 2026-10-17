@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "use-intl";
@@ -8,15 +8,16 @@ import { LibraryEmpty } from "@/components/novels/library/library-empty";
 import { LibraryNoMatches } from "@/components/novels/library/library-no-matches";
 import { LibraryPending } from "@/components/novels/library/library-pending";
 import { LibraryToolbar } from "@/components/novels/library/library-toolbar";
-import { novelsQueryOptions, type LibraryScope } from "@/components/novels/library/library-query";
-import { NovelCard } from "@/components/novels/novel-card";
 import {
-  selectLibraryNovels,
-  type LibrarySearch,
-} from "@/components/novels/library/library-search";
+  catalogQueryOptions,
+  catalogTagsQueryOptions,
+  type LibraryScope,
+} from "@/components/novels/library/library-query";
+import { toCatalogFilters, type LibrarySearch } from "@/components/novels/library/library-search";
+import { NovelCard } from "@/components/novels/novel-card";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
-import { collatorFor } from "@/lib/i18n/format";
+import type { Locale } from "@/lib/i18n/locales";
 
 interface LibraryPageProps {
   scope: LibraryScope;
@@ -33,35 +34,34 @@ interface LibraryPageProps {
  * manage affordances appear — never the mere presence of a session, which used to make
  * a signed-in reader of someone else's novel look like its owner.
  *
- * Search state and navigation arrive as props rather than from a bound route, because
- * this component is mounted by more than one route with its own search schema.
+ * The page requests one page of rows and the filtered total; the filters themselves are
+ * the database's, so a catalog of thirty thousand novels answers the first page the same
+ * way a catalog of thirty does. Search state and navigation arrive as props rather than
+ * from a bound route, because this component is mounted by more than one route with its
+ * own search schema.
  */
 export function LibraryPage({ scope, signedIn, search, onSearchChange }: LibraryPageProps) {
   const t = useTranslations("catalog");
-  const locale = useLocale();
-  const {
-    data: novels = [],
-    isPending,
-    isError,
-    error,
-    refetch,
-  } = useQuery(novelsQueryOptions(scope));
+  const tCommon = useTranslations("common");
+  const locale = useLocale() as Locale;
   const canManage = scope === "mine";
-  const languages = useMemo(
-    () =>
-      Array.from(
-        new Set(novels.map((novel) => `${novel.sourceLang}->${novel.targetLang}`)),
-      ).toSorted((a, b) => a.localeCompare(b)),
-    [novels],
-  );
-  const selectedNovels = useMemo(
-    // Sorting a title list is the one place the interface language touches the data: the
-    // collator is what orders Thai titles as a Thai reader expects rather than by code point.
-    () => selectLibraryNovels(novels, search, canManage, collatorFor(locale)),
-    [canManage, locale, novels, search],
-  );
 
-  if (isPending && novels.length === 0) return <LibraryPending />;
+  const filters = useMemo(() => toCatalogFilters(search, locale), [locale, search]);
+  const query = useInfiniteQuery(catalogQueryOptions(scope, filters));
+  const tagsQuery = useQuery({ ...catalogTagsQueryOptions(), enabled: !canManage });
+
+  const novels = useMemo(
+    () => query.data?.pages.flatMap((page) => page.novels) ?? [],
+    [query.data],
+  );
+  const total = query.data?.pages[0]?.total ?? 0;
+  const hasFilters =
+    search.q !== "" ||
+    search.language !== "all" ||
+    search.tag !== "" ||
+    (canManage && search.publication !== "all");
+
+  if (query.isPending && novels.length === 0) return <LibraryPending />;
 
   const heading = canManage ? t("titleOwn") : t("title");
   const description = canManage
@@ -78,7 +78,7 @@ export function LibraryPage({ scope, signedIn, search, onSearchChange }: Library
           <p className="mt-1.5 text-body text-muted-foreground">{description}</p>
         </div>
         {/* One call to action per state: with an empty shelf the empty state owns it. */}
-        {canManage && novels.length > 0 ? (
+        {canManage && total > 0 ? (
           <Button className="self-start sm:self-auto" render={<Link to="/novels/new" />}>
             <Plus className="size-4" aria-hidden="true" />
             {t("newNovel")}
@@ -86,33 +86,35 @@ export function LibraryPage({ scope, signedIn, search, onSearchChange }: Library
         ) : null}
       </div>
 
-      {isError ? (
+      {query.isError ? (
         <ErrorState
           title={t("loadFailed")}
-          error={error}
-          onRetry={() => void refetch()}
+          error={query.error}
+          onRetry={() => void query.refetch()}
           className="min-h-[45vh]"
         />
-      ) : novels.length === 0 ? (
-        <LibraryEmpty canManage={canManage} signedIn={signedIn} />
+      ) : total === 0 ? (
+        hasFilters ? (
+          <LibraryNoMatches
+            onClear={() => onSearchChange({ q: "", language: "all", publication: "all", tag: "" })}
+          />
+        ) : (
+          <LibraryEmpty canManage={canManage} signedIn={signedIn} />
+        )
       ) : (
         <>
           <LibraryToolbar
             search={search}
-            languages={languages}
+            tags={canManage ? [] : (tagsQuery.data ?? [])}
             isAdmin={canManage}
-            resultCount={selectedNovels.length}
-            totalCount={novels.length}
+            resultCount={novels.length}
+            totalCount={total}
             onSearchChange={onSearchChange}
           />
-          {selectedNovels.length === 0 ? (
+          {novels.length === 0 ? (
             <LibraryNoMatches
               onClear={() =>
-                onSearchChange({
-                  q: "",
-                  language: "all",
-                  publication: "all",
-                })
+                onSearchChange({ q: "", language: "all", publication: "all", tag: "" })
               }
             />
           ) : (
@@ -123,7 +125,7 @@ export function LibraryPage({ scope, signedIn, search, onSearchChange }: Library
                   : "grid gap-3"
               }
             >
-              {selectedNovels.map((novel, index) => (
+              {novels.map((novel, index) => (
                 <NovelCard
                   key={novel.id}
                   novel={novel}
@@ -135,6 +137,19 @@ export function LibraryPage({ scope, signedIn, search, onSearchChange }: Library
               ))}
             </div>
           )}
+
+          {query.hasNextPage ? (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={query.isFetchingNextPage}
+                onClick={() => void query.fetchNextPage()}
+              >
+                {query.isFetchingNextPage ? tCommon("loading") : t("loadMore")}
+              </Button>
+            </div>
+          ) : null}
         </>
       )}
     </div>

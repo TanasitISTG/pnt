@@ -149,8 +149,8 @@ test("the account section owns the display name and photo", async ({ page }) => 
   await setLocaleCookie(page, "th");
   await page.goto("/settings/account");
   await expect(page.locator("html")).toHaveAttribute("lang", "th");
-  await expect(page.getByRole("heading", { level: 1, name: "การตั้งค่า" })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 2, name: "บัญชี" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "การตั้งค่า", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "บัญชี", exact: true })).toBeVisible();
   await expect(
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);

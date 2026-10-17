@@ -65,6 +65,8 @@ const novel = {
   title: "Relationship Fixture",
   originalTitle: null,
   author: null,
+  authorId: null,
+  tags: [] as { slug: string; name: string }[],
   description: null,
   sourceLang: "zh" as "en" | "zh",
   targetLang: "th" as "en" | "th",
@@ -135,10 +137,10 @@ function renderRelationships(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   });
-  queryClient.setQueryData(novelQueryOptions("novel-relationships").queryKey, {
+  queryClient.setQueryData<typeof novel>(novelQueryOptions("novel-relationships").queryKey, {
     ...novel,
     ...novelOverride,
-  });
+  } as typeof novel);
   if (relationshipMap) {
     queryClient.setQueryData(
       relationshipMapQueryOptions("novel-relationships").queryKey,

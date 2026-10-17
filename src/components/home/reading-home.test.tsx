@@ -57,6 +57,8 @@ function novel(id: string, title: string, overrides: Partial<LibraryNovel> = {})
     title,
     originalTitle: null,
     author: "A Translator",
+    authorId: null,
+    tags: [],
     description: null,
     sourceLang: "zh",
     targetLang: "th",
@@ -92,7 +94,13 @@ function renderHome({ novels, readerStates = {}, stats = {} }: RenderHomeInput):
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   });
-  queryClient.setQueryData(novelsQueryOptions("mine").queryKey, novels);
+  queryClient.setQueryData(novelsQueryOptions("mine", "en").queryKey, {
+    novels,
+    total: novels.length,
+    page: 1,
+    pageSize: 24,
+    hasMore: false,
+  });
   for (const [novelId, state] of Object.entries(readerStates)) {
     queryClient.setQueryData(readerStateQueryOptions(novelId).queryKey, {
       ...state,

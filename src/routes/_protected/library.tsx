@@ -3,9 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { LibraryPage } from "@/components/novels/library/library-page";
 import { LibraryPending } from "@/components/novels/library/library-pending";
-import { novelsQueryOptions } from "@/components/novels/library/library-query";
+import { prefetchCatalogFirstPage } from "@/components/novels/library/library-query";
 import {
   librarySearchSchema,
+  toCatalogFilters,
   type LibrarySearch,
 } from "@/components/novels/library/library-search";
 import { headTranslator } from "@/lib/i18n/route-head";
@@ -20,10 +21,14 @@ import { headTranslator } from "@/lib/i18n/route-head";
  */
 export const Route = createFileRoute("/_protected/library")({
   validateSearch: librarySearchSchema,
-  loaderDeps: () => ({}),
+  loaderDeps: ({ search }) => search,
   shouldReload: false,
-  loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(novelsQueryOptions("mine"));
+  loader: async ({ context, deps }) => {
+    await prefetchCatalogFirstPage(
+      context.queryClient,
+      "mine",
+      toCatalogFilters(deps, context.locale),
+    );
   },
   pendingMs: 100,
   pendingMinMs: 200,

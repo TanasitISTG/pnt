@@ -59,6 +59,7 @@ import { Route as ProtectedNovelsNovelIdManageGlossaryRouteImport } from './rout
 import { Route as ProtectedNovelsNovelIdManageQualityRouteImport } from './routes/_protected/novels/$novelId/manage.quality'
 import { Route as ProtectedNovelsNovelIdManageRelationshipsRouteImport } from './routes/_protected/novels/$novelId/manage.relationships'
 import { Route as ProtectedNovelsNovelIdManageSettingsRouteImport } from './routes/_protected/novels/$novelId/manage.settings'
+import { Route as Char123LocaleChar125PublicAuthorsAuthorIdIndexRouteImport } from './routes/{-$locale}/_public/authors/$authorId/index'
 import { Route as Char123LocaleChar125PublicNovelsNovelIdIndexRouteImport } from './routes/{-$locale}/_public/novels/$novelId/index'
 import { Route as Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRouteImport } from './routes/{-$locale}/_public/novels/$novelId/chapters/$chapterId'
 
@@ -338,6 +339,12 @@ const ProtectedNovelsNovelIdManageSettingsRoute =
     path: '/settings',
     getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
   } as any)
+const Char123LocaleChar125PublicAuthorsAuthorIdIndexRoute =
+  Char123LocaleChar125PublicAuthorsAuthorIdIndexRouteImport.update({
+    id: '/authors/$authorId/',
+    path: '/authors/$authorId/',
+    getParentRoute: () => Char123LocaleChar125PublicRoute,
+  } as any)
 const Char123LocaleChar125PublicNovelsNovelIdIndexRoute =
   Char123LocaleChar125PublicNovelsNovelIdIndexRouteImport.update({
     id: '/novels/$novelId/',
@@ -401,6 +408,7 @@ export interface FileRoutesByFullPath {
   '/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
   '/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
   '/novels/$novelId/manage/': typeof ProtectedNovelsNovelIdManageIndexRoute
+  '/{-$locale}/authors/$authorId/': typeof Char123LocaleChar125PublicAuthorsAuthorIdIndexRoute
   '/{-$locale}/novels/$novelId/': typeof Char123LocaleChar125PublicNovelsNovelIdIndexRoute
   '/{-$locale}/novels/$novelId/chapters/$chapterId': typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute
 }
@@ -450,6 +458,7 @@ export interface FileRoutesByTo {
   '/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
   '/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
   '/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageIndexRoute
+  '/{-$locale}/authors/$authorId': typeof Char123LocaleChar125PublicAuthorsAuthorIdIndexRoute
   '/{-$locale}/novels/$novelId': typeof Char123LocaleChar125PublicNovelsNovelIdIndexRoute
   '/{-$locale}/novels/$novelId/chapters/$chapterId': typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute
 }
@@ -505,6 +514,7 @@ export interface FileRoutesById {
   '/_protected/novels/$novelId/manage/relationships': typeof ProtectedNovelsNovelIdManageRelationshipsRoute
   '/_protected/novels/$novelId/manage/settings': typeof ProtectedNovelsNovelIdManageSettingsRoute
   '/_protected/novels/$novelId/manage/': typeof ProtectedNovelsNovelIdManageIndexRoute
+  '/{-$locale}/_public/authors/$authorId/': typeof Char123LocaleChar125PublicAuthorsAuthorIdIndexRoute
   '/{-$locale}/_public/novels/$novelId/': typeof Char123LocaleChar125PublicNovelsNovelIdIndexRoute
   '/{-$locale}/_public/novels/$novelId/chapters/$chapterId': typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute
 }
@@ -560,6 +570,7 @@ export interface FileRouteTypes {
     | '/novels/$novelId/manage/relationships'
     | '/novels/$novelId/manage/settings'
     | '/novels/$novelId/manage/'
+    | '/{-$locale}/authors/$authorId/'
     | '/{-$locale}/novels/$novelId/'
     | '/{-$locale}/novels/$novelId/chapters/$chapterId'
   fileRoutesByTo: FileRoutesByTo
@@ -609,6 +620,7 @@ export interface FileRouteTypes {
     | '/novels/$novelId/manage/relationships'
     | '/novels/$novelId/manage/settings'
     | '/novels/$novelId/manage'
+    | '/{-$locale}/authors/$authorId'
     | '/{-$locale}/novels/$novelId'
     | '/{-$locale}/novels/$novelId/chapters/$chapterId'
   id:
@@ -663,6 +675,7 @@ export interface FileRouteTypes {
     | '/_protected/novels/$novelId/manage/relationships'
     | '/_protected/novels/$novelId/manage/settings'
     | '/_protected/novels/$novelId/manage/'
+    | '/{-$locale}/_public/authors/$authorId/'
     | '/{-$locale}/_public/novels/$novelId/'
     | '/{-$locale}/_public/novels/$novelId/chapters/$chapterId'
   fileRoutesById: FileRoutesById
@@ -1034,6 +1047,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedNovelsNovelIdManageSettingsRouteImport
       parentRoute: typeof ProtectedNovelsNovelIdManageRoute
     }
+    '/{-$locale}/_public/authors/$authorId/': {
+      id: '/{-$locale}/_public/authors/$authorId/'
+      path: '/authors/$authorId'
+      fullPath: '/{-$locale}/authors/$authorId/'
+      preLoaderRoute: typeof Char123LocaleChar125PublicAuthorsAuthorIdIndexRouteImport
+      parentRoute: typeof Char123LocaleChar125PublicRoute
+    }
     '/{-$locale}/_public/novels/$novelId/': {
       id: '/{-$locale}/_public/novels/$novelId/'
       path: '/novels/$novelId'
@@ -1054,6 +1074,7 @@ declare module '@tanstack/react-router' {
 interface Char123LocaleChar125PublicRouteChildren {
   Char123LocaleChar125PublicCatalogRoute: typeof Char123LocaleChar125PublicCatalogRoute
   Char123LocaleChar125PublicIndexRoute: typeof Char123LocaleChar125PublicIndexRoute
+  Char123LocaleChar125PublicAuthorsAuthorIdIndexRoute: typeof Char123LocaleChar125PublicAuthorsAuthorIdIndexRoute
   Char123LocaleChar125PublicNovelsNovelIdIndexRoute: typeof Char123LocaleChar125PublicNovelsNovelIdIndexRoute
   Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute: typeof Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute
 }
@@ -1063,6 +1084,8 @@ const Char123LocaleChar125PublicRouteChildren: Char123LocaleChar125PublicRouteCh
     Char123LocaleChar125PublicCatalogRoute:
       Char123LocaleChar125PublicCatalogRoute,
     Char123LocaleChar125PublicIndexRoute: Char123LocaleChar125PublicIndexRoute,
+    Char123LocaleChar125PublicAuthorsAuthorIdIndexRoute:
+      Char123LocaleChar125PublicAuthorsAuthorIdIndexRoute,
     Char123LocaleChar125PublicNovelsNovelIdIndexRoute:
       Char123LocaleChar125PublicNovelsNovelIdIndexRoute,
     Char123LocaleChar125PublicNovelsNovelIdChaptersChapterIdRoute:

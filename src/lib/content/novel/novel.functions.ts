@@ -1,10 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { encodeMessage } from "@/lib/i18n/message-code";
-import { novels, chapters } from "@/lib/db/schema";
+import { novels } from "@/lib/db/schema";
 // Mutations authenticate through `ensureSession`. The owner-scoped reads below use
 // `ensureSessionForRead`, which still requires an account but does not refuse an
 // operator's read-only impersonation session - refusing them would leave the
@@ -14,7 +14,12 @@ import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { createServerTiming } from "@/lib/server-timing";
-import { novelLive, novelReadable, chapterVisibleToGuests } from "@/lib/content/publish/publish";
+import { novelReadable } from "@/lib/content/publish/publish";
+import { catalogInputSchema } from "@/lib/content/novel/catalog.schemas";
+import { listCatalogForViewer } from "@/lib/content/novel/catalog.service.server";
+import { resolveAuthorId } from "@/lib/content/novel/author.service.server";
+import { listTagsForNovel } from "@/lib/content/novel/tag.service.server";
+import type { CatalogNovel } from "@/lib/content/novel/catalog.types";
 import {
   createNovelSchema,
   updateNovelSchema,
@@ -32,27 +37,25 @@ import {
 } from "@/lib/content/novel/cover-storage.server";
 import { assertImageMagicBytes } from "@/lib/images/magic-bytes";
 
-export interface NovelListItem {
-  id: string;
-  title: string;
-  originalTitle: string | null;
-  author: string | null;
-  description: string | null;
-  sourceLang: string;
-  targetLang: string;
-  publishedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  hasCover: number;
-  chapterCount: number;
-  translatedCount: number;
-  /** Public CDN URL; null keeps the client on the proxied cover route. */
-  coverUrl: string | null;
-  coverSrcSet: string | null;
-}
+/**
+ * One novel as the directory shows it. The shape lives with the catalog because the same
+ * row is returned by the catalog, the shelf, and an author's page; this alias is what the
+ * existing card and search modules import.
+ */
+export type NovelListItem = CatalogNovel;
 
+/**
+ * The directory read: both the shared catalog and the account's own shelf.
+ *
+ * The page is the bound. What used to be "select every published novel and filter in the
+ * browser" is now a filtered, ordered, limited query whose `total` describes the filtered
+ * set, so the client never holds the table and the payload does not grow with it.
+ *
+ * The name, method and `novels` server-timing label are kept deliberately: the E2E
+ * rate-limit spec discovers this endpoint by that label.
+ */
 export const listNovels = createServerFn({ method: "GET" })
-  .validator(z.object({ scope: z.enum(["mine", "public"]).default("public") }))
+  .validator(catalogInputSchema)
   .handler(async ({ data }) => {
     const timing = createServerTiming();
     try {
@@ -61,55 +64,7 @@ export const listNovels = createServerFn({ method: "GET" })
         if (!session)
           await timing.measure("rate-limit", () => checkRateLimit("read", GUEST_READ_LIMIT));
 
-        const viewerId = session?.user.id ?? null;
-        // "mine" is the signed-in workspace: drafts, scheduled, and live novels, with
-        // every chapter counted. Without a session it yields nothing instead of falling
-        // back to a public filter, so an expired session can never widen the query.
-        if (data.scope === "mine" && !viewerId) return [];
-
-        const ownOnly = data.scope === "mine" && viewerId !== null;
-        const chapterJoin = ownOnly
-          ? eq(chapters.novelId, novels.id)
-          : and(eq(chapters.novelId, novels.id), chapterVisibleToGuests());
-        const novelFilter = ownOnly && viewerId ? eq(novels.userId, viewerId) : novelLive();
-
-        const rows = await timing.measure("novels", () =>
-          db
-            .select({
-              id: novels.id,
-              title: novels.title,
-              originalTitle: novels.originalTitle,
-              author: novels.author,
-              description: novels.description,
-              sourceLang: novels.sourceLang,
-              targetLang: novels.targetLang,
-              publishedAt: novels.publishedAt,
-              createdAt: novels.createdAt,
-              updatedAt: novels.updatedAt,
-              hasCover: sql<number>`CASE WHEN ${novels.coverKey} IS NOT NULL THEN 1 ELSE 0 END`,
-              coverKey: novels.coverKey,
-              chapterCount: sql<number>`count(${chapters.id})::int`,
-              translatedCount: sql<number>`count(case when ${chapters.status} = 'translated' then 1 end)::int`,
-            })
-            .from(novels)
-            .leftJoin(chapters, chapterJoin)
-            .where(novelFilter)
-            .groupBy(novels.id)
-            .orderBy(desc(novels.createdAt)),
-        );
-
-        return rows.map((row) => {
-          const cover = resolvePublicCover(row.coverKey, row.publishedAt);
-          const { coverKey: _coverKey, ...item } = row;
-          return {
-            ...item,
-            chapterCount: Number(row.chapterCount || 0),
-            translatedCount: Number(row.translatedCount || 0),
-            hasCover: Number(row.hasCover || 0),
-            coverUrl: cover?.url ?? null,
-            coverSrcSet: cover?.srcSet ?? null,
-          };
-        });
+        return timing.measure("novels", () => listCatalogForViewer(session?.user.id ?? null, data));
       });
     } finally {
       timing.flush();
@@ -129,6 +84,7 @@ export const getNovel = createServerFn({ method: "GET" })
           title: novels.title,
           originalTitle: novels.originalTitle,
           author: novels.author,
+          authorId: novels.authorId,
           description: novels.description,
           sourceLang: novels.sourceLang,
           targetLang: novels.targetLang,
@@ -150,8 +106,12 @@ export const getNovel = createServerFn({ method: "GET" })
       const cover = resolvePublicCover(novel.coverKey, novel.publishedAt);
       const { coverKey, userId, ...novelRest } = novel;
       const canManage = session?.user.id === userId;
+      // Tags are catalog-visible, so they come with a novel anyone may read; the manage
+      // screen edits exactly the list the reader sees.
+      const tags = await listTagsForNovel(novel.id);
       return {
         ...novelRest,
+        tags,
         sourceLang: novel.sourceLang as "en" | "zh",
         targetLang: novel.targetLang as "en" | "th",
         hasCover: coverKey !== null,
@@ -242,6 +202,9 @@ export const createNovel = createServerFn({ method: "POST" })
       const coverKey = coverBuffer
         ? await writeCoverSet(novelId, coverBuffer, data.coverMime ?? "image/webp")
         : null;
+      // The canonical author is resolved before the insert: the upsert is idempotent, and
+      // an author row nobody ends up naming is inert.
+      const authorId = await resolveAuthorId(data.author);
       try {
         await db.insert(novels).values({
           id: novelId,
@@ -249,6 +212,7 @@ export const createNovel = createServerFn({ method: "POST" })
           title: data.title,
           originalTitle: data.originalTitle,
           author: data.author,
+          authorId,
           description: data.description,
           coverKey,
           coverMime: coverKey ? (data.coverMime ?? null) : null,

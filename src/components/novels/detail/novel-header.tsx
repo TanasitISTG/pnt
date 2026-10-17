@@ -99,7 +99,23 @@ function NovelMeta({ novel, novelId }: Pick<NovelHeaderProps, "novel" | "novelId
       ) : null}
       {novel.author ? (
         <p className="mt-0.5 text-sm text-muted-foreground">
-          {t("byAuthor", { author: novel.author })}
+          {/*
+           * The author line is the one link that leads to the rest of their work. It is a
+           * link only when a canonical author exists, because `/authors/:id` is an entity:
+           * a novel whose author text has no row would otherwise link to a page that is
+           * not there.
+           */}
+          {novel.authorId ? (
+            <Link
+              to="/{-$locale}/authors/$authorId"
+              params={{ authorId: novel.authorId }}
+              className="rounded-sm underline-offset-4 transition-colors duration-150 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              {t("byAuthor", { author: novel.author })}
+            </Link>
+          ) : (
+            t("byAuthor", { author: novel.author })
+          )}
         </p>
       ) : null}
       {novel.description ? (

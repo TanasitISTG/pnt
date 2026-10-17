@@ -33,6 +33,8 @@ const BASE_NOVEL: NovelHeaderProps["novel"] = {
   title: "The Hidden Map",
   originalTitle: null,
   author: null,
+  authorId: null,
+  tags: [],
   description: null,
   sourceLang: "zh",
   targetLang: "th",

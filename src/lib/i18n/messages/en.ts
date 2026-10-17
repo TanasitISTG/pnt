@@ -254,6 +254,9 @@ const en = {
     layoutGridView: "Grid view",
     layoutListView: "List view",
     results: "{shown} of {total, plural, one {# novel} other {# novels}}",
+    loadMore: "Load more novels",
+    tagFilterLabel: "Filter by tag",
+    tagAll: "All tags",
     pendingLabel: "Loading library…",
     cardLabel: "{title}, {source} to {target}",
     chapterCount: "{count, plural, one {# chapter} other {# chapters}}",
@@ -265,6 +268,32 @@ const en = {
     manage: "Manage",
     trailLabel: "Novel",
     publishMenuLabel: "Novel publishing options",
+  },
+  tags: {
+    title: "Tags",
+    description: "Tags are how readers find this novel in the catalog's filters. Up to {max}.",
+    placeholder: "Add a tag",
+    add: "Add",
+    remove: "Remove {name}",
+    empty: "No tags yet.",
+    maxReached: "A novel can carry at most {max} tags.",
+    duplicate: "This novel already carries that tag.",
+    saveFailed: "Could not save the tags.",
+  },
+  authors: {
+    novelCount: "{count, plural, one {# novel} other {# novels}}",
+    emptyTitle: "No novels yet",
+    emptyDescription: "This author has no published novels yet.",
+    mergeAction: "Merge into another author",
+    mergeTitle: "Merge {name} into another author",
+    mergeDescription:
+      "Every novel on this page moves to the author you pick, and their author name is rewritten to that spelling. You are taken to the page that now holds both.",
+    mergeSearchPlaceholder: "Search authors by name",
+    mergeSearchLabel: "Author to merge into",
+    mergeNoMatches: "No authors match that name.",
+    mergeConfirm: "Merge",
+    mergeDone: "Merged into {name}. {count, plural, one {# novel moved} other {# novels moved}}.",
+    mergeFailed: "Could not merge these authors.",
   },
   home: {
     welcome: "Welcome back",
@@ -1877,6 +1906,7 @@ const en = {
     actionReportDismissed: "Report dismissed",
     actionCommentRemoved: "Comment removed",
     actionReviewRemoved: "Review removed",
+    actionAuthorMerged: "Author merged",
     actionFailed: "That action did not go through",
     confirmRevokeTitle: "Sign this account out everywhere?",
     confirmRevokeBody:
@@ -2029,6 +2059,7 @@ const en = {
     chapterRange: "Enter a valid range (from ≥ 1, from ≤ to)",
     translatedTitleMax: "Translated title must be 500 characters or fewer",
     chapterIdsUnique: "Chapter IDs must be unique",
+    tooManyTags: "A novel can carry at most {max} tags.",
     glossarySourceRequired: "Source term is required",
     glossaryTargetRequired: "Target term is required",
     chapterNumberPositive: "Chapter number must be positive",
@@ -2113,6 +2144,8 @@ const en = {
     bookmarkNotFound: "Bookmark not found.",
     qualityReportNotFound: "Quality report not found.",
     accountMissing: "That account no longer exists.",
+    authorNotFound: "That author no longer exists.",
+    authorMergeSame: "Pick two different authors to merge.",
 
     // A write that lost a race. The row moved underneath the reader, and the honest answer is
     // to look again rather than to retry on their behalf.
@@ -2340,6 +2373,7 @@ const en = {
     settingsSecurity: "Security",
     settingsData: "Data",
     catalogDescription: "Browse published novel translations from the Pnt community.",
+    authorDescription: "Novels translated by {name}, from the Pnt catalog.",
     homeDescription:
       "Translate and read web novels side by side, with a glossary that keeps terms consistent.",
   },

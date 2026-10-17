@@ -8,6 +8,7 @@ import { novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { parseLanguagePair } from "@/lib/language-pair";
 import { resolvePublicCover } from "@/lib/content/novel/cover-storage.server";
+import { listTagsForNovel } from "@/lib/content/novel/tag.service.server";
 import {
   deleteRelationshipEntrySchema,
   relationshipMapSchema,
@@ -32,6 +33,7 @@ export async function getRelationshipWorkspaceForUser(userId: string, novelId: s
       title: novels.title,
       originalTitle: novels.originalTitle,
       author: novels.author,
+      authorId: novels.authorId,
       description: novels.description,
       sourceLang: novels.sourceLang,
       targetLang: novels.targetLang,
@@ -52,9 +54,14 @@ export async function getRelationshipWorkspaceForUser(userId: string, novelId: s
   const { relationshipMapJson, coverKey, ...novel } = row;
   const cover = resolvePublicCover(coverKey, novel.publishedAt);
   const pair = parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`);
+  // The tags come with the novel for the same reason `canManage` does: this payload
+  // hydrates the shared `novel` cache entry, so its shape has to be the one `getNovel`
+  // returns.
+  const tags = await listTagsForNovel(novelId);
   return {
     novel: {
       ...novel,
+      tags,
       sourceLang: novel.sourceLang as "en" | "zh",
       targetLang: novel.targetLang as "en" | "th",
       hasCover: coverKey !== null,

@@ -182,7 +182,7 @@ test("operator moderates, audits, and views an account read-only", async ({ page
     .addCookies([{ name: "pnt-locale", value: "th", url: new URL(page.url()).origin }]);
   await page.goto("/admin");
   await expect(page.locator("html")).toHaveAttribute("lang", "th");
-  await expect(page.getByRole("heading", { name: "บัญชี" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "บัญชี", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "บทบาท" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "สถานะ" })).toBeVisible();
   await expect(

@@ -135,7 +135,7 @@ test("a member reports a published novel and an operator decides the case", asyn
   await setLocaleCookie(page, appUrl, "th");
   await page.goto(`${appUrl}/admin/reports`);
   await expect(page.locator("html")).toHaveAttribute("lang", "th");
-  await expect(page.getByRole("heading", { name: "รายงาน" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "รายงาน", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "รอตรวจ" })).toBeVisible();
   await page.getByRole("tab", { name: "ตัดสินแล้ว" }).click();
   await expect(page.getByRole("row").filter({ hasText: reportedNovel.title })).toBeVisible();

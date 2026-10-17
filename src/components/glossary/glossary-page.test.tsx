@@ -66,6 +66,8 @@ const novel = {
   title: "Oversized Glossary",
   originalTitle: null,
   author: null,
+  authorId: null,
+  tags: [],
   description: null,
   sourceLang: "zh" as const,
   targetLang: "th" as const,
@@ -113,7 +115,7 @@ function renderGlossary(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   });
-  queryClient.setQueryData(novelQueryOptions("novel-1").queryKey, novel);
+  queryClient.setQueryData<typeof novel>(novelQueryOptions("novel-1").queryKey, novel);
   queryClient.setQueryData(glossaryStatsQueryOptions("novel-1").queryKey, stats);
   queryClient.setQueryData(glossaryTermsQueryOptions("novel-1", search).queryKey, page);
   render(

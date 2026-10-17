@@ -3,11 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "use-intl";
 
 import {
+  CATALOG_LANGUAGES,
   formatLibraryLanguage,
   LIBRARY_PUBLICATION_KEYS,
   LIBRARY_SORT_KEYS,
   type LibrarySearch,
 } from "@/components/novels/library/library-search";
+import type { CatalogTag } from "@/lib/content/novel/catalog.types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -21,7 +23,8 @@ import {
 
 interface LibraryToolbarProps {
   search: LibrarySearch;
-  languages: readonly string[];
+  /** The vocabulary the filter row offers; empty on the shelf, which has no tag filter. */
+  tags: readonly CatalogTag[];
   isAdmin: boolean;
   resultCount: number;
   totalCount: number;
@@ -42,7 +45,7 @@ const VIEW_OPTIONS = [
  */
 export function LibraryToolbar({
   search,
-  languages,
+  tags,
   isAdmin,
   resultCount,
   totalCount,
@@ -59,9 +62,11 @@ export function LibraryToolbar({
   const onSearchChangeRef = useRef(onSearchChange);
   const languageItems = useMemo(() => {
     const items: Record<string, string> = { all: t("languageAll") };
-    for (const language of languages) items[language] = formatLibraryLanguage(language);
+    for (const language of CATALOG_LANGUAGES) {
+      items[language] = formatLibraryLanguage(language);
+    }
     return items;
-  }, [languages, t]);
+  }, [t]);
 
   useEffect(() => {
     onSearchChangeRef.current = onSearchChange;
@@ -75,11 +80,14 @@ export function LibraryToolbar({
 
   const clear = () => {
     setQueryInputState({ query: search.q, input: "" });
-    onSearchChangeRef.current({ q: "", language: "all", publication: "all" });
+    onSearchChangeRef.current({ q: "", language: "all", publication: "all", tag: "" });
   };
 
   const hasFilters =
-    search.q !== "" || search.language !== "all" || (isAdmin && search.publication !== "all");
+    search.q !== "" ||
+    search.language !== "all" ||
+    search.tag !== "" ||
+    (isAdmin && search.publication !== "all");
 
   const sortItems = {
     newest: t(LIBRARY_SORT_KEYS.newest),
@@ -196,6 +204,40 @@ export function LibraryToolbar({
           />
         </div>
       </div>
+      {/*
+       * The vocabulary, not a free-text box: a tag filter is only useful if every reader
+       * picks the same tag, and the counts say which ones a catalog this size can sustain.
+       */}
+      {tags.length > 0 ? (
+        <div
+          className="-mx-1 flex flex-wrap gap-1 overflow-x-auto px-1 [scrollbar-width:thin]"
+          aria-label={t("tagFilterLabel")}
+        >
+          <Button
+            type="button"
+            size="sm"
+            variant={search.tag === "" ? "cream" : "ghost"}
+            aria-pressed={search.tag === ""}
+            onClick={() => onSearchChange({ tag: "" })}
+          >
+            {t("tagAll")}
+          </Button>
+          {tags.map((tag) => (
+            <Button
+              key={tag.slug}
+              type="button"
+              size="sm"
+              variant={search.tag === tag.slug ? "cream" : "ghost"}
+              aria-pressed={search.tag === tag.slug}
+              onClick={() => onSearchChange({ tag: search.tag === tag.slug ? "" : tag.slug })}
+            >
+              {tag.name}
+              <span className="text-micro tabular-nums opacity-60">{tag.count}</span>
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-muted-foreground">
         <span aria-live="polite">{t("results", { shown: resultCount, total: totalCount })}</span>
         {hasFilters ? (

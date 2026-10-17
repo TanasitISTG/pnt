@@ -352,7 +352,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
       heading: "ความเคลื่อนไหว",
       control: { role: "button", name: "คัดลอกรหัสงาน" },
     },
-    { path: chaptersPath, heading: "บทที่" },
+    { path: chaptersPath, heading: "บท" },
     { path: glossaryPath, heading: `อภิธานศัพท์ของ ${novelTitle}` },
     { path: `${novelDetailUrl}/relationships`, heading: "ตัวละครและความสัมพันธ์" },
   ] as const;
@@ -362,7 +362,9 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   for (const surface of thaiSurfaces) {
     await page.goto(surface.path);
     await expect(page.locator("html")).toHaveAttribute("lang", "th");
-    await expect(page.getByRole("heading", { name: surface.heading })).toBeVisible();
+    // Exact, like the catalog's own heading: a surface is named by its whole heading, so a
+    // heading that merely contains these words is not the surface this test visited.
+    await expect(page.getByRole("heading", { name: surface.heading, exact: true })).toBeVisible();
     if ("control" in surface) {
       await expect(
         page.getByRole(surface.control.role, { name: surface.control.name }).first(),

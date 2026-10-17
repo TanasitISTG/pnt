@@ -3,9 +3,10 @@ import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 
 import { LibraryPage } from "@/components/novels/library/library-page";
 import { LibraryPending } from "@/components/novels/library/library-pending";
-import { novelsQueryOptions } from "@/components/novels/library/library-query";
+import { prefetchCatalogFirstPage } from "@/components/novels/library/library-query";
 import {
   librarySearchSchema,
+  toCatalogFilters,
   type LibrarySearch,
 } from "@/components/novels/library/library-search";
 import { headTranslator } from "@/lib/i18n/route-head";
@@ -17,10 +18,15 @@ import { headTranslator } from "@/lib/i18n/route-head";
  */
 export const Route = createFileRoute("/{-$locale}/_public/catalog")({
   validateSearch: librarySearchSchema,
-  loaderDeps: () => ({}),
-  shouldReload: false,
-  loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(novelsQueryOptions("public"));
+  // The search *is* the request now, so a shared URL carries its own results and the
+  // server render answers the page the reader asked for instead of the whole table.
+  loaderDeps: ({ search }) => search,
+  loader: async ({ context, deps }) => {
+    await prefetchCatalogFirstPage(
+      context.queryClient,
+      "public",
+      toCatalogFilters(deps, context.locale),
+    );
   },
   pendingMs: 100,
   pendingMinMs: 200,

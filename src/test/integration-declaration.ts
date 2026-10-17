@@ -108,6 +108,7 @@ export const INTEGRATION_SUITES = {
   "src/lib/content/novel-maintenance.integration.test.ts": { allow: ["pool-for-row-locks"] },
   "src/lib/content/chapter-edit.integration.test.ts": { allow: ["pool-for-row-locks"] },
   "src/lib/content/publish.integration.test.ts": { allow: [] },
+  "src/lib/content/catalog.integration.test.ts": { allow: [] },
   "src/lib/import/workflow.integration.test.ts": { allow: ["pool-for-row-locks"] },
   "src/lib/epub/import.integration.test.ts": { allow: ["pool-for-row-locks"] },
   "src/lib/job-dashboard/service.integration.test.ts": { allow: [] },

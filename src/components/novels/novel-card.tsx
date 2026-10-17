@@ -120,6 +120,21 @@ export function NovelCard({
             <p className="line-clamp-2 text-caption text-muted-foreground">{novel.description}</p>
           ) : null}
 
+          {/*
+           * Two tags at most: a card is a pointer, and the filter row is where tags are
+           * acted on. They are not links - the whole card already is one, and an anchor
+           * inside an anchor is not a control a browser will honour.
+           */}
+          {novel.tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {novel.tags.slice(0, 2).map((tag) => (
+                <Badge key={tag.slug} variant="mutedOutline">
+                  {tag.name}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+
           <div className="mt-auto flex flex-col gap-2.5 pt-1">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <LangPair source={novel.sourceLang} target={novel.targetLang} />

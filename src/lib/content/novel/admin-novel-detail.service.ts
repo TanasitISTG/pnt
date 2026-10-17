@@ -10,6 +10,7 @@ import { encodeMessage } from "@/lib/i18n/message-code";
 import { resolvePublicCover } from "@/lib/content/novel/cover-storage.server";
 import { getGlossaryStatsForOwnedNovel } from "@/lib/glossary/service";
 import { getNovelCostsForOwnedNovel } from "@/lib/translation/cost-service";
+import { listTagsForNovel } from "@/lib/content/novel/tag.service.server";
 
 export async function getAdminNovelDetailCoreForUser(userId: string, novelId: string) {
   const [novel] = await db
@@ -18,6 +19,7 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
       title: novels.title,
       originalTitle: novels.originalTitle,
       author: novels.author,
+      authorId: novels.authorId,
       description: novels.description,
       sourceLang: novels.sourceLang,
       targetLang: novels.targetLang,
@@ -57,9 +59,13 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
     .orderBy(asc(chapters.number));
 
   const { coverKey, ...novelRest } = novel;
+  // The owner's read carries the same tags `getNovel` returns, because the two hydrate one
+  // cache entry and the manage screen edits exactly that list.
+  const tags = await listTagsForNovel(novelId);
   return {
     novel: {
       ...novelRest,
+      tags,
       sourceLang: novel.sourceLang as "en" | "zh",
       targetLang: novel.targetLang as "en" | "th",
       hasCover: coverKey !== null,

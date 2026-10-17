@@ -10,6 +10,7 @@ import { encodeMessage } from "@/lib/i18n/message-code";
 import { isSupportedLanguagePair } from "@/lib/language-pair";
 import { updateNovelSchema, type UpdateNovelInput } from "@/lib/content/novel/novel.schemas";
 import { deleteCoverSet, writeCoverSet } from "@/lib/content/novel/cover-storage.server";
+import { resolveAuthorId } from "@/lib/content/novel/author.service.server";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { mapWithConcurrency } from "@/lib/async";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
@@ -25,6 +26,11 @@ export async function updateNovelForUser(
   if (data.cover && !coverBuffer) {
     throw new SafeServerError(encodeMessage("errors.coverNotValidated"));
   }
+
+  // The canonical author is resolved before the transaction, like the cover objects: the
+  // upsert is idempotent, and a merge can clean up a row no novel ends up naming.
+  const authorChanged = data.author !== undefined;
+  const resolvedAuthorId = authorChanged ? await resolveAuthorId(data.author) : undefined;
 
   // Object storage stays outside the transaction: the row lock only covers the
   // metadata write, and a failed commit deletes the freshly written objects.
@@ -78,13 +84,19 @@ export async function updateNovelForUser(
       const updateValues: Record<string, unknown> = {
         title: data.title,
         originalTitle: data.originalTitle,
-        author: data.author,
         description: data.description,
         sourceLang: data.sourceLang,
         targetLang: data.targetLang,
         customPrompt: data.customPrompt,
         updatedAt: new Date(),
       };
+
+      // Both columns move together: an author that changed keeps its text and its identity
+      // in step, and clearing the text clears the identity with it.
+      if (authorChanged) {
+        updateValues.author = data.author;
+        updateValues.authorId = resolvedAuthorId;
+      }
 
       if (languagePairChanged) {
         updateValues.relationshipMapJson = serializeRelationshipMap(emptyRelationshipMap());
