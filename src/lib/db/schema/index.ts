@@ -12,3 +12,5 @@ export * from "./reader-state";
 export * from "./reports";
 export * from "./comments";
 export * from "./reviews";
+export * from "./follows";
+export * from "./notifications";

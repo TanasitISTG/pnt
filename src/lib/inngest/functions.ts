@@ -19,6 +19,10 @@ import {
 } from "@/lib/epub/worker";
 import { pruneOrphanNovelAssets, reapSupersededAssets } from "@/lib/account/purge.server";
 import { log } from "@/lib/log";
+import {
+  pruneNotifications,
+  sweepPendingChapterNotifications,
+} from "@/lib/notifications/service.server";
 import { dispatchPendingWorkflowOutbox } from "./outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
 import { RETRY_COUNT } from "@/lib/retry";
@@ -242,8 +246,42 @@ export const translationEvalFn = inngest.createFunction(
   },
 );
 
+/**
+ * The clock's half of publishing: a scheduled chapter has no request behind it, and a bulk
+ * release deliberately leaves its fan-out off the request, so this sweep turns "the time has
+ * passed" into the same idempotent write the single-chapter path makes. It also catches a
+ * publish whose inline fan-out failed, and prunes the rows a bell will never show again.
+ *
+ * Every minute rather than the outbox's two: readers wait on this one.
+ */
+export const notificationSweepFn = inngest.createFunction(
+  {
+    id: "notification-sweep",
+    triggers: { cron: "* * * * *" },
+    retries: 1,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => step.run("sweep-chapters", () => sweepPendingChapterNotifications()),
+);
+
+/**
+ * Retention runs once a day, not with the sweep: a bell is a recent-events surface, and the
+ * delete only has work to do when a day's worth of notifications have aged out.
+ */
+export const notificationRetentionFn = inngest.createFunction(
+  {
+    id: "notification-retention",
+    triggers: { cron: "15 4 * * *" },
+    retries: 1,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => step.run("prune", () => pruneNotifications()),
+);
+
 export const functions = [
   dispatchWorkflowOutboxFn,
+  notificationSweepFn,
+  notificationRetentionFn,
   translateChapterFn,
   importChaptersFn,
   importEpubChaptersFn,

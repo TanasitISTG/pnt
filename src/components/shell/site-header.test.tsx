@@ -53,6 +53,12 @@ vi.mock("./use-sign-out", () => ({
   useSignOut: () => ({ signingOut: false, signOut: vi.fn() }),
 }));
 
+// The bell owns its own query, socket and account channel; this file is about where the
+// header sends a reader.
+vi.mock("@/components/notifications/notification-bell", () => ({
+  NotificationBell: () => null,
+}));
+
 const member = {
   id: "user-1",
   name: "E2E Admin",

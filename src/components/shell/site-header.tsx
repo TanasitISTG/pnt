@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { LogIn } from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { AccountMenu } from "@/components/shell/account-menu";
 import { LanguageMenu } from "@/components/shell/language-menu";
 import { MobileNav } from "@/components/shell/mobile-nav";
@@ -92,6 +93,9 @@ export function SiteHeader({ user, layout = "default" }: SiteHeaderProps) {
         <div className="ml-auto flex items-center gap-1">
           <LanguageMenu signedIn={user !== null} />
           <ThemeMenu />
+          {/* Outside the `md` wrapper below: a reader on a phone needs the bell as much as
+              a reader on a laptop, and the account menu is the only thing that folds away. */}
+          {user ? <NotificationBell userId={user.id} /> : null}
           {user ? (
             // From `md` up the account menu is the only way to reach the account. Below it
             // the navigation drawer lists the same destinations (Account, Settings,

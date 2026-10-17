@@ -298,6 +298,31 @@ const en = {
    * text, and the chapter list. The owner's studio has its own words for the same objects
    * (`studio.*`), because "manage" is a different job from "read".
    */
+  notifications: {
+    bellLabel:
+      "{count, plural, =0 {No unread notifications} one {# unread notification} other {# unread notifications}}",
+    title: "Notifications",
+    loading: "Loading notifications…",
+    markAllRead: "Mark all read",
+    markReadFailed: "Couldn't update your notifications.",
+    emptyTitle: "Nothing new",
+    emptyDescription:
+      "Follow a novel and its new chapters, replies, and report updates appear here.",
+    chapterPublished: "New chapter in {novel}",
+    commentReply: "New reply to your comment in {novel}",
+    novelComment: "New comment on {novel}",
+    novelReview: "New review on {novel}",
+    reportUpheld: "Your report on {novel} was upheld",
+    reportDismissed: "Your report on {novel} was dismissed",
+    reportUpheldNoNovel: "Your report was upheld",
+    reportDismissedNoNovel: "Your report was dismissed",
+    toastChapterTitle: "New chapter",
+    toastReplyTitle: "New reply",
+    toastCommentTitle: "New comment",
+    toastReviewTitle: "New review",
+    toastReportTitle: "Report update",
+    toastOpen: "Open",
+  },
   novel: {
     loadFailed: "Failed to load novel",
     notFoundTitle: "Novel not found",
@@ -311,6 +336,9 @@ const en = {
     continueReading: "Continue reading",
     startReading: "Start reading",
     readFirstChapter: "Read first chapter",
+    follow: "Follow",
+    following: "Following",
+    followFailed: "Couldn't update your follow. Try again.",
     readingProgressLabel: "Reading progress",
     readingProgress:
       "{read} of {total, plural, one {# chapter} other {# chapters}} read · {percent}%",
@@ -2056,6 +2084,7 @@ const en = {
     chapterNotFound: "This chapter is not available.",
     novelNotFound: "Novel not found.",
     novelNotFoundOrUnauthorized: "Novel not found or you do not have access to it.",
+    cannotFollowOwnNovel: "You cannot follow your own novel.",
     commentMissing: "Comment not found.",
     commentNotFoundOrUnauthorized: "Comment not found or you do not have access to it.",
     commentGone: "That comment is no longer here.",

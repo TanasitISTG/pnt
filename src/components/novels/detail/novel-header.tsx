@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { FollowButton } from "@/components/novels/detail/follow-button";
 import { NovelCover } from "@/components/novels/novel-cover";
 import { ReportNovelButton } from "@/components/reports/report-novel-button";
 import { NovelRatingSummary } from "@/components/reviews/novel-rating-summary";
@@ -27,6 +28,10 @@ export interface ReadingProgressSummary {
 export interface NovelHeaderProps {
   novel: Novel;
   novelId: string;
+  /** Any session at all: it decides whether following is a button or a door to sign in. */
+  signedIn: boolean;
+  /** The owner manages this novel in the studio, so following it is not offered to them. */
+  isOwner: boolean;
   /** A member reading someone else's novel; the owner manages it in the studio instead. */
   canReport: boolean;
   chapters: ChapterRow[];
@@ -205,6 +210,8 @@ function ReadingActions({
 export function NovelHeader({
   novel,
   novelId,
+  signedIn,
+  isOwner,
   canReport,
   chapters,
   chaptersPending,
@@ -215,13 +222,14 @@ export function NovelHeader({
 }: NovelHeaderProps) {
   return (
     <div className="flex flex-col gap-4">
-      {/* Hidden from the owner (who has no reason to report their own novel) and from
-          guests, whose filing call would fail. */}
-      {canReport ? (
-        <div className="flex justify-end">
-          <ReportNovelButton novelId={novelId} novelTitle={novel.title} />
+      {/* The owner gets neither control: reporting one's own novel is not a thing, and
+          following it would only notify the author about their own work. */}
+      {isOwner ? null : (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <FollowButton novelId={novelId} signedIn={signedIn} isOwner={isOwner} />
+          {canReport ? <ReportNovelButton novelId={novelId} novelTitle={novel.title} /> : null}
         </div>
-      ) : null}
+      )}
       <div className="grid grid-cols-[104px_1fr] items-start gap-4 md:grid-cols-[200px_1fr] md:gap-6">
         <div className="relative aspect-3/4 w-full overflow-hidden rounded-xl border border-border bg-foreground/3">
           <NovelCover

@@ -309,6 +309,20 @@
       "when": 1791953246070,
       "tag": "0043_fuzzy_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792222967942,
+      "tag": "0044_modern_stone_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792224916035,
+      "tag": "0045_flippant_archangel",
+      "breakpoints": true
     }
   ]
 }

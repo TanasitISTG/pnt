@@ -53,6 +53,8 @@ function renderNovelHeader(description: string): void {
     <NovelHeader
       novel={{ ...BASE_NOVEL, description }}
       novelId={BASE_NOVEL.id}
+      signedIn={false}
+      isOwner
       canReport={false}
       chapters={[]}
       chaptersPending={false}

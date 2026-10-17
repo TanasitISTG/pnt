@@ -118,6 +118,7 @@ export const INTEGRATION_SUITES = {
   "src/lib/reports/report.integration.test.ts": { allow: [] },
   "src/lib/rate-limit.integration.test.ts": { allow: [] },
   "src/lib/reader/reader-state.integration.test.ts": { allow: ["pool-for-row-locks"] },
+  "src/lib/notifications/notifications.integration.test.ts": { allow: [] },
 } as const satisfies Record<string, IntegrationSuite>;
 
 /** The declarations keyed by suite path, for lookups by a path this process computed. */

@@ -43,6 +43,7 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 22. Signed-in reader state is account-scoped and single-writer per `(user, novel)`. Opening a chapter preserves the stored fraction only for that chapter and resets it otherwise; a scroll sample for any other chapter is dropped rather than overwriting the newer position; read marks are idempotent. Guests keep the browser-local equivalent, and reader settings stay browser-local for everyone.
 23. A server function is callable only while the browser graph imports its module. The compiler registers server functions the client build reaches, and every server-side call site resolves through that manifest, so a `createServerFn` that only server code references fails at runtime with `Server function info not found`. Server-only work called from server code — session lookups above all — is `createServerOnlyFn`, which is invoked directly and never consults the manifest.
 24. Database rows hold storage keys, never object bytes. Cover keys embed an immutable unguessable segment, so replacing a cover writes a new URL instead of purging a CDN object; private-bucket objects are reachable only through signed URLs or authenticated app routes. Storage failures degrade a feature (a missing cache entry rebuilds, a deleted row's archive is reaped) but never fail open into a public read.
+25. A notification row is the record and a realtime message is only a hint to refetch. Fan-out is idempotent through `unique(user_id, dedupe_key)`, a `chapter_published` row exists only while its chapter is live, and every notification write is best-effort: it may be lost, but it never fails the publish, comment, or decision that caused it.
 
 ## Novel-first mutation protocol
 
@@ -157,6 +158,14 @@ Continuation remains available after all loaded bookmarks are removed. Paging lo
 state is scoped to the current reader identity, so requests from an old novel/account cannot
 block or surface errors in its replacement.
 Guest bookmarks remain browser-local and do not use account paging.
+
+## Notifications
+
+Following is a reader relation — an account plus a novel it may merely be reading, so the write gate is read visibility, not ownership — and the bell reads `notifications` newest-first with an unread count. The writers are: a live chapter fanning out to its novel's followers excluding the author; a top-level comment telling the novel's owner; a reply telling its parent's author; a new review telling the novel's owner; and a decided report telling each reporter whose claim was in the case. A comment and a reply on the same comment therefore reach different accounts, and a review's dedupe key is the review, so an edit notifies nobody. A single-chapter publish fans out inline after its transaction commits, because that is the one chapter an author is watching land; a bulk release and a scheduled chapter are left to a one-minute sweep, which makes the same idempotent write. Either path produces the row once.
+
+Rows are snapshots: every target column is nullable and cleared on delete, while the title and excerpt stay, so the bell never depends on a join to content that may be gone. Unpublishing reconciles backward by deleting the chapter's rows, which keeps the invariant above true and lets a republished chapter notify again. Retention prunes read rows after 90 days and unread rows after 180.
+
+Ably publishes one message per recipient on `notifications:<userId>`, batched at 100 channels per request, and a browser token is minted per session for `subscribe` on that one channel only. Delivery is deliberately not on the correctness path: the client refetches the notification query on every message and polls every 30 seconds, so an unset `ABLY_API_KEY` disables the socket and nothing else.
 
 ## Export streaming
 

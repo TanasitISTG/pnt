@@ -86,6 +86,8 @@ export function NovelPublicPage({ novelId, signedIn }: NovelPublicPageProps) {
       <NovelHeader
         novel={novel}
         novelId={novelId}
+        signedIn={signedIn}
+        isOwner={canManage}
         canReport={signedIn && !canManage}
         chapters={chapters}
         chaptersPending={chaptersPending}

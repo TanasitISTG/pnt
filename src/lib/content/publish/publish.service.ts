@@ -6,6 +6,12 @@ import { db } from "@/lib/db";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, novels } from "@/lib/db/schema";
+import {
+  clearChapterNotifications,
+  clearNovelNotifications,
+  notifyChapterPublished,
+  runNotificationWrite,
+} from "@/lib/notifications/service.server";
 import { SafeServerError } from "@/lib/server-fn-error";
 
 export type ChapterPublicationInput = {
@@ -67,7 +73,29 @@ export async function setChapterPublishedForUser(
       .where(eq(chapters.id, input.chapterId));
   });
 
+  await reconcileChapterNotifications(input.chapterId, input.publishedAt);
+
   return { id: input.chapterId };
+}
+
+/**
+ * The publication change is the event, so the notification follows it rather than the clock.
+ *
+ * This is the one chapter the author just published, so the fan-out runs here instead of
+ * waiting for the sweep: it is a follower read, one insert, and one batched Ably call, and a
+ * chapter that is not a draft or scheduled in the future loses the rows it may still have
+ * carried — a reschedule must not keep announcing a chapter the catalog hides. Both calls
+ * are best-effort: a reader can miss a badge, but never their own publish.
+ */
+async function reconcileChapterNotifications(
+  chapterId: string,
+  publishedAt: Date | null,
+): Promise<void> {
+  if (publishedAt !== null && publishedAt <= new Date()) {
+    await runNotificationWrite("chapter published", () => notifyChapterPublished(chapterId));
+    return;
+  }
+  await runNotificationWrite("chapter unpublished", () => clearChapterNotifications(chapterId));
 }
 
 export async function setAllChaptersPublishedForUser(
@@ -75,7 +103,7 @@ export async function setAllChaptersPublishedForUser(
   novelId: string,
   publishedAt: Date | null,
 ): Promise<BulkPublicationResult> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [novel] = await tx
       .select({ id: novels.id })
       .from(novels)
@@ -118,4 +146,13 @@ export async function setAllChaptersPublishedForUser(
       skipped: chapterRows.length - readyIds.length,
     };
   });
+
+  // A bulk release can touch every chapter at once, so its fan-out is not run here: the
+  // sweep picks these up within a minute, off the request. Unpublishing still reconciles
+  // immediately, because a stale bell is visible and a late badge is not.
+  if (publishedAt === null || publishedAt > new Date()) {
+    await runNotificationWrite("novel unpublished", () => clearNovelNotifications(novelId));
+  }
+
+  return result;
 }

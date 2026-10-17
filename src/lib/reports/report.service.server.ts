@@ -11,6 +11,7 @@ import { novelReadable, novelLive } from "@/lib/content/publish/publish";
 import { db } from "@/lib/db";
 import { chapters, comments, novels, reports, reviews, user } from "@/lib/db/schema";
 import { isUniqueViolation } from "@/lib/db/unique-violation";
+import { notifyReportsDecided, runNotificationWrite } from "@/lib/notifications/service.server";
 import { getReviewAuthor, removeReviewForOperator } from "@/lib/reviews/review.service.server";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { SafeServerError } from "@/lib/server-fn-error";
@@ -756,6 +757,7 @@ export async function resolveReportCaseForOperator(
     )
     .returning({
       id: reports.id,
+      reporterUserId: reports.reporterUserId,
       targetType: reports.targetType,
       novelId: reports.novelId,
       commentId: reports.commentId,
@@ -790,6 +792,12 @@ export async function resolveReportCaseForOperator(
       reports: resolved.length,
     },
   });
+
+  // Each reporter filed their own claim, so each is told once. The decision is already
+  // recorded and audited; a missing courtesy never makes the operator's action look failed.
+  await runNotificationWrite("report decided", () =>
+    notifyReportsDecided(resolved, input.decision, actor.id),
+  );
 
   return { resolvedCount: resolved.length, novelId: first.novelId };
 }

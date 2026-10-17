@@ -1,0 +1,2 @@
+ALTER TYPE "public"."notification_kind" ADD VALUE 'novel_comment' BEFORE 'report_decided';--> statement-breakpoint
+ALTER TYPE "public"."notification_kind" ADD VALUE 'novel_review' BEFORE 'report_decided';

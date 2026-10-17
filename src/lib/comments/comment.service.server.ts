@@ -6,6 +6,11 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { chapters, comments, novels, reports, user } from "@/lib/db/schema";
 import { chapterVisibleToGuests, novelLive } from "@/lib/content/publish/publish";
+import {
+  notifyCommentReply,
+  notifyNovelComment,
+  runNotificationWrite,
+} from "@/lib/notifications/service.server";
 import { resolveUserAvatar } from "@/lib/profile/avatar.server";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { SafeServerError } from "@/lib/server-fn-error";
@@ -301,6 +306,16 @@ export async function createCommentForUser(
     parentId: input.parentId ?? null,
     body: input.body,
   });
+
+  // The comment is written; telling the parent author or the novel's owner is a courtesy
+  // that must not undo it. A reply is a conversation with its parent; a top-level comment
+  // is news for the owner.
+  if (input.parentId) {
+    await runNotificationWrite("comment reply", () => notifyCommentReply(id));
+  } else {
+    await runNotificationWrite("novel comment", () => notifyNovelComment(id));
+  }
+
   return { id };
 }
 

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { novels, reports, reviews, user } from "@/lib/db/schema";
 import { isUniqueViolation } from "@/lib/db/unique-violation";
 import { novelLive, novelReadable } from "@/lib/content/publish/publish";
+import { notifyNovelReview, runNotificationWrite } from "@/lib/notifications/service.server";
 import { resolveUserAvatar } from "@/lib/profile/avatar.server";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { SafeServerError } from "@/lib/server-fn-error";
@@ -274,6 +275,7 @@ export async function saveReviewForUser(
   }
 
   const id = nanoid();
+  let created = false;
   try {
     await db.insert(reviews).values({
       id,
@@ -282,6 +284,7 @@ export async function saveReviewForUser(
       rating: input.rating,
       body,
     });
+    created = true;
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
     // Another request inserted the same account's review in the gap above; editing it is
@@ -296,6 +299,13 @@ export async function saveReviewForUser(
           isNull(reviews.removedAt),
         ),
       );
+  }
+
+  // The owner hears about a new review once. An edit returns above and never reaches this,
+  // and the dedupe key would absorb a repeated report anyway; the review is already written,
+  // so the owner's badge is a courtesy that must not fail the save.
+  if (created) {
+    await runNotificationWrite("novel review", () => notifyNovelReview(id));
   }
 
   return { id };

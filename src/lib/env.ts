@@ -180,6 +180,12 @@ const baseEnvSchema = z.object({
   RESEND_API_KEY: optionalConfigured,
   EMAIL_FROM: optionalConfigured,
 
+  // Ably realtime. Optional: without it the notification bell still reads the same
+  // rows by polling and no socket is opened, which is what lets dev, CI, and E2E run
+  // keyless. It is a server-only key: browsers receive a short-lived subscribe token
+  // from `/api/realtime/token` and never see this value.
+  ABLY_API_KEY: optionalConfigured,
+
   // Cloudflare Turnstile. Optional: the captcha plugin is registered only when the
   // secret is present, which is what lets dev, CI, and E2E run without keys. The site
   // key is public and is handed to the browser by the auth-methods server function,

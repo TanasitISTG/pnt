@@ -44,6 +44,7 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
 import { Route as ApiCoversSplatRouteImport } from './routes/api/covers/$'
 import { Route as ApiExportsSplatRouteImport } from './routes/api/exports/$'
+import { Route as ApiRealtimeTokenRouteImport } from './routes/api/realtime/token'
 import { Route as ApiStorageUploadRouteImport } from './routes/api/storage/upload'
 import { Route as Char123LocaleChar125PublicIndexRouteImport } from './routes/{-$locale}/_public/index'
 import { Route as Char123LocaleChar125PublicCatalogRouteImport } from './routes/{-$locale}/_public/catalog'
@@ -249,6 +250,11 @@ const ApiExportsSplatRoute = ApiExportsSplatRouteImport.update({
   path: '/api/exports/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRealtimeTokenRoute = ApiRealtimeTokenRouteImport.update({
+  id: '/api/realtime/token',
+  path: '/api/realtime/token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiStorageUploadRoute = ApiStorageUploadRouteImport.update({
   id: '/api/storage/upload',
   path: '/api/storage/upload',
@@ -378,6 +384,7 @@ export interface FileRoutesByFullPath {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
+  '/api/realtime/token': typeof ApiRealtimeTokenRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
   '/{-$locale}/catalog': typeof Char123LocaleChar125PublicCatalogRoute
   '/admin/': typeof ProtectedAdminIndexRoute
@@ -428,6 +435,7 @@ export interface FileRoutesByTo {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
+  '/api/realtime/token': typeof ApiRealtimeTokenRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
   '/{-$locale}/catalog': typeof Char123LocaleChar125PublicCatalogRoute
   '/admin': typeof ProtectedAdminIndexRoute
@@ -480,6 +488,7 @@ export interface FileRoutesById {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/covers/$': typeof ApiCoversSplatRoute
   '/api/exports/$': typeof ApiExportsSplatRoute
+  '/api/realtime/token': typeof ApiRealtimeTokenRoute
   '/api/storage/upload': typeof ApiStorageUploadRoute
   '/{-$locale}/_public/catalog': typeof Char123LocaleChar125PublicCatalogRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
@@ -534,6 +543,7 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
+    | '/api/realtime/token'
     | '/api/storage/upload'
     | '/{-$locale}/catalog'
     | '/admin/'
@@ -584,6 +594,7 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
+    | '/api/realtime/token'
     | '/api/storage/upload'
     | '/{-$locale}/catalog'
     | '/admin'
@@ -635,6 +646,7 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/covers/$'
     | '/api/exports/$'
+    | '/api/realtime/token'
     | '/api/storage/upload'
     | '/{-$locale}/_public/catalog'
     | '/_protected/admin/'
@@ -666,6 +678,7 @@ export interface RootRouteChildren {
   ApiAvatarsSplatRoute: typeof ApiAvatarsSplatRoute
   ApiCoversSplatRoute: typeof ApiCoversSplatRoute
   ApiExportsSplatRoute: typeof ApiExportsSplatRoute
+  ApiRealtimeTokenRoute: typeof ApiRealtimeTokenRoute
   ApiStorageUploadRoute: typeof ApiStorageUploadRoute
 }
 
@@ -914,6 +927,13 @@ declare module '@tanstack/react-router' {
       path: '/api/exports/$'
       fullPath: '/api/exports/$'
       preLoaderRoute: typeof ApiExportsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/realtime/token': {
+      id: '/api/realtime/token'
+      path: '/api/realtime/token'
+      fullPath: '/api/realtime/token'
+      preLoaderRoute: typeof ApiRealtimeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/storage/upload': {
@@ -1202,6 +1222,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAvatarsSplatRoute: ApiAvatarsSplatRoute,
   ApiCoversSplatRoute: ApiCoversSplatRoute,
   ApiExportsSplatRoute: ApiExportsSplatRoute,
+  ApiRealtimeTokenRoute: ApiRealtimeTokenRoute,
   ApiStorageUploadRoute: ApiStorageUploadRoute,
 }
 export const routeTree = rootRouteImport
