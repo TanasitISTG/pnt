@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as jobStore from "./job-store";
 import { suggestAndReviewTerms } from "./finalize-glossary";
+import { parseMessage } from "@/lib/i18n/message-code";
 import * as jsonCompletion from "@/lib/providers/json-completion";
 import type { AIProviderClient } from "@/lib/providers/types";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
+
+/** Whether the run logged the named sentence; the row stores a key, not the wording. */
+function loggedKey(logs: readonly LogEntry[], key: string): boolean {
+  return logs.some((entry) => parseMessage(entry.message)?.key === `log.${key}`);
+}
 
 vi.mock("./job-store", () => ({
   loadTermSourcesForExclusion: vi.fn(),
@@ -262,7 +268,7 @@ describe("suggestAndReviewTerms", () => {
       }),
     );
     expect(jsonCompletion.generateJsonCompletion).toHaveBeenCalledTimes(5);
-    expect(logs.some((entry) => entry.message.includes("no suggestions saved"))).toBe(true);
+    expect(loggedKey(logs, "reviewFailed")).toBe(true);
   });
   it("saves no rows when review returns malformed JSON", async () => {
     vi.mocked(jsonCompletion.generateJsonCompletion)

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,9 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { BAN_DURATION_DAYS, BAN_REASON_MAX_LENGTH } from "@/lib/admin/schemas";
 
+/** The `admin` translator, named so the duration list can be built outside a hook. */
+type AdminTranslator = ReturnType<typeof useTranslations<"admin">>;
+
 export interface SuspendSubmission {
   banReason?: string;
   banExpiresInDays?: number;
@@ -30,12 +34,15 @@ const PERMANENT = "permanent";
 
 /**
  * Durations are offered as whole days; the schema takes a day count and the endpoint
- * converts it to seconds, so nothing here has to know about the wire format.
+ * converts it to seconds, so nothing here has to know about the wire format. The labels
+ * are the catalog's, because "7 days" is two words Thai puts in its own order.
  */
-const DURATION_ITEMS: Record<string, string> = Object.fromEntries([
-  ...BAN_DURATION_DAYS.map((days) => [String(days), `${days} days`]),
-  [PERMANENT, "Permanent"],
-]);
+function banDurationItems(t: AdminTranslator): Record<string, string> {
+  return Object.fromEntries([
+    ...BAN_DURATION_DAYS.map((days) => [String(days), t("suspendDurationDays", { days })]),
+    [PERMANENT, t("suspendDurationPermanent")],
+  ]);
+}
 
 export interface SuspendUserDialogProps {
   open: boolean;
@@ -56,6 +63,8 @@ export function SuspendUserDialog({
   onOpenChange,
   onConfirm,
 }: SuspendUserDialogProps) {
+  const t = useTranslations("admin");
+  const durationItems = banDurationItems(t);
   // Reset by remounting rather than by an effect: the page keys this dialog on the
   // target and the open state, so a second suspension never inherits the first
   // answer, and no render is cascaded to achieve it.
@@ -69,60 +78,52 @@ export function SuspendUserDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Suspend this account?</DialogTitle>
-          <DialogDescription>
-            {email} can no longer sign in, and every session it holds is ended. Published novels
-            stay public. A suspension targets the account, not the catalog.
-          </DialogDescription>
+          <DialogTitle>{t("suspendTitle")}</DialogTitle>
+          <DialogDescription>{t("suspendBody", { email })}</DialogDescription>
         </DialogHeader>
 
         <Field>
-          <FieldLabel htmlFor="suspend-reason">Reason</FieldLabel>
+          <FieldLabel htmlFor="suspend-reason">{t("suspendReasonLabel")}</FieldLabel>
           <Textarea
             id="suspend-reason"
             value={reason}
             maxLength={BAN_REASON_MAX_LENGTH}
-            placeholder="Spam in published chapters"
+            placeholder={t("suspendReasonPlaceholder")}
             onChange={(event) => setReason(event.target.value)}
           />
-          <FieldDescription>
-            Shown to the account when it next tries to sign in, so keep it factual.
-          </FieldDescription>
+          <FieldDescription>{t("suspendReasonHint")}</FieldDescription>
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="suspend-duration">Duration</FieldLabel>
+          <FieldLabel htmlFor="suspend-duration">{t("suspendDurationLabel")}</FieldLabel>
           <Select
             value={duration}
-            items={DURATION_ITEMS}
+            items={durationItems}
             onValueChange={(value) => {
               if (value) setDuration(value);
             }}
           >
             <SelectTrigger
               id="suspend-duration"
-              aria-label="Suspension duration"
+              aria-label={t("suspendDurationAria")}
               className="w-full"
             >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(DURATION_ITEMS).map(([value, label]) => (
+              {Object.entries(durationItems).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <FieldDescription>
-            A time-limited suspension lifts on its own; it is cleared the next time the account
-            signs in.
-          </FieldDescription>
+          <FieldDescription>{t("suspendDurationHint")}</FieldDescription>
         </Field>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Keep access
+            {t("suspendCancel")}
           </Button>
           <Button
             variant="destructive"
@@ -135,7 +136,7 @@ export function SuspendUserDialog({
             }
           >
             {busy && <Spinner />}
-            Suspend account
+            {t("suspendConfirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

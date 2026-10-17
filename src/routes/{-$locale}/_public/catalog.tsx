@@ -8,6 +8,7 @@ import {
   librarySearchSchema,
   type LibrarySearch,
 } from "@/components/novels/library/library-search";
+import { headTranslator } from "@/lib/i18n/route-head";
 
 /**
  * The shared catalog: every published novel, readable by guests and by signed-in
@@ -24,15 +25,15 @@ export const Route = createFileRoute("/{-$locale}/_public/catalog")({
   pendingMs: 100,
   pendingMinMs: 200,
   pendingComponent: LibraryPending,
-  head: () => ({
-    meta: [
-      { title: "Catalog | Pnt - Personal Novel Translator" },
-      {
-        name: "description",
-        content: "Browse published novel translations from the Pnt community.",
-      },
-    ],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [
+        { title: `${t("meta.catalog")} | ${t("meta.siteName")}` },
+        { name: "description", content: t("meta.catalogDescription") },
+      ],
+    };
+  },
   component: CatalogPage,
 });
 

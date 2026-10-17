@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Cpu, Terminal, XCircle, Zap } from "lucide-react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { ChapterStatusBadge } from "@/components/chapters/table/chapter-status-badge";
 import type { ChapterStatus } from "@/components/chapters/types";
@@ -31,7 +32,8 @@ import type {
   TranslationJobProgress,
 } from "@/lib/translation/types/api";
 import type { LogEntry } from "@/lib/translation/types/workflow";
-import { formatLocalDateTime, formatLocalTime, parseDateTime } from "@/lib/date-time";
+import { formatDateTime, formatNumber, formatTime, parseDateTime } from "@/lib/i18n/format";
+import { translateMessage } from "@/lib/i18n/server-error";
 
 function isRunningStatus(status: string | undefined): boolean {
   return status === "running" || status === "pending";
@@ -108,6 +110,7 @@ interface JobLogHeaderProps {
 }
 
 function JobLogHeader({ jobData, status }: JobLogHeaderProps) {
+  const t = useTranslations("job");
   const running = isRunningStatus(status);
   return (
     <DrawerHeader>
@@ -116,7 +119,7 @@ function JobLogHeader({ jobData, status }: JobLogHeaderProps) {
           <Terminal className="size-4 text-muted-foreground" aria-hidden="true" />
         </div>
         <div className="min-w-0">
-          <DrawerTitle>Translation job</DrawerTitle>
+          <DrawerTitle>{t("title")}</DrawerTitle>
           {jobData?.chapterTitle ? (
             <p className="mt-0.5 break-words text-caption text-muted-foreground">
               {jobData.chapterTitle}
@@ -155,35 +158,40 @@ function getLogLevelClassName(level: string) {
 }
 
 function LogEntryRow({ log, mounted }: { log: LogEntry; mounted: boolean }) {
+  const t = useTranslations();
+  const locale = useLocale();
   const timestamp = parseDateTime(log.timestamp);
   const timestampLabel =
-    timestamp && mounted ? formatLocalTime(timestamp) : timestamp ? "—" : log.timestamp;
+    timestamp && mounted ? formatTime(timestamp, locale) : timestamp ? "—" : log.timestamp;
   return (
     <div className="grid grid-cols-[auto_1fr] items-start gap-x-2.5 gap-y-1 leading-relaxed sm:grid-cols-[auto_auto_minmax(0,1fr)]">
       <time
         className="shrink-0 font-mono text-muted-foreground"
         dateTime={timestamp?.toISOString()}
-        title={timestamp && mounted ? formatLocalDateTime(timestamp) : undefined}
+        title={timestamp && mounted ? formatDateTime(timestamp, locale) : undefined}
       >
         [{timestampLabel}]
       </time>
       <span className={getLogLevelClassName(log.level)}>[{log.level.toUpperCase()}]</span>
       <span className="col-span-2 min-w-0 break-words whitespace-pre-wrap text-foreground sm:col-span-1">
-        {log.message}
+        {/* A row written by a previous release holds a sentence, not a code, and reads as what
+            was stored. */}
+        {translateMessage(log.message, t) ?? log.message}
       </span>
     </div>
   );
 }
 
 function LogConsole({ logs, mounted }: { logs: LogEntry[]; mounted: boolean }) {
+  const t = useTranslations("job");
   return (
     <div className="flex shrink-0 flex-col gap-2">
       <h4 className="text-caption font-semibold tracking-wider text-muted-foreground uppercase">
-        Execution log
+        {t("logTitle")}
       </h4>
       <div className="flex h-64 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface-2 p-3 font-mono text-xs text-foreground sm:gap-2 sm:p-4">
         {logs.length === 0 ? (
-          <span className="text-muted-foreground italic">No logs recorded yet.</span>
+          <span className="text-muted-foreground italic">{t("logEmpty")}</span>
         ) : (
           logs.map((log) => <LogEntryRow key={log.id} log={log} mounted={mounted} />)
         )}
@@ -193,21 +201,23 @@ function LogConsole({ logs, mounted }: { logs: LogEntry[]; mounted: boolean }) {
 }
 
 function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
+  const t = useTranslations("job");
+  const locale = useLocale();
   if (chunks.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
       <h4 className="text-caption font-semibold tracking-wider text-muted-foreground uppercase">
-        Chunks
+        {t("chunksTitle")}
       </h4>
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <Table className="min-w-[620px]">
           <TableHeader>
             <TableRow className="h-10 bg-muted/20">
-              <TableHead className="h-10 w-16 font-semibold">Chunk</TableHead>
-              <TableHead className="h-10 font-semibold">Raw size</TableHead>
-              <TableHead className="h-10 font-semibold">Status</TableHead>
-              <TableHead className="h-10 font-semibold">Latency</TableHead>
-              <TableHead className="h-10 text-right font-semibold">Tokens</TableHead>
+              <TableHead className="h-10 w-16 font-semibold">{t("chunkColumn")}</TableHead>
+              <TableHead className="h-10 font-semibold">{t("rawSizeColumn")}</TableHead>
+              <TableHead className="h-10 font-semibold">{t("statusColumn")}</TableHead>
+              <TableHead className="h-10 font-semibold">{t("latencyColumn")}</TableHead>
+              <TableHead className="h-10 text-right font-semibold">{t("tokensColumn")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -215,23 +225,25 @@ function ChunkMetricsTable({ chunks }: { chunks: SlimChunkProgress[] }) {
               <TableRow key={chunk.index} className="h-11">
                 <TableCell className="font-mono font-medium">{chunk.index + 1}</TableCell>
                 <TableCell className="font-mono text-muted-foreground">
-                  {chunk.textLength.toLocaleString()} chars
+                  {t("chunkSize", { count: chunk.textLength })}
                 </TableCell>
                 <TableCell>
                   {chunk.hasTranslation ? (
-                    <Badge variant="success">Completed</Badge>
+                    <Badge variant="success">{t("chunkStatusCompleted")}</Badge>
                   ) : chunk.error ? (
-                    <Badge variant="destructive">Failed</Badge>
+                    <Badge variant="destructive">{t("chunkStatusFailed")}</Badge>
                   ) : (
-                    <Badge variant="secondary">Pending</Badge>
+                    <Badge variant="secondary">{t("chunkStatusPending")}</Badge>
                   )}
                 </TableCell>
                 <TableCell className="font-mono text-muted-foreground">
-                  {chunk.latencyMs ? `${(chunk.latencyMs / 1000).toFixed(1)}s` : "—"}
+                  {chunk.latencyMs
+                    ? t("chunkLatencySeconds", { seconds: (chunk.latencyMs / 1000).toFixed(1) })
+                    : "—"}
                 </TableCell>
                 <TableCell className="text-right font-mono font-medium text-foreground">
                   {chunk.promptTokens !== undefined && chunk.completionTokens !== undefined
-                    ? (chunk.promptTokens + chunk.completionTokens).toLocaleString()
+                    ? formatNumber(chunk.promptTokens + chunk.completionTokens, locale)
                     : "—"}
                 </TableCell>
               </TableRow>
@@ -262,11 +274,13 @@ function JobMetrics({
   promptTokens,
   completionTokens,
 }: JobMetricsProps) {
+  const t = useTranslations("job");
+  const locale = useLocale();
   return (
     <dl className="grid shrink-0 grid-cols-2 gap-3">
       <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-surface-inset p-3">
         <dt className="flex items-center gap-1.5 text-caption text-muted-foreground">
-          <Cpu className="size-3.5" aria-hidden="true" /> Model
+          <Cpu className="size-3.5" aria-hidden="true" /> {t("modelLabel")}
         </dt>
         <dd className="min-w-0">
           <span className="block truncate text-caption font-semibold text-foreground" title={model}>
@@ -276,29 +290,29 @@ function JobMetrics({
             className="block truncate text-micro text-muted-foreground"
             title={provider ?? undefined}
           >
-            {provider ?? "Current provider settings"}
-            {isLegacyProviderFallback ? " · legacy fallback" : ""}
+            {provider ?? t("providerCurrent")}
+            {isLegacyProviderFallback ? ` · ${t("providerLegacyFallback")}` : ""}
           </span>
         </dd>
       </div>
       <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-surface-inset p-3">
         <dt className="flex items-center gap-1.5 text-caption text-muted-foreground">
-          <Zap className="size-3.5" aria-hidden="true" /> Progress
+          <Zap className="size-3.5" aria-hidden="true" /> {t("progressLabel")}
         </dt>
         <dd className="text-caption font-semibold tabular-nums text-foreground">
-          {doneChunks} / {totalChunks} chunks
+          {t("progressChunks", { done: doneChunks, total: totalChunks })}
         </dd>
       </div>
       <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-surface-inset p-3">
-        <dt className="text-caption text-muted-foreground">Prompt tokens</dt>
+        <dt className="text-caption text-muted-foreground">{t("promptTokensLabel")}</dt>
         <dd className="text-caption font-semibold tabular-nums text-foreground">
-          {promptTokens ? promptTokens.toLocaleString() : "—"}
+          {promptTokens ? formatNumber(promptTokens, locale) : "—"}
         </dd>
       </div>
       <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-surface-inset p-3">
-        <dt className="text-caption text-muted-foreground">Completion tokens</dt>
+        <dt className="text-caption text-muted-foreground">{t("completionTokensLabel")}</dt>
         <dd className="text-caption font-semibold tabular-nums text-foreground">
-          {completionTokens ? completionTokens.toLocaleString() : "—"}
+          {completionTokens ? formatNumber(completionTokens, locale) : "—"}
         </dd>
       </div>
     </dl>
@@ -315,6 +329,7 @@ function JobMetrics({
  * usage figures are the ones the modal rendered.
  */
 export function JobLogDrawer({ jobId, chapterId, open, onOpenChange }: JobLogDrawerProps) {
+  const t = useTranslations("job");
   const { progressQuery, detailsQuery } = useJobLogsQueries(jobId, chapterId, open);
   const mounted = useHydrated();
   const isDesktop = useIsDesktop();
@@ -344,7 +359,7 @@ export function JobLogDrawer({ jobId, chapterId, open, onOpenChange }: JobLogDra
           <div className="flex min-h-full flex-col gap-4">
             {queryError && !jobData ? (
               <QueryErrorState
-                title="Unable to load job details"
+                title={t("loadFailedTitle")}
                 error={queryError}
                 onRetry={() => void Promise.all([progressQuery.refetch(), detailsQuery.refetch()])}
                 className="my-0"
@@ -353,18 +368,16 @@ export function JobLogDrawer({ jobId, chapterId, open, onOpenChange }: JobLogDra
               (detailsQuery.isPending && !jobData) ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
                 <Spinner variant="primary" className="size-7" aria-hidden="true" />
-                <p className="text-body">Loading job details…</p>
+                <p className="text-body">{t("loading")}</p>
               </div>
             ) : jobData === null ? (
-              <p className="py-16 text-center text-body text-muted-foreground">
-                Job details not found.
-              </p>
+              <p className="py-16 text-center text-body text-muted-foreground">{t("notFound")}</p>
             ) : jobData ? (
               <>
                 {detailsQuery.isError ? (
                   <QueryErrorState
                     variant="panel"
-                    title="Unable to refresh job details"
+                    title={t("refreshDetailsFailed")}
                     error={detailsQuery.error}
                     onRetry={() => void detailsQuery.refetch()}
                     className="my-0 min-h-0"
@@ -373,7 +386,7 @@ export function JobLogDrawer({ jobId, chapterId, open, onOpenChange }: JobLogDra
                 {progressQuery.isError ? (
                   <QueryErrorState
                     variant="panel"
-                    title="Unable to refresh job progress"
+                    title={t("refreshProgressFailed")}
                     error={progressQuery.error}
                     onRetry={() => void progressQuery.refetch()}
                     className="my-0 min-h-0"
@@ -402,7 +415,7 @@ export function JobLogDrawer({ jobId, chapterId, open, onOpenChange }: JobLogDra
               </>
             ) : (
               <p className="py-16 text-center text-body text-muted-foreground">
-                Job details are still loading.
+                {t("stillLoading")}
               </p>
             )}
           </div>

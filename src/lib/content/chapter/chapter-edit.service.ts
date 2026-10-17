@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, novels, translationJobs } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
@@ -38,7 +39,7 @@ export async function updateChapterForUser(
       .where(eq(chapters.id, input.chapterId))
       .limit(1);
     if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
-      throw new SafeServerError("Chapter not found or unauthorized");
+      throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
     }
     const [existing] = await tx
       .select({ chapter: chapters })
@@ -54,21 +55,21 @@ export async function updateChapterForUser(
       .limit(1)
       .for("update", { of: chapters });
 
-    if (!existing) throw new SafeServerError("Chapter not found or unauthorized");
+    if (!existing) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
 
     const chapter = existing.chapter;
     if (input.title !== undefined && input.title.trim().length === 0) {
-      throw new SafeServerError("Source title is required");
+      throw new SafeServerError(encodeMessage("validation.sourceTitleRequired"));
     }
     if (input.rawContent !== undefined && input.rawContent.trim().length === 0) {
-      throw new SafeServerError("Source content is required");
+      throw new SafeServerError(encodeMessage("validation.sourceContentRequired"));
     }
     if (
       input.translatedContent !== undefined &&
       input.translatedContent !== null &&
       input.translatedContent.trim().length === 0
     ) {
-      throw new SafeServerError("Translation cannot be empty");
+      throw new SafeServerError(encodeMessage("validation.translationRequired"));
     }
     const numberChanged =
       input.number !== undefined && Number(input.number) !== Number(chapter.number);
@@ -78,16 +79,14 @@ export async function updateChapterForUser(
     const sourceChanged = numberChanged || titleChanged || rawContentChanged;
 
     if (sourceChanged && input.sourceChangePolicy === undefined) {
-      throw new SafeServerError("Choose whether to keep or clear the translation");
+      throw new SafeServerError(encodeMessage("errors.chapterTranslationDecisionRequired"));
     }
 
     if (
       input.translatedContent === null &&
       !(sourceChanged && input.sourceChangePolicy === "clear")
     ) {
-      throw new SafeServerError(
-        "Translated content can only be cleared when clearing a source translation",
-      );
+      throw new SafeServerError(encodeMessage("errors.translationClearRequiresSourceClear"));
     }
 
     const nextTranslatedTitle =
@@ -104,7 +103,7 @@ export async function updateChapterForUser(
           : chapter.translatedContent;
 
     if (nextTranslatedContent === "") {
-      throw new SafeServerError("Translation cannot be empty");
+      throw new SafeServerError(encodeMessage("validation.translationRequired"));
     }
 
     const translatedTitleChanged = nextTranslatedTitle !== chapter.translatedTitle;
@@ -156,7 +155,7 @@ export async function updateChapterForUser(
               jobId: activeJob.id,
               generation: activeJob.generation,
               logsJson: activeJob.logsJson,
-              message: "Translation cancelled because the chapter was edited.",
+              message: encodeMessage("log.cancelledChapterEdited"),
             },
           ],
           now,
@@ -211,7 +210,7 @@ export async function reorderChaptersForUser(
       .limit(1)
       .for("update");
 
-    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+    if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
     const novelChapters = await tx
       .select()
@@ -226,11 +225,11 @@ export async function reorderChaptersForUser(
       submittedIds.size !== novelChapters.length ||
       novelChapters.some((chapter) => !submittedIds.has(chapter.id))
     ) {
-      throw new SafeServerError("Chapter order is stale; refresh and try again");
+      throw new SafeServerError(encodeMessage("errors.chapterOrderStale"));
     }
 
     if (novelChapters.some((chapter) => chapter.activeTranslationJobId !== null)) {
-      throw new SafeServerError("Chapter order cannot change while translation is active");
+      throw new SafeServerError(encodeMessage("errors.chapterOrderTranslationActive"));
     }
 
     if (novelChapters.every((chapter, index) => chapter.id === input.chapterIds[index])) {
@@ -243,13 +242,13 @@ export async function reorderChaptersForUser(
         return !Number.isFinite(number) || number <= 0;
       })
     ) {
-      throw new SafeServerError("Chapter order requires positive chapter numbers");
+      throw new SafeServerError(encodeMessage("errors.chapterOrderPositiveNumbers"));
     }
 
     const slotById = new Map(novelChapters.map((chapter) => [chapter.id, chapter.number]));
     const targets = input.chapterIds.map((chapterId) => slotById.get(chapterId));
     if (targets.some((number) => number === undefined)) {
-      throw new SafeServerError("Chapter order is stale; refresh and try again");
+      throw new SafeServerError(encodeMessage("errors.chapterOrderStale"));
     }
 
     const changed = novelChapters.filter((chapter) => {
@@ -263,7 +262,7 @@ export async function reorderChaptersForUser(
       const targetIndex = input.chapterIds.indexOf(chapter.id);
       const target = novelChapters[targetIndex]?.number;
       if (target === undefined) {
-        throw new SafeServerError("Chapter order is stale; refresh and try again");
+        throw new SafeServerError(encodeMessage("errors.chapterOrderStale"));
       }
       return { id: chapter.id, number: target };
     });

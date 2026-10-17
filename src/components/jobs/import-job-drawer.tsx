@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import type { ReactNode } from "react";
+import { useLocale, useTranslations } from "use-intl";
 
+import type { JobsTranslator } from "@/components/jobs/job-history-columns";
 import { DateCell } from "@/components/jobs/date-cell";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { QueryErrorState } from "@/components/query-error-state";
@@ -16,6 +18,7 @@ import {
 } from "@/components/ui/drawer";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
+import { formatNumber } from "@/lib/i18n/format";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { getImportJobStatus } from "@/lib/scrape/functions";
 import type { JobHistoryStatus } from "@/lib/job-dashboard/contracts";
@@ -45,10 +48,10 @@ interface ImportJobDetails {
   updatedAt: Date | string;
 }
 
-function getImportProgress(job: ImportJobDetails) {
+function importProgress(job: ImportJobDetails, t: JobsTranslator) {
   const processed = job.added + job.skipped + job.failed;
   if (job.toNumber === 0) {
-    return { label: "Preparing…", percent: 0 };
+    return { label: t("preparing"), percent: 0 };
   }
   const total = job.kind === "epub" ? job.toNumber : Math.max(0, job.toNumber - job.fromNumber + 1);
   return {
@@ -58,13 +61,16 @@ function getImportProgress(job: ImportJobDetails) {
 }
 
 function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; updating: boolean }) {
-  const progress = getImportProgress(job);
+  const t = useTranslations("jobs");
+  const progress = importProgress(job, t);
   const source =
     job.kind === "epub"
-      ? job.sourceFileName || "EPUB upload"
-      : `${job.scrapeProvider || "Unknown provider"} · ${job.baseUrl}`;
+      ? job.sourceFileName || t("sourceEpubUpload")
+      : `${job.scrapeProvider || t("sourceUnknownProvider")} · ${job.baseUrl}`;
   const chapterRange =
-    job.kind === "epub" && job.toNumber === 0 ? "Preparing…" : `${job.fromNumber}–${job.toNumber}`;
+    job.kind === "epub" && job.toNumber === 0
+      ? t("preparing")
+      : t("rangeChapters", { from: job.fromNumber, to: job.toNumber });
   const showReupload =
     job.kind === "epub" && (job.status === "error" || job.status === "cancelled");
 
@@ -72,7 +78,7 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={job.status as JobHistoryStatus} />
-        <Badge variant="outline">{job.kind === "epub" ? "EPUB" : "Scrape"}</Badge>
+        <Badge variant="outline">{job.kind === "epub" ? t("typeEpub") : t("typeScrape")}</Badge>
         {updating ? (
           <span
             className="ml-auto inline-flex items-center gap-1.5 text-caption text-muted-foreground"
@@ -80,43 +86,43 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
             aria-live="polite"
           >
             <Spinner className="size-3.5" aria-hidden="true" />
-            Updating…
+            {t("importUpdating")}
           </span>
         ) : null}
       </div>
       <dl className="grid gap-3 rounded-lg border border-border bg-surface-inset p-4 sm:grid-cols-2">
-        <Detail label="Novel" value={job.novelTitle} />
-        <Detail label="Job ID" value={job.id} mono />
-        <Detail label="Source" value={source} breakWords />
-        <Detail label="Chapter range" value={chapterRange} />
-        <Detail label="Started" value={<DateCell value={job.createdAt} />} />
-        <Detail label="Updated" value={<DateCell value={job.updatedAt} />} />
+        <Detail label={t("detailNovel")} value={job.novelTitle} />
+        <Detail label={t("detailJobId")} value={job.id} mono />
+        <Detail label={t("detailSource")} value={source} breakWords />
+        <Detail label={t("detailChapterRange")} value={chapterRange} />
+        <Detail label={t("columnStarted")} value={<DateCell value={job.createdAt} />} />
+        <Detail label={t("columnUpdated")} value={<DateCell value={job.updatedAt} />} />
       </dl>
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 text-caption">
-          <span className="font-medium text-foreground">Processing</span>
+          <span className="font-medium text-foreground">{t("processing")}</span>
           <span className="tabular-nums text-muted-foreground">{progress.label}</span>
         </div>
-        <Progress value={progress.percent} aria-label="Import processing progress" />
+        <Progress value={progress.percent} aria-label={t("processingAria")} />
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">
-        <Counter label="Added" value={job.added} />
-        <Counter label="Skipped" value={job.skipped} />
-        <Counter label="Failed" value={job.failed} />
+        <Counter label={t("counterAdded")} value={job.added} />
+        <Counter label={t("counterSkipped")} value={job.skipped} />
+        <Counter label={t("counterFailed")} value={job.failed} />
       </div>
       {job.error ? (
         <div
           className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-caption text-destructive-text"
           role="alert"
         >
-          <p className="font-semibold">Worker error</p>
+          <p className="font-semibold">{t("workerError")}</p>
           <p className="mt-1 break-words whitespace-pre-wrap">{job.error}</p>
         </div>
       ) : null}
       {showReupload ? (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-inset p-3 text-caption text-muted-foreground">
           <Upload className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <p>Re-upload the EPUB from the novel page to retry.</p>
+          <p>{t("reuploadHint")}</p>
         </div>
       ) : null}
     </div>
@@ -140,18 +146,19 @@ function ImportDrawerBody({
   error,
   onRetry,
 }: ImportDrawerBodyProps) {
+  const t = useTranslations("jobs");
   if (loading) {
     return (
       <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-muted-foreground">
         <Spinner className="size-7" aria-hidden="true" />
-        <p>Loading import details…</p>
+        <p>{t("importLoading")}</p>
       </div>
     );
   }
   if (isError && !job) {
     return (
       <QueryErrorState
-        title="Unable to load import details"
+        title={t("importLoadFailed")}
         error={error}
         onRetry={onRetry}
         className="my-0"
@@ -161,7 +168,7 @@ function ImportDrawerBody({
   if (!job) {
     return (
       <p className="flex min-h-48 items-center justify-center text-center text-body text-muted-foreground">
-        Job details not found.
+        {t("importNotFound")}
       </p>
     );
   }
@@ -174,6 +181,7 @@ function ImportDrawerBody({
  * dialog for one and a panel for the other.
  */
 export function ImportJobDrawer({ jobId, open, onOpenChange }: ImportJobDrawerProps) {
+  const t = useTranslations("jobs");
   const isDesktop = useIsDesktop();
   const jobQuery = useQuery({
     queryKey: ["import-job-details", jobId],
@@ -196,16 +204,14 @@ export function ImportJobDrawer({ jobId, open, onOpenChange }: ImportJobDrawerPr
     <Drawer open={open} onOpenChange={onOpenChange} swipeDirection={isDesktop ? "right" : "down"}>
       <DrawerContent side={isDesktop ? "end" : "bottom"}>
         <DrawerHeader>
-          <DrawerTitle>Import job</DrawerTitle>
-          <DrawerDescription>
-            The source, range, counters, and worker result for this run.
-          </DrawerDescription>
+          <DrawerTitle>{t("importTitle")}</DrawerTitle>
+          <DrawerDescription>{t("importDescription")}</DrawerDescription>
         </DrawerHeader>
         <DrawerBody>
           <div className="flex min-h-full flex-col gap-4">
             {jobQuery.isError && job ? (
               <QueryErrorState
-                title="Unable to refresh import details"
+                title={t("importRefreshFailed")}
                 error={jobQuery.error}
                 onRetry={() => void jobQuery.refetch()}
                 variant="panel"
@@ -254,9 +260,12 @@ function Detail({
 }
 
 function Counter({ label, value }: { label: string; value: number }) {
+  const locale = useLocale();
   return (
     <div className="rounded-lg border border-border bg-surface-inset px-2 py-3">
-      <div className="font-semibold tabular-nums text-foreground">{value.toLocaleString()}</div>
+      <div className="font-semibold tabular-nums text-foreground">
+        {formatNumber(value, locale)}
+      </div>
       <div className="mt-1 text-micro text-muted-foreground">{label}</div>
     </div>
   );

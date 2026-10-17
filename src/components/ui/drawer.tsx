@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 import { XIcon } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,7 @@ function DrawerContent({
   showCloseButton?: boolean;
   showGrip?: boolean;
 }) {
+  const t = useTranslations("common");
   const classes = SIDE_CLASSES[side];
   return (
     <DrawerPrimitive.Portal>
@@ -97,7 +99,7 @@ function DrawerContent({
               render={<Button variant="ghost" size="icon-sm" className="absolute top-3 right-3" />}
             >
               <XIcon />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{t("close")}</span>
             </DrawerPrimitive.Close>
           ) : null}
         </DrawerPrimitive.Popup>

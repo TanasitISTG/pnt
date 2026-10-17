@@ -2,6 +2,14 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from
 import { dirname, resolve } from "node:path";
 import postgres from "postgres";
 
+import { requireDisposableDatabaseUrl, withDatabaseName } from "../../src/lib/db/database-url.ts";
+import {
+  describeFootprintCleanup,
+  openBucketFootprint,
+  removeAddedObjects,
+  type BucketFootprint,
+} from "../bucket-footprint.ts";
+
 const root = resolve(import.meta.dir, "../..");
 const artifactDir = resolve(root, ".tura/e2e");
 const logDir = resolve(artifactDir, "logs");
@@ -11,19 +19,27 @@ const stubUrl = "http://127.0.0.1:4010";
 const localPostgresPort = 55433;
 const localPostgresData = resolve(artifactDir, "postgres-data");
 
-const externalDatabaseUrl = process.env.E2E_DATABASE_URL;
-const requestedUrl =
-  externalDatabaseUrl ?? `postgresql://postgres@127.0.0.1:${localPostgresPort}/pnt_e2e`;
-let parsedUrl: URL;
-try {
-  parsedUrl = new URL(requestedUrl);
-} catch {
-  throw new Error("E2E_DATABASE_URL must be a valid disposable database URL");
-}
-const databaseName = parsedUrl.pathname.slice(1);
-if (!/^[a-z0-9_]+_e2e$/.test(databaseName)) {
-  throw new Error("E2E_DATABASE_URL must name a disposable database ending in _e2e");
-}
+// An empty value reads as "not configured", the way every other optional variable in this repo
+// does (`.env.example` documents this one as empty by default, and `.env.local` is copied from
+// it), so leaving it blank starts the ephemeral PostgreSQL below instead of refusing to run.
+const externalDatabaseUrl = process.env.E2E_DATABASE_URL?.trim() || undefined;
+const localDatabaseUrl = `postgresql://postgres@127.0.0.1:${localPostgresPort}/pnt_e2e`;
+// The buckets are shared with the application and with the integration run, and this run writes to
+// them through the app it starts: covers, a seeded profile photo, staged archives, cached exports.
+// Its database is dropped at the end, so the rows that would own those objects go with it. The
+// footprint taken below measures both buckets before anything starts and removes the sets this run
+// created once every process it started has stopped (`scripts/bucket-footprint.ts`), under this same
+// composed environment — which is also what makes the sweep reach the buckets the app used.
+//
+// The same guard every entry point that names a database goes through (`src/lib/db/database-url.ts`),
+// with this run's own requirement on top of it: the database named here is dropped and re-created
+// below, so only a `*_e2e` name is accepted. That is what keeps the run off the application's
+// database and off the integration run's template, either of which reads as disposable already.
+const { url: requestedUrl, name: databaseName } = requireDisposableDatabaseUrl(
+  externalDatabaseUrl ?? localDatabaseUrl,
+  "E2E_DATABASE_URL",
+  { ending: "_e2e" },
+);
 
 rmSync(artifactDir, { recursive: true, force: true });
 mkdirSync(logDir, { recursive: true });
@@ -61,10 +77,11 @@ const environment = {
   E2E_OPENAI_PORT: "4010",
   LOCAL_PROVIDER_ORIGINS: JSON.stringify([new URL(stubUrl).origin]),
   RATE_LIMIT_TRUSTED_PROXY_HOPS: "1",
-  // The suite signs in from one address a dozen times in about two minutes, which the
-  // shipped ten-per-minute auth limiter would refuse partway through — a spec failing on a
-  // 429 that the product is right to answer. Raised here, never in production.
-  AUTH_RATE_LIMIT_MAX: "100",
+  // Pinned empty, so the suite runs the shipped auth budget (ten per path per rolling minute)
+  // whatever a developer's `.env.local` says: the sessions come from the fixture, which signs in
+  // four times per run, instead of every spec signing in on the way past. Raised here before that
+  // - a dozen sign-ins from one address in one window - and never in production.
+  AUTH_RATE_LIMIT_MAX: "",
   PLAYWRIGHT_CHANNEL: detectBrowserChannel(),
   PORT: "3000",
   NITRO_PORT: "3000",
@@ -227,8 +244,20 @@ async function stop(child: ManagedProcess) {
 }
 
 let admin: ReturnType<typeof postgres> | undefined;
+let footprint: BucketFootprint | null = null;
 
 try {
+  // The window opens here, before a single process of this run has written anything. A footprint
+  // that cannot be read is reported and does not stop the run — this command's outcome is the
+  // browser workflow — but it is loud, because it means the buckets will hold what this run writes.
+  try {
+    footprint = await openBucketFootprint(environment);
+  } catch (error: unknown) {
+    console.error(
+      `The buckets could not be read before the run, so it will leave what it writes: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   if (!externalDatabaseUrl) {
     mkdirSync(localPostgresData, { recursive: true });
     await run(
@@ -253,9 +282,9 @@ try {
     await waitForPostgres(postgresProcess);
   }
 
-  const adminUrl = new URL(requestedUrl);
-  adminUrl.pathname = "/postgres";
-  admin = postgres(adminUrl.toString(), { max: 1, onnotice: () => {} });
+  // The same helper the migration scripts use to reach the server's own `postgres` database, so
+  // the connection string is rewritten in one place rather than by hand in three.
+  admin = postgres(withDatabaseName(requestedUrl, "postgres"), { max: 1, onnotice: () => {} });
   await admin.unsafe(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
   await admin.unsafe(`CREATE DATABASE "${databaseName}"`);
   await run(["bun", "run", "db:migrate"], "E2E migration");
@@ -298,9 +327,26 @@ try {
   );
   console.log("E2E workflow passed");
 } finally {
+  // Everything this run started stops first: a process still running could write after the
+  // buckets are read again, which is exactly the leftover this sweep exists to prevent.
+  for (const child of children.toReversed()) await stop(child);
+
+  if (footprint) {
+    // Reported rather than thrown: the browser workflow's result is what this command reports, and
+    // a sweep that fails here must not be read as a failing run.
+    try {
+      const cleanup = await removeAddedObjects(footprint, environment);
+      const summary = describeFootprintCleanup(cleanup);
+      if (summary) console.log(`Bucket cleanup: ${summary}.`);
+    } catch (error: unknown) {
+      console.error(
+        `The buckets could not be swept after the run, so it left what it wrote: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   if (admin) {
     await admin.unsafe(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
     await admin.end({ timeout: 1 });
   }
-  for (const child of children.toReversed()) await stop(child);
 }

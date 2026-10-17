@@ -2,6 +2,7 @@ import { memo } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { Check, Edit, Play, RotateCw, Square, Terminal, Trash2, X } from "lucide-react";
+import { useLocale, useTranslations } from "use-intl";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,8 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { ChapterStatusBadge } from "@/components/chapters/table/chapter-status-badge";
 import type { TitleEditState } from "@/components/chapters/table/use-chapter-title-edit";
 import { PublishMenu } from "@/components/publish-menu";
+import { formatNumber } from "@/lib/i18n/format";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { cn, formatCost, formatTokens } from "@/lib/utils";
 import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 import type { ActiveJobState, NovelCostData } from "@/lib/translation/types/api";
@@ -54,6 +57,7 @@ function AdminSelectionCell({
   selected,
   onToggleSelect,
 }: Pick<ChapterTableRowProps, "chapter" | "viewer" | "selected" | "onToggleSelect">) {
+  const t = useTranslations("studio");
   if (viewer !== "admin") return null;
   return (
     <TableCell className="w-10">
@@ -61,7 +65,7 @@ function AdminSelectionCell({
         type="checkbox"
         checked={selected}
         onChange={(event) => onToggleSelect(chapter.id, event.target.checked)}
-        aria-label={`Select chapter ${Number(chapter.number)}`}
+        aria-label={t("selectChapter", { number: Number(chapter.number) })}
         className="size-4 accent-primary align-middle"
       />
     </TableCell>
@@ -77,7 +81,7 @@ interface ChapterTitleEditorProps {
 }
 
 const translatedTitleSchema = z.object({
-  translatedTitle: z.string().max(500, "Translated title must be 500 characters or fewer"),
+  translatedTitle: z.string().max(500, encodeMessage("validation.translatedTitleMax")),
 });
 
 function ChapterTitleEditor({
@@ -87,6 +91,7 @@ function ChapterTitleEditor({
   onSaveTitle,
   onCancelEdit,
 }: ChapterTitleEditorProps) {
+  const t = useTranslations("studio");
   const form = useForm({
     defaultValues: {
       translatedTitle: titleEdit.initialTranslatedTitle,
@@ -116,7 +121,7 @@ function ChapterTitleEditor({
       }}
     >
       <span className="text-caption font-normal text-muted-foreground">
-        Source: {chapter.title}
+        {t("sourceLabel", { title: chapter.title })}
       </span>
       <form.Field name="translatedTitle">
         {(field) => {
@@ -135,7 +140,7 @@ function ChapterTitleEditor({
                       onCancelEdit();
                     }
                   }}
-                  aria-label={`Translated title for chapter ${Number(chapter.number)}`}
+                  aria-label={t("translatedTitleField", { number: Number(chapter.number) })}
                   aria-invalid={invalid}
                   maxLength={500}
                   autoFocus
@@ -146,8 +151,8 @@ function ChapterTitleEditor({
                   type="submit"
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Save translated title"
-                  title="Save translated title"
+                  aria-label={t("saveTranslatedTitle")}
+                  title={t("saveTranslatedTitle")}
                   disabled={
                     titleValue.trim() === titleEdit.initialTranslatedTitle ||
                     !canSubmit ||
@@ -161,8 +166,8 @@ function ChapterTitleEditor({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Cancel translated title edit"
-                  title="Cancel translated title edit"
+                  aria-label={t("cancelTranslatedTitle")}
+                  title={t("cancelTranslatedTitle")}
                   onClick={onCancelEdit}
                   disabled={isSubmitting}
                 >
@@ -184,6 +189,7 @@ function ChapterTitleLink({
   readState,
   residualScriptCount,
 }: Pick<ChapterTableRowProps, "chapter" | "novelId" | "readState" | "residualScriptCount">) {
+  const t = useTranslations("studio");
   return (
     <div className="flex items-center gap-2">
       <Link
@@ -197,11 +203,11 @@ function ChapterTitleLink({
         {chapter.translatedTitle ?? chapter.title}
       </Link>
       {readState === "read" ? (
-        <span className="text-caption text-muted-foreground">Opened</span>
+        <span className="text-caption text-muted-foreground">{t("openedMarker")}</span>
       ) : null}
       {residualScriptCount ? (
         <Badge variant="warningStrong" className="font-mono text-xs">
-          {residualScriptCount} foreign-script letters
+          {t("residualScriptLetters", { count: residualScriptCount })}
         </Badge>
       ) : null}
     </div>
@@ -213,6 +219,7 @@ function ChapterStatusOrProgress({
   activeJob,
   mobile = false,
 }: Pick<ChapterTableRowProps, "chapter" | "activeJob"> & { mobile?: boolean }) {
+  const t = useTranslations("studio");
   const translating =
     activeJob && (activeJob.status === "running" || activeJob.status === "pending");
   if (!translating) return <ChapterStatusBadge status={chapter.status} />;
@@ -220,7 +227,7 @@ function ChapterStatusOrProgress({
   return (
     <div className={cn("flex min-w-28 flex-col gap-1", mobile && "flex-1")}>
       <div className="flex justify-between text-xs text-muted-foreground font-mono">
-        <span>Translating...</span>
+        <span>{t("translatingProgress")}</span>
         <span>
           {activeJob.doneChunks}/{activeJob.totalChunks}
         </span>
@@ -244,23 +251,26 @@ function ChapterCostSummary({
   chapterCost: ChapterCost | undefined;
   mobile?: boolean;
 }) {
+  const t = useTranslations("studio");
   if (!chapterCost) return null;
-  const sourceLabel =
+  const source =
     chapterCost.source === "current-settings-estimate"
-      ? " · estimate"
+      ? t("costEstimate")
       : chapterCost.source === "unpriced"
-        ? " · unpriced"
+        ? t("costUnpriced")
         : "";
   return (
     <div className={cn("font-mono text-muted-foreground", !mobile && "text-caption")}>
       {formatTokens(chapterCost.promptTokens + chapterCost.completionTokens)} tok
       {chapterCost.cost != null ? ` · ${formatCost(chapterCost.cost)}` : null}
-      {sourceLabel}
+      {source ? ` · ${source}` : null}
     </div>
   );
 }
 
 function ChapterTitleCell(props: ChapterTableRowProps) {
+  const t = useTranslations("studio");
+  const locale = useLocale();
   const { chapter, viewer, activeJob, titleEdit, chapterCost } = props;
   return (
     <TableCell className="font-medium">
@@ -284,7 +294,9 @@ function ChapterTitleCell(props: ChapterTableRowProps) {
       <div className="sm:hidden mt-1.5 flex flex-col gap-1 text-caption text-muted-foreground">
         <div className="flex items-center gap-2">
           <ChapterStatusOrProgress chapter={chapter} activeJob={activeJob} mobile />
-          <span>· {chapter.rawCharCount.toLocaleString()} chars</span>
+          <span>
+            · {formatNumber(chapter.rawCharCount, locale)} {t("chars")}
+          </span>
         </div>
         {viewer === "admin" ? <ChapterCostSummary chapterCost={chapterCost} mobile /> : null}
       </div>
@@ -297,9 +309,10 @@ function ChapterCharacterCountCell({
   viewer,
   chapterCost,
 }: Pick<ChapterTableRowProps, "chapter" | "viewer" | "chapterCost">) {
+  const locale = useLocale();
   return (
     <TableCell className="text-muted-foreground hidden sm:table-cell">
-      {chapter.rawCharCount.toLocaleString()}
+      {formatNumber(chapter.rawCharCount, locale)}
       {viewer === "admin" ? <ChapterCostSummary chapterCost={chapterCost} /> : null}
     </TableCell>
   );
@@ -323,6 +336,7 @@ function TranslationActionButton({
   | "onStartTranslate"
   | "onRequestRetranslate"
 >) {
+  const t = useTranslations("studio");
   if (translationState === "translating" && activeJob) {
     return (
       <Button
@@ -330,8 +344,8 @@ function TranslationActionButton({
         size="icon"
         className="size-8"
         onClick={() => onCancelTranslate(activeJob.jobId, chapter.id)}
-        aria-label="Cancel translation"
-        title="Cancel translation"
+        aria-label={t("cancelTranslation")}
+        title={t("cancelTranslation")}
       >
         <Square className="size-4" />
       </Button>
@@ -353,8 +367,8 @@ function TranslationActionButton({
             onStartTranslate(chapter.id, "missing");
           }
         }}
-        aria-label="Retry translation"
-        title="Retry translation"
+        aria-label={t("retryTranslation")}
+        title={t("retryTranslation")}
       >
         <RotateCw className="size-4" />
       </Button>
@@ -368,8 +382,8 @@ function TranslationActionButton({
         size="icon"
         className="size-8"
         onClick={() => onRequestRetranslate(chapter.id)}
-        aria-label="Re-translate chapter"
-        title="Re-translate chapter"
+        aria-label={t("retranslateChapter")}
+        title={t("retranslateChapter")}
       >
         <RotateCw className="size-4" />
       </Button>
@@ -382,8 +396,8 @@ function TranslationActionButton({
       size="icon"
       className="size-8"
       onClick={() => onStartTranslate(chapter.id, "missing")}
-      aria-label="Translate chapter"
-      title="Translate chapter"
+      aria-label={t("translateChapter")}
+      title={t("translateChapter")}
     >
       <Play className="size-4" />
     </Button>
@@ -391,6 +405,7 @@ function TranslationActionButton({
 }
 
 function AdminActionsCell(props: ChapterTableRowProps) {
+  const t = useTranslations("studio");
   const { chapter, viewer, activeJob, titleEdit } = props;
   if (viewer !== "admin") return null;
   const isTitleEditing = titleEdit !== null;
@@ -418,8 +433,8 @@ function AdminActionsCell(props: ChapterTableRowProps) {
             size="icon"
             className="size-8"
             onClick={() => props.onViewLogs(chapter.id)}
-            aria-label="View translation logs"
-            title="View translation logs"
+            aria-label={t("viewLogs")}
+            title={t("viewLogs")}
           >
             <Terminal className="size-4" />
           </Button>
@@ -429,8 +444,8 @@ function AdminActionsCell(props: ChapterTableRowProps) {
           size="icon"
           className="size-8"
           onClick={() => (isTitleEditing ? props.onCancelEdit() : props.onStartEdit(chapter))}
-          aria-label={isTitleEditing ? "Cancel edit" : "Edit chapter"}
-          title={isTitleEditing ? "Cancel edit" : "Edit chapter"}
+          aria-label={isTitleEditing ? t("cancelEdit") : t("editChapter")}
+          title={isTitleEditing ? t("cancelEdit") : t("editChapter")}
           disabled={!isTitleEditing && props.translationState === "translating"}
         >
           {isTitleEditing ? (
@@ -444,7 +459,7 @@ function AdminActionsCell(props: ChapterTableRowProps) {
           size="icon"
           className="size-8"
           onClick={() => props.onDeleteChapter(chapter.id)}
-          aria-label="Delete chapter"
+          aria-label={t("deleteChapter")}
         >
           <Trash2 className="size-4 text-destructive-text" />
         </Button>

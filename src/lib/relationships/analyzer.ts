@@ -17,6 +17,7 @@ import {
   parseRelationshipAnalysis,
 } from "./analysis-prompt";
 import { MAX_RELATIONSHIP_PROMPT_ITEMS, normalizeIdentity } from "./schemas";
+import { logMessage } from "@/lib/translation/workflow/log-entry";
 import type { AIProviderClient } from "@/lib/providers/types";
 import type {
   ApprovedCharacterMapping,
@@ -33,7 +34,14 @@ interface ResolvedIdentity {
 
 export interface ChunkRelationshipAnalysis {
   context: RelationshipPromptContext | null;
-  warning: string | null;
+  /**
+   * One stored message per warning, each a code from `logMessage`, in the order they happened.
+   *
+   * A list rather than one joined string is what lets the job log write a row per warning: the
+   * codec resolves a whole message or none of it, so two sentences in one row could never be
+   * read in the reader's language.
+   */
+  warnings: string[];
   promptTokens: number;
   completionTokens: number;
 }
@@ -65,6 +73,7 @@ export interface ChunkRelationshipAnalysisInput {
 export interface PersistedRelationshipAnalysis {
   applied: boolean;
   map: RelationshipMapV1 | null;
+  /** The same one-code-per-warning list the merge returns, resolved on the reader's side. */
   warnings: string[];
 }
 
@@ -87,7 +96,7 @@ export async function analyzeChunkRelationshipsForChunk(
   const { novel, chapter, chunk, previousChunk, previousChapter } = input;
 
   const pair = parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`);
-  if (!pair) return emptyResult(null);
+  if (!pair) return emptyResult();
 
   const approvedMappings: ApprovedCharacterMapping[] = [];
   for (const term of input.approvedTerms) {
@@ -102,17 +111,23 @@ export async function analyzeChunkRelationshipsForChunk(
     chunk.index > 0
       ? previousChunk?.sourceText.slice(-tailLength) || null
       : previousChapter?.rawTail || null;
+  // Every warning here is stored, not printed: each becomes a row of its own in the chapter's job
+  // log, which whoever owns the novel opens later, in whatever language they read. So each is
+  // written as a code (`lib/translation/workflow/log-entry.ts`) and the failure it names travels as
+  // a value — the provider's own code when the provider failed, and a sentence from a library
+  // otherwise.
+  const unknownReason = logMessage("analysisReasonUnknown");
   const invalidMapWarning =
-    novel.relationshipMapJson && !storedMap
-      ? "Stored relationship map is invalid; automatic facts were not written."
-      : null;
+    novel.relationshipMapJson && !storedMap ? logMessage("relationshipMapInvalid") : null;
 
   if (!input.providerConfig) {
     return {
       context: buildRelationshipPromptContextForText(storedMap, chunk.sourceText),
-      warning: joinWarnings(
+      warnings: uniqueWarnings(
         invalidMapWarning,
-        `Relationship analysis unavailable: ${input.providerFailure ?? "provider error"}.`,
+        logMessage("relationshipAnalysisUnavailable", {
+          reason: input.providerFailure ?? unknownReason,
+        }),
       ),
       promptTokens: 0,
       completionTokens: 0,
@@ -131,7 +146,7 @@ export async function analyzeChunkRelationshipsForChunk(
   });
 
   let context = sourceAnalysis.context;
-  const warnings = [invalidMapWarning, sourceAnalysis.warning];
+  const warnings = uniqueWarnings(invalidMapWarning, ...sourceAnalysis.warnings);
   if (sourceAnalysis.analysis && storedMap) {
     const applied = await input.persistAnalysis(sourceAnalysis.analysis);
     context =
@@ -144,7 +159,9 @@ export async function analyzeChunkRelationshipsForChunk(
   }
   return {
     context,
-    warning: joinWarnings(...warnings),
+    // The port can report a warning the merge already reported, and the same refusal said twice
+    // is one row: a reader does not need the second copy.
+    warnings: uniqueWarnings(...warnings),
     promptTokens: sourceAnalysis.promptTokens,
     completionTokens: sourceAnalysis.completionTokens,
   };
@@ -170,6 +187,9 @@ export async function analyzeRelationshipSourceChunk(
   options: RelationshipSourceAnalysisOptions,
 ): Promise<RelationshipSourceAnalysis> {
   const fallback = buildRelationshipPromptContextForText(options.existingMap, options.currentChunk);
+  // Both the throw and the catch below name one failure, so the sentinel is written once: an
+  // unreadable analysis is its own sentence rather than a reason inside the generic one.
+  const invalidJsonReason = logMessage("relationshipAnalysisInvalidJson");
   let promptTokens = 0;
   let completionTokens = 0;
 
@@ -195,7 +215,7 @@ export async function analyzeRelationshipSourceChunk(
       completionTokens += completion.completionTokens;
 
       const parsed = parseRelationshipAnalysis(completion.content);
-      if (!parsed) throw new Error("Relationship analysis returned invalid JSON");
+      if (!parsed) throw new Error(invalidJsonReason);
       return parsed;
     });
 
@@ -217,20 +237,21 @@ export async function analyzeRelationshipSourceChunk(
       map: merged.map,
       analysis: validated,
       context: context ?? fallback,
-      warning: joinWarnings(...merged.warnings),
+      warnings: uniqueWarnings(...merged.warnings),
       promptTokens,
       completionTokens,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "analysis error";
+    const message = error instanceof Error ? error.message : logMessage("analysisReasonUnknown");
     return {
       map: options.existingMap,
       analysis: null,
       context: fallback,
-      warning:
-        message === "Relationship analysis returned invalid JSON"
-          ? "Relationship analysis returned invalid JSON."
-          : `Relationship analysis failed: ${message}.`,
+      warnings: [
+        message === invalidJsonReason
+          ? invalidJsonReason
+          : logMessage("relationshipAnalysisFailed", { reason: message }),
+      ],
       promptTokens,
       completionTokens,
     };
@@ -362,11 +383,16 @@ function identityPairKey(speaker: string, listener: string): string {
   return `${normalizeIdentity(speaker)}\u0000${normalizeIdentity(listener)}`;
 }
 
-function joinWarnings(...warnings: Array<string | null | undefined>): string | null {
-  const unique = [...new Set(warnings.filter((warning): warning is string => Boolean(warning)))];
-  return unique.length > 0 ? unique.join(" ") : null;
+/**
+ * The warnings in one list, each kept once and in the order it first happened.
+ *
+ * Every item is already a code, so the same refusal arrives identical only when it is the
+ * same refusal: deduplicating by string is exact rather than approximate.
+ */
+function uniqueWarnings(...warnings: Array<string | null | undefined>): string[] {
+  return [...new Set(warnings.filter((warning): warning is string => Boolean(warning)))];
 }
 
-function emptyResult(warning: string | null): ChunkRelationshipAnalysis {
-  return { context: null, warning, promptTokens: 0, completionTokens: 0 };
+function emptyResult(warnings: string[] = []): ChunkRelationshipAnalysis {
+  return { context: null, warnings, promptTokens: 0, completionTokens: 0 };
 }

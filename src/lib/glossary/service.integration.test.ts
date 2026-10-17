@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { type Sql } from "postgres";
 
 import type { GlossaryListInput } from "@/lib/glossary/schemas";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import { encodeMessage } from "@/lib/i18n/message-code";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let listGlossaryTermsForUser: typeof import("./service").listGlossaryTermsForUser;
@@ -25,21 +28,13 @@ function search(novelId: string, overrides: Partial<GlossaryListInput> = {}): Gl
   return { novelId, ...defaultSearch, ...overrides };
 }
 
-integrationDescribe("glossary pagination PostgreSQL contracts", () => {
+describeIntegration("glossary pagination PostgreSQL contracts", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     ({ listGlossaryTermsForUser, updateGlossaryTermAtomic } = await import("./service"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   it("filters, sorts, pages, clamps, and isolates glossary rows", async () => {
     const ownerUserId = `user-${randomUUID()}`;
@@ -235,7 +230,7 @@ integrationDescribe("glossary pagination PostgreSQL contracts", () => {
       expect(clamped.rows).toHaveLength(25);
 
       await expect(listGlossaryTermsForUser(otherUserId, search(novelId))).rejects.toThrow(
-        "Novel not found or unauthorized",
+        encodeMessage("errors.novelNotFoundOrUnauthorized"),
       );
     } finally {
       await sql`DELETE FROM "glossary_terms" WHERE "novel_id" = ${novelId} OR "novel_id" = ${otherNovelId}`;
@@ -359,9 +354,9 @@ integrationDescribe("glossary pagination PostgreSQL contracts", () => {
       expect(novel?.story_summary).toBeNull();
       expect(term?.target).toBe("New Name");
       expect(job?.status).toBe("cancelled");
-      expect(job?.logs_json).toContain(
-        "Translation cancelled because glossary terms were propagated.",
-      );
+      // A code rather than a sentence: propagation cancels jobs that may belong to a chapter nobody
+      // is looking at, and the drawer resolves the row when someone opens it.
+      expect(job?.logs_json).toContain(encodeMessage("log.cancelledGlossaryPropagated"));
       expect(outbox).toHaveLength(1);
       expect(JSON.parse(outbox[0]!.payload_json)).toEqual({ jobId, generation: 4 });
       expect(dispatched).toEqual([outbox[0]!.id]);

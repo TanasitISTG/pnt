@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import {
   cancelImportJob,
@@ -102,6 +103,10 @@ export function useImportJob(
   invalidateChapters: () => void,
   kind: ImportJobKind = "scrape",
 ): ImportJobController {
+  const t = useTranslations("studio");
+  // The discovery and poll effects read copy through a ref: neither may re-run because the
+  // translator's identity changed, only because its own inputs did.
+  const tRef = useRef(t);
   const queryClient = useQueryClient();
   const [importJob, setImportJob] = useState<ImportJobState | null>(null);
   const [importStatusError, setImportStatusError] = useState<Error | null>(null);
@@ -131,6 +136,10 @@ export function useImportJob(
   useEffect(() => {
     invalidateChaptersRef.current = invalidateChapters;
   }, [invalidateChapters]);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const setInitialLoading = useCallback((loading: boolean) => {
     initialStatusLoadingRef.current = loading;
@@ -204,7 +213,7 @@ export function useImportJob(
         ) {
           return;
         }
-        setImportStatusError(normalizeError(error, "Unable to load import status"));
+        setImportStatusError(normalizeError(error, tRef.current("importStatusLoadFailed")));
       })
       .finally(() => {
         if (
@@ -281,12 +290,20 @@ export function useImportJob(
         }
         if (result.status === "done") {
           toast.success(
-            `Import done: added ${result.added}, skipped ${result.skipped}, failed ${result.failed}`,
+            tRef.current("importDone", {
+              added: result.added,
+              skipped: result.skipped,
+              failed: result.failed,
+            }),
           );
         } else if (result.status === "error") {
-          toast.error(`Import failed: ${result.error || "Unknown error"}`);
+          toast.error(
+            tRef.current("importFailedReason", {
+              reason: result.error || tRef.current("importUnknownError"),
+            }),
+          );
         } else if (result.status === "cancelled") {
-          toast.info("Import cancelled");
+          toast.info(tRef.current("importCancelledToast"));
         }
       } catch (error: unknown) {
         if (
@@ -296,7 +313,7 @@ export function useImportJob(
           version === jobVersionRef.current &&
           importJobRef.current?.id === jobId
         ) {
-          setImportStatusError(normalizeError(error, "Unable to refresh import status"));
+          setImportStatusError(normalizeError(error, tRef.current("importStatusRefreshFailed")));
         }
       } finally {
         if (requestId === statusRequestRef.current) {
@@ -359,10 +376,10 @@ export function useImportJob(
       setLastScrapeRequest(request);
       setImportStatusError(null);
       void invalidateJobDashboard(queryClient);
-      toast.info(`Import of chapters ${from}–${to} queued`);
+      toast.info(t("importQueued", { from, to }));
     } catch (error: unknown) {
       if (revision === localRevisionRef.current) {
-        toast.error(normalizeError(error, "Failed to start import").message);
+        toast.error(normalizeError(error, t("importStartFailed")).message);
       }
     } finally {
       if (startTokenRef.current === revision) {
@@ -400,10 +417,10 @@ export function useImportJob(
       setImportJob(cancelledJob);
       invalidateChaptersRef.current();
       void invalidateJobDashboard(queryClient);
-      toast.info("Import cancelled");
+      toast.info(t("importCancelledToast"));
     } catch (error: unknown) {
       if (revision === localRevisionRef.current && importJobRef.current?.id === jobId) {
-        toast.error(normalizeError(error, "Failed to cancel import").message);
+        toast.error(normalizeError(error, t("importCancelFailed")).message);
       }
     } finally {
       if (cancelTokenRef.current === revision) {
@@ -486,7 +503,7 @@ export function useImportJob(
         expectedRevision === localRevisionRef.current &&
         expectedJobId === (importJobRef.current?.id ?? null)
       ) {
-        setImportStatusError(normalizeError(error, "Unable to refresh import status"));
+        setImportStatusError(normalizeError(error, t("importStatusRefreshFailed")));
       }
     } finally {
       if (requestId === statusRequestRef.current) {

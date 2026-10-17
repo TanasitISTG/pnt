@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { eq } from "drizzle-orm";
 
 import { auth, type User as AuthUser } from "@/lib/auth/auth";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { impersonationOperatorId } from "@/lib/auth/impersonation";
 import { db } from "@/lib/db";
 import { user as userTable } from "@/lib/db/schema";
@@ -84,7 +85,7 @@ export async function applyProfileName(headers: Headers, name: string): Promise<
     log("error", "Display name update failed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    throw new SafeServerError("Could not update your display name. Try again.");
+    throw new SafeServerError(encodeMessage("errors.displayNameUpdateFailed"));
   }
 }
 
@@ -95,7 +96,7 @@ export async function replaceProfileImage(
   data: UpdateProfileImageInput,
 ): Promise<void> {
   const buffer = Buffer.from(data.image, "base64");
-  assertImageMagicBytes(buffer, data.imageMime, "Profile");
+  assertImageMagicBytes(buffer, data.imageMime);
 
   // Objects are written before the row, so the profile never points at missing
   // bytes; a refused write-back removes the set that was just written.

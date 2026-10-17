@@ -2,6 +2,7 @@ import { getRouteApi, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
+import { useTranslations } from "use-intl";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import {
@@ -25,18 +26,32 @@ import {
 } from "@/components/ui/dialog";
 import { relationshipMapQueryOptions, type RelationshipMapSearch } from "@/lib/relationships/query";
 import { novelQueryOptions } from "@/lib/content/novel/novel.query";
+import { languageName } from "@/lib/i18n/language-name";
 import { LANG_LABELS, parseLanguagePair } from "@/lib/language-pair";
 
 const relationshipsRoute = getRouteApi("/_protected/novels/$novelId/manage/relationships");
 
 export function RelationshipsPage() {
+  const t = useTranslations("relationships");
+  const tCommon = useTranslations("common");
+  const tRoot = useTranslations();
   const { novelId } = relationshipsRoute.useParams();
   const search = relationshipsRoute.useSearch();
   const navigate = relationshipsRoute.useNavigate();
   const novelQuery = useQuery(novelQueryOptions(novelId));
   const novel = novelQuery.data;
   const pair = novel ? parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`) : null;
-  const languageLabels = pair ? LANG_LABELS[pair] : null;
+  // The pair is data ("zh", "th"), but the words a reader sees for it are interface copy: a
+  // Thai owner reading a Chinese-to-Thai map should see จีน, not the English name of the
+  // language. `LANG_LABELS` is the English name the analysis prompts use, so it is only the
+  // fallback for a code the catalog does not name.
+  const languageLabels =
+    novel && pair
+      ? {
+          source: languageName(tRoot, novel.sourceLang) ?? LANG_LABELS[pair].source,
+          target: languageName(tRoot, novel.targetLang) ?? LANG_LABELS[pair].target,
+        }
+      : null;
   const mapQuery = useQuery({
     ...relationshipMapQueryOptions(novelId),
     enabled: pair !== null,
@@ -97,9 +112,9 @@ export function RelationshipsPage() {
   if (!novel) {
     return (
       <div className="py-12 text-center">
-        <h2 className="text-card-title font-semibold text-foreground">Novel not found</h2>
+        <h2 className="text-card-title font-semibold text-foreground">{t("novelNotFound")}</h2>
         <Button className="mt-4" render={<Link to="/" />}>
-          Back to Library
+          {t("backToLibrary")}
         </Button>
       </div>
     );
@@ -107,17 +122,13 @@ export function RelationshipsPage() {
   if (!pair || !languageLabels) {
     return (
       <div className="py-12 text-center">
-        <h2 className="text-card-title font-semibold text-foreground">
-          Relationship map unavailable
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This language pair does not support relationship maps.
-        </p>
+        <h2 className="text-card-title font-semibold text-foreground">{t("mapUnavailable")}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{t("mapUnavailableDescription")}</p>
         <Button
           className="mt-4"
           render={<Link to="/{-$locale}/novels/$novelId" params={{ novelId }} />}
         >
-          Back to novel
+          {t("backToNovel")}
         </Button>
       </div>
     );
@@ -126,7 +137,7 @@ export function RelationshipsPage() {
   if (mapQuery.isPending && !map) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground" aria-busy="true">
-        Loading relationship map…
+        {t("loading")}
       </div>
     );
   }
@@ -134,7 +145,7 @@ export function RelationshipsPage() {
   if (mapQuery.isError && !map) {
     return (
       <QueryErrorState
-        title="Unable to load relationship map"
+        title={t("loadFailed")}
         error={mapQuery.error}
         onRetry={() => void mapQuery.refetch()}
         className="my-0"
@@ -181,25 +192,23 @@ export function RelationshipsPage() {
       <Dialog open={deleteTarget !== null} onOpenChange={closeDeleteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete relationship entry?</DialogTitle>
+            <DialogTitle>{t("deleteTitle")}</DialogTitle>
             <DialogDescription>
-              Delete “{deleteTarget?.label}” permanently from this map? A later source analysis can
-              rediscover an unlocked fact, but this stored row and any character-linked rows will be
-              removed now.
+              {t("deleteBody", { label: deleteTarget?.label ?? "" })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => closeDeleteDialog(false)} disabled={deleting}>
-              Cancel
+              {tCommon("cancel")}
             </Button>
             <Button
               variant="destructive"
               onClick={confirmDelete}
               disabled={deleting}
-              aria-label="Confirm delete relationship entry"
+              aria-label={t("deleteConfirmAria")}
             >
               <Trash2 className="size-4" aria-hidden="true" />
-              Delete entry
+              {t("deleteConfirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

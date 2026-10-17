@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import { strFromU8, unzipSync } from "fflate";
-import postgres, { type Sql } from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it } from "vitest";
 
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let createNovelExportResponse: typeof import("./stream").createNovelExportResponse;
@@ -49,21 +52,13 @@ async function seedExportFixture() {
   return { userId, otherUserId, novelId };
 }
 
-integrationDescribe("streaming novel exports", () => {
+describeIntegration("streaming novel exports", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-
-    sql = postgres(testDatabaseUrl!, { max: 2, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 2 }));
     ({ createNovelExportResponse } = await import("./stream"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   it("streams translated chapters in numeric order with private download headers", async () => {
     const fixture = await seedExportFixture();

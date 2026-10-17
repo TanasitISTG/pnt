@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import {
   createGlossaryTerm,
@@ -29,6 +30,7 @@ export interface GlossaryMutationCallbacks {
 }
 
 export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutationCallbacks) {
+  const t = useTranslations("studio");
   const queryClient = useQueryClient();
   const { onAdded, onSaved, onDeleted, onImported, onAllDeleted } = callbacks;
 
@@ -45,11 +47,11 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     mutationFn: (vars: CreateTermInput) => createGlossaryTerm({ data: vars }),
     onSuccess: () => {
       invalidateAll();
-      toast.success("Glossary term added");
+      toast.success(t("glossaryTermAdded"));
       onAdded();
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to add term");
+      toast.error(error.message || t("glossaryTermAddFailed"));
     },
   });
 
@@ -58,12 +60,12 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     onSuccess: (_data, vars) => {
       invalidateAll();
       toast.success(
-        vars.applyToChapters ? "Term updated and replaced in translated chapters" : "Term updated",
+        vars.applyToChapters ? t("glossaryTermUpdatedReplaced") : t("glossaryTermUpdated"),
       );
       onSaved();
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to update term");
+      toast.error(error.message || t("glossaryTermUpdateFailed"));
     },
   });
 
@@ -71,11 +73,11 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     mutationFn: (termId: string) => deleteGlossaryTerm({ data: { termId } }),
     onSuccess: () => {
       invalidateAll();
-      toast.success("Term deleted");
+      toast.success(t("glossaryTermDeleted"));
       onDeleted();
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to delete term");
+      toast.error(error.message || t("glossaryTermDeleteFailed"));
     },
   });
 
@@ -83,11 +85,11 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     mutationFn: () => deleteAllGlossaryTerms({ data: { novelId } }),
     onSuccess: ({ deleted }) => {
       invalidateAll();
-      toast.success(`Deleted ${deleted} glossary term(s)`);
+      toast.success(t("glossaryTermsDeleted", { count: deleted }));
       onAllDeleted();
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to delete all terms");
+      toast.error(error.message || t("glossaryTermsClearFailed"));
     },
   });
 
@@ -95,10 +97,10 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     mutationFn: (termId: string) => approveGlossaryTerm({ data: { termId } }),
     onSuccess: () => {
       invalidateAll();
-      toast.success("Term approved");
+      toast.success(t("glossaryTermApproved"));
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to approve term");
+      toast.error(error.message || t("glossaryTermApproveFailed"));
     },
   });
 
@@ -106,10 +108,10 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     mutationFn: () => approveAllPendingTerms({ data: { novelId } }),
     onSuccess: () => {
       invalidateAll();
-      toast.success("All pending terms approved!");
+      toast.success(t("glossaryAllApproved"));
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to approve all terms");
+      toast.error(error.message || t("glossaryApproveAllFailed"));
     },
   });
 
@@ -117,10 +119,10 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     mutationFn: () => rejectAllPendingTerms({ data: { novelId } }),
     onSuccess: ({ rejected }) => {
       invalidateAll();
-      toast.success(`Rejected ${rejected} suggestion(s)`);
+      toast.success(t("glossarySuggestionsRejected", { count: rejected }));
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to reject all suggestions");
+      toast.error(error.message || t("glossaryRejectAllFailed"));
     },
   });
 
@@ -128,10 +130,10 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     mutationFn: (termId: string) => rejectGlossaryTerm({ data: { termId } }),
     onSuccess: () => {
       invalidateAll();
-      toast.success("Suggestion rejected");
+      toast.success(t("glossaryTermRejected"));
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to reject suggestion");
+      toast.error(error.message || t("glossaryTermRejectFailed"));
     },
   });
 
@@ -139,16 +141,14 @@ export function useGlossaryMutations(novelId: string, callbacks: GlossaryMutatio
     mutationFn: (tsv: string) => bulkImportGlossaryTerms({ data: { novelId, tsv } }),
     onSuccess: (res) => {
       invalidateAll();
-      toast.success(
-        `Imported ${res.imported} new term(s), updated ${res.updated} existing term(s).`,
-      );
+      toast.success(t("glossaryImported", { imported: res.imported, updated: res.updated }));
       if (res.errors.length > 0) {
-        toast.warning(`${res.errors.length} line(s) skipped due to format issues.`);
+        toast.warning(t("glossaryImportSkipped", { count: res.errors.length }));
       }
       onImported();
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to import terms");
+      toast.error(error.message || t("glossaryImportFailed"));
     },
   });
 

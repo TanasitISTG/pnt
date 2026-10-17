@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react";
+import { useTranslations } from "use-intl";
 
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { TitleEditState } from "@/components/chapters/table/use-chapter-title-edit";
@@ -59,6 +60,7 @@ export const ChapterTable = memo(function ChapterTable({
   onCancelEdit,
   onDeleteChapter,
 }: ChapterTableProps) {
+  const t = useTranslations("studio");
   const selectableIds = useMemo(() => chapters.map((chapter) => chapter.id), [chapters]);
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
 
@@ -107,16 +109,18 @@ export const ChapterTable = memo(function ChapterTable({
                   type="checkbox"
                   checked={allSelected}
                   onChange={(event) => onToggleSelectAll(selectableIds, event.target.checked)}
-                  aria-label="Select visible chapters"
+                  aria-label={t("selectVisible")}
                   className="size-4 accent-primary align-middle"
                 />
               </TableHead>
             )}
-            <TableHead className="w-16">{isAdmin ? "#" : "Number"}</TableHead>
-            <TableHead>Chapter</TableHead>
-            <TableHead className="hidden w-32 sm:table-cell">Characters</TableHead>
-            <TableHead className="hidden w-32 sm:table-cell">Status</TableHead>
-            {isAdmin && <TableHead className="w-24 text-right">Actions</TableHead>}
+            {/* `#` rather than a word for the owner's own table, which is compact and has the
+                number in every row anyway; a guest viewer reads the column's name. */}
+            <TableHead className="w-16">{isAdmin ? "#" : t("columnNumber")}</TableHead>
+            <TableHead>{t("columnChapter")}</TableHead>
+            <TableHead className="hidden w-32 sm:table-cell">{t("columnCharacters")}</TableHead>
+            <TableHead className="hidden w-32 sm:table-cell">{t("columnStatus")}</TableHead>
+            {isAdmin && <TableHead className="w-24 text-right">{t("columnActions")}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>{rows}</TableBody>

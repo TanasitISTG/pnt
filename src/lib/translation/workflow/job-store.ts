@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/schema";
 import { assertPersistableTokenCount } from "@/lib/translation/token-count";
 import { canRunJob } from "./job-state";
+import { logMessage } from "./log-entry";
 import {
   mergeAutomaticRelationshipAnalysis,
   parseRelationshipMap,
@@ -457,6 +458,7 @@ export async function loadTermSourcesForExclusion(novelId: string) {
 export interface ApplyRelationshipAnalysisResult {
   applied: boolean;
   map: RelationshipMapV1 | null;
+  /** One code per refusal, the same list shape the merge returns: a row each, never joined. */
   warnings: string[];
 }
 
@@ -476,7 +478,7 @@ export async function applyRelationshipAnalysis(
       return {
         applied: false,
         map: null,
-        warnings: ["Stored relationship map is invalid; automatic update skipped."],
+        warnings: [logMessage("relationshipMapInvalid")],
       };
     }
 

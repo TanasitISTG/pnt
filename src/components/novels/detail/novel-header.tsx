@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { BookOpen, ChevronDown } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -37,6 +38,7 @@ export interface NovelHeaderProps {
 }
 
 function NovelDescription({ description }: { description: string }) {
+  const t = useTranslations("novel");
   const [expanded, setExpanded] = useState(false);
   const isLongDescription = description.length > DESCRIPTION_COLLAPSE_THRESHOLD;
   const descriptionClassName =
@@ -59,7 +61,7 @@ function NovelDescription({ description }: { description: string }) {
       <CollapsibleTrigger
         render={<Button type="button" variant="ghost" size="sm" className="-ml-3 mt-1 min-h-11" />}
       >
-        {expanded ? "Show less" : "Show more"}
+        {expanded ? t("showLess") : t("showMore")}
         <ChevronDown
           className={cn(
             "size-4 transition-transform motion-reduce:transition-none",
@@ -73,6 +75,8 @@ function NovelDescription({ description }: { description: string }) {
 }
 
 function NovelMeta({ novel, novelId }: Pick<NovelHeaderProps, "novel" | "novelId">) {
+  const t = useTranslations("novel");
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
@@ -89,7 +93,9 @@ function NovelMeta({ novel, novelId }: Pick<NovelHeaderProps, "novel" | "novelId
         <p className="mt-1 text-body font-medium text-muted-foreground">{novel.originalTitle}</p>
       ) : null}
       {novel.author ? (
-        <p className="mt-0.5 text-sm text-muted-foreground">By {novel.author}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          {t("byAuthor", { author: novel.author })}
+        </p>
       ) : null}
       {novel.description ? (
         <NovelDescription key={novel.description} description={novel.description} />
@@ -118,11 +124,13 @@ function ReadingActions({
   firstChapter,
   readingProgress,
 }: ReadingActionsProps) {
+  const t = useTranslations("novel");
+
   if (readingActionsPending || chaptersPending) {
     return (
       <div
         className="h-10 w-48 motion-safe:animate-pulse rounded-md bg-surface-inset"
-        aria-label="Loading reading actions"
+        aria-label={t("loadingActions")}
       />
     );
   }
@@ -145,7 +153,7 @@ function ReadingActions({
           }
         >
           <BookOpen className="size-4" />
-          <span>{lastReadChapter ? "Continue reading" : "Start reading"}</span>
+          <span>{lastReadChapter ? t("continueReading") : t("startReading")}</span>
           {lastReadChapter ? (
             <span className="max-w-50 truncate text-xs font-normal opacity-75">
               ({lastReadChapter.translatedTitle ?? lastReadChapter.title})
@@ -164,7 +172,7 @@ function ReadingActions({
               />
             }
           >
-            Read first chapter
+            {t("readFirstChapter")}
           </Button>
         ) : null}
       </div>
@@ -173,11 +181,14 @@ function ReadingActions({
           <Progress
             value={readingProgress.percent}
             className="h-1 min-w-0 max-w-48 flex-1"
-            aria-label="Reading progress"
+            aria-label={t("readingProgressLabel")}
           />
           <span className="shrink-0 text-caption tabular-nums text-muted-foreground">
-            {readingProgress.readCount} of {readingProgress.totalCount} chapters read ·{" "}
-            {readingProgress.percent}%
+            {t("readingProgress", {
+              read: readingProgress.readCount,
+              total: readingProgress.totalCount,
+              percent: readingProgress.percent,
+            })}
           </span>
         </div>
       ) : null}

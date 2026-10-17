@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 import { ChevronLeft, ChevronRight, List } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,14 @@ export function ReaderFooterNav({
   nextChapter,
   onGoToChapter,
 }: ReaderFooterNavProps) {
+  const t = useTranslations("reader");
+  // The chapter's own name, as one phrase: the button's title and its label both read it.
+  const chapterLabel = (chapter: ReaderChapterSummary) =>
+    t("chapterLabel", {
+      number: Number(chapter.number),
+      title: chapter.translatedTitle ?? chapter.title,
+    });
+
   return (
     <footer className="flex min-w-0 max-w-full flex-col gap-4 border-t border-border pt-6">
       <div className="grid min-w-0 max-w-full gap-3 sm:grid-cols-2">
@@ -32,11 +41,13 @@ export function ReaderFooterNav({
             size="readerNav"
             className="w-full min-w-0 max-w-full justify-start overflow-hidden text-left"
             onClick={() => onGoToChapter(prevChapter.id)}
-            title={`Previous: ${chapterLabel(prevChapter)}`}
+            title={t("previousChapterTitle", { chapter: chapterLabel(prevChapter) })}
           >
             <ChevronLeft className="size-3.5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1 overflow-hidden">
-              <span className="block text-caption text-muted-foreground">Previous chapter</span>
+              <span className="block text-caption text-muted-foreground">
+                {t("previousChapter")}
+              </span>
               <span className="block truncate">{chapterLabel(prevChapter)}</span>
             </span>
           </Button>
@@ -49,10 +60,10 @@ export function ReaderFooterNav({
               !prevChapter && "sm:col-start-2",
             )}
             onClick={() => onGoToChapter(nextChapter.id)}
-            title={`Up next: ${chapterLabel(nextChapter)}`}
+            title={t("upNextTitle", { chapter: chapterLabel(nextChapter) })}
           >
             <span className="min-w-0 flex-1 overflow-hidden">
-              <span className="block text-caption opacity-75">Up next</span>
+              <span className="block text-caption opacity-75">{t("nextChapter")}</span>
               <span className="block truncate">{chapterLabel(nextChapter)}</span>
             </span>
             <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
@@ -64,7 +75,7 @@ export function ReaderFooterNav({
               !prevChapter && "sm:col-start-2",
             )}
           >
-            This is the last available chapter.
+            {t("lastChapter")}
           </p>
         )}
       </div>
@@ -74,16 +85,12 @@ export function ReaderFooterNav({
           size="sm"
           className="max-w-full"
           render={<Link to="/{-$locale}/novels/$novelId" params={{ novelId }} />}
-          aria-label="All chapters"
+          aria-label={t("allChapters")}
         >
           <List className="size-4" aria-hidden="true" />
-          All chapters
+          {t("allChapters")}
         </Button>
       </div>
     </footer>
   );
-}
-
-function chapterLabel(chapter: ReaderChapterSummary): string {
-  return `Ch. ${Number(chapter.number)}: ${chapter.translatedTitle ?? chapter.title}`;
 }

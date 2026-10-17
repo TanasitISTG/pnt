@@ -12,6 +12,7 @@ import {
   markEpubImportJobError,
   cleanupExpiredUploads,
 } from "./job-store";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { getMaxChapterNumber, markImportJobRunning } from "@/lib/import/job-store";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { log } from "@/lib/log";
@@ -34,17 +35,17 @@ export async function prepareEpubImportJob(
   }
 
   if (!job.epubUploadId) {
-    throw new SafeServerError("EPUB upload ID is missing from import job");
+    throw new SafeServerError(encodeMessage("errors.epubUploadIdMissing"));
   }
 
   const objectKey = await loadEpubUploadObjectKey(job.epubUploadId);
   if (!objectKey) {
-    throw new SafeServerError("EPUB upload storage key is missing from import job");
+    throw new SafeServerError(encodeMessage("errors.epubStorageKeyMissing"));
   }
 
   const combined = await readStagedEpubArchive(objectKey);
   if (!combined || combined.length === 0) {
-    throw new SafeServerError("EPUB upload file was not found in storage");
+    throw new SafeServerError(encodeMessage("errors.epubUploadMissing"));
   }
 
   // Parse EPUB archive
@@ -56,11 +57,15 @@ export async function prepareEpubImportJob(
   for (const chapter of parsed.chapters) {
     if (chapter.number === null) continue;
     if (!chapterNumberPattern.test(chapter.number)) {
-      throw new SafeServerError(`Invalid chapter number: ${chapter.number}`);
+      throw new SafeServerError(
+        encodeMessage("errors.epubInvalidChapterNumber", { number: chapter.number }),
+      );
     }
     const parsedNumber = Number(chapter.number);
     if (!Number.isFinite(parsedNumber) || parsedNumber < 0 || parsedNumber > 999999.99) {
-      throw new SafeServerError(`Invalid chapter number: ${chapter.number}`);
+      throw new SafeServerError(
+        encodeMessage("errors.epubInvalidChapterNumber", { number: chapter.number }),
+      );
     }
     currentMax = Math.max(currentMax, parsedNumber);
   }
@@ -84,7 +89,9 @@ export async function prepareEpubImportJob(
       numericValue < 0 ||
       numericValue > 999999.99
     ) {
-      throw new SafeServerError(`Invalid chapter number: ${numStr}`);
+      throw new SafeServerError(
+        encodeMessage("errors.epubInvalidChapterNumber", { number: numStr }),
+      );
     }
     items.push({
       sequence: i + 1,

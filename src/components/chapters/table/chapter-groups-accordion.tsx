@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslations } from "use-intl";
 
 import {
   Accordion,
@@ -22,6 +23,7 @@ export function ChapterGroupsAccordion({
   isAdmin,
   tableProps,
 }: ChapterGroupsAccordionProps) {
+  const t = useTranslations("studio");
   const [userValue, setUserValue] = useState<number[] | null>(null);
   const value = userValue ?? [initialGroupIndex];
 
@@ -31,7 +33,10 @@ export function ChapterGroupsAccordion({
         <AccordionItem key={groupIndex} value={groupIndex}>
           <AccordionTrigger>
             <span>
-              Chapters {Number(group[0].number)}–{Number(group[group.length - 1].number)}{" "}
+              {t("chapterGroup", {
+                from: Number(group[0].number),
+                to: Number(group[group.length - 1].number),
+              })}{" "}
               <span className="ml-2 font-normal text-muted-foreground">({group.length})</span>
             </span>
           </AccordionTrigger>

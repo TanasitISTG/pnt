@@ -17,7 +17,7 @@ import {
   failEpubImportJob,
   cleanupExpiredEpubUploads,
 } from "@/lib/epub/worker";
-import { pruneOrphanNovelAssets } from "@/lib/account/purge.server";
+import { pruneOrphanNovelAssets, reapSupersededAssets } from "@/lib/account/purge.server";
 import { log } from "@/lib/log";
 import { dispatchPendingWorkflowOutbox } from "./outbox";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
@@ -196,11 +196,14 @@ export const cleanupExpiredRateLimitsFn = inngest.createFunction(
   },
 );
 
-// Deleting an account cascades its novels away in Postgres but leaves their cover
-// variants and cached exports in the buckets, because no foreign key reaches storage.
-// This reconciliation is the only thing that reclaims those bytes; it is idempotent and
-// also self-heals orphans left by any earlier failure. Daily is enough — storage cost
-// accrues slowly and each run lists both buckets.
+// Nothing else reclaims the bytes the buckets accumulate. Deleting an account cascades its novels
+// away in Postgres but leaves their cover variants and cached exports behind, because no foreign key
+// reaches storage; replacing a cover or advancing a novel's content writes a new set and leaves the
+// old one to a delete that can fail. So both rules run here: the orphan prune reclaims what a gone
+// row no longer owns, and the superseded reap reclaims what a surviving row no longer names. Both
+// are idempotent and also self-heal residue left by any earlier failure. Daily is enough — storage
+// cost accrues slowly and each run lists both buckets — and the reap's grace period is measured in
+// days for the same reason.
 export const pruneOrphanStorageFn = inngest.createFunction(
   {
     id: "prune-orphan-storage",
@@ -208,7 +211,10 @@ export const pruneOrphanStorageFn = inngest.createFunction(
     retries: 2,
     concurrency: { limit: 1 },
   },
-  async ({ step }) => step.run("prune", () => pruneOrphanNovelAssets()),
+  async ({ step }) => ({
+    pruned: await step.run("prune", () => pruneOrphanNovelAssets()),
+    reaped: await step.run("reap", () => reapSupersededAssets()),
+  }),
 );
 
 export const translationEvalFn = inngest.createFunction(

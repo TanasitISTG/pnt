@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import type { ReasoningEffort } from "@/lib/providers/types";
 
 const reasoningEffortValues = [
@@ -15,13 +16,16 @@ const reasoningEffortValues = [
 export const saveProviderSettingsSchema = z.object({
   provider: z.enum(["openai", "gemini"]).default("openai"),
   baseUrl: z
-    .url("Base URL must be a valid URL")
+    .url(encodeMessage("validation.providerBaseUrlInvalid"))
     .or(z.literal(""))
     .default("https://api.openai.com/v1"),
   apiKey: z.string().optional().nullable(),
-  model: z.string().min(1, "Model name is required"),
+  model: z.string().min(1, encodeMessage("validation.providerModelRequired")),
   fastModel: z.string().optional().nullable(),
-  temperature: z.number().min(0, "Min temperature is 0").max(2, "Max temperature is 2"),
+  temperature: z
+    .number()
+    .min(0, encodeMessage("validation.providerTemperatureMin", { min: 0 }))
+    .max(2, encodeMessage("validation.providerTemperatureMax", { max: 2 })),
   reasoningEffort: z.enum(reasoningEffortValues).optional().nullable(),
   requestTimeoutSec: z.number().int().min(10).max(600).optional().nullable(),
   inputPricePer1M: z.number().min(0).optional().nullable(),
@@ -31,25 +35,31 @@ export const saveProviderSettingsSchema = z.object({
 export const testProviderConnectionSchema = z.object({
   provider: z.enum(["openai", "gemini"]).default("openai"),
   baseUrl: z
-    .url("Base URL must be a valid URL")
+    .url(encodeMessage("validation.providerBaseUrlInvalid"))
     .or(z.literal(""))
     .default("https://api.openai.com/v1"),
   apiKey: z.string().optional().nullable(),
-  model: z.string().min(1, "Model name is required"),
+  model: z.string().min(1, encodeMessage("validation.providerModelRequired")),
   fastModel: z.string().optional().nullable(),
-  temperature: z.number().min(0, "Min temperature is 0").max(2, "Max temperature is 2"),
+  temperature: z
+    .number()
+    .min(0, encodeMessage("validation.providerTemperatureMin", { min: 0 }))
+    .max(2, encodeMessage("validation.providerTemperatureMax", { max: 2 })),
   reasoningEffort: z.enum(reasoningEffortValues).optional().nullable(),
   requestTimeoutSec: z.number().int().min(10).max(600).optional().nullable(),
 });
 
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, "Current password is required").max(1024),
-    newPassword: z.string().min(8, "New password must be at least 8 characters").max(1024),
-    confirmPassword: z.string().min(8, "Confirm password must be at least 8 characters").max(1024),
+    currentPassword: z
+      .string()
+      .min(1, encodeMessage("validation.currentPasswordRequired"))
+      .max(1024),
+    newPassword: z.string().min(8, encodeMessage("validation.passwordMin")).max(1024),
+    confirmPassword: z.string().min(8, encodeMessage("validation.confirmPasswordMin")).max(1024),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
-    message: "New passwords do not match",
+    message: encodeMessage("validation.passwordsDoNotMatch"),
     path: ["confirmPassword"],
   });
 

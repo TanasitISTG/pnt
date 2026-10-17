@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { type Sql } from "postgres";
 import type * as EvalService from "./eval.service";
 import type * as EvalWorker from "./eval-worker";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import type * as Outbox from "@/lib/inngest/outbox";
 import type * as ChapterEdit from "@/lib/content/chapter/chapter-edit.service";
 import { EVAL_SELECTOR_ERROR, evalStoredResultV2Schema, evalSummaryV2Schema } from "./eval.schemas";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let queueTranslationEvalForUser: typeof EvalService.queueTranslationEvalForUser;
@@ -156,14 +159,9 @@ function unicodeLength(value: string | null): number {
   return value ? [...value].length : 0;
 }
 
-integrationDescribe("translation evaluation workflow PostgreSQL invariants", () => {
+describeIntegration("translation evaluation workflow PostgreSQL invariants", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     // Server-only modules must load after the isolated database environment is set.
     ({
       queueTranslationEvalForUser,
@@ -175,9 +173,7 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
     ({ updateChapterForUser } = await import("@/lib/content/chapter/chapter-edit.service"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   it("rejects invalid selectors and evaluates decimal and first3 selections", async () => {
     const fixture = await seedFixture([
@@ -346,14 +342,16 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
 
       const failedReportId = await queueReport(fixture, "all");
       await failTranslationEvalReport(failedReportId);
+      // The failure is stored as a code: the report outlives the worker that stopped it, and the
+      // panel that opens it resolves the code in its reader's language.
       expect(await readReport(failedReportId)).toMatchObject({
         status: "error",
-        error: "Quality check failed. Run it again.",
+        error: encodeMessage("errors.qualityCheckFailed"),
       });
       await failTranslationEvalReport(failedReportId);
       expect(await readReport(failedReportId)).toMatchObject({
         status: "error",
-        error: "Quality check failed. Run it again.",
+        error: encodeMessage("errors.qualityCheckFailed"),
       });
       await failTranslationEvalReport(reportId);
       expect(await readReport(reportId)).toEqual(completedBeforeDuplicate);
@@ -451,7 +449,7 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
           page: 1,
           pageSize: 25,
         }),
-      ).rejects.toThrow("Quality report not found");
+      ).rejects.toThrow(encodeMessage("errors.qualityReportNotFound"));
       await expect(
         getTranslationEvalReportForUser(fixture.ownerUserId, {
           novelId: `wrong-${fixture.novelId}`,
@@ -460,7 +458,7 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
           page: 1,
           pageSize: 25,
         }),
-      ).rejects.toThrow("Quality report not found");
+      ).rejects.toThrow(encodeMessage("errors.qualityReportNotFound"));
 
       await updateChapterForUser(
         fixture.ownerUserId,
@@ -838,7 +836,7 @@ integrationDescribe("translation evaluation workflow PostgreSQL invariants", () 
         page: 1,
         pageSize: 25,
       });
-      expect(detail.report.error).toBe("Quality check failed. Run it again.");
+      expect(detail.report.error).toBe(encodeMessage("errors.qualityCheckFailed"));
     } finally {
       await cleanupFixture(fixture);
     }

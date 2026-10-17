@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 
 import { NAV_LINK_ACTIVE_CLASS, NAV_LINK_CLASS } from "@/components/shell/nav-styles";
 import { cn } from "@/lib/utils";
@@ -10,7 +11,8 @@ interface SettingsLink {
     | "/settings/appearance"
     | "/settings/security"
     | "/settings/data";
-  label: string;
+  /** The key the section's own heading uses, so the link and the landmark say one thing. */
+  labelKey: "accountTitle" | "providerTitle" | "appearanceTitle" | "securityTitle" | "dataTitle";
   /** Operators only: the backup tools move metered data out of the production database. */
   requiresAdmin?: boolean;
 }
@@ -21,11 +23,11 @@ interface SettingsLink {
  * only action here that cannot be undone — sits near the end.
  */
 const SETTINGS_LINKS: readonly SettingsLink[] = [
-  { to: "/settings/account", label: "Account" },
-  { to: "/settings/provider", label: "Provider" },
-  { to: "/settings/appearance", label: "Appearance" },
-  { to: "/settings/security", label: "Security" },
-  { to: "/settings/data", label: "Data", requiresAdmin: true },
+  { to: "/settings/account", labelKey: "accountTitle" },
+  { to: "/settings/provider", labelKey: "providerTitle" },
+  { to: "/settings/appearance", labelKey: "appearanceTitle" },
+  { to: "/settings/security", labelKey: "securityTitle" },
+  { to: "/settings/data", labelKey: "dataTitle", requiresAdmin: true },
 ];
 
 /**
@@ -35,11 +37,12 @@ const SETTINGS_LINKS: readonly SettingsLink[] = [
  * sections is what replaced that.
  */
 export function SettingsNav({ isAdmin = false }: { isAdmin?: boolean }) {
+  const t = useTranslations("settings");
   const links = SETTINGS_LINKS.filter((link) => !link.requiresAdmin || isAdmin);
 
   return (
     <nav
-      aria-label="Settings sections"
+      aria-label={t("navLabel")}
       className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 [scrollbar-width:none]"
     >
       {links.map((link) => (
@@ -49,7 +52,7 @@ export function SettingsNav({ isAdmin = false }: { isAdmin?: boolean }) {
           className={cn(NAV_LINK_CLASS, "shrink-0")}
           activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
         >
-          {link.label}
+          {t(link.labelKey)}
         </Link>
       ))}
     </nav>

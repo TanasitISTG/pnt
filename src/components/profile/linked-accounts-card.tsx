@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Link2, Unlink } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,8 +12,12 @@ import type { AuthMethods } from "@/lib/auth/functions";
 
 type SocialProvider = "google" | "discord";
 
-const PROVIDER_LABELS: Record<string, string> = {
-  credential: "Email and password",
+/**
+ * The providers' own names, which are the same in both languages - the same reason the
+ * scrape registry's service names are the same. The credential row is not a brand, so its
+ * label is copy and comes from the catalog.
+ */
+const PROVIDER_NAMES: Record<string, string> = {
   google: "Google",
   discord: "Discord",
 };
@@ -23,6 +28,11 @@ export function configuredProviders(methods: AuthMethods): SocialProvider[] {
     ...(methods.google ? (["google"] as const) : []),
     ...(methods.discord ? (["discord"] as const) : []),
   ];
+}
+
+/** A provider's own name, or its id when the deployment offered something unlisted. */
+function providerName(providerId: string): string {
+  return PROVIDER_NAMES[providerId] ?? providerId;
 }
 
 export interface LinkedAccountsCardProps {
@@ -36,13 +46,14 @@ export interface LinkedAccountsCardProps {
  * with no way back in, and the server would then have to explain a lockout it caused.
  */
 export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
+  const t = useTranslations("settings");
   const queryClient = useQueryClient();
   const [busyProvider, setBusyProvider] = useState<string | null>(null);
   const accountsQuery = useQuery({
     queryKey: ["linkedAccounts"] as const,
     queryFn: async () => {
       const { data, error } = await listAccounts();
-      if (error) throw new Error(error.message || "Could not load linked accounts");
+      if (error) throw new Error(error.message || t("accountsLoadFailed"));
       return data ?? [];
     },
   });
@@ -50,10 +61,10 @@ export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
   const accounts = accountsQuery.data ?? [];
   const linkedByProvider = new Map(accounts.map((account) => [account.providerId, account]));
   const rows: { id: string; label: string; social: SocialProvider | null }[] = [
-    { id: "credential", label: PROVIDER_LABELS.credential, social: null },
+    { id: "credential", label: t("methodCredential"), social: null },
     ...configuredProviders(methods).map((provider) => ({
       id: provider,
-      label: PROVIDER_LABELS[provider] ?? provider,
+      label: PROVIDER_NAMES[provider] ?? provider,
       social: provider,
     })),
   ];
@@ -64,9 +75,11 @@ export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
     setBusyProvider(provider);
     try {
       const { error } = await linkSocial({ provider, callbackURL: "/settings/account" });
-      if (error) toast.error(error.message || `Could not connect ${PROVIDER_LABELS[provider]}`);
+      if (error) {
+        toast.error(error.message || t("connectFailed", { provider: providerName(provider) }));
+      }
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Could not connect that account");
+      toast.error(error instanceof Error ? error.message : t("connectFailedGeneric"));
     } finally {
       setBusyProvider(null);
     }
@@ -78,13 +91,13 @@ export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
       // The endpoint identifies the link by its account row, not by provider name.
       const { error } = await unlinkAccount({ accountId });
       if (error) {
-        toast.error(error.message || "Could not disconnect that account");
+        toast.error(error.message || t("disconnectFailed"));
         return;
       }
-      toast.success(`${PROVIDER_LABELS[providerId] ?? providerId} disconnected`);
+      toast.success(t("disconnected", { provider: providerName(providerId) }));
       await queryClient.invalidateQueries({ queryKey: ["linkedAccounts"] });
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Could not disconnect that account");
+      toast.error(error instanceof Error ? error.message : t("disconnectFailed"));
     } finally {
       setBusyProvider(null);
     }
@@ -95,18 +108,16 @@ export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Link2 className="size-5 text-muted-foreground" />
-          <CardTitle>Sign-in Methods</CardTitle>
+          <CardTitle>{t("methodsTitle")}</CardTitle>
         </div>
-        <CardDescription>
-          Every way this account can be reached. Keep at least one available.
-        </CardDescription>
+        <CardDescription>{t("methodsDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         {accountsQuery.isError ? (
           <p role="alert" className="text-caption text-destructive-text">
             {accountsQuery.error instanceof Error
               ? accountsQuery.error.message
-              : "Could not load linked accounts"}
+              : t("accountsLoadFailed")}
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -122,27 +133,23 @@ export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
                     <KeyRound className="size-4 text-muted-foreground" aria-hidden="true" />
                     <span className="text-body text-foreground">{row.label}</span>
                     <span className="text-caption text-muted-foreground">
-                      {account ? "Connected" : "Not connected"}
+                      {account ? t("connected") : t("notConnected")}
                     </span>
                   </div>
                   {social === null ? (
                     <span className="text-caption text-muted-foreground">
-                      Change your password in Security tab.
+                      {t("changePasswordInSecurity")}
                     </span>
                   ) : account ? (
                     <Button
                       variant="outline"
                       size="sm"
                       disabled={busy || !canUnlink}
-                      title={
-                        canUnlink
-                          ? undefined
-                          : "This is the only way to sign in, so it cannot be disconnected"
-                      }
+                      title={canUnlink ? undefined : t("onlyMethodHint")}
                       onClick={() => void handleUnlink(row.id, account.id)}
                     >
                       {busy ? <Spinner /> : <Unlink className="size-4" aria-hidden="true" />}
-                      Disconnect
+                      {t("disconnect")}
                     </Button>
                   ) : (
                     <Button
@@ -152,7 +159,7 @@ export function LinkedAccountsCard({ methods }: LinkedAccountsCardProps) {
                       onClick={() => void handleLink(social)}
                     >
                       {busy && <Spinner />}
-                      Connect
+                      {t("connect")}
                     </Button>
                   )}
                 </li>

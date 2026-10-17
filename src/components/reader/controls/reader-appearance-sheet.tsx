@@ -1,4 +1,5 @@
 import { Settings2 } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,9 @@ export function ReaderAppearanceSheet({
   triggerSize = "icon",
   ...controls
 }: ReaderAppearanceSheetProps) {
+  const t = useTranslations("reader");
+  const tShell = useTranslations("shell");
+
   return (
     <Drawer open={open} onOpenChange={onOpenChange} swipeDirection="down">
       <DrawerTrigger
@@ -45,15 +49,15 @@ export function ReaderAppearanceSheet({
             className={triggerSize === "icon" ? "size-11 shrink-0" : undefined}
           />
         }
-        aria-label="Reading settings"
-        title="Reading settings"
+        aria-label={t("readingSettings")}
+        title={t("readingSettings")}
       >
         <Settings2 className={triggerSize === "icon" ? "size-4" : "size-5"} aria-hidden="true" />
-        {triggerSize === "readerBar" ? "Settings" : null}
+        {triggerSize === "readerBar" ? tShell("settings") : null}
       </DrawerTrigger>
       <DrawerContent side="bottom">
         <DrawerHeader>
-          <DrawerTitle>Reading settings</DrawerTitle>
+          <DrawerTitle>{t("readingSettings")}</DrawerTitle>
         </DrawerHeader>
         <DrawerBody>
           <ReaderAppearanceControls {...controls} />

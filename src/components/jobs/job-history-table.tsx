@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import { Badge } from "@/components/ui/badge";
@@ -25,12 +26,13 @@ import type {
   JobHistoryTranslationRow,
 } from "@/lib/job-dashboard/contracts";
 import { DateCell } from "@/components/jobs/date-cell";
+import { JobErrorText } from "@/components/jobs/job-error-text";
 import { StatusBadge } from "@/components/jobs/status-badge";
+import { formatNumber } from "@/lib/i18n/format";
 import {
   createJobHistoryColumns,
   type JobHistoryColumnActions,
-  translationRuntime,
-  typeLabels,
+  jobHistoryColumnCopy,
 } from "./job-history-columns";
 
 export type JobHistorySearchChange = (
@@ -56,39 +58,12 @@ export interface JobHistoryTableProps {
   pendingJobId: string | null;
 }
 
-const columnLabels: Record<string, string> = {
-  novelTitle: "Job",
-  type: "Type",
-  status: "Status",
-  progress: "Progress",
-  createdAt: "Started",
-  updatedAt: "Updated",
-  error: "Error",
-  actions: "Actions",
-};
-
 const sortableSearchColumns: Record<string, JobHistorySearch["sort"]> = {
   novelTitle: "novelTitle",
   type: "type",
   status: "status",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
-};
-
-const jobTypeItems: Record<string, string> = {
-  all: "All types",
-  translation: "Translations",
-  scrape: "Scrapes",
-  epub: "EPUB",
-};
-
-const jobStatusItems: Record<string, string> = {
-  all: "All statuses",
-  pending: "Pending",
-  running: "Running",
-  done: "Completed",
-  error: "Failed",
-  cancelled: "Cancelled",
 };
 
 const pageSizeOptions = [10, 25, 50] as const;
@@ -117,10 +92,11 @@ function JobHistoryUpdateError({
   error: unknown;
   onRetry: () => void;
 }) {
+  const t = useTranslations("jobs");
   if (!visible) return null;
   return (
     <QueryErrorState
-      title="Unable to update job history"
+      title={t("updateFailed")}
       error={error}
       onRetry={onRetry}
       className="m-3 min-h-0 sm:m-4"
@@ -128,12 +104,12 @@ function JobHistoryUpdateError({
   );
 }
 
-function mobileJobSecondaryLine(job: JobHistoryRow): string {
-  if (job.type === "translation") return `Chapter ${job.chapterNumber} · ${job.chapterTitle}`;
-  if (job.type === "scrape") return `Chapters ${job.fromNumber}–${job.toNumber}`;
-  return job.sourceFileName ? `EPUB · ${job.sourceFileName}` : "EPUB import";
-}
-
+/**
+ * The row as a phone reads it: the same facts as the table, stacked.
+ *
+ * It keeps its own wording for the second line — a full "Chapter 12" rather than the
+ * column's "Ch. 12" — because the row has the width for the word and the table does not.
+ */
 function JobHistoryMobileRows({
   rows,
   actions,
@@ -143,10 +119,18 @@ function JobHistoryMobileRows({
   actions: Omit<JobHistoryColumnActions, "pendingJobId">;
   pendingJobId: string | null;
 }) {
+  const t = useTranslations("jobs");
+  const locale = useLocale();
+  const copy = useMemo(() => jobHistoryColumnCopy(t), [t]);
+
   return (
     <>
       {rows.map((job) => {
         const pending = pendingJobId === job.id;
+        const secondaryLine =
+          job.type === "translation"
+            ? t("mobileChapter", { number: job.chapterNumber, title: job.chapterTitle })
+            : copy.secondaryLine(job);
         return (
           <article key={job.id} className="space-y-3 p-4">
             <div className="flex items-start justify-between gap-3">
@@ -159,56 +143,48 @@ function JobHistoryMobileRows({
                 >
                   {job.novelTitle}
                 </button>
-                <p className="mt-1 truncate text-caption text-muted-foreground">
-                  {mobileJobSecondaryLine(job)}
-                </p>
+                <p className="mt-1 truncate text-caption text-muted-foreground">{secondaryLine}</p>
                 {job.type === "translation" ? (
-                  <p
-                    className="mt-0.5 truncate text-caption text-muted-foreground"
-                    title={`Runtime · ${translationRuntime(job)}`}
-                  >
-                    Runtime · {translationRuntime(job)}
+                  <p className="mt-0.5 truncate text-caption text-muted-foreground">
+                    {copy.runtime(job)}
                   </p>
                 ) : null}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                <Badge variant="outline">{typeLabels[job.type]}</Badge>
+                <Badge variant="outline">{copy.type[job.type]}</Badge>
                 <StatusBadge status={job.status} />
               </div>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-3 text-caption text-muted-foreground">
-                <span>Progress</span>
+                <span>{copy.headers.progress}</span>
                 <span className="tabular-nums">
                   {job.progress.preparing
-                    ? "Preparing…"
-                    : `${job.progress.completed.toLocaleString()} / ${job.progress.total.toLocaleString()}`}
+                    ? copy.preparing
+                    : `${formatNumber(job.progress.completed, locale)} / ${formatNumber(job.progress.total, locale)}`}
                 </span>
               </div>
               <Progress
                 value={job.progress.percent}
-                aria-label={`${job.progress.percent}% complete`}
+                aria-label={copy.progressAria(job.progress.percent)}
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-muted-foreground">
-              <span>
-                Updated <DateCell value={job.updatedAt} />
+              <span className="inline-flex items-center gap-1">
+                {copy.headers.updatedAt}
+                <DateCell value={job.updatedAt} />
               </span>
-              {job.error ? (
-                <span className="max-w-full truncate text-destructive-text" title={job.error}>
-                  {job.error}
-                </span>
-              ) : null}
+              {job.error ? <JobErrorText message={job.error} /> : null}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="lg" variant="outline" onClick={() => actions.onCopyJobId(job)}>
-                Copy job ID
+                {copy.menu.copyJobId}
               </Button>
               <Button size="lg" variant="outline" onClick={() => actions.onViewDetails(job)}>
-                Details
+                {copy.details}
               </Button>
               <Button size="lg" variant="outline" onClick={() => actions.onOpenNovel(job.novelId)}>
-                Novel
+                {t("mobileOpenNovel")}
               </Button>
               {job.type === "translation" ? (
                 <Button
@@ -216,7 +192,7 @@ function JobHistoryMobileRows({
                   variant="outline"
                   onClick={() => actions.onOpenChapter(job as JobHistoryTranslationRow)}
                 >
-                  Chapter
+                  {t("mobileOpenChapter")}
                 </Button>
               ) : null}
               {job.canCancel ? (
@@ -226,11 +202,11 @@ function JobHistoryMobileRows({
                   disabled={pending}
                   onClick={() => actions.onCancel(job)}
                 >
-                  {pending ? "Working…" : "Cancel job"}
+                  {pending ? copy.menu.working : copy.menu.cancelJob}
                 </Button>
               ) : job.canRetry ? (
                 <Button size="lg" disabled={pending} onClick={() => actions.onRetry(job)}>
-                  {pending ? "Working…" : "Retry job"}
+                  {pending ? copy.menu.working : copy.menu.retryJob}
                 </Button>
               ) : null}
             </div>
@@ -249,6 +225,9 @@ export function JobHistoryTable({
   actions,
   pendingJobId,
 }: JobHistoryTableProps) {
+  const t = useTranslations("jobs");
+  const tCommon = useTranslations("common");
+  const locale = useLocale();
   const { page: history, isPending, isFetching, isPlaceholderData, isError, error } = query;
 
   useEffect(() => {
@@ -256,14 +235,29 @@ export function JobHistoryTable({
     onSearchChange({ page: history.page }, true);
   }, [history, isFetching, isPlaceholderData, onSearchChange, search.page]);
 
+  const copy = useMemo(() => jobHistoryColumnCopy(t), [t]);
   const columns = useMemo(
-    () => createJobHistoryColumns({ ...actions, pendingJobId }),
-    [actions, pendingJobId],
+    () => createJobHistoryColumns({ ...actions, pendingJobId }, copy, locale),
+    [actions, copy, locale, pendingJobId],
   );
   const data = history?.rows ?? EMPTY_JOB_HISTORY_ROWS;
   const rowCount = history?.rowCount ?? 0;
   const currentPage = history?.page ?? search.page;
   const clearFilters = () => onSearchChange(CLEAR_JOB_FILTERS, true);
+  const typeItems = {
+    all: t("filterAllTypes"),
+    translation: t("filterTranslations"),
+    scrape: t("filterScrapes"),
+    epub: t("typeEpub"),
+  };
+  const statusItems = {
+    all: t("filterAllStatuses"),
+    pending: t("statusPending"),
+    running: t("statusRunning"),
+    done: t("statusDone"),
+    error: t("statusError"),
+    cancelled: t("statusCancelled"),
+  };
 
   const { table } = useDataTable({
     columns,
@@ -300,46 +294,41 @@ export function JobHistoryTable({
 
   if (isError && !history) {
     return (
-      <QueryErrorState
-        title="Unable to load job history"
-        error={error}
-        onRetry={onRetry}
-        className="my-0"
-      />
+      <QueryErrorState title={t("loadFailed")} error={error} onRetry={onRetry} className="my-0" />
     );
   }
   return (
-    <DataTableSection ariaLabel="Job history" busy={isFetching}>
+    <DataTableSection ariaLabel={t("sectionAria")} busy={isFetching}>
       <DataTableToolbar
         searchValue={search.q}
-        searchLabel="Search job history"
-        searchPlaceholder="Search novel, chapter, source, or job ID"
+        searchLabel={t("searchLabel")}
+        searchPlaceholder={t("searchPlaceholder")}
         onSearchChange={(q) => onSearchChange({ q, page: 1 }, true)}
         filters={[
           {
             triggerId: "job-history-type",
-            ariaLabel: "Filter by type",
+            ariaLabel: t("filterByType"),
             value: search.type,
-            items: jobTypeItems,
+            items: typeItems,
             onChange: (value) =>
               onSearchChange({ type: value as JobHistorySearch["type"], page: 1 }, true),
           },
           {
             triggerId: "job-history-status",
-            ariaLabel: "Filter by status",
+            ariaLabel: t("filterByStatus"),
             value: search.status,
-            items: jobStatusItems,
+            items: statusItems,
             onChange: (value) =>
               onSearchChange({ status: value as JobHistorySearch["status"], page: 1 }, true),
           },
         ]}
-        columns={{ table, labels: columnLabels }}
-        clearLabel="Clear filters"
+        columns={{ table, labels: { ...copy.headers, actions: t("columnActions") } }}
+        clearLabel={tCommon("clearFilters")}
         filtered={filtered}
         onClearFilters={clearFilters}
-        description="All retained translation and import runs"
+        description={t("tableDescription")}
         query={{ isFetching, isPlaceholderData }}
-        busyMessage="Loading job page…"
+        busyMessage={t("loadingPage")}
       />
 
       <JobHistoryUpdateError
@@ -348,16 +337,16 @@ export function JobHistoryTable({
         onRetry={onRetry}
       />
 
-      <DataTableMobileRegion ariaLabel={noRows || isPending ? undefined : "Mobile job history"}>
+      <DataTableMobileRegion ariaLabel={noRows || isPending ? undefined : t("mobileAria")}>
         {isPending && !history ? (
-          <DataTableMobileLoading message="Loading jobs…" />
+          <DataTableMobileLoading message={t("loadingJobs")} />
         ) : noRows ? (
           <DataTableMobileEmpty
             filtered={filtered}
-            emptyTitle="No jobs yet"
-            filteredTitle="No jobs match these filters"
-            emptyDescription="Translation and import runs will appear here."
-            filteredDescription="Try a different search or clear the filters."
+            emptyTitle={t("emptyTitle")}
+            filteredTitle={t("filteredTitle")}
+            emptyDescription={t("emptyMobileDescription")}
+            filteredDescription={t("filteredMobileDescription")}
             onClearFilters={clearFilters}
           />
         ) : (
@@ -365,7 +354,7 @@ export function JobHistoryTable({
         )}
       </DataTableMobileRegion>
 
-      <DataTableDesktopRegion ariaLabel="Desktop job history" scroll>
+      <DataTableDesktopRegion ariaLabel={t("desktopAria")} scroll>
         <Table className="min-w-[1080px] text-caption">
           <TableHeader className="sticky top-0 z-10 bg-muted/20">
             <DataTableHeaderGroups
@@ -379,10 +368,10 @@ export function JobHistoryTable({
             filtered={filtered}
             visibleColumnCount={visibleColumnCount}
             rows={renderedRows}
-            emptyTitle="No jobs yet"
-            filteredTitle="No jobs match these filters"
-            emptyDescription="Translation and import runs will appear here as they are created."
-            filteredDescription="Try a different search or clear the filters to see all retained runs."
+            emptyTitle={t("emptyTitle")}
+            filteredTitle={t("filteredTitle")}
+            emptyDescription={t("emptyDesktopDescription")}
+            filteredDescription={t("filteredDesktopDescription")}
             onClearFilters={clearFilters}
           />
         </Table>
@@ -397,7 +386,7 @@ export function JobHistoryTable({
         busy={paginationBusy}
         pageSize={search.pageSize}
         pageSizeOptions={pageSizeOptions}
-        noun="jobs"
+        noun={t("nounJobs")}
         onPageSizeChange={(pageSize) =>
           onSearchChange({ pageSize: pageSize as JobHistorySearch["pageSize"], page: 1 }, true)
         }

@@ -1,3 +1,5 @@
+import { logMessage } from "@/lib/translation/workflow/log-entry";
+
 import {
   MAX_CHARACTER_ALIASES,
   MAX_RELATIONSHIPS,
@@ -20,6 +22,13 @@ import {
 
 export interface RelationshipMergeResult {
   map: RelationshipMapV1;
+  /**
+   * One stored message per refusal, each a code from `logMessage`, never a joined sentence.
+   *
+   * A merge can exceed a cap, drop an alias, refuse an unresolved pair or reject the whole map,
+   * and every one of those is a row the job log shows on its own line — so a reader can read
+   * it in their own language, which a row holding several sentences could not be.
+   */
   warnings: string[];
 }
 
@@ -121,7 +130,7 @@ export function mergeAutomaticRelationshipAnalysis(
     if (!existing) {
       if (next.characters.length >= MAX_RELATIONSHIP_CHARACTERS) {
         warnings.push(
-          `Relationship character cap reached; skipped automatic character “${suggestion.sourceName}”.`,
+          logMessage("relationshipCharacterCapReached", { name: suggestion.sourceName }),
         );
         continue;
       }
@@ -207,7 +216,10 @@ export function mergeAutomaticRelationshipAnalysis(
     const listener = resolveCharacter(next.characters, characterByIdentity, suggestion.listener);
     if (!speaker || !listener || speaker.id === listener.id) {
       warnings.push(
-        `Skipped automatic relationship with unresolved endpoint(s): “${suggestion.speaker}” → “${suggestion.listener}”.`,
+        logMessage("relationshipEndpointsUnresolved", {
+          speaker: suggestion.speaker,
+          listener: suggestion.listener,
+        }),
       );
       continue;
     }
@@ -217,7 +229,10 @@ export function mergeAutomaticRelationshipAnalysis(
     if (!existing) {
       if (next.relationships.length >= MAX_RELATIONSHIPS) {
         warnings.push(
-          `Relationship cap reached; skipped automatic pair “${suggestion.speaker}” → “${suggestion.listener}”.`,
+          logMessage("relationshipPairCapReached", {
+            speaker: suggestion.speaker,
+            listener: suggestion.listener,
+          }),
         );
         continue;
       }
@@ -256,9 +271,7 @@ export function mergeAutomaticRelationshipAnalysis(
 
   const validated = relationshipMapSchema.safeParse(next);
   if (!validated.success) {
-    warnings.push(
-      "Automatic relationship analysis produced an invalid map; no map changes were applied.",
-    );
+    warnings.push(logMessage("relationshipAnalysisInvalidMap"));
     return { map, warnings };
   }
   return { map: validated.data, warnings };
@@ -462,7 +475,7 @@ function addAutomaticAliases(
     if (character.aliases.some((item) => normalizeIdentity(item) === normalized)) continue;
     if (character.aliases.length >= MAX_CHARACTER_ALIASES) {
       warnings.push(
-        `Alias cap reached for automatic character “${character.sourceName}”; discarded “${trimmed}”.`,
+        logMessage("relationshipAliasCapReached", { name: character.sourceName, alias: trimmed }),
       );
       continue;
     }

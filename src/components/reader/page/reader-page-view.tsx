@@ -1,5 +1,6 @@
 import type { ActiveJobState } from "@/lib/translation/types/api";
 import type { RefObject } from "react";
+import { useTranslations } from "use-intl";
 import type { ReaderTranslationStatus } from "@/components/reader/content/reader-content-types";
 import { QueryErrorState } from "@/components/query-error-state";
 import type { ReaderSettings } from "@/lib/reader/types";
@@ -165,6 +166,8 @@ export function ReaderPageView({
   onSave,
   onCancel,
 }: ReaderPageViewProps) {
+  const t = useTranslations("reader");
+
   return (
     <div
       // Focus mode hides the chrome; a tap back in the prose is how a touch reader asks
@@ -210,7 +213,7 @@ export function ReaderPageView({
       />
       {canManage && translationStatusError ? (
         <QueryErrorState
-          title="Unable to refresh translation status"
+          title={t("statusRefreshFailed")}
           error={translationStatusError}
           onRetry={() => void retryTranslationStatus()}
           className="my-0 min-h-0"

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { ChapterImportStatus } from "@/components/chapters/import/chapter-import-status";
@@ -15,6 +16,7 @@ import {
   createEpubUpload,
   EPUB_CONTENT_TYPE,
 } from "@/lib/epub/functions";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 interface EpubImportSectionProps {
   novelId: string;
@@ -39,6 +41,8 @@ function putEpubWithProgress(
   uploadUrl: string,
   file: File,
   onProgress: (percent: number) => void,
+  failureMessage: string,
+  cancelledMessage: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -51,30 +55,30 @@ function putEpubWithProgress(
     });
     request.addEventListener("load", () => {
       if (request.status >= 200 && request.status < 300) resolve();
-      else reject(new Error("Could not upload the EPUB file"));
+      else reject(new Error(failureMessage));
     });
-    request.addEventListener("error", () => reject(new Error("Could not upload the EPUB file")));
-    request.addEventListener("abort", () => reject(new Error("EPUB upload was cancelled")));
+    request.addEventListener("error", () => reject(new Error(failureMessage)));
+    request.addEventListener("abort", () => reject(new Error(cancelledMessage)));
     request.send(file);
   });
 }
 
 const epubFileSchema = z.custom<File | null>(
   (value) => value === null || (typeof File !== "undefined" && value instanceof File),
-  "Please select a valid .epub file",
+  encodeMessage("validation.epubFileInvalid"),
 );
 const epubImportFormSchema = z.object({
   epubFile: epubFileSchema.superRefine((file, context) => {
     if (!file) {
-      context.addIssue({ code: "custom", message: "Please select an EPUB file" });
+      context.addIssue({ code: "custom", message: encodeMessage("validation.epubFileRequired") });
       return;
     }
     if (!file.name.toLowerCase().endsWith(".epub")) {
-      context.addIssue({ code: "custom", message: "Please select a valid .epub file" });
+      context.addIssue({ code: "custom", message: encodeMessage("validation.epubFileInvalid") });
     } else if (file.size === 0) {
-      context.addIssue({ code: "custom", message: "Selected file is empty" });
+      context.addIssue({ code: "custom", message: encodeMessage("validation.epubFileEmpty") });
     } else if (file.size > MAX_FILE_SIZE) {
-      context.addIssue({ code: "custom", message: "EPUB file must be 50 MB or smaller" });
+      context.addIssue({ code: "custom", message: encodeMessage("validation.epubFileTooLarge") });
     }
   }),
 });
@@ -92,6 +96,7 @@ export function EpubImportSection({
   onUploadActivityChange,
   otherImportActive,
 }: EpubImportSectionProps) {
+  const t = useTranslations("studio");
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -124,18 +129,24 @@ export function EpubImportSection({
         });
         uploadId = createResult.uploadId;
 
-        await putEpubWithProgress(createResult.uploadUrl, file, (percent) => {
-          setUploadProgress({ percent });
-        });
+        await putEpubWithProgress(
+          createResult.uploadUrl,
+          file,
+          (percent) => {
+            setUploadProgress({ percent });
+          },
+          t("epubUploadFailed"),
+          t("epubUploadCancelled"),
+        );
 
         const { jobId } = await completeEpubUpload({ data: { uploadId } });
         importController.attachJob(jobId, file.name);
-        toast.info("EPUB uploaded and import queued (runs server-side)");
+        toast.info(t("epubQueued"));
       } catch (error: unknown) {
         if (uploadId) {
           await abortEpubUpload({ data: { uploadId } }).catch(() => {});
         }
-        setUploadError(error instanceof Error ? error.message : "Failed to upload EPUB");
+        setUploadError(error instanceof Error ? error.message : t("epubUploadFallback"));
       } finally {
         uploadingRef.current = false;
         setUploadProgress(null);
@@ -208,12 +219,8 @@ export function EpubImportSection({
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h3 className="text-xl font-semibold tracking-tight text-foreground">
-          Import an EPUB file
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Import raw chapters from a WebToEpub or standard .epub file.
-        </p>
+        <h3 className="text-xl font-semibold tracking-tight text-foreground">{t("epubHeading")}</h3>
+        <p className="text-sm text-muted-foreground">{t("epubLead")}</p>
       </header>
 
       <form
@@ -230,7 +237,7 @@ export function EpubImportSection({
             return (
               <Field data-invalid={invalid || undefined}>
                 <FieldLabel htmlFor="epub-file-input" className="sr-only">
-                  EPUB file
+                  {t("epubFileLabel")}
                 </FieldLabel>
                 <input
                   ref={fileInputRef}
@@ -243,7 +250,7 @@ export function EpubImportSection({
                   disabled={selectionDisabled}
                   className="sr-only"
                   id="epub-file-input"
-                  aria-label="EPUB file"
+                  aria-label={t("epubFileLabel")}
                   aria-invalid={invalid}
                   aria-describedby={invalid ? "epub-file-error" : undefined}
                 />
@@ -252,7 +259,7 @@ export function EpubImportSection({
                   <div
                     className="flex flex-col gap-4 rounded-xl border border-border bg-background p-4"
                     role="group"
-                    aria-label="Selected EPUB file"
+                    aria-label={t("selectedEpubFile")}
                   >
                     <div className="flex min-w-0 flex-col gap-1">
                       <span
@@ -272,7 +279,7 @@ export function EpubImportSection({
                         onClick={() => fileInputRef.current?.click()}
                         disabled={selectionDisabled}
                       >
-                        Replace file
+                        {t("replaceFile")}
                       </Button>
                       <Button
                         type="button"
@@ -284,7 +291,7 @@ export function EpubImportSection({
                         }}
                         disabled={selectionDisabled}
                       >
-                        Remove file
+                        {t("removeFile")}
                       </Button>
                     </div>
                   </div>
@@ -309,12 +316,8 @@ export function EpubImportSection({
                     }}
                     disabled={selectionDisabled}
                   >
-                    <span className="text-base font-semibold">
-                      Drop an EPUB here or choose a file
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      WebToEpub and standard .epub files, up to 50 MB.
-                    </span>
+                    <span className="text-base font-semibold">{t("epubDropTitle")}</span>
+                    <span className="text-sm text-muted-foreground">{t("epubDropHint")}</span>
                   </button>
                 )}
                 {invalid && <FieldError id="epub-file-error" errors={field.state.meta.errors} />}
@@ -325,7 +328,7 @@ export function EpubImportSection({
 
         {otherImportActive ? (
           <p className="text-sm text-muted-foreground" role="status">
-            Finish or cancel the URL range import before starting an EPUB import.
+            {t("finishUrlImport")}
           </p>
         ) : null}
 
@@ -333,11 +336,11 @@ export function EpubImportSection({
           <div className="flex flex-col gap-3" role="status" aria-live="polite">
             <Progress
               value={uploadProgress.percent}
-              aria-label="EPUB upload progress"
+              aria-label={t("epubUploadProgressLabel")}
               className="gap-2"
             >
               <div className="flex w-full items-center gap-3 text-sm text-muted-foreground">
-                <ProgressLabel>Uploading EPUB</ProgressLabel>
+                <ProgressLabel>{t("uploadingEpub")}</ProgressLabel>
                 <ProgressValue>{() => `${uploadProgress.percent}%`}</ProgressValue>
               </div>
             </Progress>
@@ -351,7 +354,9 @@ export function EpubImportSection({
             className="self-start"
           >
             {isSubmitting && <Spinner />}
-            {isSubmitting ? `Uploading ${uploadProgress?.percent ?? 0}%…` : "Upload and import"}
+            {isSubmitting
+              ? t("epubUploadingPercent", { percent: uploadProgress?.percent ?? 0 })
+              : t("uploadAndImport")}
           </Button>
           {uploadError ? (
             <div
@@ -365,7 +370,7 @@ export function EpubImportSection({
       </form>
 
       <ChapterImportStatus
-        label="EPUB import"
+        label={t("importLabelEpub")}
         job={importController.importJob}
         active={importController.importActive}
         statusError={importController.importStatusError}
@@ -379,16 +384,14 @@ export function EpubImportSection({
           className="self-start"
           onClick={importController.cancelImport}
         >
-          Cancel import
+          {t("cancelImport")}
         </Button>
       ) : null}
 
       {retryableJob ? (
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-background p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <span className="text-muted-foreground">
-            {selectedFile
-              ? "This import stopped. Upload the selected EPUB again to retry."
-              : "Choose the EPUB file again before retrying this import."}
+            {selectedFile ? t("importStoppedReupload") : t("importChooseEpubAgain")}
           </span>
           <Button
             type="button"
@@ -402,7 +405,7 @@ export function EpubImportSection({
               importController.startPending
             }
           >
-            Retry EPUB import
+            {t("retryEpubImport")}
           </Button>
         </div>
       ) : null}

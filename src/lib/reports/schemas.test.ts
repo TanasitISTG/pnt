@@ -10,10 +10,10 @@ import {
   resolveReportCaseSchema,
 } from "@/lib/reports/schemas";
 import {
-  describeReportReason,
-  describeReportStatus,
-  describeReportTarget,
   isReportReason,
+  reportReasonKey,
+  reportStatusKey,
+  reportTargetKey,
 } from "@/lib/reports/reasons";
 
 describe("createNovelReportSchema", () => {
@@ -130,10 +130,14 @@ describe("reportQueueSearchSchema", () => {
 });
 
 describe("report vocabulary", () => {
-  it("labels known values and falls back to the raw one", () => {
-    expect(describeReportReason("copyright")).toBe("Copyright or a stolen translation");
-    expect(describeReportReason("unknown")).toBe("unknown");
-    expect(describeReportStatus("upheld")).toBe("Upheld");
+  it("names a catalog key for every known value", () => {
+    // The words live in the catalog, so what this module owes its callers is the key: a
+    // `reports.*` key for a stored value, and null for anything it does not know so the
+    // caller can fall back to the raw one.
+    expect(reportReasonKey("copyright")).toBe("reasonCopyright");
+    expect(reportReasonKey("unknown")).toBeNull();
+    expect(reportStatusKey("upheld")).toBe("statusUpheld");
+    expect(reportStatusKey("unknown")).toBeNull();
   });
 
   it("recognizes only declared reasons", () => {
@@ -142,9 +146,9 @@ describe("report vocabulary", () => {
   });
 
   it("names every report target", () => {
-    expect(describeReportTarget("novel")).toBe("Novel");
-    expect(describeReportTarget("comment")).toBe("Comment");
-    expect(describeReportTarget("review")).toBe("Review");
-    expect(describeReportTarget("unknown")).toBe("unknown");
+    expect(reportTargetKey("novel")).toBe("targetNovel");
+    expect(reportTargetKey("comment")).toBe("targetComment");
+    expect(reportTargetKey("review")).toBe("targetReview");
+    expect(reportTargetKey("unknown")).toBeNull();
   });
 });

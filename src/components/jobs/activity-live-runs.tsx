@@ -1,7 +1,11 @@
+import { useMemo } from "react";
+import { useLocale, useTranslations } from "use-intl";
+
 import { ActivityBand } from "@/components/jobs/activity-band";
-import { jobSecondaryLine, typeLabels } from "@/components/jobs/job-history-columns";
+import { jobHistoryColumnCopy } from "@/components/jobs/job-history-columns";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { formatNumber } from "@/lib/i18n/format";
 import type { JobHistoryProgress, JobHistoryRow } from "@/lib/job-dashboard/contracts";
 
 export interface ActivityLiveRunsProps {
@@ -14,12 +18,6 @@ export interface ActivityLiveRunsProps {
   onCancel: (job: JobHistoryRow) => void;
   onViewDetails: (job: JobHistoryRow) => void;
   onOpenNovel: (novelId: string) => void;
-}
-
-function progressLabel(progress: JobHistoryProgress): string {
-  return progress.preparing
-    ? "Preparing…"
-    : `${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()}`;
 }
 
 /**
@@ -38,25 +36,31 @@ export function ActivityLiveRuns({
   onViewDetails,
   onOpenNovel,
 }: ActivityLiveRunsProps) {
+  const t = useTranslations("jobs");
+  const locale = useLocale();
+  const copy = useMemo(() => jobHistoryColumnCopy(t), [t]);
   const total = activeTranslationJobs + activeImportJobs;
+
+  const progressLabel = (progress: JobHistoryProgress) =>
+    progress.preparing
+      ? copy.preparing
+      : `${formatNumber(progress.completed, locale)} / ${formatNumber(progress.total, locale)}`;
+
   if (total === 0) return null;
 
   return (
     <ActivityBand
-      ariaLabel="Running jobs"
+      ariaLabel={t("activeAria")}
       live
-      label="Active jobs"
+      label={t("activeLabel")}
       value={total}
-      detail={
-        <>
-          Translation {activeTranslationJobs} · Import {activeImportJobs}
-        </>
-      }
+      detail={t("activeDetail", {
+        translation: activeTranslationJobs,
+        import: activeImportJobs,
+      })}
     >
       {jobs.length === 0 ? (
-        <p className="pt-3 text-caption text-muted-foreground">
-          No running job appears on this page.
-        </p>
+        <p className="pt-3 text-caption text-muted-foreground">{t("activeEmpty")}</p>
       ) : (
         <ul className="divide-y divide-border">
           {jobs.map((job) => (
@@ -71,13 +75,13 @@ export function ActivityLiveRuns({
                   {job.novelTitle}
                 </button>
                 <p className="mt-0.5 truncate text-caption text-muted-foreground">
-                  {jobSecondaryLine(job)} · {typeLabels[job.type]}
+                  {copy.secondaryLine(job)} · {copy.type[job.type]}
                 </p>
               </div>
               <div className="w-full sm:w-56">
                 <Progress
                   value={job.progress.percent}
-                  aria-label={`${job.progress.percent}% complete`}
+                  aria-label={copy.progressAria(job.progress.percent)}
                 />
                 <span className="mt-1 block text-caption tabular-nums text-muted-foreground">
                   {progressLabel(job.progress)}
@@ -85,7 +89,7 @@ export function ActivityLiveRuns({
               </div>
               <div className="flex shrink-0 gap-2">
                 <Button size="sm" variant="outline" onClick={() => onViewDetails(job)}>
-                  Details
+                  {copy.menu.viewDetails}
                 </Button>
                 {job.canCancel ? (
                   <Button
@@ -94,7 +98,7 @@ export function ActivityLiveRuns({
                     disabled={pendingJobId === job.id}
                     onClick={() => onCancel(job)}
                   >
-                    {pendingJobId === job.id ? "Working…" : "Cancel job"}
+                    {pendingJobId === job.id ? copy.menu.working : copy.menu.cancelJob}
                   </Button>
                 ) : null}
               </div>

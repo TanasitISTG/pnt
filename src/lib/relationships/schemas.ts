@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
+
 export const RELATIONSHIP_MAP_VERSION = 1 as const;
 export const MAX_RELATIONSHIP_CHARACTERS = 200;
 export const MAX_RELATIONSHIPS = 400;
@@ -100,7 +102,7 @@ export const relationshipMapSchema = z
           ctx.addIssue({
             code: "custom",
             path: ["characters", index, field === "aliases" ? "aliases" : field],
-            message: `Duplicate normalized character name or alias: ${value}`,
+            message: encodeMessage("errors.relationshipNameDuplicate", { name: value }),
           });
         } else {
           names.set(normalized, { index, field });
@@ -123,7 +125,7 @@ export const relationshipMapSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["relationships", index],
-          message: "A relationship cannot point from a character to itself",
+          message: encodeMessage("errors.relationshipSelfReference"),
         });
       }
 
@@ -147,7 +149,7 @@ export const relationshipMapSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["relationships", index],
-          message: "Duplicate directed speaker/listener pair",
+          message: encodeMessage("errors.relationshipPairExists"),
         });
       }
       directedPairs.add(pair);

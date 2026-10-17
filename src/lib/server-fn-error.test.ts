@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import {
   withSafeHandler,
   UnauthorizedError,
@@ -24,17 +25,17 @@ describe("withSafeHandler", () => {
   it("rethrows SafeServerError intact", async () => {
     await expect(
       withSafeHandler(async () => {
-        throw new SafeServerError("Novel not found");
+        throw new SafeServerError(encodeMessage("errors.novelNotFound"));
       }),
-    ).rejects.toThrow("Novel not found");
+    ).rejects.toThrow(encodeMessage("errors.novelNotFound"));
   });
 
-  it("catches unknown error and throws generic 'Something went wrong.'", async () => {
+  it("catches unknown error and throws the generic safe message", async () => {
     await expect(
       withSafeHandler(async () => {
         throw new Error("relation novels does not exist in db");
       }),
-    ).rejects.toThrow("Something went wrong.");
+    ).rejects.toThrow(encodeMessage("common.somethingWentWrong"));
   });
 });
 
@@ -45,7 +46,9 @@ describe("RateLimitError", () => {
     expect(err instanceof SafeServerError).toBe(true);
     expect(err instanceof Error).toBe(true);
     expect(err.name).toBe("RateLimitError");
-    expect(err.message).toBe("Too many requests");
+    // The message is a code, so the reader resolves it in their own language. Asserting the
+    // key rather than a sentence is what keeps this test honest if the key is ever renamed.
+    expect(err.message).toBe(encodeMessage("errors.rateLimited"));
   });
 
   it("passes through withSafeHandler unchanged", async () => {

@@ -1,5 +1,6 @@
 import { useForm, useStore } from "@tanstack/react-form";
 import { Key } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,10 @@ export interface ChangePasswordCardProps {
 }
 
 export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
+  const t = useTranslations("settings");
+  // "Updating…" is the app's own word for a form in flight, so it comes from `common`
+  // rather than being said again here.
+  const tc = useTranslations("common");
   const form = useForm({
     defaultValues: emptyPasswordForm,
     validators: { onSubmit: changePasswordSchema },
@@ -54,9 +59,9 @@ export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Key className="size-5 text-muted-foreground" />
-          <CardTitle>Password</CardTitle>
+          <CardTitle>{t("passwordTitle")}</CardTitle>
         </div>
-        <CardDescription>Change the password this account signs in with.</CardDescription>
+        <CardDescription>{t("passwordDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form
@@ -72,7 +77,7 @@ export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="currentPassword">Current Password</FieldLabel>
+                  <FieldLabel htmlFor="currentPassword">{t("currentPasswordLabel")}</FieldLabel>
                   <Input
                     id="currentPassword"
                     name={field.name}
@@ -92,7 +97,7 @@ export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
+                  <FieldLabel htmlFor="newPassword">{t("newPasswordLabel")}</FieldLabel>
                   <Input
                     id="newPassword"
                     name={field.name}
@@ -112,7 +117,7 @@ export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="confirmPassword">Confirm New Password</FieldLabel>
+                  <FieldLabel htmlFor="confirmPassword">{t("confirmPasswordLabel")}</FieldLabel>
                   <Input
                     id="confirmPassword"
                     name={field.name}
@@ -130,7 +135,7 @@ export function ChangePasswordCard({ onSubmit }: ChangePasswordCardProps) {
           <div className="pt-2">
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Spinner />}
-              {isSubmitting ? "Updating…" : "Update Password"}
+              {isSubmitting ? tc("updating") : t("updatePassword")}
             </Button>
           </div>
         </form>

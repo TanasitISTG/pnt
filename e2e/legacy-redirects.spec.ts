@@ -1,14 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-const adminEmail = "e2e-admin@example.test";
-const adminPassword = "e2e-password-123";
+import { createNovel } from "./novels";
+import { takeSession } from "./sessions";
 
-async function waitForReactHydration(page: import("@playwright/test").Page) {
-  await page.waitForFunction(() => {
-    const submit = document.querySelector('button[type="submit"]');
-    return submit && Object.keys(submit).some((key) => key.startsWith("__reactProps$"));
-  });
-}
+test.use({ storageState: takeSession("admin", "read") });
 
 /**
  * The redesign moved the shared shelf, the owner's editor and the two novel maps to new URLs
@@ -30,14 +25,8 @@ test("legacy addresses redirect into the redesigned app", async ({ page }) => {
   );
   await expect(page.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
 
-  await page.goto("/login");
-  await waitForReactHydration(page);
-  const rejectButton = page.getByRole("button", { name: "Reject optional" });
-  if (await rejectButton.isVisible()) await rejectButton.click();
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(adminPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  // The rest of this spec walks an owner's addresses, and its session comes from the fixture
+  // (`e2e/sessions.ts`).
 
   // Settings became a hub of its own sections. The old account page and the bare hub both
   // land on the section the hub opens with.
@@ -49,19 +38,13 @@ test("legacy addresses redirect into the redesigned app", async ({ page }) => {
   await page.goto("/settings");
   await expect(page).toHaveURL((url) => url.pathname === "/settings/account");
 
-  // A novel of this spec's own, so the studio redirects are walked by an owner who can see
-  // them. Creating one lands in the studio's add flow, which is where the id comes from.
+  // A novel of this spec's own, so the studio redirects are walked by an owner who can see them:
+  // creating one hands back the id every address below is built from.
   // The control lives on the reading home and the shelf, not in the settings hub this spec
   // has just walked, so the flow comes back to the home screen to reach it.
   await page.goto("/");
   const novelTitle = `Legacy addresses ${Date.now()}`;
-  await page.getByRole("button", { name: "New novel" }).click();
-  await waitForReactHydration(page);
-  await page.getByLabel("Title *").fill(novelTitle);
-  await page.getByRole("button", { name: "Create Novel" }).click();
-  await expect(page.getByRole("heading", { name: "Add chapters" })).toBeVisible();
-  const novelId = new URL(page.url()).pathname.split("/")[2];
-  expect(novelId).toBeTruthy();
+  const novelId = await createNovel(page, { title: novelTitle });
 
   await page.goto(`/novels/${novelId}/edit`);
   await expect(page).toHaveURL((url) => url.pathname === `/novels/${novelId}/manage/settings`);

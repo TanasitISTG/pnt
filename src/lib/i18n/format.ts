@@ -39,6 +39,18 @@ export function intlLocale(locale: Locale): string {
 /** The month, day and time, which is the default shape for a record's own timestamp. */
 const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
 
+/**
+ * The numeric shape a dense table cell uses, where a month name would widen the column for
+ * nothing. A cell that shows a record's age rather than its moment.
+ */
+const COMPACT_DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  year: "2-digit",
+  month: "numeric",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+};
+
 const TIME_OPTIONS: Intl.DateTimeFormatOptions = {
   hour: "numeric",
   minute: "2-digit",
@@ -54,9 +66,32 @@ export function parseDateTime(value: Date | string): Date | null {
 const EMPTY = "-";
 
 export function formatDateTime(value: Date | string, locale: Locale): string {
+  return formatDateTimeWith(value, locale, DATE_TIME_OPTIONS);
+}
+
+/** The compact shape above, for a cell that is a column among several. */
+export function formatCompactDateTime(value: Date | string, locale: Locale): string {
+  return formatDateTimeWith(value, locale, COMPACT_DATE_TIME_OPTIONS);
+}
+
+/**
+ * The date without its time, for a column that records a day: a case was reported on the
+ * 14th, not at 09:41, and the shorter cell keeps the waiting tree readable.
+ */
+export function formatDate(value: Date | string, locale: Locale): string {
   const date = parseDateTime(value);
   if (!date) return EMPTY;
-  return date.toLocaleString(intlLocale(locale), { timeZone: APP_TIME_ZONE, ...DATE_TIME_OPTIONS });
+  return date.toLocaleDateString(intlLocale(locale), { timeZone: APP_TIME_ZONE });
+}
+
+function formatDateTimeWith(
+  value: Date | string,
+  locale: Locale,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  const date = parseDateTime(value);
+  if (!date) return EMPTY;
+  return date.toLocaleString(intlLocale(locale), { timeZone: APP_TIME_ZONE, ...options });
 }
 
 /** The clock time to the second, for a job's log lines. */

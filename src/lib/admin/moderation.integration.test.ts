@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { type Sql } from "postgres";
 import { hashPassword } from "better-auth/crypto";
+
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 import { describeBan } from "./ban-status";
 
 type AuthApi = typeof import("@/lib/auth/auth").auth;
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
 let auth: AuthApi;
@@ -96,14 +99,9 @@ async function readBanRow(userId: string): Promise<{
   };
 }
 
-integrationDescribe("operator moderation", () => {
+describeIntegration("operator moderation", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     ({ auth } = await import("@/lib/auth/auth"));
     ({ recordAdminAction } = await import("./audit.server"));
 
@@ -119,7 +117,7 @@ integrationDescribe("operator moderation", () => {
     if (!sql) return;
     await sql`DELETE FROM "user" WHERE "id" IN (${operatorId}, ${memberId})`;
     await sql`DELETE FROM "admin_audit_log" WHERE "actor_id" = ${operatorId} OR "actor_id" = ${memberId}`;
-    await sql.end({ timeout: 1 });
+    await closeIntegrationDatabase();
   });
 
   it("records an audit row that survives the account it names", async () => {

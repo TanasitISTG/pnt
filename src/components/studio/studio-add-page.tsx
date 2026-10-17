@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "use-intl";
 
 import { AddChapterSection } from "@/components/chapters/import/add-chapter-section";
 import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
@@ -14,6 +15,7 @@ export interface StudioAddPageProps {
  * same screen; as its own destination the mode picker is the page.
  */
 export function StudioAddPage({ novelId }: StudioAddPageProps) {
+  const t = useTranslations("studio");
   const queryClient = useQueryClient();
   const chaptersQuery = useQuery(chaptersQueryOptions(novelId));
   const chapters = chaptersQuery.data ?? [];
@@ -28,16 +30,14 @@ export function StudioAddPage({ novelId }: StudioAddPageProps) {
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-card-title font-semibold tracking-tight text-foreground sm:text-sub">
-          Add chapters
+          {t("sectionAdd")}
         </h1>
-        <p className="mt-0.5 text-body text-muted-foreground">
-          Paste source text, fetch from a supported site, or import an EPUB.
-        </p>
+        <p className="mt-0.5 text-body text-muted-foreground">{t("addLead")}</p>
       </div>
 
       {chaptersQuery.isPending ? (
         <div className="rounded-xl border border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
-          Loading chapter tools…
+          {t("loadingChapterTools")}
         </div>
       ) : (
         <AddChapterSection

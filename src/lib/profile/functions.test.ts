@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 const mocks = vi.hoisted(() => ({
   updateUser: vi.fn(),
@@ -111,7 +112,7 @@ describe("applyProfileName", () => {
     mocks.updateUser.mockRejectedValue(new Error('relation "user" does not exist'));
 
     await expect(applyProfileName(headers, "tana")).rejects.toThrow(
-      "Could not update your display name. Try again.",
+      encodeMessage("errors.displayNameUpdateFailed"),
     );
   });
 });
@@ -138,7 +139,7 @@ describe("replaceProfileImage", () => {
         image: PNG_BASE64,
         imageMime: "image/jpeg",
       }),
-    ).rejects.toThrow("Profile image magic bytes do not match declared JPEG MIME type");
+    ).rejects.toThrow(encodeMessage("errors.imageTypeMismatch"));
 
     expect(mocks.writeAvatarSet).not.toHaveBeenCalled();
     expect(mocks.updateUser).not.toHaveBeenCalled();

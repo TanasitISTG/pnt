@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactElement } from "react";
+import { useTranslations } from "use-intl";
 import { Check, Search } from "lucide-react";
 
 import {
@@ -52,6 +53,12 @@ export function ReaderChapterDrawer({
   trigger,
   side = "end",
 }: ReaderChapterDrawerProps) {
+  const t = useTranslations("reader");
+  const chapterLabel = (chapter: ReaderChapterSummary) =>
+    t("chapterLabel", {
+      number: Number(chapter.number),
+      title: chapter.translatedTitle ?? chapter.title,
+    });
   const currentChapter = chapters.find((chapter) => chapter.id === chapterId);
   const currentIndex = chapters.findIndex((chapter) => chapter.id === chapterId);
   const currentGroup = currentIndex >= 0 ? Math.floor(currentIndex / CHAPTER_GROUP_SIZE) : 0;
@@ -77,9 +84,11 @@ export function ReaderChapterDrawer({
       <DrawerTrigger render={trigger} />
       <DrawerContent side={side}>
         <DrawerHeader>
-          <DrawerTitle>Chapters</DrawerTitle>
+          <DrawerTitle>{t("chapterListTitle")}</DrawerTitle>
           <DrawerDescription>
-            {currentChapter ? `Reading ${chapterLabel(currentChapter)}` : "Choose a chapter"}
+            {currentChapter
+              ? t("readingChapter", { chapter: chapterLabel(currentChapter) })
+              : t("chooseChapter")}
           </DrawerDescription>
         </DrawerHeader>
         <div className="shrink-0 px-5 pt-3">
@@ -91,8 +100,8 @@ export function ReaderChapterDrawer({
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search chapters…"
-              aria-label="Search chapters in picker"
+              placeholder={t("searchChaptersPlaceholder")}
+              aria-label={t("searchChaptersLabel")}
               className="h-11 pl-9"
             />
           </div>
@@ -100,9 +109,9 @@ export function ReaderChapterDrawer({
         <DrawerBody>
           {groups.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <p className="text-body text-muted-foreground">No chapters match your search.</p>
+              <p className="text-body text-muted-foreground">{t("noChapterMatches")}</p>
               <Button type="button" variant="outline" size="sm" onClick={() => setQuery("")}>
-                Clear search
+                {t("clearSearch")}
               </Button>
             </div>
           ) : (
@@ -115,7 +124,10 @@ export function ReaderChapterDrawer({
                 >
                   <AccordionTrigger className="min-w-0">
                     <span className="min-w-0 flex-1">
-                      Chapters {Number(group[0].number)}–{Number(group[group.length - 1].number)}{" "}
+                      {t("chapterGroup", {
+                        from: Number(group[0].number),
+                        to: Number(group[group.length - 1].number),
+                      })}{" "}
                       <span className="font-normal text-muted-foreground">({group.length})</span>
                     </span>
                   </AccordionTrigger>
@@ -147,7 +159,7 @@ export function ReaderChapterDrawer({
                             {read ? (
                               <span className="shrink-0 self-center text-muted-foreground">
                                 <Check className="size-4" aria-hidden="true" />
-                                <span className="sr-only">Read</span>
+                                <span className="sr-only">{t("readMarker")}</span>
                               </span>
                             ) : null}
                           </Button>
@@ -163,8 +175,4 @@ export function ReaderChapterDrawer({
       </DrawerContent>
     </Drawer>
   );
-}
-
-function chapterLabel(chapter: ReaderChapterSummary): string {
-  return `Ch. ${Number(chapter.number)}: ${chapter.translatedTitle ?? chapter.title}`;
 }

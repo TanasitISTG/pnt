@@ -7,6 +7,7 @@ vi.mock("@/lib/scrape/network-policy.server", () => ({
 
 import { directFetch, fetchHtml } from "@/lib/scrape/server";
 import { SafeServerError } from "@/lib/server-fn-error";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 describe("scrape.server", () => {
   beforeEach(() => {
@@ -42,7 +43,7 @@ describe("scrape.server", () => {
 
     const err = await directFetch("https://www.quanben.io/n/test/1.html").catch((e) => e);
     expect(err).toBeInstanceOf(SafeServerError);
-    expect(err.message).toContain("redirect");
+    expect(err.message).toContain("scrapeHttpRedirect");
     expect(err.message).toContain("302");
   });
 
@@ -53,7 +54,7 @@ describe("scrape.server", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 403 })));
 
     await expect(directFetch("https://www.quanben.io/n/test/1.html")).rejects.toMatchObject({
-      message: "Source site returned HTTP 403",
+      message: encodeMessage("errors.scrapeHttpError", { status: 403 }),
       cause: 403,
     });
   });
@@ -85,7 +86,7 @@ describe("scrape.server", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(fetchHtml("https://www.quanben.io/n/test/1.html", "direct")).rejects.toThrow(
-      "Page too large",
+      encodeMessage("errors.scrapePageTooLarge"),
     );
   });
 
@@ -97,7 +98,7 @@ describe("scrape.server", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(fetchHtml("https://www.quanben.io/n/test/1.html", "direct")).rejects.toThrow(
-      "Page too large",
+      encodeMessage("errors.scrapePageTooLarge"),
     );
   });
 });

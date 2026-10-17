@@ -4,6 +4,7 @@ import { count, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 import type { AdminActionDetail } from "@/lib/admin/audit";
 import { auth } from "@/lib/auth/auth";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { ensureAdminSession, getSession } from "@/lib/auth/functions";
 import { impersonationOperatorId } from "@/lib/auth/impersonation";
 import { hasAdminRole } from "@/lib/auth/roles";
@@ -155,7 +156,7 @@ export const listAdminActivity = createServerFn({ method: "GET" })
  */
 function assertNotSelf(sessionUserId: string, targetId: string): void {
   if (sessionUserId === targetId) {
-    throw new SafeServerError("You cannot change your own operator account here.");
+    throw new SafeServerError(encodeMessage("errors.operatorSelfTarget"));
   }
 }
 
@@ -172,7 +173,7 @@ async function findTargetAccount(userId: string): Promise<TargetAccount> {
     .where(eq(user.id, userId))
     .limit(1);
 
-  if (!target) throw new SafeServerError("That account no longer exists.");
+  if (!target) throw new SafeServerError(encodeMessage("errors.accountMissing"));
   return target;
 }
 
@@ -306,7 +307,7 @@ export const startImpersonation = createServerFn({ method: "POST" })
       const target = await findTargetAccount(data.userId);
 
       if (hasAdminRole(target.role)) {
-        throw new SafeServerError("Operator accounts cannot be viewed as another account.");
+        throw new SafeServerError(encodeMessage("errors.operatorCannotImpersonate"));
       }
 
       await auth.api.impersonateUser({
@@ -338,7 +339,7 @@ export const stopImpersonation = createServerFn({ method: "POST" }).handler(asyn
     if (!session) throw new UnauthorizedError();
 
     const operatorId = impersonationOperatorId(session.session);
-    if (!operatorId) throw new SafeServerError("You are not viewing as another account.");
+    if (!operatorId) throw new SafeServerError(encodeMessage("errors.notImpersonating"));
 
     await auth.api.stopImpersonating({ headers: getRequestHeaders() });
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { requireAdminSession, requireSession } from "@/lib/auth/functions";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { ImpersonationReadOnlyError, UnauthorizedError } from "@/lib/server-fn-error";
 
 describe("requireSession", () => {
@@ -55,7 +56,7 @@ describe("requireSession", () => {
 
     expect(() => requireSession(impersonated)).toThrow(ImpersonationReadOnlyError);
     expect(() => requireSession(impersonated)).toThrow(
-      "Actions are unavailable while you are viewing as another account.",
+      encodeMessage("errors.impersonationReadOnly"),
     );
   });
 

@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { createComment, deleteComment, updateComment } from "@/lib/comments/functions";
+import { translateServerError } from "@/lib/i18n/server-error";
 import { createCommentReport } from "@/lib/reports/functions";
 import type { ReportReason } from "@/lib/reports/reasons";
 
@@ -15,6 +17,13 @@ import type { ReportReason } from "@/lib/reports/reasons";
  * in the list.
  */
 export function useCommentMutations(chapterId: string) {
+  const t = useTranslations("comments");
+  // A report is filed from three surfaces (a comment, a review, a novel) and its two sentences live
+  // once, in the namespace that owns reporting.
+  const tReports = useTranslations("reports");
+  // One root translator: a message code carries its own namespace, so a failure from the server
+  // resolves without this hook knowing which namespace it came from.
+  const tRoot = useTranslations();
   const queryClient = useQueryClient();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["chapterComments", chapterId] });
@@ -35,22 +44,21 @@ export function useCommentMutations(chapterId: string) {
   const remove = useMutation({
     mutationFn: (commentId: string) => deleteComment({ data: { commentId } }),
     onSuccess: () => {
-      toast.success("Comment deleted.");
+      toast.success(t("deleted"));
       void invalidate();
     },
-    onError: (error: unknown) =>
-      toast.error(error instanceof Error ? error.message : "That comment could not be deleted"),
+    onError: (error: unknown) => toast.error(translateServerError(error, tRoot, t("deleteFailed"))),
   });
 
   const report = useMutation({
     mutationFn: (input: { commentId: string; reason: ReportReason; details?: string }) =>
       createCommentReport({ data: input }),
     onSuccess: () => {
-      toast.success("Report sent. An operator will review it.");
+      toast.success(tReports("sent"));
       void invalidate();
     },
     onError: (error: unknown) =>
-      toast.error(error instanceof Error ? error.message : "That report did not go through"),
+      toast.error(translateServerError(error, tRoot, tReports("failed"))),
   });
 
   return { post, edit, remove, report };

@@ -178,7 +178,7 @@ describe("backup restore schema", () => {
   it("rejects duplicates the unique indexes would reject after the transaction opens", () => {
     expect(() =>
       parseBackup(backup({ chapters: [chapter(), chapter({ id: "chapter-2", number: "1" })] })),
-    ).toThrow(/duplicate chapter numbers/);
+    ).toThrow(/backupDuplicateChapterNumbers/);
 
     const term = {
       id: "term-1",
@@ -191,13 +191,13 @@ describe("backup restore schema", () => {
       updatedAt: exportedAt,
     };
     expect(() => parseBackup(backup({ glossaryTerms: [term, { ...term, id: "term-2" }] }))).toThrow(
-      /duplicate glossary sources/,
+      /backupDuplicateGlossarySources/,
     );
   });
 
   it("still rejects unsupported language pairs", () => {
     expect(() => parseBackup(backup({ sourceLang: "en", targetLang: "en" }))).toThrow(
-      /unsupported language pair/i,
+      /backupUnsupportedLanguagePair/,
     );
   });
 
@@ -205,10 +205,9 @@ describe("backup restore schema", () => {
     expect(() =>
       assertExportableBackup({ app: "pnt", schemaVersion: 1, exportedAt, novels: [] }),
     ).not.toThrow();
-    expect(() => assertExportableBackup(backup({ chunkSize: 10 }))).toThrow(
-      /Backup export failed validation/,
-    );
-    expect(() => parseBackup(backup({ chunkSize: 10 }))).toThrow(/Invalid backup file/);
+    // Both directions report the field and the rule, as codes the reader's catalog resolves.
+    expect(() => assertExportableBackup(backup({ chunkSize: 10 }))).toThrow(/backupFieldInvalid/);
+    expect(() => parseBackup(backup({ chunkSize: 10 }))).toThrow(/backupFieldInvalid/);
   });
 
   it("reports the first issue instead of a generic failure", () => {
@@ -220,7 +219,7 @@ describe("backup restore schema", () => {
     }
 
     expect(thrown).toBeInstanceOf(SafeServerError);
-    expect((thrown as Error).message).toContain("Invalid backup file");
+    expect((thrown as Error).message).toContain("backupFieldInvalid");
     expect((thrown as Error).message).toContain("novels.0.contextTailLength");
   });
 });

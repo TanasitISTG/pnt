@@ -12,7 +12,6 @@ import {
   DataTableRowActions,
   DataTableSortableHeader,
   DataTableToolbar,
-  formatTableRange,
   resolveTableUpdater,
   type DataTablePaginationTable,
 } from "./data-table-parts";
@@ -42,11 +41,6 @@ describe("table helpers", () => {
   it("resolves functional and direct updaters", () => {
     expect(resolveTableUpdater((current: number) => current + 1, 4)).toBe(5);
     expect(resolveTableUpdater(9, 4)).toBe(9);
-  });
-
-  it("formats empty and populated ranges with the noun", () => {
-    expect(formatTableRange(0, 0, 0, "terms")).toBe("0 terms");
-    expect(formatTableRange(1, 25, 1200, "terms")).toBe("1–25 of 1,200 terms");
   });
 });
 

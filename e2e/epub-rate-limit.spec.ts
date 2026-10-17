@@ -1,18 +1,17 @@
 import { expect, test } from "@playwright/test";
 
+import { claimShared } from "./fixtures";
+import { openReadingHome, takeSession } from "./sessions";
+
+test.use({ storageState: takeSession("admin", "read") });
+
 test("EPUB account quota returns HTTP 429 without a guest IP", async ({ page }) => {
-  await page.goto("/login");
-  await page.waitForFunction(() => {
-    const submit = document.querySelector('button[type="submit"]');
-    return submit && Object.keys(submit).some((key) => key.startsWith("__reactProps$"));
-  });
-  const reject = page.getByRole("button", { name: "Reject optional" });
-  if (await reject.isVisible()) await reject.click();
-  await page.getByLabel("Email").fill("e2e-admin@example.test");
-  await page.getByLabel("Password").fill("e2e-password-123");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  // A signed-in account lands on its reading home; the shelf itself is `/library`.
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await openReadingHome(page);
+
+  // The account's whole upload window, spent on purpose: the declaration (`e2e/fixtures.ts`) is
+  // what says this spec is the one that may spend it, and what the app's limit is.
+  const quota = claimShared("admin-epub-window", "spend", "epub-rate-limit");
+  const attempts = quota.limit + 1;
 
   // Invalid filenames fail before admission, but after the authenticated quota check;
   // no upload or chapter is persisted. Call the real client proxy and inspect its HTTP responses.
@@ -22,22 +21,22 @@ test("EPUB account quota returns HTTP 429 without a guest IP", async ({ page }) 
       statuses.push(response.status());
     }
   });
-  await page.evaluate(async () => {
+  await page.evaluate(async (calls) => {
     // The Vite client proxy exists only in the browser; importing it in the Playwright
     // process would instead load the server module and its environment.
     // @ts-expect-error /src is served by Vite, not resolved by Playwright's tsconfig.
     const { createEpubUpload } = await import("/src/lib/epub/functions.ts");
-    for (let index = 0; index < 7; index += 1) {
+    for (let index = 0; index < calls; index += 1) {
       try {
         await createEpubUpload({
           data: { novelId: "unused", fileName: "invalid.txt", fileSize: 1 },
         });
       } catch {
-        // Expected: filename rejection for six calls, then quota rejection.
+        // Expected: filename rejection for every call the window allows, then quota rejection.
       }
     }
-  });
-  expect(statuses).toHaveLength(7);
-  expect(statuses.slice(0, 6)).not.toContain(429);
-  expect(statuses[6]).toBe(429);
+  }, attempts);
+  expect(statuses).toHaveLength(attempts);
+  expect(statuses.slice(0, quota.limit)).not.toContain(429);
+  expect(statuses[quota.limit]).toBe(429);
 });

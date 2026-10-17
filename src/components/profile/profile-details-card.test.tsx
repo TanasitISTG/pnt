@@ -47,7 +47,8 @@ describe("ProfileDetailsCard", () => {
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.click(save);
 
-    await waitFor(() => expect(screen.getByText("Display name is required")).toBeDefined());
+    // The schema's rule is a code, and this is the sentence the field resolves it to.
+    await waitFor(() => expect(screen.getByText("Display name is required.")).toBeDefined());
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -61,7 +62,7 @@ describe("ProfileDetailsCard", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText(`Display name must be at most ${PROFILE_NAME_MAX_LENGTH} characters`),
+        screen.getByText(`Keep your display name under ${PROFILE_NAME_MAX_LENGTH} characters.`),
       ).toBeDefined(),
     );
     expect(onSubmit).not.toHaveBeenCalled();

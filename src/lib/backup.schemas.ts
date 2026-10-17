@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { coverMimeSchema, createNovelSchema } from "@/lib/content/novel/novel.schemas";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { isSupportedLanguagePair } from "@/lib/language-pair";
@@ -8,12 +9,15 @@ import { isSupportedLanguagePair } from "@/lib/language-pair";
 // Chapter numbers live in a numeric(8, 2) column, so at most six integer digits.
 const chapterNumberSchema = z
   .string()
-  .regex(/^\d{1,6}(\.\d{1,2})?$/, "Chapter number must be a number with up to two decimals")
-  .refine((value) => Number(value) > 0, "Chapter number must be positive");
+  .regex(/^\d{1,6}(\.\d{1,2})?$/, encodeMessage("validation.backupChapterNumberFormat"))
+  .refine((value) => Number(value) > 0, encodeMessage("validation.chapterNumberPositive"));
 
 const isoDateStringSchema = z
   .string()
-  .refine((value) => !Number.isNaN(Date.parse(value)), "Expected an ISO date string");
+  .refine(
+    (value) => !Number.isNaN(Date.parse(value)),
+    encodeMessage("validation.backupIsoDateRequired"),
+  );
 
 export const backupChapterSchema = z
   .object({
@@ -42,28 +46,28 @@ export const backupChapterSchema = z
     if (chapter.translatedContent !== null && !hasTranslatedContent) {
       context.addIssue({
         code: "custom",
-        message: "Translated content must be null or nonblank",
+        message: encodeMessage("validation.backupTranslationNullOrNonblank"),
         path: ["translatedContent"],
       });
     }
     if (chapter.status === "translated" && !hasTranslatedContent) {
       context.addIssue({
         code: "custom",
-        message: "Translated chapters require nonblank translated content",
+        message: encodeMessage("validation.backupTranslationRequired"),
         path: ["status"],
       });
     }
     if (chapter.status === "raw" && chapter.translatedContent !== null) {
       context.addIssue({
         code: "custom",
-        message: "Raw chapters require null translated content",
+        message: encodeMessage("validation.backupRawRequiresNullTranslation"),
         path: ["status"],
       });
     }
     if (chapter.rawCharCount !== chapter.rawContent.length) {
       context.addIssue({
         code: "custom",
-        message: "Raw character count must equal raw content length",
+        message: encodeMessage("validation.backupRawCountMismatch"),
         path: ["rawCharCount"],
       });
     }
@@ -107,7 +111,7 @@ export const backupNovelSchema = z
     glossaryTerms: z.array(backupTermSchema),
   })
   .refine((data) => !data.coverBase64 || !!data.coverMime, {
-    message: "Cover MIME type is required when a cover image is present",
+    message: encodeMessage("validation.backupCoverMimeRequired"),
     path: ["coverMime"],
   })
   // Chapter numbers compare numerically in the column's unique index, so "1"
@@ -115,15 +119,18 @@ export const backupNovelSchema = z
   .refine(
     (data) =>
       new Set(data.chapters.map((chapter) => Number(chapter.number))).size === data.chapters.length,
-    { message: "Backup contains duplicate chapter numbers", path: ["chapters"] },
+    { message: encodeMessage("validation.backupDuplicateChapterNumbers"), path: ["chapters"] },
   )
   .refine(
     (data) =>
       new Set(data.glossaryTerms.map((term) => term.source)).size === data.glossaryTerms.length,
-    { message: "Backup contains duplicate glossary sources", path: ["glossaryTerms"] },
+    {
+      message: encodeMessage("validation.backupDuplicateGlossarySources"),
+      path: ["glossaryTerms"],
+    },
   )
   .refine((data) => isSupportedLanguagePair(data.sourceLang, data.targetLang), {
-    message: "Backup contains an unsupported language pair",
+    message: encodeMessage("validation.backupUnsupportedLanguagePair"),
     path: ["targetLang"],
   });
 
@@ -136,10 +143,23 @@ export const backupSchema = z.object({
 
 export type Backup = z.infer<typeof backupSchema>;
 
+/**
+ * The first issue a backup failed on, as a message code.
+ *
+ * A Zod message is a code, and a code wrapped in an English sentence is a string no catalog can
+ * resolve. So the two travel as a wrapper with a nested message: `{path}` names the field and
+ * `{message}` is the rule, which `translateMessage` resolves in turn.
+ */
 function firstIssueMessage(error: z.ZodError): string {
   const issue = error.issues[0];
-  const path = issue && issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-  return `${path}${issue?.message ?? "validation failed"}`;
+  if (!issue) return encodeMessage("validation.backupInvalid");
+  const path = issue.path.join(".");
+  // The field is named as a value and the rule as a nested message, so a reader gets both in
+  // their own language. A rule the catalog does not know - a Zod default - travels as the
+  // sentence it is, which is why the wrapper resolves only what it can.
+  return path
+    ? encodeMessage("validation.backupFieldInvalid", { path, message: issue.message })
+    : issue.message;
 }
 
 /**
@@ -150,7 +170,7 @@ function firstIssueMessage(error: z.ZodError): string {
 export function parseBackup(value: unknown): Backup {
   const result = backupSchema.safeParse(value);
   if (result.success) return result.data;
-  throw new SafeServerError(`Invalid backup file: ${firstIssueMessage(result.error)}`);
+  throw new SafeServerError(firstIssueMessage(result.error));
 }
 
 /**
@@ -160,5 +180,5 @@ export function parseBackup(value: unknown): Backup {
 export function assertExportableBackup(value: unknown): Backup {
   const result = backupSchema.safeParse(value);
   if (result.success) return result.data;
-  throw new SafeServerError(`Backup export failed validation: ${firstIssueMessage(result.error)}`);
+  throw new SafeServerError(firstIssueMessage(result.error));
 }

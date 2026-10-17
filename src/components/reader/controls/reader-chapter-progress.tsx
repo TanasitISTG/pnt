@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
+import { useTranslations } from "use-intl";
 
 import {
   getReaderScrollFraction,
@@ -20,6 +21,7 @@ export function ReaderChapterProgress({
   proseNode,
   toolbarRef,
 }: ReaderChapterProgressProps) {
+  const t = useTranslations("reader");
   const [progress, setProgress] = useState({ percent: 0, scrollable: false });
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export function ReaderChapterProgress({
     <div
       className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5"
       role="progressbar"
-      aria-label="Chapter progress"
+      aria-label={t("chapterProgress")}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={progress.percent}

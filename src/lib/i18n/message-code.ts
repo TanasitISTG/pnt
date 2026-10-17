@@ -10,17 +10,31 @@
  * code (Better Auth's own English, a message from before this change, a key with no catalog
  * entry) passes through untouched rather than turning into a placeholder.
  */
+import type { Messages } from "./messages";
+
 export interface ServerMessage {
   key: string;
   values?: Record<string, string | number>;
 }
+
+/**
+ * Every key in the catalog, dotted: `errors.chapterNotFound`, `reader.toolbar`.
+ *
+ * Both catalogs are exactly two levels deep — a namespace and the keys beneath it — so this
+ * is a mapped type rather than a recursive one, and it stays cheap for the compiler. Typing
+ * the parameter is what turns a mistyped key from a string the reader eventually sees into
+ * a `bun run typecheck` failure at the call site.
+ */
+export type MessageKey = {
+  [Namespace in keyof Messages]: `${Namespace & string}.${keyof Messages[Namespace] & string}`;
+}[keyof Messages];
 
 const SEPARATOR = "|";
 
 /** `namespace.key` or `namespace.section.key`, lower camelCase, as the catalogs are written. */
 const KEY_PATTERN = /^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9]+)+$/;
 
-export function encodeMessage(key: string, values?: Record<string, string | number>): string {
+export function encodeMessage(key: MessageKey, values?: Record<string, string | number>): string {
   if (!values || Object.keys(values).length === 0) return key;
   return `${key}${SEPARATOR}${JSON.stringify(values)}`;
 }

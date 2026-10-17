@@ -1,4 +1,7 @@
 import { CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { useTranslations } from "use-intl";
+
+import { translateServerError } from "@/lib/i18n/server-error";
 
 import type { ProviderTestResult } from "./provider-settings-card";
 
@@ -13,6 +16,13 @@ export function TestResultBanner({
   showFullError,
   onToggleFullError,
 }: TestResultBannerProps) {
+  const t = useTranslations("settings");
+  const tRoot = useTranslations();
+  // The server sends a code for the failure it classified, because the worker that classified it
+  // had no reader and no language. Resolving it here is what makes the same failure read in Thai
+  // in this banner and in a job's log row; a message that is not a code - anything from before
+  // this vocabulary, or a provider's own words in an old row - passes through as it is.
+  const failure = translateServerError(testResult.error, tRoot);
   return (
     <div
       className={`flex items-start gap-3 rounded-lg border p-4 ${
@@ -29,19 +39,19 @@ export function TestResultBanner({
       <div className="min-w-0 flex-1 text-body">
         <p className="font-semibold">
           {testResult.success
-            ? `Connection Successful (${testResult.latencyMs}ms)`
-            : "Connection Failed"}
+            ? t("connectionSuccessful", { latencyMs: testResult.latencyMs ?? 0 })
+            : t("connectionFailed")}
         </p>
         {testResult.success ? (
-          <p className="mt-1 text-caption opacity-90">Sample completion: "{testResult.sample}"</p>
+          <p className="mt-1 text-caption opacity-90">
+            {t("sampleCompletion", { sample: testResult.sample ?? "" })}
+          </p>
         ) : (
           <div>
             <p className="mt-1 break-words text-caption opacity-90">
-              {showFullError || (testResult.error?.length || 0) <= 120
-                ? testResult.error
-                : `${testResult.error?.slice(0, 120)}…`}
+              {showFullError || failure.length <= 120 ? failure : `${failure.slice(0, 120)}…`}
             </p>
-            {(testResult.error?.length || 0) > 120 && (
+            {failure.length > 120 && (
               <button
                 type="button"
                 onClick={onToggleFullError}
@@ -50,12 +60,12 @@ export function TestResultBanner({
                 {showFullError ? (
                   <>
                     <ChevronUp className="size-3.5" />
-                    Show less
+                    {t("showLess")}
                   </>
                 ) : (
                   <>
                     <ChevronDown className="size-3.5" />
-                    Show details
+                    {t("showDetails")}
                   </>
                 )}
               </button>

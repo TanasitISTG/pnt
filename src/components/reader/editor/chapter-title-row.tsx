@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { Badge } from "@/components/ui/badge";
 
 export interface ChapterTitleRowProps {
@@ -13,10 +15,13 @@ export function ChapterTitleRow({
   translatedTitle,
   editedAt,
 }: ChapterTitleRowProps) {
+  const t = useTranslations("reader");
+  const tCommon = useTranslations("common");
+
   return (
     <div className="flex min-w-0 max-w-full items-start gap-3 border-b border-border pb-4">
       <span className="shrink-0 whitespace-nowrap font-mono text-caption text-muted-foreground">
-        Ch. {Number(number)}
+        {tCommon("chapterShort", { number: Number(number) })}
       </span>
       <div className="flex min-w-0 max-w-full flex-1 flex-col gap-0.5">
         <h1 className="min-w-0 max-w-full break-words text-card-title font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
@@ -30,7 +35,7 @@ export function ChapterTitleRow({
       </div>
       {editedAt && (
         <Badge variant="secondary" className="shrink-0 text-badge-count">
-          Edited
+          {t("editedBadge")}
         </Badge>
       )}
     </div>

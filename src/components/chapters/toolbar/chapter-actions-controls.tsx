@@ -1,4 +1,5 @@
 import { Check, GripVertical, Languages, MoreHorizontal, Trash2 } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import {
   DropdownMenu,
@@ -41,41 +42,44 @@ export function ChapterActionsControls({
   deletingAllTranslations,
   onDeleteAllTranslations,
 }: ChapterActionsControlsProps) {
+  const t = useTranslations("studio");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="outline" size="sm" aria-label="Chapter actions" />}
+        render={<Button variant="outline" size="sm" aria-label={t("chapterActions")} />}
       >
         <MoreHorizontal className="size-4" />
-        <span className="hidden sm:inline">Chapter actions</span>
+        <span className="hidden sm:inline">{t("chapterActions")}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 max-w-[calc(100vw-2rem)]">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Maintenance</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("maintenance")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {readyUnpublishedCount > 0 ? (
             <DropdownMenuItem onClick={onPublishAll} disabled={publishingAll}>
               <Check className="size-4" />
-              {publishingAll ? "Publishing…" : `Publish ready chapters (${readyUnpublishedCount})`}
+              {publishingAll
+                ? t("publishingChapters")
+                : t("publishReadyChapters", { count: readyUnpublishedCount })}
             </DropdownMenuItem>
           ) : null}
           {unreadyCount > 0 ? (
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
-              {unreadyCount} chapter{unreadyCount === 1 ? "" : "s"} not ready to publish
+              {t("notReadyToPublish", { count: unreadyCount })}
             </p>
           ) : null}
           {missingTitleCount > 0 ? (
             <DropdownMenuItem onClick={onBackfillTitles} disabled={backfillingTitles}>
               {backfillingTitles ? <Spinner /> : <Languages className="size-4" />}
               {backfillingTitles
-                ? "Translating titles…"
-                : `Translate titles (${missingTitleCount})`}
+                ? t("translatingTitles")
+                : t("translateTitles", { count: missingTitleCount })}
             </DropdownMenuItem>
           ) : null}
           {chapterCount > 1 ? (
             <DropdownMenuItem onClick={onReorderChapters} disabled={reorderDisabled}>
               <GripVertical className="size-4" />
-              Reorder chapters
+              {t("reorderChapters")}
             </DropdownMenuItem>
           ) : null}
           {chapterCount > 0 ? (
@@ -85,7 +89,7 @@ export function ChapterActionsControls({
               disabled={deletingAllTranslations}
             >
               <Trash2 className="size-4" />
-              {deletingAllTranslations ? "Deleting…" : "Delete translations"}
+              {deletingAllTranslations ? t("deletingTranslations") : t("deleteTranslations")}
             </DropdownMenuItem>
           ) : null}
         </DropdownMenuGroup>

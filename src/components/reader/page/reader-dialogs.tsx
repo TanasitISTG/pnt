@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
@@ -36,25 +38,25 @@ interface ReaderDialogsProps {
 }
 
 export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: ReaderDialogsProps) {
+  const t = useTranslations("reader");
+  const tCommon = useTranslations("common");
+
   return (
     <>
       <ConfirmDialog
         open={translation.open}
         onOpenChange={translation.onOpenChange}
-        title="Overwrite Edited Translation?"
-        description="This chapter was manually edited. Re-translating will overwrite your manual changes with a new machine translation."
-        confirmText="Overwrite & Translate"
+        title={t("retranslateTitle")}
+        description={t("retranslateDescription")}
+        confirmText={t("retranslateConfirm")}
         onConfirm={translation.onConfirm}
         contentClassName="z-[60]"
       />
       <Dialog open={sourceEdit.open} onOpenChange={sourceEdit.onOpenChange}>
         <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto overscroll-contain sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Source Changed</DialogTitle>
-            <DialogDescription>
-              Keeping the translation marks it as manually edited. Clearing removes the translated
-              title and content so the chapter can be retranslated.
-            </DialogDescription>
+            <DialogTitle>{t("sourceChangedTitle")}</DialogTitle>
+            <DialogDescription>{t("sourceChangedDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
@@ -62,13 +64,13 @@ export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: R
               onClick={() => sourceEdit.onOpenChange(false)}
               disabled={sourceEdit.saving}
             >
-              Cancel
+              {tCommon("cancel")}
             </Button>
             <Button variant="destructive" onClick={sourceEdit.onClear} disabled={sourceEdit.saving}>
-              Clear Translation
+              {t("clearTranslation")}
             </Button>
             <Button onClick={sourceEdit.onKeep} disabled={sourceEdit.saving}>
-              Keep Translation
+              {t("keepTranslation")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -77,17 +79,15 @@ export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: R
       <Dialog open={discard.open} onOpenChange={discard.onOpenChange}>
         <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain">
           <DialogHeader>
-            <DialogTitle>Discard Unsaved Changes?</DialogTitle>
-            <DialogDescription>
-              Your chapter edits are not saved. Leaving now will discard them.
-            </DialogDescription>
+            <DialogTitle>{t("discardTitle")}</DialogTitle>
+            <DialogDescription>{t("discardDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={discard.onKeep}>
-              Keep Editing
+              {t("keepEditing")}
             </Button>
             <Button variant="destructive" onClick={discard.onDiscard}>
-              Discard Changes
+              {t("discardChanges")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -96,30 +96,21 @@ export function ReaderDialogs({ translation, sourceEdit, discard, shortcuts }: R
       <Dialog open={shortcuts.open} onOpenChange={shortcuts.onOpenChange}>
         <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain">
           <DialogHeader>
-            <DialogTitle>Reader shortcuts</DialogTitle>
-            <DialogDescription>
-              Shortcuts work from the page body and pause while a dialog or menu is open. While
-              editing, only Ctrl/⌘+S and Esc remain active.
-            </DialogDescription>
+            <DialogTitle>{t("shortcutsTitle")}</DialogTitle>
+            <DialogDescription>{t("shortcutsDescription")}</DialogDescription>
           </DialogHeader>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-caption">
-            <ShortcutKeys keys="← / h" label="Previous chapter" />
-            <ShortcutKeys keys="→ / l" label="Next chapter" />
-            <ShortcutKeys
-              keys="v"
-              label="Cycle view: Compare / Translation / Original (translated chapters)"
-            />
-            <ShortcutKeys keys="t" label="Toggle light/dark theme" />
-            <ShortcutKeys keys="Ctrl/⌘+F" label="Find in chapter" />
-            <ShortcutKeys keys="Enter / ⇧+Enter" label="Next / previous match while finding" />
-            <ShortcutKeys keys="f" label="Focus mode: hide the reader's chrome" />
-            {shortcuts.canEdit && <ShortcutKeys keys="e" label="Edit chapter" />}
-            {shortcuts.canEdit && <ShortcutKeys keys="Ctrl/⌘+S" label="Save chapter" />}
-            <ShortcutKeys
-              keys="Esc"
-              label="Cancel edit, close find, exit focus mode, or close help"
-            />
-            <ShortcutKeys keys="?" label="Show this help" />
+            <ShortcutKeys keys="← / h" label={t("previousChapter")} />
+            <ShortcutKeys keys="→ / l" label={t("nextChapter")} />
+            <ShortcutKeys keys="v" label={t("shortcutCycleView")} />
+            <ShortcutKeys keys="t" label={t("shortcutTheme")} />
+            <ShortcutKeys keys="Ctrl/⌘+F" label={t("findInChapter")} />
+            <ShortcutKeys keys="Enter / ⇧+Enter" label={t("shortcutMatches")} />
+            <ShortcutKeys keys="f" label={t("shortcutFocus")} />
+            {shortcuts.canEdit && <ShortcutKeys keys="e" label={t("editChapter")} />}
+            {shortcuts.canEdit && <ShortcutKeys keys="Ctrl/⌘+S" label={t("shortcutSave")} />}
+            <ShortcutKeys keys="Esc" label={t("shortcutEscape")} />
+            <ShortcutKeys keys="?" label={t("shortcutHelp")} />
           </dl>
         </DialogContent>
       </Dialog>

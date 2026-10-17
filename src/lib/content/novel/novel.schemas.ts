@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { isSupportedLanguagePair } from "@/lib/language-pair";
 
 export const sourceLangSchema = z.enum(["en", "zh"]);
@@ -7,16 +8,19 @@ export const targetLangSchema = z.enum(["en", "th"]);
 export const coverMimeSchema = z.enum(["image/jpeg", "image/png", "image/webp"]);
 export const chapterNumberSchema = z
   .number()
-  .positive("Chapter number must be positive")
-  .max(999_999.99, "Chapter number must be at most 999999.99")
-  .multipleOf(0.01, "Chapter number must have at most two decimal places");
+  .positive(encodeMessage("validation.chapterNumberPositive"))
+  .max(999_999.99, encodeMessage("validation.chapterNumberMax"))
+  .multipleOf(0.01, encodeMessage("validation.chapterNumberDecimals"));
 
 const baseNovelFields = {
   title: z
     .string()
-    .min(1, "Title is required")
+    .min(1, encodeMessage("validation.titleRequired"))
     .max(500)
-    .refine((value) => value.length === 0 || value.trim().length > 0, "Title is required"),
+    .refine(
+      (value) => value.length === 0 || value.trim().length > 0,
+      encodeMessage("validation.titleRequired"),
+    ),
   originalTitle: z.string().max(500).optional().nullable(),
   author: z.string().max(200).optional().nullable(),
   description: z.string().max(5000).optional().nullable(),
@@ -32,11 +36,11 @@ const baseNovelFields = {
 export const createNovelSchema = z
   .object(baseNovelFields)
   .refine((data) => !data.cover || !!data.coverMime, {
-    message: "Cover MIME type is required when cover image is provided",
+    message: encodeMessage("validation.coverMimeRequired"),
     path: ["coverMime"],
   })
   .refine((data) => isSupportedLanguagePair(data.sourceLang, data.targetLang), {
-    message: "Unsupported language pair. Use EN→TH, ZH→EN, or ZH→TH",
+    message: encodeMessage("validation.languagePairUnsupported"),
     path: ["targetLang"],
   });
 
@@ -48,7 +52,7 @@ export const updateNovelSchema = z
     removeCover: z.boolean().optional(),
   })
   .refine((data) => !data.cover || !!data.coverMime, {
-    message: "Cover MIME type is required when cover image is provided",
+    message: encodeMessage("validation.coverMimeRequired"),
     path: ["coverMime"],
   });
 
@@ -57,13 +61,19 @@ export const createChapterSchema = z.object({
   number: chapterNumberSchema,
   title: z
     .string()
-    .min(1, "Title is required")
+    .min(1, encodeMessage("validation.titleRequired"))
     .max(500)
-    .refine((value) => value.length === 0 || value.trim().length > 0, "Title is required"),
+    .refine(
+      (value) => value.length === 0 || value.trim().length > 0,
+      encodeMessage("validation.titleRequired"),
+    ),
   rawContent: z
     .string()
-    .min(1, "Content is required")
-    .refine((value) => value.length === 0 || value.trim().length > 0, "Content is required"),
+    .min(1, encodeMessage("validation.sourceContentRequired"))
+    .refine(
+      (value) => value.length === 0 || value.trim().length > 0,
+      encodeMessage("validation.sourceContentRequired"),
+    ),
 });
 
 export const updateChapterSchema = z.object({
@@ -73,18 +83,24 @@ export const updateChapterSchema = z.object({
     .string()
     .min(1)
     .max(500)
-    .refine((value) => value.length === 0 || value.trim().length > 0, "Title is required")
+    .refine(
+      (value) => value.length === 0 || value.trim().length > 0,
+      encodeMessage("validation.titleRequired"),
+    )
     .optional(),
   rawContent: z
     .string()
     .min(1)
-    .refine((value) => value.length === 0 || value.trim().length > 0, "Content is required")
+    .refine(
+      (value) => value.length === 0 || value.trim().length > 0,
+      encodeMessage("validation.sourceContentRequired"),
+    )
     .optional(),
 });
 
 export const updateChapterTranslationSchema = z.object({
   chapterId: z.string().min(1),
-  translatedContent: z.string().min(1, "Translation cannot be empty"),
+  translatedContent: z.string().min(1, encodeMessage("validation.translationRequired")),
 });
 export const editChapterSchema = z
   .object({
@@ -92,16 +108,16 @@ export const editChapterSchema = z
     title: z
       .string()
       .max(500)
-      .refine((value) => value.trim().length > 0, "Source title is required")
+      .refine((value) => value.trim().length > 0, encodeMessage("validation.sourceTitleRequired"))
       .optional(),
     translatedTitle: z.string().max(500).nullable().optional(),
     rawContent: z
       .string()
-      .refine((value) => value.trim().length > 0, "Source content is required")
+      .refine((value) => value.trim().length > 0, encodeMessage("validation.sourceContentRequired"))
       .optional(),
     translatedContent: z
       .string()
-      .refine((value) => value.trim().length > 0, "Translation cannot be empty")
+      .refine((value) => value.trim().length > 0, encodeMessage("validation.translationRequired"))
       .nullable()
       .optional(),
     sourceChangePolicy: z.enum(["keep", "clear"]).optional(),
@@ -112,7 +128,7 @@ export const editChapterSchema = z
       data.translatedTitle !== undefined ||
       data.rawContent !== undefined ||
       data.translatedContent !== undefined,
-    { message: "At least one chapter field is required", path: ["chapterId"] },
+    { message: encodeMessage("validation.chapterFieldRequired"), path: ["chapterId"] },
   );
 
 export const reorderChaptersSchema = z
@@ -121,7 +137,7 @@ export const reorderChaptersSchema = z
     chapterIds: z.array(z.string().min(1)).min(1),
   })
   .refine((data) => new Set(data.chapterIds).size === data.chapterIds.length, {
-    message: "Chapter IDs must be unique",
+    message: encodeMessage("validation.chapterIdsUnique"),
     path: ["chapterIds"],
   });
 

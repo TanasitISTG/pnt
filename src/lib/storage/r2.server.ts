@@ -2,7 +2,14 @@ import "@tanstack/react-start/server-only";
 
 import { S3mini, S3ServiceError } from "s3mini";
 
-import type { ObjectStorage, StorageHead, StorageObject, StoragePutOptions } from "./types";
+import type { KeySetScope, ObjectKey } from "./keys";
+import type {
+  ObjectStorageBackend,
+  StorageHead,
+  StorageObject,
+  StorageObjectEntry,
+  StoragePutOptions,
+} from "./types";
 
 export interface R2ObjectStorageConfig {
   accountId: string;
@@ -84,7 +91,7 @@ const pinnedFetch: typeof fetch = Object.assign(
  * The wrapper defeats the detection while still resolving the global at request time, so
  * one signed implementation runs everywhere and stays observable.
  */
-export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStorage {
+export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStorageBackend {
   const client = new S3mini({
     accessKeyId: config.accessKeyId,
     secretAccessKey: config.secretAccessKey,
@@ -93,27 +100,33 @@ export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStor
     fetch: pinnedFetch,
   });
 
-  /** Lists every key under a prefix, bounded to the configured page ceiling. */
-  async function listEveryKey(prefix: string): Promise<string[] | null> {
-    const keys: string[] = [];
+  /** Lists every object in one resolved set, bounded to the configured page ceiling. */
+  async function listEveryObject(scope: KeySetScope): Promise<StorageObjectEntry[] | null> {
+    // S3 matches a raw string prefix, so this is where the set's own boundary — resolved
+    // once by the port, not derived here — keeps `avatars` from matching `avatars-archive/...`
+    // and one novel's prefix from reaching a longer id that merely starts with it.
+    const scoped = scope.boundary;
+    const objects: StorageObjectEntry[] = [];
     let token: string | undefined;
 
     for (let page = 0; page < LIST_MAX_PAGES; page += 1) {
-      const listed = await request(`R2 LIST ${prefix}`, () =>
-        client.listObjectsPaged("/", prefix, LIST_PAGE_SIZE, token),
+      const listed = await request(`R2 LIST ${scoped}`, () =>
+        client.listObjectsPaged("/", scoped, LIST_PAGE_SIZE, token),
       );
       // A null result means the bucket itself is missing; an empty bucket lists as [].
       if (!listed || !listed.objects) return null;
-      for (const object of listed.objects) keys.push(object.Key);
+      for (const object of listed.objects) {
+        objects.push({ key: object.Key, lastModified: object.LastModified });
+      }
       token = listed.nextContinuationToken;
       if (!token) break;
     }
 
-    return keys;
+    return objects;
   }
 
   return {
-    async put(key: string, bytes: Uint8Array, options: StoragePutOptions) {
+    async put(key: ObjectKey, bytes: Uint8Array, options: StoragePutOptions) {
       const response = await request(`R2 PUT ${key}`, () =>
         client.putObject(key, bytes, options.contentType),
       );
@@ -126,7 +139,7 @@ export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStor
       }
     },
 
-    async get(key: string): Promise<StorageObject | null> {
+    async get(key: ObjectKey): Promise<StorageObject | null> {
       const response = await request(`R2 GET ${key}`, () => client.getObjectResponse(key));
       if (!response) return null;
       return {
@@ -135,7 +148,7 @@ export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStor
       };
     },
 
-    async head(key: string): Promise<StorageHead | null> {
+    async head(key: ObjectKey): Promise<StorageHead | null> {
       try {
         return { size: await client.getContentLength(key) };
       } catch (error) {
@@ -144,18 +157,23 @@ export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStor
       }
     },
 
-    async delete(key: string) {
+    async delete(key: ObjectKey) {
       await request(`R2 DELETE ${key}`, () => client.deleteObject(key));
     },
 
-    async deletePrefix(prefix: string) {
-      const keys = await listEveryKey(prefix);
-      if (keys === null || keys.length === 0) return;
+    async removeSet(scope: KeySetScope) {
+      const objects = await listEveryObject(scope);
+      if (objects === null || objects.length === 0) return;
+      const keys = objects.map((object) => object.key);
       // `deleteObjects` batches at 1000 keys per request.
-      await request(`R2 DELETE ${prefix}`, () => client.deleteObjects(keys));
+      await request(`R2 DELETE ${scope.boundary}`, () => client.deleteObjects(keys));
     },
 
-    listKeys: listEveryKey,
+    async listSet(scope: KeySetScope) {
+      return (await listEveryObject(scope))?.map((object) => object.key) ?? null;
+    },
+
+    listObjects: listEveryObject,
 
     async presignPut(key, { expiresIn }) {
       // Signs the host and expiry only, so the URL writes exactly one key and cannot be
@@ -163,7 +181,7 @@ export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStor
       return request(`R2 PRESIGN ${key}`, () => client.getPresignedUrl("PUT", key, expiresIn));
     },
 
-    publicUrl(key: string) {
+    publicUrl(key: ObjectKey) {
       if (!config.publicBaseUrl) return null;
       return `${config.publicBaseUrl}/${encodeObjectPath(key)}`;
     },
@@ -171,7 +189,7 @@ export function createR2ObjectStorage(config: R2ObjectStorageConfig): ObjectStor
 }
 
 /** Percent-encodes each path segment without touching the separators. */
-function encodeObjectPath(key: string): string {
+function encodeObjectPath(key: ObjectKey): string {
   return key
     .split("/")
     .map((segment) => encodeURIComponent(segment))

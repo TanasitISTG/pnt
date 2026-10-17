@@ -5,6 +5,7 @@ import { ReaderPage } from "@/components/reader/page/reader-page";
 import { ReaderPending } from "@/components/reader/page/reader-pending";
 import { readerStateQueryOptions } from "@/lib/reader/query";
 import { chapterQueryOptions } from "@/lib/content/chapter/chapter.query";
+import { headTranslator } from "@/lib/i18n/route-head";
 import {
   readerChapterManifestQueryOptions,
   readerNovelQueryOptions,
@@ -34,19 +35,26 @@ export const Route = createFileRoute("/{-$locale}/_public/novels/$novelId/chapte
   pendingMs: 100,
   pendingMinMs: 200,
   pendingComponent: ReaderPending,
-  head: ({ loaderData }) => {
+  // The tab title is read in the page's own language, and `head` runs before any provider
+  // exists, so it takes the same translator the document does (i18n.md §3).
+  head: async ({ loaderData }) => {
+    const t = await headTranslator();
     const chapter = loaderData?.chapterHead;
     const novel = loaderData?.novelHead;
     const chapterTitle = chapter
-      ? `Ch. ${Number(chapter.number)}: ${chapter.translatedTitle ?? chapter.title}`
-      : "Chapter";
-    const novelTitle = novel?.title ?? "Novel";
-    const pageTitle = `${chapterTitle} | ${novelTitle} | Pnt - Personal Novel Translator`;
+      ? t("reader.chapterLabel", {
+          number: Number(chapter.number),
+          title: chapter.translatedTitle ?? chapter.title,
+        })
+      : t("reader.chapterFallback");
+    const pageTitle = novel?.title
+      ? `${chapterTitle} | ${novel.title} | ${t("meta.siteName")}`
+      : `${chapterTitle} | ${t("meta.siteName")}`;
     const description = novel?.description
       ? novel.description.length > 160
         ? `${novel.description.slice(0, 157)}...`
         : novel.description
-      : "Read translated web novel chapter.";
+      : t("meta.novelDescription");
 
     return {
       meta: [

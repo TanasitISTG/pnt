@@ -1,11 +1,13 @@
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ReaderSearchApi } from "@/components/reader/page/use-reader-search";
 
 export function ReaderFindBar({ search }: { search: ReaderSearchApi }) {
+  const t = useTranslations("reader");
   const inputRef = useRef<HTMLInputElement>(null);
   const handledFocusRequestRef = useRef(-1);
 
@@ -37,8 +39,11 @@ export function ReaderFindBar({ search }: { search: ReaderSearchApi }) {
   const status = !search.query.trim()
     ? ""
     : search.matchCount === 0
-      ? "No matches"
-      : `${search.activeIndex + 1} of ${search.matchCount}${search.truncated ? "+" : ""}`;
+      ? t("noMatches")
+      : `${t("matchPosition", {
+          current: search.activeIndex + 1,
+          total: search.matchCount,
+        })}${search.truncated ? "+" : ""}`;
 
   return (
     <div className="flex min-w-0 items-center gap-1.5 pb-2">
@@ -52,8 +57,8 @@ export function ReaderFindBar({ search }: { search: ReaderSearchApi }) {
           value={search.query}
           onChange={(event) => search.setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Find in chapter"
-          aria-label="Find in chapter"
+          placeholder={t("findInChapter")}
+          aria-label={t("findInChapter")}
           autoComplete="off"
           spellCheck={false}
           className="h-9 w-full pl-9"
@@ -72,8 +77,8 @@ export function ReaderFindBar({ search }: { search: ReaderSearchApi }) {
         className="size-9 shrink-0"
         onClick={search.previous}
         disabled={search.matchCount === 0}
-        aria-label="Previous match"
-        title="Previous match (Shift+Enter)"
+        aria-label={t("previousMatch")}
+        title={t("previousMatchShortcut")}
       >
         <ChevronUp className="size-4" aria-hidden="true" />
       </Button>
@@ -83,8 +88,8 @@ export function ReaderFindBar({ search }: { search: ReaderSearchApi }) {
         className="size-9 shrink-0"
         onClick={search.next}
         disabled={search.matchCount === 0}
-        aria-label="Next match"
-        title="Next match (Enter)"
+        aria-label={t("nextMatch")}
+        title={t("nextMatchShortcut")}
       >
         <ChevronDown className="size-4" aria-hidden="true" />
       </Button>
@@ -93,8 +98,8 @@ export function ReaderFindBar({ search }: { search: ReaderSearchApi }) {
         size="icon"
         className="size-9 shrink-0"
         onClick={search.close}
-        aria-label="Close find"
-        title="Close find (Esc)"
+        aria-label={t("closeFind")}
+        title={t("closeFindShortcut")}
       >
         <X className="size-4" aria-hidden="true" />
       </Button>

@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { type Sql } from "postgres";
 import { hashPassword } from "better-auth/crypto";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 type AuthApi = typeof import("./auth").auth;
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
 let auth: AuthApi;
@@ -35,14 +37,9 @@ async function signIn(password: string): Promise<Headers> {
   return new Headers({ cookie: sessionCookie(result.headers) });
 }
 
-integrationDescribe("password session revocation", () => {
+describeIntegration("password session revocation", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     ({ auth } = await import("./auth"));
 
     userId = `auth-user-${randomUUID()}`;
@@ -64,7 +61,7 @@ integrationDescribe("password session revocation", () => {
   afterAll(async () => {
     if (sql) {
       await sql`DELETE FROM "user" WHERE "id" = ${userId}`;
-      await sql.end({ timeout: 1 });
+      await closeIntegrationDatabase();
     }
   });
 

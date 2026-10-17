@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { BookOpen } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -42,6 +43,7 @@ export function StudioProgressCard({
   costData,
   glossaryStats,
 }: StudioProgressCardProps) {
+  const t = useTranslations("studio");
   const translatedChapterCount = chaptersPending
     ? 0
     : chapters.filter((chapter) => chapter.status === "translated").length;
@@ -60,11 +62,15 @@ export function StudioProgressCard({
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex flex-col gap-1.5">
           <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-caption text-muted-foreground">
-            <span>Translated</span>
+            <span>{t("statusTranslated")}</span>
             <span className="tabular-nums">
               {chaptersPending
-                ? "Loading chapter progress…"
-                : `${progressPercent}% (${translatedChapterCount}/${chapters.length} chapters)`}
+                ? t("loadingChapterProgress")
+                : t("progressSummary", {
+                    percent: progressPercent,
+                    translated: translatedChapterCount,
+                    total: chapters.length,
+                  })}
             </span>
           </div>
           <Progress value={chaptersPending ? null : progressPercent} className="h-2 max-w-md" />
@@ -73,13 +79,17 @@ export function StudioProgressCard({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-muted-foreground">
           {hasUsage && costData ? (
             <span className="font-mono">
-              {formatTokens(costData.totals.promptTokens)} in /{" "}
-              {formatTokens(costData.totals.completionTokens)} out
+              {t("tokensInOut", {
+                input: formatTokens(costData.totals.promptTokens),
+                output: formatTokens(costData.totals.completionTokens),
+              })}
               {costData.totals.cost != null ? ` · ${formatCost(costData.totals.cost)}` : null}
               {costData.totals.unpricedChapterCount > 0
-                ? ` · ${costData.totals.unpricedChapterCount} unpriced`
+                ? ` · ${t("unpricedChapters", { count: costData.totals.unpricedChapterCount })}`
                 : costData.totals.estimatedChapterCount > 0
-                  ? ` · ${costData.totals.estimatedChapterCount} estimated`
+                  ? ` · ${t("estimatedChapters", {
+                      count: costData.totals.estimatedChapterCount,
+                    })}`
                   : null}
             </span>
           ) : null}
@@ -90,10 +100,15 @@ export function StudioProgressCard({
           >
             <BookOpen className="size-3.5" aria-hidden="true" />
             {glossaryStats
-              ? `${glossaryStats.approved} of ${glossaryStats.total} terms approved`
-              : "Glossary"}
+              ? t("glossaryApproved", {
+                  approved: glossaryStats.approved,
+                  total: glossaryStats.total,
+                })
+              : t("sectionGlossary")}
             {glossaryStats && glossaryStats.pending > 0 ? (
-              <span className="text-warning">{glossaryStats.pending} awaiting review</span>
+              <span className="text-warning">
+                {t("glossaryPending", { count: glossaryStats.pending })}
+              </span>
             ) : null}
           </Link>
         </div>

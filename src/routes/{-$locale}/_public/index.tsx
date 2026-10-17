@@ -9,6 +9,7 @@ import {
   librarySearchSchema,
   type LibrarySearch,
 } from "@/components/novels/library/library-search";
+import { headTranslator } from "@/lib/i18n/route-head";
 
 /**
  * Home. A guest gets the shared catalog — which is also what the sitemap and crawlers
@@ -30,18 +31,15 @@ export const Route = createFileRoute("/{-$locale}/_public/")({
   pendingMs: 100,
   pendingMinMs: 200,
   pendingComponent: LibraryPending,
-  head: () => ({
-    meta: [
-      {
-        title: "Pnt - Personal Novel Translator",
-      },
-      {
-        name: "description",
-        content:
-          "Translate and read web novels side by side, with a glossary that keeps terms consistent.",
-      },
-    ],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [
+        { title: t("meta.siteName") },
+        { name: "description", content: t("meta.homeDescription") },
+      ],
+    };
+  },
   component: HomeRoute,
 });
 

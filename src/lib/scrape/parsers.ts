@@ -2,15 +2,39 @@
 // One entry per supported site — add a new site by adding one entry to SOURCES.
 
 import { SafeServerError } from "@/lib/server-fn-error";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { log } from "@/lib/log";
 import type { ScrapeProviderMeta, ScrapedChapter } from "./types";
 
+// The fetch methods, as copy keys rather than sentences: the picker reads them through the
+// catalog, so the two generic methods say what they do in the reader's own language and the
+// three service names stay their names.
 export const SCRAPE_PROVIDERS: ScrapeProviderMeta[] = [
-  { id: "auto", label: "Automatic", description: "Default per-site proxy behavior" },
-  { id: "direct", label: "Direct", description: "Direct HTTP fetch without proxy" },
-  { id: "zenrows", label: "ZenRows", description: "ZenRows scraping API" },
-  { id: "scrapingbee", label: "ScrapingBee", description: "ScrapingBee HTML API" },
-  { id: "firecrawl", label: "Firecrawl", description: "Firecrawl scrape endpoint" },
+  {
+    id: "auto",
+    labelKey: "scrapeProviderAuto",
+    descriptionKey: "scrapeProviderAutoDescription",
+  },
+  {
+    id: "direct",
+    labelKey: "scrapeProviderDirect",
+    descriptionKey: "scrapeProviderDirectDescription",
+  },
+  {
+    id: "zenrows",
+    labelKey: "scrapeProviderZenRows",
+    descriptionKey: "scrapeProviderZenRowsDescription",
+  },
+  {
+    id: "scrapingbee",
+    labelKey: "scrapeProviderScrapingBee",
+    descriptionKey: "scrapeProviderScrapingBeeDescription",
+  },
+  {
+    id: "firecrawl",
+    labelKey: "scrapeProviderFirecrawl",
+    descriptionKey: "scrapeProviderFirecrawlDescription",
+  },
 ];
 
 export function sourceUrlForLog(value: string): string;
@@ -130,7 +154,7 @@ function resolveChapterNumber(texts: readonly string[]): ResolvedChapterNumber |
     if (!token) continue;
     const value = parseChapterNumberToken(token.raw);
     if (value === null) {
-      throw new SafeServerError("Could not determine a valid chapter number from the source page");
+      throw new SafeServerError(encodeMessage("errors.scrapeChapterNumberInvalid"));
     }
     return { value, pattern: token.pattern };
   }
@@ -171,7 +195,9 @@ function parseQuanben(html: string, url: string): ScrapedChapter {
   if (!numMatch) throw new Error("Could not read chapter number from URL");
 
   const h1 = /<h1[^>]*class="headline"[^>]*>([\s\S]*?)<\/h1>/.exec(html);
-  if (!h1) throw new Error("Could not find chapter title on page");
+  // The same failure its sibling parsers report, as the same code: a page with no title is a
+  // page the author can act on, not an internal invariant.
+  if (!h1) throw new SafeServerError(encodeMessage("errors.scrapeNoTitle"));
   const title = decodeEntities(stripTags(h1[1]))
     .replace(/^第\s*\d+\s*章\s*/, "")
     .trim();
@@ -251,11 +277,9 @@ export function parseTwkanToc(html: string, tocUrl: string): Record<number, stri
       html.includes("_cf_chl") ||
       (html.includes("Cloudflare") && /challenge|captcha|verify|mitigated|security/i.test(html))
     ) {
-      throw new SafeServerError(
-        "Cloudflare challenge blocked access. Try setting SCRAPER_PREMIUM_PROXY=true in .env.local",
-      );
+      throw new SafeServerError(encodeMessage("errors.scrapeCloudflareBlocked"));
     }
-    throw new SafeServerError("Could not parse chapters from twkan TOC page");
+    throw new SafeServerError(encodeMessage("errors.scrapeTwkanTocFailed"));
   }
 
   return chapterUrls;
@@ -276,9 +300,7 @@ export function parseTwkan(html: string, url: string): ScrapedChapter {
     html.includes("_cf_chl") ||
     (html.includes("Cloudflare") && /challenge|captcha|verify|mitigated|security/i.test(html))
   ) {
-    throw new SafeServerError(
-      "Cloudflare challenge blocked access. Try setting SCRAPER_PREMIUM_PROXY=true in .env.local",
-    );
+    throw new SafeServerError(encodeMessage("errors.scrapeCloudflareBlocked"));
   }
 
   const hasTwkanContent =
@@ -296,9 +318,7 @@ export function parseTwkan(html: string, url: string): ScrapedChapter {
       html.includes("Ficha de producto") ||
       /amazon\.[a-z]{2,3}/i.test(pageTitle))
   ) {
-    throw new SafeServerError(
-      "twkan bot detection redirected to an ad page. Set SCRAPER_PREMIUM_PROXY=true in .env.local to use residential proxies.",
-    );
+    throw new SafeServerError(encodeMessage("errors.scrapeTwkanAdRedirect"));
   }
 
   let h1Text = "";
@@ -347,7 +367,7 @@ export function parseTwkan(html: string, url: string): ScrapedChapter {
   }
 
   if (!h1Text) {
-    throw new SafeServerError("Could not find chapter title on page");
+    throw new SafeServerError(encodeMessage("errors.scrapeNoTitle"));
   }
 
   // Numbering and title come from the heading, falling back to the page title;
@@ -368,16 +388,14 @@ export function parseTwkan(html: string, url: string): ScrapedChapter {
 
   if (start === -1) {
     if (html.length < 1000 || !/[\u4e00-\u9fa5]/.test(html)) {
-      throw new SafeServerError(
-        "Source page returned invalid HTML or was blocked. Try setting SCRAPER_PREMIUM_PROXY=true in .env.local",
-      );
+      throw new SafeServerError(encodeMessage("errors.scrapeInvalidHtml"));
     }
-    throw new SafeServerError("Could not locate chapter text container on page");
+    throw new SafeServerError(encodeMessage("errors.scrapeNoTextContainer"));
   }
 
   const contentStart = html.indexOf(">", start);
   if (contentStart === -1) {
-    throw new SafeServerError("Could not locate chapter text container on page");
+    throw new SafeServerError(encodeMessage("errors.scrapeNoTextContainer"));
   }
 
   let contentHtml = html.slice(contentStart + 1);
@@ -407,7 +425,7 @@ export function parseTwkan(html: string, url: string): ScrapedChapter {
   });
 
   if (paragraphs.length === 0) {
-    throw new SafeServerError("Chapter text extracted is empty");
+    throw new SafeServerError(encodeMessage("errors.scrapeEmptyText"));
   }
 
   const nextMatch = /href="([^"]+)"[^>]*>\s*下一章\s*</i.exec(html);
@@ -518,11 +536,9 @@ export function parseBiqugeToc(html: string, tocUrl: string): Record<number, str
       html.includes("_cf_chl") ||
       (html.includes("Cloudflare") && /challenge|captcha|verify|mitigated|security/i.test(html))
     ) {
-      throw new SafeServerError(
-        "Cloudflare challenge blocked access. Try setting SCRAPER_PREMIUM_PROXY=true in .env.local",
-      );
+      throw new SafeServerError(encodeMessage("errors.scrapeCloudflareBlocked"));
     }
-    throw new SafeServerError("Could not parse chapters from biquge TOC page");
+    throw new SafeServerError(encodeMessage("errors.scrapeBiqugeTocFailed"));
   }
 
   return chapterUrls;
@@ -558,9 +574,7 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
     html.includes("_cf_chl") ||
     (html.includes("Cloudflare") && /challenge|captcha|verify|mitigated|security/i.test(html))
   ) {
-    throw new SafeServerError(
-      "Cloudflare challenge blocked access. Try setting SCRAPER_PREMIUM_PROXY=true in .env.local",
-    );
+    throw new SafeServerError(encodeMessage("errors.scrapeCloudflareBlocked"));
   }
 
   // Only throw redirect error if the page lacks chapter content AND page title indicates an Amazon search result page
@@ -575,9 +589,7 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
       url: sourceUrlForLog(url),
       pageTitle,
     });
-    throw new SafeServerError(
-      "biquge bot detection redirected to an ad page. Set SCRAPER_PREMIUM_PROXY=true in .env.local to use residential proxies.",
-    );
+    throw new SafeServerError(encodeMessage("errors.scrapeBiqugeAdRedirect"));
   }
 
   let h1Text = "";
@@ -593,7 +605,7 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
     }
   }
 
-  if (!h1Text) throw new SafeServerError("Could not find chapter title on page");
+  if (!h1Text) throw new SafeServerError(encodeMessage("errors.scrapeNoTitle"));
 
   // Strip pagination suffix like （1 / 1） or (1/1)
   h1Text = h1Text.replace(/[（(]\s*\d+\s*[/分]\s*\d+\s*[）)]/g, "").trim();
@@ -619,16 +631,14 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
       length: html.length,
     });
     if (html.length < 1000 || !/[\u4e00-\u9fa5]/.test(html)) {
-      throw new SafeServerError(
-        "Source page returned invalid HTML or was blocked. Try setting SCRAPER_PREMIUM_PROXY=true in .env.local",
-      );
+      throw new SafeServerError(encodeMessage("errors.scrapeInvalidHtml"));
     }
-    throw new SafeServerError("Could not locate chapter text container on page");
+    throw new SafeServerError(encodeMessage("errors.scrapeNoTextContainer"));
   }
 
   const contentStart = html.indexOf(">", start);
   if (contentStart === -1) {
-    throw new SafeServerError("Could not locate chapter text container on page");
+    throw new SafeServerError(encodeMessage("errors.scrapeNoTextContainer"));
   }
 
   let contentHtml = html.slice(contentStart + 1);
@@ -666,7 +676,7 @@ export function parseBiquge(html: string, url: string): ScrapedChapter {
   }
 
   if (paragraphs.length === 0) {
-    throw new SafeServerError("Chapter text extracted is empty");
+    throw new SafeServerError(encodeMessage("errors.scrapeEmptyText"));
   }
 
   const nextMatch =
@@ -697,10 +707,10 @@ export function findSource(url: string): Source {
     const u = new URL(url);
     if (u.protocol !== "https:") throw new Error("Only https URLs are supported");
     if (u.username || u.password) {
-      throw new SafeServerError("Credentials in source URLs are not allowed");
+      throw new SafeServerError(encodeMessage("errors.scrapeUrlCredentials"));
     }
     if (u.hash) {
-      throw new SafeServerError("Fragments in source URLs are not allowed");
+      throw new SafeServerError(encodeMessage("errors.scrapeUrlFragment"));
     }
     host = u.hostname;
   } catch (e) {
@@ -723,9 +733,7 @@ export function parseChapter(html: string, url: string): ScrapedChapter {
 export function chapterUrlFor(url: string, n: number): string {
   const parsed = new URL(url);
   if (!/\/\d+(?:\.\d+)?\.html$/.test(parsed.pathname)) {
-    throw new SafeServerError(
-      "Quanben range imports require a chapter URL ending in /<number>.html",
-    );
+    throw new SafeServerError(encodeMessage("errors.scrapeQuanbenUrlRange"));
   }
   parsed.pathname = parsed.pathname.replace(/\/\d+(?:\.\d+)?\.html$/, `/${n}.html`);
   return parsed.toString();

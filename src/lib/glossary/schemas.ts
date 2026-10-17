@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
+
 export const termCategorySchema = z.enum(["character", "place", "skill", "item", "other"]);
 
 export const termStatusSchema = z.enum(["approved", "pending", "rejected"]);
@@ -19,7 +21,7 @@ export const glossaryListSearchSchema = z.object({
     .number()
     .int()
     .refine((value): value is 10 | 25 | 50 => value === 10 || value === 25 || value === 50, {
-      message: "Page size must be 10, 25, or 50",
+      message: encodeMessage("validation.pageSizeInvalid"),
     })
     .default(25),
 });
@@ -33,8 +35,16 @@ export const GLOSSARY_TERM_NOTE_MAX_LENGTH = 1000;
 
 export const createTermSchema = z.object({
   novelId: z.string().min(1),
-  source: z.string().trim().min(1, "Source term is required").max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
-  target: z.string().trim().min(1, "Target term is required").max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
+  source: z
+    .string()
+    .trim()
+    .min(1, encodeMessage("validation.glossarySourceRequired"))
+    .max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
+  target: z
+    .string()
+    .trim()
+    .min(1, encodeMessage("validation.glossaryTargetRequired"))
+    .max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
   category: termCategorySchema.default("other"),
   note: z.string().max(GLOSSARY_TERM_NOTE_MAX_LENGTH).optional().nullable(),
   status: termStatusSchema.optional().default("approved"),
@@ -61,7 +71,7 @@ export const deleteTermSchema = z.object({
 
 export const bulkImportTermsSchema = z.object({
   novelId: z.string().min(1),
-  tsv: z.string().min(1, "TSV content is required"),
+  tsv: z.string().min(1, encodeMessage("validation.glossaryTsvRequired")),
 });
 
 export const approveTermSchema = z.object({

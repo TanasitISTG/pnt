@@ -3,8 +3,10 @@ import "@tanstack/react-start/server-only";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { epubUploads, importJobItems, importJobs, novels, workflowOutbox } from "@/lib/db/schema";
 import { getPrivateStorage } from "@/lib/storage/index.server";
+import { parseObjectKey } from "@/lib/storage/keys";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { chapterUrlFor, findSource } from "@/lib/scrape";
@@ -23,7 +25,7 @@ function assertValidScrapeImportRange(from: number, to: number): void {
     from > to ||
     to - from + 1 > MAX_IMPORT_RANGE_LENGTH
   ) {
-    throw new SafeServerError("Invalid range (from ≤ to, max 500 chapters)");
+    throw new SafeServerError(encodeMessage("errors.importRangeInvalid"));
   }
 }
 
@@ -131,7 +133,7 @@ export async function startScrapeImportForUser(
       .where(and(eq(novels.id, input.novelId), eq(novels.userId, userId)))
       .limit(1)
       .for("update");
-    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+    if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
     const now = new Date();
     const outboxIds = await cancelActiveImportsInTransaction(tx, input.novelId, now);
@@ -183,14 +185,18 @@ export async function completeEpubImportForUser(
     .innerJoin(novels, eq(epubUploads.novelId, novels.id))
     .where(and(eq(epubUploads.id, uploadId), eq(novels.userId, userId)))
     .limit(1);
-  if (!verification) throw new SafeServerError("Upload not found or unauthorized");
+  if (!verification)
+    throw new SafeServerError(encodeMessage("errors.uploadNotFoundOrUnauthorized"));
   if (verification.status === "uploading" && !verification.expired) {
     const storage = getPrivateStorage();
-    const head = await storage.head(verification.objectKey);
-    if (!head) throw new SafeServerError("Uploaded EPUB file was not found in storage");
+    // The key is read back from the row rather than trusted: a value that names no staged archive
+    // is an upload whose bytes are not there, which is the failure this branch exists to report.
+    const stored = parseObjectKey(verification.objectKey);
+    const head = stored === null ? null : await storage.head(stored.key);
+    if (!stored || !head) throw new SafeServerError(encodeMessage("errors.epubUploadMissing"));
     if (head.size !== verification.fileSize) {
-      await storage.delete(verification.objectKey).catch(() => {});
-      throw new SafeServerError("Uploaded EPUB size does not match the declared file size");
+      await storage.delete(stored.key).catch(() => {});
+      throw new SafeServerError(encodeMessage("errors.epubSizeMismatch"));
     }
   }
 
@@ -209,7 +215,7 @@ export async function completeEpubImportForUser(
       .where(and(eq(epubUploads.id, uploadId), eq(novels.userId, userId)))
       .limit(1);
 
-    if (!upload) throw new SafeServerError("Upload not found or unauthorized");
+    if (!upload) throw new SafeServerError(encodeMessage("errors.uploadNotFoundOrUnauthorized"));
 
     const [novel] = await tx
       .select({ id: novels.id })
@@ -217,7 +223,7 @@ export async function completeEpubImportForUser(
       .where(and(eq(novels.id, upload.novelId), eq(novels.userId, userId)))
       .limit(1)
       .for("update");
-    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+    if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
     const [lockedUpload] = await tx
       .select({
@@ -232,7 +238,8 @@ export async function completeEpubImportForUser(
       .where(and(eq(epubUploads.id, uploadId), eq(epubUploads.novelId, novel.id)))
       .limit(1)
       .for("update");
-    if (!lockedUpload) throw new SafeServerError("Upload not found or unauthorized");
+    if (!lockedUpload)
+      throw new SafeServerError(encodeMessage("errors.uploadNotFoundOrUnauthorized"));
 
     if (lockedUpload.status !== "uploading") {
       const [existingJob] = await tx
@@ -244,10 +251,10 @@ export async function completeEpubImportForUser(
         .orderBy(desc(importJobs.createdAt))
         .limit(1);
       if (existingJob) return { jobId: existingJob.id, outboxIds: [] };
-      throw new SafeServerError("Upload is no longer in uploading state");
+      throw new SafeServerError(encodeMessage("errors.uploadNotUploading"));
     }
     if (lockedUpload.expired) {
-      throw new SafeServerError("Upload session has expired");
+      throw new SafeServerError(encodeMessage("errors.uploadExpired"));
     }
 
     const now = new Date();
@@ -304,7 +311,8 @@ export async function cancelImportJobForUser(
       .innerJoin(novels, eq(importJobs.novelId, novels.id))
       .where(and(eq(importJobs.id, jobId), eq(novels.userId, userId)))
       .limit(1);
-    if (!candidate) throw new SafeServerError("Import job not found or unauthorized");
+    if (!candidate)
+      throw new SafeServerError(encodeMessage("errors.importJobNotFoundOrUnauthorized"));
 
     const [novel] = await tx
       .select({ id: novels.id })
@@ -312,7 +320,7 @@ export async function cancelImportJobForUser(
       .where(and(eq(novels.id, candidate.novelId), eq(novels.userId, userId)))
       .limit(1)
       .for("update");
-    if (!novel) throw new SafeServerError("Import job not found or unauthorized");
+    if (!novel) throw new SafeServerError(encodeMessage("errors.importJobNotFoundOrUnauthorized"));
 
     const [job] = await tx
       .select({

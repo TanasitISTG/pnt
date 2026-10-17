@@ -2,12 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as titleModule from "./title";
 import { generateSummaryArtifacts } from "./finalize-summary";
+import { parseMessage } from "@/lib/i18n/message-code";
 import type { AIProviderClient } from "@/lib/providers/types";
 import type { GlossaryTermInput } from "../types/glossary";
 import type { LogEntry } from "../types/workflow";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 
 vi.mock("./title", () => ({ translateChapterTitle: vi.fn() }));
+
+/** Whether the run logged the named sentence; the row stores a key, not the wording. */
+function loggedKey(logs: readonly LogEntry[], key: string): boolean {
+  return logs.some((entry) => parseMessage(entry.message)?.key === `log.${key}`);
+}
 
 function makeProvider(
   generateChatCompletion: AIProviderClient["generateChatCompletion"],
@@ -199,7 +205,7 @@ describe("generateSummaryArtifacts", () => {
     expect(result.freshSummary).toBeUndefined();
     expect(result.updatedStorySummary).toBeUndefined();
     expect(generateChatCompletion).toHaveBeenCalledTimes(4);
-    expect(logs.some((entry) => entry.message.includes("Summary generation skipped"))).toBe(true);
+    expect(loggedKey(logs, "summarySkipped")).toBe(true);
   });
 
   it("keeps the chapter summary when rolling summary retries are exhausted", async () => {
@@ -222,8 +228,6 @@ describe("generateSummaryArtifacts", () => {
     expect(result.freshSummary).toBe("Chapter summary");
     expect(result.updatedStorySummary).toBeUndefined();
     expect(generateChatCompletion).toHaveBeenCalledTimes(5);
-    expect(
-      logs.some((entry) => entry.message.includes("Rolling story summary update skipped")),
-    ).toBe(true);
+    expect(loggedKey(logs, "storySummarySkipped")).toBe(true);
   });
 });

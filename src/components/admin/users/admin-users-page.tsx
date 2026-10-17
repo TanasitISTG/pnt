@@ -3,6 +3,7 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { TablePager } from "@/components/admin/table-pager";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -42,6 +43,8 @@ interface PendingTarget {
 }
 
 export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminUsersPageProps) {
+  const t = useTranslations("admin");
+  const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const router = useRouter();
   const navigate = useNavigate();
@@ -78,7 +81,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
       toast.success(message);
       await refresh();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "That action did not go through");
+      toast.error(error instanceof Error ? error.message : t("actionFailed"));
     } finally {
       setBusyUserId(null);
     }
@@ -97,7 +100,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
       await router.invalidate();
       await navigate({ to: "/" });
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "That action did not go through");
+      toast.error(error instanceof Error ? error.message : t("actionFailed"));
       setBusyUserId(null);
     }
   };
@@ -106,10 +109,8 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-section font-semibold text-foreground">Accounts</h1>
-          <p className="mt-1 text-body text-muted-foreground">
-            Every account, with the operator controls that apply to it.
-          </p>
+          <h1 className="text-section font-semibold text-foreground">{t("usersTitle")}</h1>
+          <p className="mt-1 text-body text-muted-foreground">{t("usersDescription")}</p>
         </div>
         <div className="relative sm:w-72">
           <Search
@@ -120,8 +121,8 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
             className="pl-9"
             type="search"
             value={search.q ?? ""}
-            placeholder="Search name, email, or role"
-            aria-label="Search accounts"
+            placeholder={t("usersSearchPlaceholder")}
+            aria-label={t("usersSearchLabel")}
             onChange={(event) =>
               // Any change to the query invalidates the current offset, so paging
               // resets with the search rather than pointing past the new result set.
@@ -133,23 +134,26 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
 
       {query.isError ? (
         <QueryErrorState
-          title="Failed to load accounts"
+          title={t("usersLoadFailed")}
           error={query.error}
           onRetry={() => void query.refetch()}
           className="min-h-[40vh]"
         />
       ) : (
-        <DataTableSection ariaLabel="Accounts" busy={query.isFetching || query.isPlaceholderData}>
+        <DataTableSection
+          ariaLabel={t("usersTableAria")}
+          busy={query.isFetching || query.isPlaceholderData}
+        >
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Account</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden sm:table-cell">Terms</TableHead>
-                <TableHead className="hidden sm:table-cell">Joined</TableHead>
+                <TableHead>{t("columnAccount")}</TableHead>
+                <TableHead>{t("columnRole")}</TableHead>
+                <TableHead>{t("columnStatus")}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t("columnTerms")}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t("columnJoined")}</TableHead>
                 <TableHead className="w-12">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("columnActions")}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -165,14 +169,14 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
                       void runAction(
                         row.id,
                         () => setUserRole({ data: { userId: row.id, role } }),
-                        role === "admin" ? "Operator access granted" : "Operator access removed",
+                        role === "admin" ? t("actionRoleGranted") : t("actionRoleRemoved"),
                       ),
                     onSuspend: () => setPendingSuspend({ id: row.id, email: row.email }),
                     onRestore: () =>
                       void runAction(
                         row.id,
                         () => setUserBanned({ data: { userId: row.id, banned: false } }),
-                        "Account restored",
+                        t("actionAccountRestored"),
                       ),
                     onRevokeSessions: () => setPendingRevoke({ id: row.id, email: row.email }),
                     onViewAs: () => setPendingViewAs({ id: row.id, email: row.email }),
@@ -183,9 +187,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
               {!query.isPending && (data?.rows.length ?? 0) === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
-                    {search.q
-                      ? "No accounts match that search."
-                      : "No accounts have been created yet."}
+                    {search.q ? t("usersEmptySearch") : t("usersEmpty")}
                   </TableCell>
                 </TableRow>
               )}
@@ -195,7 +197,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
             page={page}
             pageSize={pageSize}
             rowCount={rowCount}
-            noun="accounts"
+            noun={t("nounAccounts")}
             isPending={query.isPending}
             onPageChange={(next) => onSearchChange({ page: next <= 1 ? undefined : next })}
           />
@@ -226,21 +228,17 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
                   banExpiresInDays: submission.banExpiresInDays,
                 },
               }),
-            "Account suspended",
+            t("actionAccountSuspended"),
           ).finally(() => setPendingSuspend(null));
         }}
       />
 
       <ConfirmDialog
         open={pendingRevoke !== null}
-        title="Sign this account out everywhere?"
-        description={
-          pendingRevoke
-            ? `Every session ${pendingRevoke.email} holds is ended, including any the account is signed in on right now. It can sign back in with its password.`
-            : ""
-        }
-        confirmText="Sign out all devices"
-        cancelText="Keep sessions"
+        title={t("confirmRevokeTitle")}
+        description={pendingRevoke ? t("confirmRevokeBody", { email: pendingRevoke.email }) : ""}
+        confirmText={t("confirmRevokeConfirm")}
+        cancelText={t("confirmRevokeCancel")}
         pending={busyUserId === pendingRevoke?.id}
         onOpenChange={(open) => {
           if (!open) setPendingRevoke(null);
@@ -251,21 +249,17 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
           void runAction(
             target.id,
             () => revokeUserSessions({ data: { userId: target.id } }),
-            "Sessions signed out",
+            t("actionSessionsSignedOut"),
           ).finally(() => setPendingRevoke(null));
         }}
       />
 
       <ConfirmDialog
         open={pendingViewAs !== null}
-        title="View as this account?"
-        description={
-          pendingViewAs
-            ? `You will browse Pnt as ${pendingViewAs.email} for up to 30 minutes. The view is read-only: nothing you do can change that account's novels, chapters, or reader state. A banner at the top of every page returns you to your operator account.`
-            : ""
-        }
-        confirmText="View as this account"
-        cancelText="Cancel"
+        title={t("confirmViewAsTitle")}
+        description={pendingViewAs ? t("confirmViewAsBody", { email: pendingViewAs.email }) : ""}
+        confirmText={t("actionViewAs")}
+        cancelText={tCommon("cancel")}
         pending={busyUserId === pendingViewAs?.id}
         onOpenChange={(open) => {
           if (!open) setPendingViewAs(null);
@@ -280,14 +274,10 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
 
       <ConfirmDialog
         open={pendingDelete !== null}
-        title="Delete this account?"
-        description={
-          pendingDelete
-            ? `${pendingDelete.email} and everything it owns (novels, chapters, glossary, and reader state) are removed. This cannot be undone.`
-            : ""
-        }
-        confirmText="Delete account"
-        cancelText="Keep account"
+        title={t("confirmDeleteTitle")}
+        description={pendingDelete ? t("confirmDeleteBody", { email: pendingDelete.email }) : ""}
+        confirmText={t("actionDelete")}
+        cancelText={t("confirmDeleteCancel")}
         variant="destructive"
         pending={busyUserId === pendingDelete?.id}
         onOpenChange={(open) => {
@@ -299,7 +289,7 @@ export function AdminUsersPage({ currentUserId, search, onSearchChange }: AdminU
           void runAction(
             target.id,
             () => removeUser({ data: { userId: target.id } }),
-            "Account deleted",
+            t("actionAccountDeleted"),
           ).finally(() => setPendingDelete(null));
         }}
       />

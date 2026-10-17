@@ -6,10 +6,9 @@ import { join } from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import { describeIntegration, openIntegrationDatabase } from "@/test/integration";
 
 function databaseUrl(baseUrl: string, database: string) {
   const url = new URL(baseUrl);
@@ -17,9 +16,9 @@ function databaseUrl(baseUrl: string, database: string) {
   return url.toString();
 }
 
-integrationDescribe("translation chunk migration", () => {
+describeIntegration("translation chunk migration", () => {
   it("backfills legacy chunks_json once when migration 0022 is applied", async () => {
-    const baseUrl = testDatabaseUrl!;
+    const { databaseUrl: baseUrl } = openIntegrationDatabase(import.meta.url);
     const database = `pnt_migration_${randomUUID().replaceAll("-", "")}`;
     const admin = postgres(databaseUrl(baseUrl, "postgres"), { max: 1, onnotice: () => {} });
     const partialDir = await mkdtemp(join(tmpdir(), "pnt-migrations-"));

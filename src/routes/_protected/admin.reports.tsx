@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback } from "react";
 
 import { ReportsPage } from "@/components/admin/reports/reports-page";
+import { headTranslator } from "@/lib/i18n/route-head";
 import { reportCaseQueueQueryOptions, reportHistoryQueryOptions } from "@/lib/reports/query";
 import { reportQueueSearchSchema, type ReportQueueSearch } from "@/lib/reports/schemas";
 
@@ -20,12 +21,15 @@ export const Route = createFileRoute("/_protected/admin/reports")({
     }
     await context.queryClient.ensureQueryData(reportCaseQueueQueryOptions(search));
   },
-  head: () => ({
-    meta: [
-      { title: "Reports | Pnt - Personal Novel Translator" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [
+        { title: `${t("meta.adminReports")} | ${t("meta.siteName")}` },
+        { name: "robots", content: "noindex, nofollow" },
+      ],
+    };
+  },
   component: AdminReportsRoutePage,
 });
 

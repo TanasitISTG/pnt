@@ -13,6 +13,7 @@ import {
 } from "./worker";
 import * as epubJobStore from "./job-store";
 import * as importJobStore from "@/lib/import/job-store";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import * as epubParser from "./parser";
 
 vi.mock("./job-store", () => ({
@@ -160,7 +161,9 @@ describe("EPUB worker steps", () => {
       });
       vi.mocked(importJobStore.getMaxChapterNumber).mockResolvedValueOnce(0);
 
-      await expect(prepareEpubImportJob("job-1")).rejects.toThrow("Invalid chapter number");
+      await expect(prepareEpubImportJob("job-1")).rejects.toThrow(
+        encodeMessage("errors.epubInvalidChapterNumber"),
+      );
       expect(epubJobStore.stageImportJobItems).not.toHaveBeenCalled();
     });
   });

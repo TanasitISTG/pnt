@@ -27,6 +27,7 @@ vi.mock("@/lib/reader/reader.functions", () => ({
 }));
 
 import { Route } from "./index";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 const novel = {
   id: "novel-1",
@@ -56,9 +57,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   // The real chapter read refuses with this sentence for a novel that is gone or private,
   // which is the failure that used to turn a missing page into a broken one.
-  serverFunctions.listChapters.mockRejectedValue(new Error("Novel not found or unauthorized"));
+  serverFunctions.listChapters.mockRejectedValue(
+    new Error(encodeMessage("errors.novelNotFoundOrUnauthorized")),
+  );
   serverFunctions.getReaderNovelState.mockRejectedValue(
-    new Error("Novel not found or unauthorized"),
+    new Error(encodeMessage("errors.novelNotFoundOrUnauthorized")),
   );
   serverFunctions.getAdminNovelDetailCore.mockResolvedValue(null);
 });
@@ -90,7 +93,7 @@ describe("reading route loader", () => {
 
     expect(isNotFound(error)).toBe(false);
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("Novel not found or unauthorized");
+    expect((error as Error).message).toBe(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   });
 
   it("carries a signed-in reader's own progress read, and a guest's local one", async () => {

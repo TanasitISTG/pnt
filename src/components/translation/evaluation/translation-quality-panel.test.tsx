@@ -4,10 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  EVAL_SELECTOR_ERROR,
-  type EvalReviewSearch,
-} from "@/lib/translation/evaluation/eval.schemas";
+import en from "@/lib/i18n/messages/en";
+import { type EvalReviewSearch } from "@/lib/translation/evaluation/eval.schemas";
 
 const serverFunctions = vi.hoisted(() => ({
   startTranslationEval: vi.fn(),
@@ -80,7 +78,9 @@ describe("TranslationQualityPanel", () => {
     fireEvent.change(selector, { target: { value: "1,,2" } });
     fireEvent.click(screen.getByRole("button", { name: "Run check" }));
 
-    expect(await screen.findByText(EVAL_SELECTOR_ERROR)).toBeTruthy();
+    // The panel resolves the code through the catalog, so the assertion names the copy the
+    // reader actually sees rather than the code that produces it.
+    expect(await screen.findByText(en.validation.evalSelectorInvalid)).toBeTruthy();
     expect(selector.getAttribute("aria-invalid")).toBe("true");
     expect(document.activeElement).toBe(selector);
     expect(serverFunctions.startTranslationEval).not.toHaveBeenCalled();

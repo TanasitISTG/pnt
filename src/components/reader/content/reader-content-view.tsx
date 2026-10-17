@@ -1,20 +1,22 @@
+import { useTranslations } from "use-intl";
+
+import { languageName } from "@/lib/i18n/language-name";
+
 import type { ReaderContentProps, ReaderTranslationStatus } from "./reader-content-types";
 import { ReaderEmptyContent } from "./reader-content-empty";
 import { ReaderTranslatedContent } from "./reader-content-translated";
 import { ReaderUntranslatedContent } from "./reader-content-untranslated";
-import { READER_LANGUAGE_NAMES } from "./reader-content-language";
 
 function isFailedTranslation(status: ReaderTranslationStatus | undefined): boolean {
   return status === "error" || status === "cancelled";
 }
 
 function ReaderTranslationFailureNotice() {
+  const t = useTranslations("reader");
   return (
     <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-      <p className="font-medium text-foreground">The last translation attempt did not finish.</p>
-      <p className="mt-1 text-caption text-muted-foreground">
-        Use chapter actions to retry translation or edit the chapter.
-      </p>
+      <p className="font-medium text-foreground">{t("translationFailedTitle")}</p>
+      <p className="mt-1 text-caption text-muted-foreground">{t("translationFailedDescription")}</p>
     </div>
   );
 }
@@ -36,8 +38,10 @@ export function ReaderContentView({
   highlightsFor,
   proseRef,
 }: ReaderContentProps) {
-  const sourceName = READER_LANGUAGE_NAMES[sourceLang];
-  const targetName = READER_LANGUAGE_NAMES[targetLang] ?? targetLang;
+  const t = useTranslations("reader");
+  const tRoot = useTranslations();
+  const sourceName = languageName(tRoot, sourceLang);
+  const targetName = languageName(tRoot, targetLang) ?? targetLang;
   const hasReadableText = rawParagraphs.length > 0 || translatedParagraphs.length > 0;
 
   if (!hasReadableText) {
@@ -51,9 +55,7 @@ export function ReaderContentView({
       ) : null}
       {viewMode !== "raw" && hasTranslation ? (
         <p className="mb-5 text-caption text-muted-foreground">
-          {sourceName
-            ? `Machine-translated from ${sourceName}. May contain inaccuracies.`
-            : "Machine-translated. May contain inaccuracies."}
+          {sourceName ? t("machineTranslatedFrom", { source: sourceName }) : t("machineTranslated")}
         </p>
       ) : null}
       {hasTranslation ? (

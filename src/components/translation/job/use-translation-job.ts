@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
+
 import { invalidateJobDashboard } from "@/lib/job-dashboard/query";
+import { translateServerError } from "@/lib/i18n/server-error";
 import {
   startTranslationJob,
   startTranslationJobs,
@@ -48,6 +51,15 @@ export function useTranslationJob(novelId: string, enabled = true) {
   // invalidate a claimed terminal lookup.
   const activeJobsRef = useRef<Map<string, ActiveJobState>>(activeJobs);
   const authorityRef = useRef<JobAuthorityState>(createJobAuthorityState());
+  // One root translator: a toast names the surface it belongs to (`studio.*` for the chapter
+  // workspace, `jobs.*` for a run), and a message code carries its own namespace. The ref carries
+  // the current words into the poll, which must not restart because the language changed - the
+  // import console's hook reads copy through a ref for the same reason.
+  const t = useTranslations();
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const mountedRef = useRef(true);
   const lifecycleRef = useRef(0);
 
@@ -296,16 +308,19 @@ export function useTranslationJob(novelId: string, enabled = true) {
       }
       if (terminalCount === 0) return;
 
+      // A run's outcome: counted parts joined as data, the words around them in one message.
       const parts: string[] = [];
-      if (doneCount > 0) parts.push(`${doneCount} completed`);
-      if (errorCount > 0) parts.push(`${errorCount} failed`);
-      if (cancelledCount > 0) parts.push(`${cancelledCount} cancelled`);
+      if (doneCount > 0) parts.push(tRef.current("jobs.summaryCompleted", { count: doneCount }));
+      if (errorCount > 0) parts.push(tRef.current("jobs.summaryFailed", { count: errorCount }));
+      if (cancelledCount > 0)
+        parts.push(tRef.current("jobs.summaryCancelled", { count: cancelledCount }));
+      const summary = tRef.current("jobs.translationSummary", { summary: parts.join(", ") });
       if (errorCount > 0 && doneCount === 0 && cancelledCount === 0) {
-        toast.error(`Translation: ${parts.join(", ")}`);
+        toast.error(summary);
       } else if (doneCount > 0) {
-        toast.success(`Translation: ${parts.join(", ")}`);
+        toast.success(summary);
       } else {
-        toast.info(`Translation: ${parts.join(", ")}`);
+        toast.info(summary);
       }
     })();
   }, [
@@ -347,11 +362,17 @@ export function useTranslationJob(novelId: string, enabled = true) {
         if (!mountedRef.current || !ownsMutation(authorityRef.current, chapterId, version)) return;
 
         setJobState(nextJob);
-        toast.info(mode === "overwrite" ? "Re-translation queued" : "Translation queued");
+        toast.info(
+          tRef.current(
+            mode === "overwrite" ? "studio.reTranslationQueued" : "studio.translationQueued",
+          ),
+        );
         invalidateJobOutcome();
       } catch (err) {
         if (mountedRef.current && ownsMutation(authorityRef.current, chapterId, version)) {
-          toast.error(err instanceof Error ? err.message : "Failed to start translation");
+          toast.error(
+            translateServerError(err, tRef.current, tRef.current("studio.translationStartFailed")),
+          );
         }
       }
     },
@@ -401,13 +422,14 @@ export function useTranslationJob(novelId: string, enabled = true) {
 
         if (currentQueuedJobs.length > 0) {
           toast.info(
-            `${mode === "overwrite" ? "Queued re-translation for" : "Queued"} ${currentQueuedJobs.length} chapter${currentQueuedJobs.length === 1 ? "" : "s"}`,
+            tRef.current(
+              mode === "overwrite" ? "studio.chaptersRequeued" : "studio.chaptersQueued",
+              { count: currentQueuedJobs.length },
+            ),
           );
         }
         if (currentSkipped.length > 0) {
-          toast.warning(
-            `Skipped ${currentSkipped.length} chapter${currentSkipped.length === 1 ? "" : "s"}`,
-          );
+          toast.warning(tRef.current("studio.chaptersSkipped", { count: currentSkipped.length }));
         }
 
         if (currentQueuedJobs.length > 0 || currentSkipped.length > 0) invalidateJobOutcome();
@@ -417,7 +439,9 @@ export function useTranslationJob(novelId: string, enabled = true) {
           mountedRef.current &&
           chapterIds.some((chapterId) => ownsMutation(authorityRef.current, chapterId, version))
         ) {
-          toast.error(err instanceof Error ? err.message : "Failed to queue translations");
+          toast.error(
+            translateServerError(err, tRef.current, tRef.current("studio.translationQueueFailed")),
+          );
         }
         return 0;
       }
@@ -465,12 +489,14 @@ export function useTranslationJob(novelId: string, enabled = true) {
         const skippedChapterIds = currentSkipped.map(({ chapterId }) => chapterId);
         if (cancelledChapterIds.length > 0) {
           toast.info(
-            `Cancellation requested for ${cancelledChapterIds.length} translation${cancelledChapterIds.length === 1 ? "" : "s"}`,
+            tRef.current("studio.cancellationsRequested", {
+              count: cancelledChapterIds.length,
+            }),
           );
         }
         if (skippedChapterIds.length > 0) {
           toast.warning(
-            `Skipped ${skippedChapterIds.length} chapter${skippedChapterIds.length === 1 ? "" : "s"} with no active translation`,
+            tRef.current("studio.chaptersSkippedNoActive", { count: skippedChapterIds.length }),
           );
         }
 
@@ -481,7 +507,9 @@ export function useTranslationJob(novelId: string, enabled = true) {
           mountedRef.current &&
           chapterIds.some((chapterId) => ownsMutation(authorityRef.current, chapterId, version))
         ) {
-          toast.error(err instanceof Error ? err.message : "Failed to stop selected translations");
+          toast.error(
+            translateServerError(err, tRef.current, tRef.current("studio.translationStopFailed")),
+          );
         }
         return null;
       }
@@ -507,11 +535,13 @@ export function useTranslationJob(novelId: string, enabled = true) {
         if (!mountedRef.current || !ownsMutation(authorityRef.current, chapterId, version)) return;
 
         removeJob(chapterId, jobId);
-        toast.info("Translation cancelled");
+        toast.info(tRef.current("studio.translationCancelled"));
         invalidateJobOutcome();
       } catch (err) {
         if (mountedRef.current && ownsMutation(authorityRef.current, chapterId, version)) {
-          toast.error(err instanceof Error ? err.message : "Failed to cancel translation");
+          toast.error(
+            translateServerError(err, tRef.current, tRef.current("studio.translationCancelFailed")),
+          );
         }
       }
     },
@@ -544,11 +574,13 @@ export function useTranslationJob(novelId: string, enabled = true) {
         if (!mountedRef.current || !ownsMutation(authorityRef.current, chapterId, version)) return;
 
         setJobState(retriedJob);
-        toast.info("Translation requeued");
+        toast.info(tRef.current("studio.translationRequeued"));
         invalidateJobOutcome();
       } catch (err) {
         if (mountedRef.current && ownsMutation(authorityRef.current, chapterId, version)) {
-          toast.error(err instanceof Error ? err.message : "Failed to retry translation");
+          toast.error(
+            translateServerError(err, tRef.current, tRef.current("studio.translationRetryFailed")),
+          );
         }
       }
     },

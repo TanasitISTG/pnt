@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { env } from "@/lib/env";
 import { findSource, parseChapter, sourceUrlForLog } from "@/lib/scrape";
 import { assertPublicHost, fetchFromPublicHost } from "@/lib/scrape/network-policy.server";
@@ -19,7 +20,7 @@ async function readResponseText(res: Response, maxBytes = MAX_HTML_BYTES): Promi
     const declaredBytes = Number(contentLength);
     if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
       await res.body?.cancel().catch(() => undefined);
-      throw new SafeServerError("Page too large");
+      throw new SafeServerError(encodeMessage("errors.scrapePageTooLarge"));
     }
   }
 
@@ -37,7 +38,7 @@ async function readResponseText(res: Response, maxBytes = MAX_HTML_BYTES): Promi
       bytesRead += value.byteLength;
       if (bytesRead > maxBytes) {
         await reader.cancel().catch(() => undefined);
-        throw new SafeServerError("Page too large");
+        throw new SafeServerError(encodeMessage("errors.scrapePageTooLarge"));
       }
       text += decoder.decode(value, { stream: true });
     }
@@ -66,9 +67,12 @@ async function fetchWithoutRedirects(
       ...(logUrl ? { url: logUrl } : {}),
       status: res.status,
     });
-    throw new SafeServerError(`${context} attempted a redirect (HTTP ${res.status}) - blocked`, {
-      cause: res.status,
-    });
+    throw new SafeServerError(
+      encodeMessage("errors.scrapeHttpRedirect", { context, status: res.status }),
+      {
+        cause: res.status,
+      },
+    );
   }
   return res;
 }
@@ -94,7 +98,9 @@ export async function directFetch(url: string): Promise<string> {
   if (!res.ok) {
     await res.body?.cancel().catch(() => undefined);
     log("warn", "Direct scrape fetch failed", { url: sourceLogUrl, status: res.status });
-    throw new SafeServerError(`Source site returned HTTP ${res.status}`, { cause: res.status });
+    throw new SafeServerError(encodeMessage("errors.scrapeHttpError", { status: res.status }), {
+      cause: res.status,
+    });
   }
   return readResponseText(res);
 }
@@ -133,7 +139,7 @@ async function proxiedFetch(
 ): Promise<string> {
   if (!spec.apiKey) {
     throw new SafeServerError(
-      `Scraping this site requires ${spec.missingKeyEnv} to be set in environment variables`,
+      encodeMessage("errors.scrapeProxyKeyRequired", { envVar: spec.missingKeyEnv }),
     );
   }
   const apiKey = spec.apiKey;
@@ -181,9 +187,10 @@ async function proxiedFetch(
       url: sourceLogUrl,
       status: res.status,
     });
-    throw new SafeServerError(`${spec.name} returned HTTP ${res.status}`, {
-      cause: res.status,
-    });
+    throw new SafeServerError(
+      encodeMessage("errors.scrapeProviderHttpError", { provider: spec.name, status: res.status }),
+      { cause: res.status },
+    );
   }
 
   return spec.parseResponse ? spec.parseResponse(res) : readResponseText(res);
@@ -284,14 +291,14 @@ const firecrawlSpec: ProxyProviderSpec = {
       json = JSON.parse(text);
     } catch {
       log("error", "Firecrawl response validation failed", { reason: "invalid JSON" });
-      throw new SafeServerError("Firecrawl returned an invalid response");
+      throw new SafeServerError(encodeMessage("errors.scrapeFirecrawlInvalid"));
     }
     const parsed = firecrawlResponseSchema.safeParse(json);
     if (!parsed.success || !parsed.data.data?.rawHtml) {
       log("error", "Firecrawl response validation failed", {
         reason: parsed.success ? "missing rawHtml" : "invalid response payload",
       });
-      throw new SafeServerError("Firecrawl returned an invalid response");
+      throw new SafeServerError(encodeMessage("errors.scrapeFirecrawlInvalid"));
     }
     return parsed.data.data.rawHtml;
   },
@@ -323,7 +330,7 @@ export async function fetchHtml(url: string, provider: ScrapeProvider = "auto"):
           html = await scraperFetch(url);
         } else if (cause === 403 || msg.includes("HTTP 403")) {
           throw new SafeServerError(
-            `Source site ${source.name} returned HTTP 403 Forbidden. Set SCRAPER_API_KEY in .env.local to enable scraper proxy.`,
+            encodeMessage("errors.scrapeForbidden", { source: source.name }),
           );
         } else {
           throw e;
@@ -339,7 +346,7 @@ export async function fetchHtml(url: string, provider: ScrapeProvider = "auto"):
   } else if (provider === "firecrawl") {
     html = await firecrawlFetch(url);
   } else {
-    throw new SafeServerError(`Unknown scrape provider: ${provider}`);
+    throw new SafeServerError(encodeMessage("errors.scrapeUnknownProvider", { provider }));
   }
 
   return html;

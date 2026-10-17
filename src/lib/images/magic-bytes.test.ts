@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { assertImageMagicBytes } from "./magic-bytes";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -15,55 +16,60 @@ describe("assertImageMagicBytes", () => {
     [JPEG, "image/jpeg"],
     [WEBP, "image/webp"],
   ])("accepts %s bytes whose header matches the declared type", (bytes, mime) => {
-    expect(() => assertImageMagicBytes(bytes, mime, "Profile")).not.toThrow();
+    expect(() => assertImageMagicBytes(bytes, mime)).not.toThrow();
   });
 
-  it("keeps the cover-labelled messages callers already assert on", () => {
-    expect(() => assertImageMagicBytes(INVALID, "image/png", "Cover")).toThrow(
-      "Cover image magic bytes do not match declared PNG MIME type",
-    );
-    expect(() => assertImageMagicBytes(INVALID, "image/jpeg", "Cover")).toThrow(
-      "Cover image magic bytes do not match declared JPEG MIME type",
-    );
-    expect(() => assertImageMagicBytes(INVALID, "image/webp", "Cover")).toThrow(
-      "Cover image magic bytes do not match declared WebP MIME type",
-    );
-    expect(() => assertImageMagicBytes(INVALID, "image/gif", "Cover")).toThrow(
-      "Unsupported cover MIME type: image/gif",
-    );
-    expect(() => assertImageMagicBytes(INVALID, "", "Cover")).toThrow(
-      "Cover MIME type is required to validate cover image",
+  it.each([
+    ["image/png", INVALID],
+    ["image/jpeg", INVALID],
+    ["image/webp", INVALID],
+  ])("rejects bytes that disagree with a declared %s", (mime, bytes) => {
+    expect(() => assertImageMagicBytes(bytes, mime)).toThrow(
+      encodeMessage("errors.imageTypeMismatch"),
     );
   });
 
-  it("names the profile upload in its own messages", () => {
-    expect(() => assertImageMagicBytes(INVALID, "image/png", "Profile")).toThrow(
-      "Profile image magic bytes do not match declared PNG MIME type",
-    );
-    expect(() => assertImageMagicBytes(INVALID, "", "Profile")).toThrow(
-      "Profile MIME type is required to validate profile image",
+  it("rejects an unsupported declared type, naming the type as data", () => {
+    expect(() => assertImageMagicBytes(PNG, "image/gif")).toThrow(
+      encodeMessage("errors.imageUnsupportedType", { mime: "image/gif" }),
     );
   });
 
-  it("rejects a buffer whose bytes disagree with the declared type", () => {
-    // A WebP upload claiming to be a PNG: the declared type is a claim, not evidence.
-    expect(() => assertImageMagicBytes(WEBP, "image/png", "Profile")).toThrow(
-      "Profile image magic bytes do not match declared PNG MIME type",
+  it("rejects a missing declared type", () => {
+    expect(() => assertImageMagicBytes(INVALID, "")).toThrow(
+      encodeMessage("errors.imageMimeRequired"),
     );
   });
 
   it("rejects truncated buffers instead of reading past the end", () => {
-    expect(() => assertImageMagicBytes(new Uint8Array([0x89, 0x50]), "image/png", "Cover")).toThrow(
-      "Cover image magic bytes do not match declared PNG MIME type",
+    expect(() => assertImageMagicBytes(new Uint8Array([0x89, 0x50]), "image/png")).toThrow(
+      encodeMessage("errors.imageTypeMismatch"),
     );
-    expect(() => assertImageMagicBytes(new Uint8Array(11), "image/webp", "Cover")).toThrow(
-      "Cover image magic bytes do not match declared WebP MIME type",
+    expect(() => assertImageMagicBytes(new Uint8Array(11), "image/webp")).toThrow(
+      encodeMessage("errors.imageTypeMismatch"),
     );
   });
 
-  it("rejects unsupported declared types", () => {
-    expect(() => assertImageMagicBytes(PNG, "image/gif", "Profile")).toThrow(
-      "Unsupported profile MIME type: image/gif",
-    );
+  it("says the same thing for every upload path, so the copy can be translated", () => {
+    // The message used to be built from an English noun the caller supplied ("Cover",
+    // "Profile"), which made it untranslatable. It is now one code per rule, and the path that
+    // called it is what names the image.
+    const coverMessage = (() => {
+      try {
+        assertImageMagicBytes(INVALID, "image/png");
+      } catch (error) {
+        return (error as Error).message;
+      }
+      return "";
+    })();
+    const profileMessage = (() => {
+      try {
+        assertImageMagicBytes(WEBP, "image/png");
+      } catch (error) {
+        return (error as Error).message;
+      }
+      return "";
+    })();
+    expect(coverMessage).toBe(profileMessage);
   });
 });

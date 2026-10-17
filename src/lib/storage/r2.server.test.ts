@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  AVATAR_KEY_ROOT,
+  avatarOriginalKey,
+  avatarPrefix,
+  coverObjectKey,
+  coverPrefix,
+  coverVariantKey,
+  epubUploadKey,
+  keySetScope,
+} from "./keys";
 import { createR2ObjectStorage, StorageRequestError } from "./r2.server";
 
 const config = {
@@ -9,6 +19,13 @@ const config = {
   bucket: "pnt-bucket",
   publicBaseUrl: "https://cdn.example.test",
 } as const;
+
+// The adapter takes keys the vocabulary derives, so every case below asks a builder for the key it
+// means; what travels over the wire is then the builder's path, which is what the URLs assert.
+const COVER_SET = coverPrefix("novel-1", "segment");
+const COVER_KEY = coverVariantKey(COVER_SET, 480);
+const UPLOAD_KEY = epubUploadKey("upload-1");
+const ABSENT_KEY = avatarOriginalKey(avatarPrefix("user-missing", "photo"));
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -42,7 +59,7 @@ describe("R2 object storage", () => {
     const requests = stubFetch(() => new Response(null, { status: 200 }));
     const storage = createR2ObjectStorage(config);
 
-    await storage.put("covers/novel-1/segment/480.webp", Uint8Array.from([1, 2, 3]), {
+    await storage.put(COVER_KEY, Uint8Array.from([1, 2, 3]), {
       contentType: "image/webp",
     });
 
@@ -63,7 +80,8 @@ describe("R2 object storage", () => {
     const requests = stubFetch(() => new Response(null, { status: 200 }));
     const storage = createR2ObjectStorage(config);
 
-    await storage.put("covers/novel 1/segment/key+1", Uint8Array.from([1]), {
+    const key = coverObjectKey(coverPrefix("novel 1", "segment"), "key+1");
+    await storage.put(key, Uint8Array.from([1]), {
       contentType: "image/webp",
     });
 
@@ -76,12 +94,12 @@ describe("R2 object storage", () => {
     const storage = createR2ObjectStorage(config);
 
     await expect(
-      storage.put("covers/novel-1/segment/480.webp", Uint8Array.from([1]), {
+      storage.put(COVER_KEY, Uint8Array.from([1]), {
         contentType: "image/webp",
       }),
     ).rejects.toBeInstanceOf(StorageRequestError);
     await expect(
-      storage.put("covers/novel-1/segment/480.webp", Uint8Array.from([1]), {
+      storage.put(COVER_KEY, Uint8Array.from([1]), {
         contentType: "image/webp",
       }),
     ).rejects.toMatchObject({ status: 403 });
@@ -97,7 +115,7 @@ describe("R2 object storage", () => {
     );
     const storage = createR2ObjectStorage(config);
 
-    const object = await storage.get("covers/novel-1/segment/480.webp");
+    const object = await storage.get(COVER_KEY);
     expect(object?.contentType).toBe("image/webp");
     expect(Buffer.from(object?.bytes ?? [])).toEqual(Buffer.from([1, 2, 3]));
   });
@@ -106,10 +124,10 @@ describe("R2 object storage", () => {
     const requests = stubFetch(() => new Response(null, { status: 404 }));
     const storage = createR2ObjectStorage(config);
 
-    await expect(storage.get("covers/missing")).resolves.toBeNull();
+    await expect(storage.get(ABSENT_KEY)).resolves.toBeNull();
     // `getContentLength` rethrows the S3 failure as a plain Error with a `cause`, so
     // this also covers the adapter reading the status back out of that chain.
-    await expect(storage.head("covers/missing")).resolves.toBeNull();
+    await expect(storage.head(ABSENT_KEY)).resolves.toBeNull();
     expect(requests.map((request) => request.method)).toEqual(["GET", "HEAD"]);
   });
 
@@ -123,7 +141,7 @@ describe("R2 object storage", () => {
     );
     const storage = createR2ObjectStorage(config);
 
-    await expect(storage.head("epub-uploads/upload-1")).resolves.toEqual({ size: 4096 });
+    await expect(storage.head(UPLOAD_KEY)).resolves.toEqual({ size: 4096 });
     expect(requests).toHaveLength(1);
     expect(requests[0].method).toBe("HEAD");
   });
@@ -132,7 +150,7 @@ describe("R2 object storage", () => {
     const requests = stubFetch(() => new Response(null, { status: 204 }));
     const storage = createR2ObjectStorage(config);
 
-    await storage.delete("epub-uploads/upload-1");
+    await storage.delete(UPLOAD_KEY);
 
     expect(requests).toHaveLength(1);
     expect(requests[0].method).toBe("DELETE");
@@ -141,7 +159,7 @@ describe("R2 object storage", () => {
     );
   });
 
-  it("removes every object under a prefix with one batched delete", async () => {
+  it("removes every object in one set with a single batched delete", async () => {
     const listed = `<ListBucketResult>
       <Contents><Key>covers/n/seg/320.webp</Key></Contents>
       <Contents><Key>covers/n/seg/640.webp</Key></Contents>
@@ -158,13 +176,14 @@ describe("R2 object storage", () => {
     });
     const storage = createR2ObjectStorage(config);
 
-    await storage.deletePrefix("covers/n/seg");
+    await storage.removeSet(keySetScope(coverPrefix("n", "seg")));
 
     expect(requests.map((request) => request.method)).toEqual(["GET", "POST"]);
     const [list, remove] = requests;
     expect(list.url).toContain("list-type=2");
     expect(list.url).toContain("max-keys=1000");
-    expect(list.url).toContain("prefix=covers%2Fn%2Fseg");
+    // The boundary the port resolved, so the delete cannot reach `covers/n/segment-2/...`.
+    expect(list.url).toContain("prefix=covers%2Fn%2Fseg%2F");
     expect(remove.url).toContain("?delete=");
     // R2 gets the checksum header S3 requires for a batch delete.
     expect(remove.headers.get("x-amz-checksum-sha256")).toMatch(/^[A-Za-z0-9+/=]+$/);
@@ -173,7 +192,7 @@ describe("R2 object storage", () => {
     expect(body).toContain("<Key>covers/n/seg/640.webp</Key>");
   });
 
-  it("lists every key under a prefix for callers that reconcile the bucket", async () => {
+  it("lists every key in a set for callers that reconcile the bucket", async () => {
     const listed = `<ListBucketResult>
       <Contents><Key>avatars/user-1/segment/original</Key></Contents>
       <Contents><Key>avatars/user-1/segment/64.webp</Key></Contents>
@@ -182,13 +201,32 @@ describe("R2 object storage", () => {
     const requests = stubFetch(() => xml(listed));
     const storage = createR2ObjectStorage(config);
 
-    await expect(storage.listKeys("avatars")).resolves.toEqual([
+    await expect(storage.listSet(keySetScope(AVATAR_KEY_ROOT))).resolves.toEqual([
       "avatars/user-1/segment/original",
       "avatars/user-1/segment/64.webp",
     ]);
     expect(requests.map((request) => request.method)).toEqual(["GET"]);
     expect(requests[0].url).toContain("list-type=2");
-    expect(requests[0].url).toContain("prefix=avatars");
+    // A raw `prefix=avatars` would also return `avatars-archive/...`; the boundary the port
+    // resolved keeps it to the set, so a caller never spells a separator R2 would match.
+    expect(requests[0].url).toContain("prefix=avatars%2F");
+  });
+
+  it("reports when each object was written, so a sweep can apply a grace period", async () => {
+    const listed = `<ListBucketResult>
+      <Contents>
+        <Key>covers/n/seg/320.webp</Key>
+        <LastModified>2026-01-02T03:04:05.000Z</LastModified>
+      </Contents>
+      <IsTruncated>false</IsTruncated>
+    </ListBucketResult>`;
+    const requests = stubFetch(() => xml(listed));
+    const storage = createR2ObjectStorage(config);
+
+    await expect(storage.listObjects(keySetScope(coverPrefix("n", "seg")))).resolves.toEqual([
+      { key: "covers/n/seg/320.webp", lastModified: new Date("2026-01-02T03:04:05.000Z") },
+    ]);
+    expect(requests.map((request) => request.method)).toEqual(["GET"]);
   });
 
   it("follows continuation tokens to the end of a listing", async () => {
@@ -208,7 +246,7 @@ describe("R2 object storage", () => {
     });
     const storage = createR2ObjectStorage(config);
 
-    await expect(storage.listKeys("avatars")).resolves.toEqual([
+    await expect(storage.listSet(keySetScope(AVATAR_KEY_ROOT))).resolves.toEqual([
       "avatars/user-1/segment/original",
       "avatars/user-1/segment/64.webp",
     ]);
@@ -222,7 +260,7 @@ describe("R2 object storage", () => {
 
     // Null is the signal that nothing was inspected; an empty array would claim the
     // bucket was read and found empty.
-    await expect(storage.listKeys("avatars")).resolves.toBeNull();
+    await expect(storage.listSet(keySetScope(AVATAR_KEY_ROOT))).resolves.toBeNull();
     expect(requests.map((request) => request.method)).toEqual(["GET"]);
   });
 
@@ -230,7 +268,7 @@ describe("R2 object storage", () => {
     const requests = stubFetch(() => xml("<Error><Code>NoSuchBucket</Code></Error>", 404));
     const storage = createR2ObjectStorage(config);
 
-    await expect(storage.deletePrefix("covers/n/seg")).resolves.toBeUndefined();
+    await expect(storage.removeSet(keySetScope(coverPrefix("n", "seg")))).resolves.toBeUndefined();
     // Listing tolerates 404 and reports it as null; no delete request is attempted.
     expect(requests.map((request) => request.method)).toEqual(["GET"]);
   });
@@ -240,7 +278,7 @@ describe("R2 object storage", () => {
     const storage = createR2ObjectStorage(config);
 
     const url = new URL(
-      await storage.presignPut("epub-uploads/upload-1", {
+      await storage.presignPut(UPLOAD_KEY, {
         contentType: "application/epub+zip",
         expiresIn: 900,
       }),
@@ -259,11 +297,11 @@ describe("R2 object storage", () => {
 
   it("only exposes public URLs for the bucket that is served publicly", () => {
     const publicStorage = createR2ObjectStorage(config);
-    expect(publicStorage.publicUrl("covers/n/seg/640.webp")).toBe(
+    expect(publicStorage.publicUrl(coverVariantKey(coverPrefix("n", "seg"), 640))).toBe(
       "https://cdn.example.test/covers/n/seg/640.webp",
     );
 
     const privateStorage = createR2ObjectStorage({ ...config, publicBaseUrl: null });
-    expect(privateStorage.publicUrl("epub-uploads/upload-1")).toBeNull();
+    expect(privateStorage.publicUrl(UPLOAD_KEY)).toBeNull();
   });
 });

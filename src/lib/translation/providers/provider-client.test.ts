@@ -29,6 +29,7 @@ vi.mock("@/lib/settings/crypto", () => ({ decrypt: vi.fn() }));
 
 import { GeminiProviderClient, OpenAIProviderClient } from "./provider-client";
 import { generateJsonCompletion } from "@/lib/providers/json-completion";
+import { englishWords, rejectionOf } from "@/test/messages";
 
 beforeEach(() => {
   createCompletion.mockReset();
@@ -267,10 +268,9 @@ describe("provider-client module", () => {
     createCompletion.mockResolvedValueOnce(payload);
     const client = new OpenAIProviderClient(openAIConfig);
 
-    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
-      code: "INVALID_RESPONSE",
-      message: "Invalid provider response",
-    });
+    const failure = await rejectionOf(client.generateChatCompletion({ messages: [] }));
+    expect(failure).toMatchObject({ code: "INVALID_RESPONSE" });
+    expect(englishWords(failure.message)).toBe("The provider returned an unreadable response.");
   });
 
   it.each([
@@ -287,10 +287,9 @@ describe("provider-client module", () => {
       model: "gpt-5.6-luna",
     });
 
-    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
-      code: "INVALID_RESPONSE",
-      message: "Invalid provider response",
-    });
+    const failure = await rejectionOf(client.generateChatCompletion({ messages: [] }));
+    expect(failure).toMatchObject({ code: "INVALID_RESPONSE" });
+    expect(englishWords(failure.message)).toBe("The provider returned an unreadable response.");
   });
 
   it("accepts valid nullable Chat Completions content and absent usage", async () => {
@@ -319,37 +318,40 @@ describe("provider-client module", () => {
       "CONNECTION_FAILED",
       "Could not connect to the provider. Check the settings and try again.",
     ],
-  ])("maps OpenAI HTTP %s without exposing upstream details", async (status, code, message) => {
-    createCompletion.mockRejectedValueOnce(
-      Object.assign(new Error("secret-key in upstream body"), {
-        status,
-        error: { message: "secret-key in upstream body" },
-      }),
-    );
-    const client = new OpenAIProviderClient(openAIConfig);
+  ] as const)(
+    "maps OpenAI HTTP %s without exposing upstream details",
+    async (status, code, words) => {
+      createCompletion.mockRejectedValueOnce(
+        Object.assign(new Error("secret-key in upstream body"), {
+          status,
+          error: { message: "secret-key in upstream body" },
+        }),
+      );
+      const client = new OpenAIProviderClient(openAIConfig);
 
-    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
-      code,
-      status,
-      message,
-    });
-  });
+      const failure = await rejectionOf(client.generateChatCompletion({ messages: [] }));
+      expect(failure).toMatchObject({ code, status });
+      // The failure travels as the code the catalog resolves, and never as the upstream body's
+      // words: the words below are the app's own, and the reader's language decides the rest.
+      expect(englishWords(failure.message)).toBe(words);
+    },
+  );
 
   it("maps secret-bearing transport failures and timeouts to fixed errors", async () => {
     const client = new OpenAIProviderClient(openAIConfig);
     createCompletion.mockRejectedValueOnce(new Error("https://user:secret@upstream.example"));
-    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
-      code: "CONNECTION_FAILED",
-      message: "Could not connect to the provider. Check the settings and try again.",
-    });
+    const transportFailure = await rejectionOf(client.generateChatCompletion({ messages: [] }));
+    expect(transportFailure).toMatchObject({ code: "CONNECTION_FAILED" });
+    expect(englishWords(transportFailure.message)).toBe(
+      "Could not connect to the provider. Check the settings and try again.",
+    );
 
     createCompletion.mockRejectedValueOnce(
       Object.assign(new Error("secret timeout body"), { name: "APIConnectionTimeoutError" }),
     );
-    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
-      code: "TIMEOUT",
-      message: "Provider request timed out.",
-    });
+    const timeoutFailure = await rejectionOf(client.generateChatCompletion({ messages: [] }));
+    expect(timeoutFailure).toMatchObject({ code: "TIMEOUT" });
+    expect(englishWords(timeoutFailure.message)).toBe("Provider request timed out.");
   });
 
   it("uses plain fallback only for clear OpenAI JSON-mode rejection", async () => {
@@ -370,10 +372,11 @@ describe("provider-client module", () => {
     createCompletion.mockRejectedValueOnce(
       Object.assign(new Error("secret: invalid model"), { status: 400 }),
     );
-    await expect(generateJsonCompletion(client, 0, [])).rejects.toMatchObject({
-      code: "CONNECTION_FAILED",
-      message: "Could not connect to the provider. Check the settings and try again.",
-    });
+    const failure = await rejectionOf(generateJsonCompletion(client, 0, []));
+    expect(failure).toMatchObject({ code: "CONNECTION_FAILED" });
+    expect(englishWords(failure.message)).toBe(
+      "Could not connect to the provider. Check the settings and try again.",
+    );
     expect(createCompletion).toHaveBeenCalledTimes(3);
   });
 
@@ -455,10 +458,9 @@ describe("provider-client module", () => {
   ])("rejects malformed response fields safely", async (payload) => {
     createGeminiContent.mockResolvedValueOnce(Response.json(payload));
     const client = new GeminiProviderClient({ apiKey: "key", model: "test", temperature: 0 });
-    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
-      code: "INVALID_RESPONSE",
-      message: "Invalid provider response",
-    });
+    const failure = await rejectionOf(client.generateChatCompletion({ messages: [] }));
+    expect(failure).toMatchObject({ code: "INVALID_RESPONSE" });
+    expect(englishWords(failure.message)).toBe("The provider returned an unreadable response.");
   });
 
   it.each([
@@ -470,15 +472,15 @@ describe("provider-client module", () => {
     [404, "Provider endpoint or model was not found."],
     [429, "Provider rate limit reached. Try again later."],
     [500, "Could not connect to the provider. Check the settings and try again."],
-  ])("maps HTTP %s without upstream details", async (status, message) => {
+  ] as const)("maps HTTP %s without upstream details", async (status, words) => {
     createGeminiContent.mockResolvedValueOnce(
       new Response("secret upstream URL/key", { status: Number(status) }),
     );
     const client = new GeminiProviderClient({ apiKey: "key", model: "test", temperature: 0 });
-    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
-      status,
-      message,
-    });
+
+    const failure = await rejectionOf(client.generateChatCompletion({ messages: [] }));
+    expect(failure).toMatchObject({ status });
+    expect(englishWords(failure.message)).toBe(words);
   });
 
   it("preserves narrow JSON fallback and timeout detection", async () => {
@@ -503,10 +505,9 @@ describe("provider-client module", () => {
       code: "HTTP_ERROR",
     });
     createGeminiContent.mockRejectedValueOnce(new DOMException("upstream secret", "TimeoutError"));
-    await expect(client.generateChatCompletion({ messages: [] })).rejects.toMatchObject({
-      code: "TIMEOUT",
-      message: "Provider request timed out.",
-    });
+    const failure = await rejectionOf(client.generateChatCompletion({ messages: [] }));
+    expect(failure).toMatchObject({ code: "TIMEOUT" });
+    expect(englishWords(failure.message)).toBe("Provider request timed out.");
   });
 
   it("preserves timeouts while reading a Gemini JSON-mode error body", async () => {
@@ -517,14 +518,13 @@ describe("provider-client module", () => {
     createGeminiContent.mockResolvedValueOnce(response);
     const client = new GeminiProviderClient({ apiKey: "key", model: "test", temperature: 0 });
 
-    await expect(
+    const failure = await rejectionOf(
       client.generateChatCompletion({
         messages: [],
         responseFormat: { type: "json_object" },
       }),
-    ).rejects.toMatchObject({
-      code: "TIMEOUT",
-      message: "Provider request timed out.",
-    });
+    );
+    expect(failure).toMatchObject({ code: "TIMEOUT" });
+    expect(englishWords(failure.message)).toBe("Provider request timed out.");
   });
 });

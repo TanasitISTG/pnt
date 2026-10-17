@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { assertCoverMagicBytes } from "@/lib/content/novel/novel.functions";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 describe("assertCoverMagicBytes", () => {
   it("passes valid PNG magic bytes", () => {
@@ -34,20 +35,20 @@ describe("assertCoverMagicBytes", () => {
   it("rejects mismatched magic bytes", () => {
     const invalidHeader = new Uint8Array([0x00, 0x00, 0x00, 0x00]);
     expect(() => assertCoverMagicBytes(invalidHeader, "image/png")).toThrow(
-      "Cover image magic bytes do not match declared PNG MIME type",
+      encodeMessage("errors.imageTypeMismatch"),
     );
     expect(() => assertCoverMagicBytes(invalidHeader, "image/jpeg")).toThrow(
-      "Cover image magic bytes do not match declared JPEG MIME type",
+      encodeMessage("errors.imageTypeMismatch"),
     );
     expect(() => assertCoverMagicBytes(invalidHeader, "image/webp")).toThrow(
-      "Cover image magic bytes do not match declared WebP MIME type",
+      encodeMessage("errors.imageTypeMismatch"),
     );
   });
 
   it("rejects unsupported MIME types", () => {
     const buf = new Uint8Array([0x00]);
     expect(() => assertCoverMagicBytes(buf, "image/gif")).toThrow(
-      "Unsupported cover MIME type: image/gif",
+      encodeMessage("errors.imageUnsupportedType", { mime: "image/gif" }),
     );
   });
 });

@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, glossaryTerms, novels, translationJobs } from "@/lib/db/schema";
 import { mapWithConcurrency } from "@/lib/async";
@@ -30,7 +31,7 @@ export async function listGlossaryTermsForUser(
     .limit(1);
 
   if (!novel) {
-    throw new SafeServerError("Novel not found or unauthorized");
+    throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   }
 
   const conditions = [eq(glossaryTerms.novelId, input.novelId)];
@@ -109,7 +110,7 @@ export async function getGlossaryStatsForUser(userId: string, novelId: string) {
     .from(novels)
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1);
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   return getGlossaryStatsForOwnedNovel(novelId);
 }
 
@@ -128,7 +129,7 @@ export async function updateGlossaryTermAtomic(
       .where(eq(glossaryTerms.id, data.termId))
       .limit(1);
     if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
-      throw new SafeServerError("Glossary term not found or unauthorized");
+      throw new SafeServerError(encodeMessage("errors.glossaryTermNotFoundOrUnauthorized"));
     }
 
     const [term] = await tx
@@ -142,7 +143,8 @@ export async function updateGlossaryTermAtomic(
       .limit(1)
       .for("update", { of: glossaryTerms });
 
-    if (!term) throw new SafeServerError("Glossary term not found or unauthorized");
+    if (!term)
+      throw new SafeServerError(encodeMessage("errors.glossaryTermNotFoundOrUnauthorized"));
 
     const now = new Date();
     const updateData: Partial<typeof glossaryTerms.$inferInsert> = { updatedAt: now };
@@ -165,7 +167,9 @@ export async function updateGlossaryTermAtomic(
         )
         .limit(1);
       if (existing) {
-        throw new SafeServerError(`Term with source "${data.source.trim()}" already exists`);
+        throw new SafeServerError(
+          encodeMessage("errors.glossaryTermExists", { source: data.source.trim() }),
+        );
       }
     }
 
@@ -231,7 +235,7 @@ export async function updateGlossaryTermAtomic(
           jobId: job.id,
           generation: job.generation,
           logsJson: job.logsJson,
-          message: "Translation cancelled because glossary terms were propagated.",
+          message: encodeMessage("log.cancelledGlossaryPropagated"),
         })),
         now,
       );
@@ -277,7 +281,7 @@ export async function deleteAllGlossaryTermsForUser(
       .limit(1)
       .for("update");
 
-    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+    if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
     const deleted = await tx
       .delete(glossaryTerms)
@@ -299,7 +303,7 @@ export async function rejectAllPendingGlossaryTermsForUser(
       .limit(1)
       .for("update");
 
-    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+    if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
     const rejected = await tx
       .update(glossaryTerms)

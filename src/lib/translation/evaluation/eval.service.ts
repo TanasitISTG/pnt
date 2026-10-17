@@ -33,9 +33,13 @@ import {
   type StartTranslationEvalInput,
 } from "@/lib/translation/evaluation/eval.schemas";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { nanoid } from "@/lib/utils";
 
-export const EVAL_FAILURE_ERROR = "Quality check failed. Run it again.";
+// The failure a report carries when its run stopped. It is stored on the report and rendered by the
+// panel that opened it, hours later and in a language this module cannot know, so it is a code: the
+// same shape a job's log rows use, resolved through the catalog where it is shown.
+export const EVAL_FAILURE_ERROR = encodeMessage("errors.qualityCheckFailed");
 
 type OutboxDispatch = (outboxId: string) => Promise<void>;
 type EvalReportStatus = "pending" | "running" | "done" | "error";
@@ -136,7 +140,7 @@ export async function queueTranslationEvalForUser(
       .from(novels)
       .where(and(eq(novels.id, parsed.data.novelId), eq(novels.userId, userId)))
       .limit(1);
-    if (!novel) throw new SafeServerError("Novel not found");
+    if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFound"));
 
     const nextReportId = nanoid();
     const nextOutboxId = nanoid();
@@ -167,7 +171,7 @@ export async function listTranslationEvalReportsForUser(
     .from(novels)
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1);
-  if (!novel) throw new SafeServerError("Novel not found");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFound"));
 
   const rows = await db
     .select({
@@ -413,7 +417,7 @@ export async function getTranslationEvalReportForUser(
       ),
     )
     .limit(1);
-  if (!row) throw new SafeServerError("Quality report not found");
+  if (!row) throw new SafeServerError(encodeMessage("errors.qualityReportNotFound"));
 
   const report = toReportSummary(row);
   if (

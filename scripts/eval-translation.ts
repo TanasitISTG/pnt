@@ -184,10 +184,9 @@ async function runEval() {
           relationshipMap = relationshipAnalysis.map;
           promptTokens += relationshipAnalysis.promptTokens;
           completionTokens += relationshipAnalysis.completionTokens;
-          if (relationshipAnalysis.warning) {
-            console.warn(
-              `Chapter ${chapter.number}, chunk ${i + 1}: ${relationshipAnalysis.warning}`,
-            );
+          // A script has no reader to resolve a code, so it prints them as they are stored.
+          for (const warning of relationshipAnalysis.warnings) {
+            console.warn(`Chapter ${chapter.number}, chunk ${i + 1}: ${warning}`);
           }
         }
 

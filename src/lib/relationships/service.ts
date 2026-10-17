@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { and, eq } from "drizzle-orm";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { nanoid } from "@/lib/utils";
 import { db } from "@/lib/db";
 import { novels } from "@/lib/db/schema";
@@ -81,9 +82,9 @@ export async function getRelationshipMapForUser(
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1);
 
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   if (!parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`)) {
-    throw new SafeServerError("Relationship maps are not supported for this language pair");
+    throw new SafeServerError(encodeMessage("errors.relationshipMapUnsupportedPair"));
   }
   return parseStoredMap(novel.relationshipMapJson);
 }
@@ -96,7 +97,7 @@ export async function upsertCharacterProfileForUser(
   return db.transaction(async (tx) => {
     const { novel, map } = await lockOwnedNovel(tx, userId, data.novelId);
     const existing = data.id ? map.characters.find((character) => character.id === data.id) : null;
-    if (data.id && !existing) throw new SafeServerError("Character profile not found");
+    if (data.id && !existing) throw new SafeServerError(encodeMessage("errors.characterNotFound"));
 
     const now = new Date().toISOString();
     const profile = {
@@ -132,19 +133,20 @@ export async function upsertCharacterRelationshipForUser(
   return db.transaction(async (tx) => {
     const { novel, map } = await lockOwnedNovel(tx, userId, data.novelId);
     if (data.speakerId === data.listenerId) {
-      throw new SafeServerError("A relationship cannot point to the same character");
+      throw new SafeServerError(encodeMessage("errors.relationshipSelfReference"));
     }
     if (!map.characters.some((character) => character.id === data.speakerId)) {
-      throw new SafeServerError("Speaker character not found");
+      throw new SafeServerError(encodeMessage("errors.speakerCharacterNotFound"));
     }
     if (!map.characters.some((character) => character.id === data.listenerId)) {
-      throw new SafeServerError("Listener character not found");
+      throw new SafeServerError(encodeMessage("errors.listenerCharacterNotFound"));
     }
 
     const existing = data.id
       ? map.relationships.find((relationship) => relationship.id === data.id)
       : null;
-    if (data.id && !existing) throw new SafeServerError("Relationship entry not found");
+    if (data.id && !existing)
+      throw new SafeServerError(encodeMessage("errors.relationshipNotFound"));
     const duplicatePair = map.relationships.find(
       (relationship) =>
         relationship.id !== existing?.id &&
@@ -152,7 +154,7 @@ export async function upsertCharacterRelationshipForUser(
         relationship.listenerId === data.listenerId,
     );
     if (duplicatePair) {
-      throw new SafeServerError("That directed speaker/listener pair already exists");
+      throw new SafeServerError(encodeMessage("errors.relationshipPairExists"));
     }
 
     const now = new Date().toISOString();
@@ -229,7 +231,7 @@ export async function deleteRelationshipEntryForUser(
     let next: RelationshipMapV1;
     if (data.entryType === "character") {
       if (!map.characters.some((character) => character.id === data.entryId)) {
-        throw new SafeServerError("Character profile not found");
+        throw new SafeServerError(encodeMessage("errors.characterNotFound"));
       }
       next = {
         version: 1,
@@ -241,7 +243,7 @@ export async function deleteRelationshipEntryForUser(
       };
     } else {
       if (!map.relationships.some((relationship) => relationship.id === data.entryId)) {
-        throw new SafeServerError("Relationship entry not found");
+        throw new SafeServerError(encodeMessage("errors.relationshipNotFound"));
       }
       next = {
         version: 1,
@@ -265,9 +267,9 @@ async function lockOwnedNovel(tx: DbTransaction, userId: string, novelId: string
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1)
     .for("update");
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   if (!parseLanguagePair(`${novel.sourceLang}->${novel.targetLang}`)) {
-    throw new SafeServerError("Relationship maps are not supported for this language pair");
+    throw new SafeServerError(encodeMessage("errors.relationshipMapUnsupportedPair"));
   }
   return { novel, map: parseStoredMap(novel.relationshipMapJson) };
 }
@@ -279,8 +281,11 @@ async function saveValidatedMap(
 ): Promise<RelationshipMapV1> {
   const validated = relationshipMapSchema.safeParse(map);
   if (!validated.success) {
-    const issue = validated.error.issues[0]?.message ?? "invalid relationship map";
-    throw new SafeServerError(`Relationship map update is invalid: ${issue}`);
+    // The first issue is already a message code, so it is thrown as itself rather than wrapped:
+    // a code inside an English sentence is a string no catalog can resolve.
+    throw new SafeServerError(
+      validated.error.issues[0]?.message ?? encodeMessage("errors.relationshipMapInvalid"),
+    );
   }
   const serialized = serializeRelationshipMap(validated.data);
   await tx
@@ -293,7 +298,7 @@ async function saveValidatedMap(
 function parseStoredMap(json: string): RelationshipMapV1 {
   const map = parseRelationshipMap(json);
   if (!map) {
-    throw new SafeServerError("Relationship map is invalid and cannot be edited safely");
+    throw new SafeServerError(encodeMessage("errors.relationshipMapInvalid"));
   }
   return map;
 }
@@ -308,7 +313,7 @@ function updateEntry(
 ): RelationshipMapV1 {
   if (entryType === "character") {
     const entry = map.characters.find((character) => character.id === entryId);
-    if (!entry) throw new SafeServerError("Character profile not found");
+    if (!entry) throw new SafeServerError(encodeMessage("errors.characterNotFound"));
     return {
       version: 1,
       characters: map.characters.map((character) =>
@@ -321,7 +326,7 @@ function updateEntry(
   }
 
   const entry = map.relationships.find((relationship) => relationship.id === entryId);
-  if (!entry) throw new SafeServerError("Relationship entry not found");
+  if (!entry) throw new SafeServerError(encodeMessage("errors.relationshipNotFound"));
   return {
     version: 1,
     characters: map.characters,

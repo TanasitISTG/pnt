@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Bookmark, Check, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,13 +36,6 @@ export interface ReaderBookmarksDialogProps {
   onGoToChapter: (chapterId: string, hash?: string) => void;
 }
 
-function chapterLabel(chapters: ReaderChapterSummary[], chapterId: string): string {
-  const chapter = chapters.find((item) => item.id === chapterId);
-  if (!chapter) return "Chapter";
-  const title = chapter.translatedTitle ?? chapter.title;
-  return `Ch. ${Number(chapter.number)} · ${title}`;
-}
-
 function sortBookmarks(
   bookmarks: ReaderBookmark[],
   chapters: ReaderChapterSummary[],
@@ -65,7 +59,18 @@ export function ReaderBookmarksDialog({
   onOpenChange,
   onGoToChapter,
 }: ReaderBookmarksDialogProps) {
+  const t = useTranslations("reader");
+  const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
+  // The bookmark list names each chapter above the excerpt the reader is choosing between.
+  const chapterLabel = (id: string) => {
+    const chapter = chapters.find((item) => item.id === id);
+    if (!chapter) return t("chapterFallback");
+    return t("bookmarkChapterLabel", {
+      number: Number(chapter.number),
+      title: chapter.translatedTitle ?? chapter.title,
+    });
+  };
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const { bookmarks } = readerState;
@@ -92,12 +97,12 @@ export function ReaderBookmarksDialog({
   const handleBookmarkThisSpot = () => {
     const target = resolveBookmarkTarget();
     if (!target) {
-      toast.error("Scroll to a paragraph first");
+      toast.error(t("bookmarkScrollFirst"));
       return;
     }
     const excerpt = buildBookmarkExcerpt(target.element, target.text);
     if (!excerpt) {
-      toast.error("Nothing to bookmark here");
+      toast.error(t("bookmarkNothingHere"));
       return;
     }
     const added = readerState.addBookmark({
@@ -107,9 +112,9 @@ export function ReaderBookmarksDialog({
       excerpt,
     });
     if (added) {
-      toast.success("Bookmark saved");
+      toast.success(t("bookmarkSaved"));
     } else {
-      toast.info("Already bookmarked here");
+      toast.info(t("bookmarkExists"));
     }
   };
 
@@ -124,24 +129,20 @@ export function ReaderBookmarksDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="z-[60] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto overscroll-contain">
         <DialogHeader>
-          <DialogTitle>Bookmarks</DialogTitle>
+          <DialogTitle>{t("bookmarksTitle")}</DialogTitle>
           <DialogDescription>
-            {signedIn
-              ? "Bookmarks are saved to your account and sync across devices."
-              : "Bookmarks are stored in this browser only."}
+            {signedIn ? t("bookmarksSynced") : t("bookmarksLocalOnly")}
           </DialogDescription>
         </DialogHeader>
 
         <Button type="button" onClick={handleBookmarkThisSpot} disabled={editing}>
           <Bookmark className="size-4" aria-hidden="true" />
-          Bookmark this spot
+          {t("bookmarkThisSpot")}
         </Button>
 
         {sortedBookmarks.length === 0 ? (
           !readerState.bookmarksHasMore && !readerState.bookmarksLoadError ? (
-            <p className="text-sm text-muted-foreground">
-              No bookmarks yet. Open this dialog while reading a paragraph you want to keep.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("bookmarksEmpty")}</p>
           ) : null
         ) : (
           <ul className="flex flex-col gap-3">
@@ -152,7 +153,7 @@ export function ReaderBookmarksDialog({
                 <li key={bookmark.id} className="flex flex-col gap-2">
                   {showChapter ? (
                     <p className="text-caption font-medium text-muted-foreground">
-                      {chapterLabel(chapters, bookmark.chapterId)}
+                      {chapterLabel(bookmark.chapterId)}
                     </p>
                   ) : null}
                   <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
@@ -167,13 +168,13 @@ export function ReaderBookmarksDialog({
                         <Textarea
                           value={noteDraft}
                           onChange={(event) => setNoteDraft(event.target.value)}
-                          aria-label="Bookmark note"
+                          aria-label={t("bookmarkNoteLabel")}
                           rows={3}
                         />
                         <div className="flex items-center gap-2">
                           <Button size="sm" onClick={() => handleSaveNote(bookmark.id)}>
                             <Check className="size-4" aria-hidden="true" />
-                            Save note
+                            {t("saveNote")}
                           </Button>
                           <Button
                             size="sm"
@@ -183,7 +184,7 @@ export function ReaderBookmarksDialog({
                               setNoteDraft("");
                             }}
                           >
-                            Cancel
+                            {tCommon("cancel")}
                           </Button>
                         </div>
                       </div>
@@ -197,7 +198,7 @@ export function ReaderBookmarksDialog({
                             void goToBookmark(bookmark);
                           }}
                         >
-                          Go to
+                          {t("goToBookmark")}
                         </Button>
                         <Button
                           size="sm"
@@ -207,17 +208,17 @@ export function ReaderBookmarksDialog({
                             setNoteDraft(bookmark.note ?? "");
                           }}
                         >
-                          {bookmark.note ? "Edit note" : "Add note"}
+                          {bookmark.note ? t("editNote") : t("addNote")}
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
                           className="ml-auto"
-                          aria-label="Delete bookmark"
-                          title="Delete bookmark"
+                          aria-label={t("deleteBookmark")}
+                          title={t("deleteBookmark")}
                           onClick={() => {
                             readerState.removeBookmark(bookmark.id);
-                            toast.success("Bookmark removed");
+                            toast.success(t("bookmarkRemoved"));
                           }}
                         >
                           <Trash2 className="size-4" aria-hidden="true" />
@@ -232,25 +233,27 @@ export function ReaderBookmarksDialog({
         )}
         {readerState.bookmarksLoadError ? (
           <div className="flex items-center justify-between gap-2">
-            <p className="text-caption text-destructive-text">Could not load more bookmarks.</p>
+            <p className="text-caption text-destructive-text">{t("bookmarksLoadFailed")}</p>
             <Button
               size="sm"
               variant="outline"
               onClick={() => void readerState.loadMoreBookmarks()}
             >
-              Retry
+              {t("retry")}
             </Button>
           </div>
         ) : readerState.bookmarksHasMore ? (
           <div className="flex items-center justify-between gap-2">
-            <p className="text-caption text-muted-foreground">{sortedBookmarks.length} loaded</p>
+            <p className="text-caption text-muted-foreground">
+              {t("loadedCount", { count: sortedBookmarks.length })}
+            </p>
             <Button
               size="sm"
               variant="outline"
               disabled={readerState.bookmarksLoadingMore}
               onClick={() => void readerState.loadMoreBookmarks()}
             >
-              {readerState.bookmarksLoadingMore ? "Loading…" : "Load more"}
+              {readerState.bookmarksLoadingMore ? t("loading") : t("loadMore")}
             </Button>
           </div>
         ) : null}

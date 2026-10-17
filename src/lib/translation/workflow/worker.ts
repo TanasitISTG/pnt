@@ -18,7 +18,9 @@ import {
   countParagraphMarkers,
   normalizeTranslationOutput,
 } from "../text/paragraphs";
-import { createLog, parseLogEntries, serializeLogEntries } from "./log-entry";
+import { encodeMessage } from "@/lib/i18n/message-code";
+
+import { createLog, createLogMessage, parseLogEntries, serializeLogEntries } from "./log-entry";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
 import { analyzeChunkRelationshipsForChunk } from "@/lib/relationships/analyzer";
 import { log } from "@/lib/log";
@@ -89,6 +91,17 @@ interface TranslatePieceResult {
   completionTokens: number;
 }
 
+/**
+ * Where a chunk sits in its run, as the numbers a log sentence needs.
+ *
+ * Not a prebuilt "Chunk 3/12" label: the line is stored as a code and rendered later, in
+ * whatever language its reader is in, so the sentence has to be assembled at that end.
+ */
+interface ChunkRef {
+  index: number;
+  total: number;
+}
+
 async function translatePiece(
   text: string,
   previousTail: string | null,
@@ -98,7 +111,7 @@ async function translatePiece(
   langPair: string,
   protectedTerms: readonly string[],
   logs: LogEntry[],
-  chunkLabel: string,
+  chunk: ChunkRef,
 ): Promise<TranslatePieceResult> {
   const markedText = injectParagraphMarkers(text);
   const expectedMarkers = countParagraphMarkers(markedText);
@@ -141,21 +154,22 @@ async function translatePiece(
       const fixedMarkers = countParagraphMarkers(fixed);
       if (fixed.trim() && fixedMarkers === expectedMarkers) {
         translation = fixed;
-        logs.push(createLog("success", `${chunkLabel} marker count corrected.`));
+        logs.push(createLogMessage("success", "markerCountCorrected", { ...chunk }));
       } else if (fixed.trim()) {
         logs.push(
-          createLog(
-            "warn",
-            `${chunkLabel} marker fix didn't match (${fixedMarkers}/${expectedMarkers}); keeping original.`,
-          ),
+          createLogMessage("warn", "markerFixMismatch", {
+            ...chunk,
+            fixed: fixedMarkers,
+            expected: expectedMarkers,
+          }),
         );
       }
     } catch (markerFixErr) {
       logs.push(
-        createLog(
-          "warn",
-          `${chunkLabel} marker fix failed (${markerFixErr instanceof Error ? markerFixErr.message : "error"}); keeping original.`,
-        ),
+        createLogMessage("warn", "markerFixFailed", {
+          ...chunk,
+          error: markerFixErr instanceof Error ? markerFixErr.message : "error",
+        }),
       );
     }
   }
@@ -173,7 +187,7 @@ async function translatePiece(
     expectedMarkers,
     protectedTerms,
     logs,
-    chunkLabel,
+    chunk,
   );
   promptTokens += repaired.promptTokens;
   completionTokens += repaired.completionTokens;
@@ -227,7 +241,7 @@ async function repairResidualScripts(
   expectedMarkers: number,
   protectedTerms: readonly string[],
   logs: LogEntry[],
-  chunkLabel: string,
+  chunk: ChunkRef,
 ): Promise<TranslatePieceResult> {
   let text = translation;
   let promptTokens = 0;
@@ -236,10 +250,10 @@ async function repairResidualScripts(
   if (residual.letterCount === 0) return { translation: text, promptTokens, completionTokens };
 
   logs.push(
-    createLog(
-      "warn",
-      `${chunkLabel} has ${residual.letterCount} foreign-script letters; repairing.`,
-    ),
+    createLogMessage("warn", "foreignLettersRepairing", {
+      ...chunk,
+      count: residual.letterCount,
+    }),
   );
 
   const normalizedPair = normalizePair(langPair);
@@ -284,13 +298,13 @@ async function repairResidualScripts(
       });
       text = repaired;
       residual = scanResidualScripts(langPair, text, { sourceText, protectedTerms });
-      logs.push(createLog("info", `${chunkLabel} re-requested for untranslated passage.`));
+      logs.push(createLogMessage("info", "chunkReRequested", { ...chunk }));
     } catch (fixErr) {
       logs.push(
-        createLog(
-          "warn",
-          `${chunkLabel} re-translation failed (${fixErr instanceof Error ? fixErr.message : "error"}); keeping original.`,
-        ),
+        createLogMessage("warn", "reTranslationFailed", {
+          ...chunk,
+          error: fixErr instanceof Error ? fixErr.message : "error",
+        }),
       );
     }
   }
@@ -353,21 +367,21 @@ async function repairResidualScripts(
         return spliced;
       });
       text = repaired;
-      logs.push(createLog("success", `${chunkLabel} foreign-script spans repaired.`));
+      logs.push(createLogMessage("success", "spansRepaired", { ...chunk }));
     } catch (spanErr) {
       logs.push(
-        createLog(
-          "warn",
-          `${chunkLabel} span repair failed (${spanErr instanceof Error ? spanErr.message : "error"}); keeping original.`,
-        ),
+        createLogMessage("warn", "spanRepairFailed", {
+          ...chunk,
+          error: spanErr instanceof Error ? spanErr.message : "error",
+        }),
       );
     }
   } else if (residual.letterCount > 0) {
     logs.push(
-      createLog(
-        "warn",
-        `${chunkLabel} still has ${residual.letterCount} foreign-script letters after retry; keeping anyway.`,
-      ),
+      createLogMessage("warn", "foreignLettersAfterRepair", {
+        ...chunk,
+        count: residual.letterCount,
+      }),
     );
   }
 
@@ -419,17 +433,22 @@ export async function translateChunk(
 
   const logs: LogEntry[] = parseLogEntries(job.logsJson);
 
-  if (relationshipAnalysis.warning) {
-    logs.push(createLog("warn", relationshipAnalysis.warning));
+  // One row per warning, because each is already a code of its own: a chunk that hit a cap and
+  // then failed its analysis says both, on two lines a reader's language can resolve.
+  if (relationshipAnalysis.warnings.length > 0) {
+    for (const warning of relationshipAnalysis.warnings) {
+      logs.push(createLog("warn", warning));
+    }
   } else if (relationshipAnalysis.context) {
-    logs.push(createLog("success", "Relationship context analyzed for this scene."));
+    logs.push(createLogMessage("success", "relationshipContextReady"));
   }
 
   logs.push(
-    createLog(
-      "info",
-      `Translating chunk ${i + 1}/${job.totalChunks} (${currentChunk.sourceText.length.toLocaleString()} chars)...`,
-    ),
+    createLogMessage("info", "translatingChunk", {
+      index: i + 1,
+      total: job.totalChunks,
+      chars: currentChunk.sourceText.length,
+    }),
   );
 
   const previousSummary = novel.storySummary || resolvedContext.previousChapter?.summary || null;
@@ -445,10 +464,10 @@ export async function translateChunk(
   const glossaryBlock = formatGlossaryBlock(matchedTerms);
   if (matchedTerms.length > 0) {
     logs.push(
-      createLog(
-        "info",
-        `Injected ${matchedTerms.length} glossary term(s): ${matchedTerms.map((t) => t.source).join(", ")}`,
-      ),
+      createLogMessage("info", "glossaryTermsInjected", {
+        count: matchedTerms.length,
+        terms: matchedTerms.map((term) => term.source).join(", "),
+      }),
     );
   }
 
@@ -470,7 +489,7 @@ export async function translateChunk(
     translationContext,
     novel.customPrompt,
   );
-  const chunkLabel = `Chunk ${i + 1}/${job.totalChunks}`;
+  const chunk: ChunkRef = { index: i + 1, total: job.totalChunks };
   const protectedTerms = matchedTerms.map((term) => term.target);
   async function translatePieceWithAutoSplit(
     text: string,
@@ -488,7 +507,7 @@ export async function translateChunk(
         langPair,
         pieceProtectedTerms,
         logs,
-        chunkLabel,
+        chunk,
       );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message.toLowerCase() : "";
@@ -497,10 +516,11 @@ export async function translateChunk(
         (err instanceof Error && err.name === "APIConnectionTimeoutError");
       if (isTimeout && text.length > 1200 && depth < 2) {
         logs.push(
-          createLog(
-            "warn",
-            `${chunkLabel} timed out (${text.length} chars, depth ${depth}). Auto-splitting into halves...`,
-          ),
+          createLogMessage("warn", "chunkTimedOut", {
+            ...chunk,
+            chars: text.length,
+            depth,
+          }),
         );
         // ponytail: upgrade path — if 5-min budget per half is needed in future, split into separate Inngest steps.
         const [half1, half2] = splitAtParagraphBoundary(text);
@@ -545,7 +565,7 @@ export async function translateChunk(
   } catch (err) {
     // Record which chunk failed for the UI, then rethrow — Inngest owns retries.
     const error = err instanceof Error ? err.message : "API Error";
-    logs.push(createLog("warn", `Chunk ${i + 1}/${job.totalChunks} failed: ${error}`));
+    logs.push(createLogMessage("warn", "chunkFailed", { ...chunk, error }));
     const saved = await saveChunkFailure(job.id, generation, i, error, serializeLogEntries(logs));
     if (!saved) return;
     throw err;
@@ -563,10 +583,12 @@ export async function translateChunk(
   );
 
   logs.push(
-    createLog(
-      "success",
-      `Chunk ${i + 1}/${job.totalChunks} completed in ${(elapsedMs / 1000).toFixed(1)}s (tokens: ${promptTokens} prompt + ${completionTokens} completion).`,
-    ),
+    createLogMessage("success", "chunkCompleted", {
+      ...chunk,
+      seconds: (elapsedMs / 1000).toFixed(1),
+      prompt: promptTokens,
+      completion: completionTokens,
+    }),
   );
 
   await completeChunk(job.id, generation, i, {
@@ -608,7 +630,7 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
     error: chunk.error ?? undefined,
   }));
 
-  logs.push(createLog("info", "All chunks translated. Assembling chapter..."));
+  logs.push(createLogMessage("info", "allChunksTranslated"));
 
   const fullTranslation = normalizeTranslationOutput(
     chunkList.map((c) => c.translation || "").join("\n\n"),
@@ -617,7 +639,9 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
   // Blank output would violate the translated-content invariant, so fail the job
   // instead of writing `status = 'translated'` with an empty body.
   if (fullTranslation.trim().length === 0) {
-    await failJob(jobId, generation, "Translation produced no content; nothing was saved");
+    // A code rather than a sentence: `failJob` stores it as the job's failure, and the jobs table
+    // renders that row to a reader whose language this worker cannot know.
+    await failJob(jobId, generation, encodeMessage("errors.translationEmptyOutput"));
     return;
   }
 
@@ -648,10 +672,11 @@ export async function finalizeJob(jobId: string, generation: number): Promise<vo
   totalCompletionTokens += glossaryRes.completionTokens;
 
   logs.push(
-    createLog(
-      "success",
-      `Job completed! Total tokens: ${totalPromptTokens + totalCompletionTokens} (${totalPromptTokens} prompt + ${totalCompletionTokens} completion).`,
-    ),
+    createLogMessage("success", "jobCompleted", {
+      total: totalPromptTokens + totalCompletionTokens,
+      prompt: totalPromptTokens,
+      completion: totalCompletionTokens,
+    }),
   );
 
   await completeJob({
@@ -675,7 +700,7 @@ export async function failJob(jobId: string, generation: number, message: string
   const { job } = row;
 
   const logs: LogEntry[] = parseLogEntries(job.logsJson);
-  logs.push(createLog("error", `Job failed: ${message}`));
+  logs.push(createLogMessage("error", "jobFailed", { error: message }));
 
   await failActiveJob(job.id, generation, message, serializeLogEntries(logs));
 }

@@ -1,11 +1,22 @@
 // Shared types for chapter scraping. Leaf module — types only.
 
+import type { Messages } from "@/lib/i18n/messages";
+
 export type ScrapeProvider = "auto" | "direct" | "zenrows" | "scrapingbee" | "firecrawl";
+
+/**
+ * A key in the `studio` namespace.
+ *
+ * A fetch method is described in words, and the reader who picks one is reading Thai or
+ * English, so the registry carries keys rather than sentences. The type is derived from the
+ * catalog, which makes a misspelled or removed key a compile error where it is written.
+ */
+export type ScrapeProviderCopyKey = keyof Messages["studio"];
 
 export interface ScrapeProviderMeta {
   id: ScrapeProvider;
-  label: string;
-  description: string;
+  labelKey: ScrapeProviderCopyKey;
+  descriptionKey: ScrapeProviderCopyKey;
 }
 
 export interface ScrapedChapter {

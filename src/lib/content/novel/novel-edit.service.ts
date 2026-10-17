@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { chapters, novels, translationJobs } from "@/lib/db/schema";
 import { emptyRelationshipMap, serializeRelationshipMap } from "@/lib/relationships/map";
 import { SafeServerError } from "@/lib/server-fn-error";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { isSupportedLanguagePair } from "@/lib/language-pair";
 import { updateNovelSchema, type UpdateNovelInput } from "@/lib/content/novel/novel.schemas";
 import { deleteCoverSet, writeCoverSet } from "@/lib/content/novel/cover-storage.server";
@@ -22,7 +23,7 @@ export async function updateNovelForUser(
 ): Promise<{ id: string }> {
   const data = updateNovelSchema.parse(rawData);
   if (data.cover && !coverBuffer) {
-    throw new SafeServerError("Cover image data was not validated");
+    throw new SafeServerError(encodeMessage("errors.coverNotValidated"));
   }
 
   // Object storage stays outside the transaction: the row lock only covers the
@@ -49,7 +50,7 @@ export async function updateNovelForUser(
         .for("update");
 
       if (!existing) {
-        throw new SafeServerError("Novel not found or unauthorized");
+        throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       }
 
       const nextSourceLang = data.sourceLang ?? existing.sourceLang;
@@ -58,7 +59,7 @@ export async function updateNovelForUser(
         nextSourceLang !== existing.sourceLang || nextTargetLang !== existing.targetLang;
 
       if (!isSupportedLanguagePair(nextSourceLang, nextTargetLang)) {
-        throw new SafeServerError("Unsupported language pair. Use EN→TH, ZH→EN, or ZH→TH");
+        throw new SafeServerError(encodeMessage("validation.languagePairUnsupported"));
       }
 
       if (languagePairChanged) {
@@ -70,7 +71,7 @@ export async function updateNovelForUser(
           )
           .limit(1);
         if (activeChapter) {
-          throw new SafeServerError("Cancel active translations before changing the language pair");
+          throw new SafeServerError(encodeMessage("errors.languagePairNeedsCancel"));
         }
       }
 
@@ -162,7 +163,7 @@ export async function deleteNovelForUser(
         jobId: job.id,
         generation: job.generation,
         logsJson: job.logsJson,
-        message: "Translation cancelled because the novel was deleted.",
+        message: encodeMessage("log.cancelledNovelDeleted"),
       })),
       now,
     );

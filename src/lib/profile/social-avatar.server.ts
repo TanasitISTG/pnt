@@ -119,7 +119,7 @@ export async function fetchProviderAvatar(
     }
 
     // The provider's claim about the bytes is only a claim, exactly as for an upload.
-    assertImageMagicBytes(prepared.buffer, prepared.mime, "Profile");
+    assertImageMagicBytes(prepared.buffer, prepared.mime);
     return prepared;
   } catch (error) {
     log("warn", "provider profile photo could not be read", {

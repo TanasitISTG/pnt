@@ -1,7 +1,14 @@
 import { Network, Users } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
+import { useTranslations } from "use-intl";
 
+import {
+  familiarityLabels,
+  genderLabels,
+  speakerStatusLabels,
+  type RelationshipsTranslator,
+} from "@/components/relationships/relationship-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,36 +65,78 @@ interface DirectedRelationshipsTableProps {
 }
 
 const pageSizeOptions = [10, 25, 50] as const;
-const stateItems: Record<string, string> = {
-  all: "All states",
-  active: "Active",
-  inactive: "Inactive",
-};
-const managementItems: Record<string, string> = {
-  all: "All management",
-  manual: "Manual",
-  auto: "Auto-managed",
-};
-const characterColumnLabels: Record<string, string> = {
-  name: "Name",
-  aliases: "Aliases / gender",
-  role: "Role",
-  notes: "Notes / evidence",
-  management: "Management",
-  state: "State",
-  actions: "Actions",
-};
-const relationshipColumnLabels: Record<string, string> = {
-  name: "Speaker → listener",
-  relationship: "Relationship",
-  status: "Status / familiarity",
-  speech: "Speech choices",
-  register: "Register",
-  notes: "Notes / evidence",
-  management: "Management",
-  state: "State",
-  actions: "Actions",
-};
+
+/** The two filters both tables carry, in the reader's language. */
+function filterItems(t: RelationshipsTranslator) {
+  return {
+    state: {
+      all: t("stateAll"),
+      active: t("stateActive"),
+      inactive: t("stateInactive"),
+    },
+    management: {
+      all: t("managementAll"),
+      manual: t("managementManual"),
+      auto: t("managementAuto"),
+    },
+  };
+}
+
+/**
+ * Everything the character table's cells say about a row, resolved once per render.
+ *
+ * A column factory is not a component, so it cannot call a hook: the table resolves the
+ * copy and hands it in. The gender words are shared with the form that offers them, so a
+ * row and the select that edits it cannot name the same value differently.
+ */
+function characterCopy(t: RelationshipsTranslator) {
+  return {
+    headers: {
+      name: t("columnName"),
+      aliases: t("columnAliases"),
+      role: t("columnRole"),
+      notes: t("columnNotes"),
+      management: t("columnManagement"),
+      state: t("columnState"),
+      actions: t("actionsColumn"),
+    },
+    gender: genderLabels(t),
+    noTargetName: t("noTargetName"),
+    aliasesList: (list: string) => t("aliasesList", { list }),
+    actionsFor: (name: string) => t("actionsForCharacter", { name }),
+  };
+}
+
+type CharacterCopy = ReturnType<typeof characterCopy>;
+
+/** The same, for the directed-relationship table. */
+function relationshipCopy(t: RelationshipsTranslator) {
+  return {
+    headers: {
+      name: t("columnSpeaker"),
+      relationship: t("columnRelationship"),
+      status: t("columnStatus"),
+      speech: t("columnSpeech"),
+      register: t("columnRegister"),
+      notes: t("columnNotes"),
+      management: t("columnManagement"),
+      state: t("columnState"),
+      actions: t("actionsColumn"),
+    },
+    speakerStatus: speakerStatusLabels(t),
+    familiarity: familiarityLabels(t),
+    self: (value: string) => t("speechSelf", { value }),
+    addressee: (value: string) => t("speechAddressee", { value }),
+    particles: (value: string) => t("speechParticles", { value }),
+    inactiveCharacterDisabled: t("stateInactiveCharacterDisabled"),
+    disabled: t("stateDisabled"),
+    actionsFor: (speaker: string, listener: string) =>
+      t("actionsForRelationship", { speaker, listener }),
+  };
+}
+
+type RelationshipCopy = ReturnType<typeof relationshipCopy>;
+
 const sortableSearchColumns: Record<string, RelationshipMapSearch["sort"]> = {
   name: "name",
   state: "state",
@@ -106,21 +155,23 @@ function clearFilters(onSearchChange: RelationshipSearchChange) {
 }
 
 function buildFilters(
+  t: RelationshipsTranslator,
   search: RelationshipMapSearch,
   onSearchChange: RelationshipSearchChange,
 ): DataTableToolbarFilter[] {
+  const items = filterItems(t);
   return [
     {
-      ariaLabel: "Filter by effective state",
+      ariaLabel: t("filterByState"),
       value: search.state,
-      items: stateItems,
+      items: items.state,
       onChange: (value) =>
         onSearchChange({ state: value as RelationshipMapSearch["state"], page: 1 }, true),
     },
     {
-      ariaLabel: "Filter by management",
+      ariaLabel: t("filterByManagement"),
       value: search.management,
-      items: managementItems,
+      items: items.management,
       onChange: (value) =>
         onSearchChange({ management: value as RelationshipMapSearch["management"], page: 1 }, true),
     },
@@ -147,25 +198,25 @@ function paginationTableFor(
 }
 
 function ManagementBadge({ locked }: { locked: boolean }) {
+  const t = useTranslations("relationships");
   return (
-    <Badge variant={locked ? "default" : "outline"}>{locked ? "Manual" : "Auto-managed"}</Badge>
+    <Badge variant={locked ? "default" : "outline"}>
+      {locked ? t("managementManual") : t("managementAuto")}
+    </Badge>
   );
 }
 
-function StateBadge({
-  active,
-  inactiveLabel = "Inactive",
-}: {
-  active: boolean;
-  inactiveLabel?: string;
-}) {
+function StateBadge({ active, inactiveLabel }: { active: boolean; inactiveLabel?: string }) {
+  const t = useTranslations("relationships");
   return (
-    <Badge variant={active ? "secondary" : "outline"}>{active ? "Active" : inactiveLabel}</Badge>
+    <Badge variant={active ? "secondary" : "outline"}>
+      {active ? t("stateActive") : (inactiveLabel ?? t("stateInactive"))}
+    </Badge>
   );
 }
 
 function EntryActions({
-  label,
+  actionsLabel,
   entryType,
   enabled,
   locked,
@@ -175,7 +226,8 @@ function EntryActions({
   onAuto,
   onDelete,
 }: {
-  label: string;
+  /** The whole accessible name, which names the entry it acts on. */
+  actionsLabel: string;
   entryType: "character" | "relationship";
   enabled: boolean;
   locked: boolean;
@@ -185,18 +237,22 @@ function EntryActions({
   onAuto: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations("relationships");
+  const tCommon = useTranslations("common");
   return (
     <DataTableRowActions
-      triggerLabel={`Actions for ${label}`}
-      menuLabel={entryType === "character" ? "Character actions" : "Relationship actions"}
+      triggerLabel={actionsLabel}
+      menuLabel={
+        entryType === "character" ? t("characterActionsMenu") : t("relationshipActionsMenu")
+      }
       pending={pending}
       triggerClassName="min-h-11 min-w-11"
       contentClassName="w-56"
       items={[
-        { label: "Edit", onSelect: onEdit },
-        { label: enabled ? "Disable" : "Restore", onSelect: onToggle },
-        ...(locked ? [{ label: "Use automatic updates", onSelect: onAuto }] : []),
-        { label: "Delete", variant: "destructive" as const, onSelect: onDelete },
+        { label: tCommon("edit"), onSelect: onEdit },
+        { label: enabled ? t("actionDisable") : t("actionRestore"), onSelect: onToggle },
+        ...(locked ? [{ label: t("actionAuto"), onSelect: onAuto }] : []),
+        { label: tCommon("delete"), variant: "destructive" as const, onSelect: onDelete },
       ]}
     />
   );
@@ -211,22 +267,22 @@ function CharacterEmptyState({
   onClear: () => void;
   onAdd: () => void;
 }) {
+  const t = useTranslations("relationships");
+  const tCommon = useTranslations("common");
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 px-5 py-12 text-center">
       <Users className="mb-3 size-7 text-muted-foreground" aria-hidden="true" />
       <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-        {filtered
-          ? "No character profiles match these filters."
-          : "No character profiles yet. The next translation or retranslation will generate this map, or you can add a profile manually."}
+        {filtered ? t("charactersEmptyFiltered") : t("charactersEmpty")}
       </p>
       {filtered ? (
         <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
-          Clear filters
+          {tCommon("clearFilters")}
         </Button>
       ) : (
         <Button size="sm" className="mt-4" onClick={onAdd}>
           <Users className="size-4" aria-hidden="true" />
-          Add character
+          {t("addCharacter")}
         </Button>
       )}
     </div>
@@ -244,17 +300,17 @@ function RelationshipEmptyState({
   onClear: () => void;
   onAdd: () => void;
 }) {
+  const t = useTranslations("relationships");
+  const tCommon = useTranslations("common");
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 px-5 py-12 text-center">
       <Network className="mb-3 size-7 text-muted-foreground" aria-hidden="true" />
       <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-        {filtered
-          ? "No directed relationships match these filters."
-          : "No directed relationships yet. They are generated from evidenced dialogue during the next translation or retranslation, or can be added manually."}
+        {filtered ? t("relationshipsEmptyFiltered") : t("relationshipsEmpty")}
       </p>
       {filtered ? (
         <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
-          Clear filters
+          {tCommon("clearFilters")}
         </Button>
       ) : (
         <Button
@@ -262,23 +318,25 @@ function RelationshipEmptyState({
           className="mt-4"
           onClick={onAdd}
           disabled={!canAdd}
-          title={canAdd ? undefined : "Add at least 2 character profiles first."}
+          title={canAdd ? undefined : t("needsCharacters")}
         >
           <Network className="size-4" aria-hidden="true" />
-          Add relationship
+          {t("addRelationship")}
         </Button>
       )}
     </div>
   );
 }
 
-function useCharacterProfileColumns(actions: RelationshipTableActions) {
+function useCharacterProfileColumns(copy: CharacterCopy, actions: RelationshipTableActions) {
   return useMemo(
     () =>
       characterColumnHelper.columns([
         characterColumnHelper.accessor((character) => character.sourceName, {
           id: "name",
-          header: ({ column }) => <DataTableSortableHeader column={column} label="Name" />,
+          header: ({ column }) => (
+            <DataTableSortableHeader column={column} label={copy.headers.name} />
+          ),
           cell: ({ row }) => (
             <div className="min-w-[180px] max-w-[260px]" title={row.original.sourceName}>
               <p className="truncate font-medium text-foreground">{row.original.sourceName}</p>
@@ -292,20 +350,20 @@ function useCharacterProfileColumns(actions: RelationshipTableActions) {
         }),
         characterColumnHelper.accessor("aliases", {
           id: "aliases",
-          header: "Aliases / gender",
+          header: copy.headers.aliases,
           enableSorting: false,
           cell: ({ row }) => (
             <div className="min-w-[150px] max-w-[220px] text-caption">
               <p className="truncate" title={row.original.aliases.join(", ")}>
                 {row.original.aliases.length ? row.original.aliases.join(", ") : "—"}
               </p>
-              <p className="mt-1 capitalize text-muted-foreground">{row.original.gender}</p>
+              <p className="mt-1 text-muted-foreground">{copy.gender[row.original.gender]}</p>
             </div>
           ),
         }),
         characterColumnHelper.accessor("role", {
           id: "role",
-          header: "Role",
+          header: copy.headers.role,
           enableSorting: false,
           cell: ({ row }) => (
             <div
@@ -318,7 +376,7 @@ function useCharacterProfileColumns(actions: RelationshipTableActions) {
         }),
         characterColumnHelper.accessor((character) => character.notes || character.evidence || "", {
           id: "notes",
-          header: "Notes / evidence",
+          header: copy.headers.notes,
           enableSorting: false,
           cell: ({ row }) => (
             <div className="max-w-[260px] text-caption text-muted-foreground">
@@ -335,12 +393,16 @@ function useCharacterProfileColumns(actions: RelationshipTableActions) {
         }),
         characterColumnHelper.accessor((character) => (character.locked ? "manual" : "auto"), {
           id: "management",
-          header: ({ column }) => <DataTableSortableHeader column={column} label="Management" />,
+          header: ({ column }) => (
+            <DataTableSortableHeader column={column} label={copy.headers.management} />
+          ),
           cell: ({ row }) => <ManagementBadge locked={row.original.locked} />,
         }),
         characterColumnHelper.accessor((character) => (character.enabled ? "active" : "inactive"), {
           id: "state",
-          header: ({ column }) => <DataTableSortableHeader column={column} label="State" />,
+          header: ({ column }) => (
+            <DataTableSortableHeader column={column} label={copy.headers.state} />
+          ),
           cell: ({ row }) => <StateBadge active={row.original.enabled} />,
         }),
         characterColumnHelper.display({
@@ -351,7 +413,7 @@ function useCharacterProfileColumns(actions: RelationshipTableActions) {
             const character = row.original;
             return (
               <EntryActions
-                label={`character ${character.sourceName}`}
+                actionsLabel={copy.actionsFor(character.sourceName)}
                 entryType="character"
                 enabled={character.enabled}
                 locked={character.locked}
@@ -365,15 +427,17 @@ function useCharacterProfileColumns(actions: RelationshipTableActions) {
           },
         }),
       ]),
-    [actions],
+    [actions, copy],
   );
 }
 
 function CharacterMobileRows({
   rows,
+  copy,
   actions,
 }: {
   rows: CharacterProfile[];
+  copy: CharacterCopy;
   actions: RelationshipTableActions;
 }) {
   return (
@@ -384,11 +448,11 @@ function CharacterMobileRows({
             <div className="min-w-0">
               <p className="break-words font-medium text-foreground">{character.sourceName}</p>
               <p className="mt-0.5 break-words text-sm text-muted-foreground">
-                {character.targetName || "No target name"}
+                {character.targetName || copy.noTargetName}
               </p>
             </div>
             <EntryActions
-              label={`character ${character.sourceName}`}
+              actionsLabel={copy.actionsFor(character.sourceName)}
               entryType="character"
               enabled={character.enabled}
               locked={character.locked}
@@ -402,11 +466,13 @@ function CharacterMobileRows({
           <div className="flex flex-wrap items-center gap-2">
             <ManagementBadge locked={character.locked} />
             <StateBadge active={character.enabled} />
-            <span className="text-caption text-muted-foreground">{character.gender}</span>
+            <span className="text-caption text-muted-foreground">
+              {copy.gender[character.gender]}
+            </span>
           </div>
           {character.aliases.length > 0 ? (
             <p className="break-words text-caption text-muted-foreground">
-              Aliases: {character.aliases.join(", ")}
+              {copy.aliasesList(character.aliases.join(", "))}
             </p>
           ) : null}
           {character.role || character.notes ? (
@@ -427,8 +493,11 @@ export function CharacterProfilesTable({
   actions,
   onAdd,
 }: CharacterProfilesTableProps) {
+  const t = useTranslations("relationships");
+  const tCommon = useTranslations("common");
+  const copy = useMemo(() => characterCopy(t), [t]);
   const { rows: pageRows, rowCount, pageCount, currentPage } = page;
-  const columns = useCharacterProfileColumns(actions);
+  const columns = useCharacterProfileColumns(copy, actions);
   const clear = () => clearFilters(onSearchChange);
 
   const { table } = useDataTable({
@@ -453,30 +522,30 @@ export function CharacterProfilesTable({
   const lastRow = rowCount === 0 ? 0 : Math.min(rowCount, firstRow + search.pageSize - 1);
 
   return (
-    <DataTableSection ariaLabel="Character profiles" busy={actions.pending}>
+    <DataTableSection ariaLabel={t("charactersTableAria")} busy={actions.pending}>
       <DataTableToolbar
         searchValue={search.q}
-        searchLabel="Search characters"
-        searchPlaceholder="Search characters"
+        searchLabel={t("searchCharacters")}
+        searchPlaceholder={t("searchCharacters")}
         onSearchChange={(q) => onSearchChange({ q, page: 1 }, true)}
-        filters={buildFilters(search, onSearchChange)}
-        columns={{ table, labels: characterColumnLabels, menuClassName: "w-52" }}
-        clearLabel="Clear filters"
+        filters={buildFilters(t, search, onSearchChange)}
+        columns={{ table, labels: copy.headers, menuClassName: "w-52" }}
+        clearLabel={tCommon("clearFilters")}
         filtered={filtered}
         onClearFilters={clear}
-        description="Profiles and name mappings used by translation."
+        description={t("charactersTableDescription")}
       />
       {rowCount === 0 ? (
-        <div className="p-4 md:hidden" aria-label="Mobile character profiles" role="region">
+        <div className="p-4 md:hidden" aria-label={t("charactersMobileAria")} role="region">
           <CharacterEmptyState filtered={filtered} onClear={clear} onAdd={onAdd} />
         </div>
       ) : (
-        <DataTableMobileRegion ariaLabel="Mobile character profiles">
-          <CharacterMobileRows rows={pageRows} actions={actions} />
+        <DataTableMobileRegion ariaLabel={t("charactersMobileAria")}>
+          <CharacterMobileRows rows={pageRows} copy={copy} actions={actions} />
         </DataTableMobileRegion>
       )}
 
-      <DataTableDesktopRegion ariaLabel="Desktop character profiles">
+      <DataTableDesktopRegion ariaLabel={t("charactersDesktopAria")}>
         <Table className="min-w-[1000px] text-caption">
           <TableHeader className="bg-muted/20">
             <DataTableHeaderGroups
@@ -513,7 +582,7 @@ export function CharacterProfilesTable({
         busy={actions.pending}
         pageSize={search.pageSize}
         pageSizeOptions={pageSizeOptions}
-        noun="characters"
+        noun={t("nounCharacters")}
         onPageSizeChange={(pageSize) =>
           onSearchChange({ pageSize: pageSize as RelationshipMapSearch["pageSize"], page: 1 }, true)
         }
@@ -523,6 +592,7 @@ export function CharacterProfilesTable({
 }
 
 function useDirectedRelationshipColumns(
+  copy: RelationshipCopy,
   actions: RelationshipTableActions,
   characterLabel: (id: string) => string,
   isActive: (relationship: CharacterRelationship) => boolean,
@@ -536,7 +606,7 @@ function useDirectedRelationshipColumns(
           {
             id: "name",
             header: ({ column }) => (
-              <DataTableSortableHeader column={column} label="Speaker → listener" />
+              <DataTableSortableHeader column={column} label={copy.headers.name} />
             ),
             cell: ({ row }) => (
               <div className="min-w-[210px] max-w-[280px]">
@@ -552,7 +622,7 @@ function useDirectedRelationshipColumns(
         ),
         relationshipColumnHelper.accessor("relationship", {
           id: "relationship",
-          header: "Relationship",
+          header: copy.headers.relationship,
           enableSorting: false,
           cell: ({ row }) => (
             <div className="max-w-[180px] truncate" title={row.original.relationship}>
@@ -564,12 +634,14 @@ function useDirectedRelationshipColumns(
           (relationship) => `${relationship.speakerStatus} ${relationship.familiarity}`,
           {
             id: "status",
-            header: "Status / familiarity",
+            header: copy.headers.status,
             enableSorting: false,
             cell: ({ row }) => (
               <div className="min-w-[130px] text-caption">
-                <p className="capitalize">{row.original.speakerStatus}</p>
-                <p className="mt-1 capitalize text-muted-foreground">{row.original.familiarity}</p>
+                <p>{copy.speakerStatus[row.original.speakerStatus]}</p>
+                <p className="mt-1 text-muted-foreground">
+                  {copy.familiarity[row.original.familiarity]}
+                </p>
               </div>
             ),
           },
@@ -579,18 +651,18 @@ function useDirectedRelationshipColumns(
             `${relationship.selfPronoun} ${relationship.addresseeTerm} ${relationship.sentenceParticles}`,
           {
             id: "speech",
-            header: "Speech choices",
+            header: copy.headers.speech,
             enableSorting: false,
             cell: ({ row }) => (
               <div className="min-w-[190px] max-w-[260px] text-caption text-muted-foreground">
                 <p className="truncate" title={row.original.selfPronoun ?? undefined}>
-                  Self: {row.original.selfPronoun || "—"}
+                  {copy.self(row.original.selfPronoun || "—")}
                 </p>
                 <p className="truncate" title={row.original.addresseeTerm ?? undefined}>
-                  Addressee: {row.original.addresseeTerm || "—"}
+                  {copy.addressee(row.original.addresseeTerm || "—")}
                 </p>
                 <p className="truncate" title={row.original.sentenceParticles ?? undefined}>
-                  Particles: {row.original.sentenceParticles || "—"}
+                  {copy.particles(row.original.sentenceParticles || "—")}
                 </p>
               </div>
             ),
@@ -598,7 +670,7 @@ function useDirectedRelationshipColumns(
         ),
         relationshipColumnHelper.accessor("register", {
           id: "register",
-          header: "Register",
+          header: copy.headers.register,
           enableSorting: false,
           cell: ({ row }) => (
             <div className="max-w-[140px] truncate" title={row.original.register ?? undefined}>
@@ -610,7 +682,7 @@ function useDirectedRelationshipColumns(
           (relationship) => relationship.notes || relationship.evidence || "",
           {
             id: "notes",
-            header: "Notes / evidence",
+            header: copy.headers.notes,
             enableSorting: false,
             cell: ({ row }) => (
               <div className="max-w-[260px] text-caption text-muted-foreground">
@@ -630,7 +702,9 @@ function useDirectedRelationshipColumns(
           (relationship) => (relationship.locked ? "manual" : "auto"),
           {
             id: "management",
-            header: ({ column }) => <DataTableSortableHeader column={column} label="Management" />,
+            header: ({ column }) => (
+              <DataTableSortableHeader column={column} label={copy.headers.management} />
+            ),
             cell: ({ row }) => <ManagementBadge locked={row.original.locked} />,
           },
         ),
@@ -638,11 +712,15 @@ function useDirectedRelationshipColumns(
           (relationship) => (isActive(relationship) ? "active" : "inactive"),
           {
             id: "state",
-            header: ({ column }) => <DataTableSortableHeader column={column} label="State" />,
+            header: ({ column }) => (
+              <DataTableSortableHeader column={column} label={copy.headers.state} />
+            ),
             cell: ({ row }) => (
               <StateBadge
                 active={isActive(row.original)}
-                inactiveLabel={row.original.enabled ? "Inactive: character disabled" : "Disabled"}
+                inactiveLabel={
+                  row.original.enabled ? copy.inactiveCharacterDisabled : copy.disabled
+                }
               />
             ),
           },
@@ -653,10 +731,14 @@ function useDirectedRelationshipColumns(
           enableHiding: false,
           cell: ({ row }) => {
             const relationship = row.original;
-            const label = `${characterLabel(relationship.speakerId)} to ${characterLabel(relationship.listenerId)}`;
+            const speakerName = characterLabel(relationship.speakerId);
+            const listenerName = characterLabel(relationship.listenerId);
+            // The entry's own name, as data: two character names around a direction. The
+            // words "to" and "Actions for" are the catalog's, in the sentence below.
+            const entryName = `${speakerName} → ${listenerName}`;
             return (
               <EntryActions
-                label={`relationship ${label}`}
+                actionsLabel={copy.actionsFor(speakerName, listenerName)}
                 entryType="relationship"
                 enabled={relationship.enabled}
                 locked={relationship.locked}
@@ -666,23 +748,25 @@ function useDirectedRelationshipColumns(
                   actions.onToggle("relationship", relationship.id, !relationship.enabled)
                 }
                 onAuto={() => actions.onAuto("relationship", relationship.id)}
-                onDelete={() => actions.onDelete("relationship", relationship.id, label)}
+                onDelete={() => actions.onDelete("relationship", relationship.id, entryName)}
               />
             );
           },
         }),
       ]),
-    [actions, characterLabel, isActive],
+    [actions, characterLabel, copy, isActive],
   );
 }
 
 function RelationshipMobileRows({
   rows,
+  copy,
   characterLabel,
   isActive,
   actions,
 }: {
   rows: CharacterRelationship[];
+  copy: RelationshipCopy;
   characterLabel: (id: string) => string;
   isActive: (relationship: CharacterRelationship) => boolean;
   actions: RelationshipTableActions;
@@ -690,7 +774,9 @@ function RelationshipMobileRows({
   return (
     <>
       {rows.map((relationship) => {
-        const label = `${characterLabel(relationship.speakerId)} to ${characterLabel(relationship.listenerId)}`;
+        const speakerName = characterLabel(relationship.speakerId);
+        const listenerName = characterLabel(relationship.listenerId);
+        const entryName = `${speakerName} → ${listenerName}`;
         return (
           <article key={relationship.id} className="space-y-3 p-4">
             <div className="flex items-start justify-between gap-3">
@@ -703,7 +789,7 @@ function RelationshipMobileRows({
                 </p>
               </div>
               <EntryActions
-                label={`relationship ${label}`}
+                actionsLabel={copy.actionsFor(speakerName, listenerName)}
                 entryType="relationship"
                 enabled={relationship.enabled}
                 locked={relationship.locked}
@@ -713,18 +799,21 @@ function RelationshipMobileRows({
                   actions.onToggle("relationship", relationship.id, !relationship.enabled)
                 }
                 onAuto={() => actions.onAuto("relationship", relationship.id)}
-                onDelete={() => actions.onDelete("relationship", relationship.id, label)}
+                onDelete={() => actions.onDelete("relationship", relationship.id, entryName)}
               />
             </div>
             <p className="break-words text-foreground">{relationship.relationship}</p>
             <div className="flex flex-wrap items-center gap-2">
               <StateBadge
                 active={isActive(relationship)}
-                inactiveLabel={relationship.enabled ? "Inactive: character disabled" : "Disabled"}
+                inactiveLabel={
+                  relationship.enabled ? copy.inactiveCharacterDisabled : copy.disabled
+                }
               />
               <ManagementBadge locked={relationship.locked} />
               <span className="text-caption text-muted-foreground">
-                {relationship.familiarity} · {relationship.speakerStatus}
+                {copy.familiarity[relationship.familiarity]} ·{" "}
+                {copy.speakerStatus[relationship.speakerStatus]}
               </span>
             </div>
             {relationship.register ||
@@ -764,9 +853,12 @@ export function DirectedRelationshipsTable({
     () => new Map(characters.map((character) => [character.id, character])),
     [characters],
   );
+  const t = useTranslations("relationships");
+  const tCommon = useTranslations("common");
+  const copy = useMemo(() => relationshipCopy(t), [t]);
   const characterLabel = useCallback(
-    (id: string) => charactersById.get(id)?.sourceName ?? "Unknown character",
-    [charactersById],
+    (id: string) => charactersById.get(id)?.sourceName ?? t("unknownCharacter"),
+    [charactersById, t],
   );
   const isActive = useCallback(
     (relationship: CharacterRelationship) =>
@@ -776,7 +868,7 @@ export function DirectedRelationshipsTable({
     [charactersById],
   );
   const { rows: pageRows, rowCount, pageCount, currentPage } = page;
-  const columns = useDirectedRelationshipColumns(actions, characterLabel, isActive);
+  const columns = useDirectedRelationshipColumns(copy, actions, characterLabel, isActive);
   const clear = () => clearFilters(onSearchChange);
 
   const { table } = useDataTable({
@@ -802,21 +894,21 @@ export function DirectedRelationshipsTable({
   const lastRow = rowCount === 0 ? 0 : Math.min(rowCount, firstRow + search.pageSize - 1);
 
   return (
-    <DataTableSection ariaLabel="Directed relationships" busy={actions.pending}>
+    <DataTableSection ariaLabel={t("relationshipsTableAria")} busy={actions.pending}>
       <DataTableToolbar
         searchValue={search.q}
-        searchLabel="Search relationships"
-        searchPlaceholder="Search relationships"
+        searchLabel={t("searchRelationships")}
+        searchPlaceholder={t("searchRelationships")}
         onSearchChange={(q) => onSearchChange({ q, page: 1 }, true)}
-        filters={buildFilters(search, onSearchChange)}
-        columns={{ table, labels: relationshipColumnLabels, menuClassName: "w-52" }}
-        clearLabel="Clear filters"
+        filters={buildFilters(t, search, onSearchChange)}
+        columns={{ table, labels: copy.headers, menuClassName: "w-52" }}
+        clearLabel={tCommon("clearFilters")}
         filtered={filtered}
         onClearFilters={clear}
-        description="Directed speaker-to-listener facts and speech choices for translation."
+        description={t("relationshipsTableDescription")}
       />
       {rowCount === 0 ? (
-        <div className="p-4 md:hidden" aria-label="Mobile directed relationships" role="region">
+        <div className="p-4 md:hidden" aria-label={t("relationshipsMobileAria")} role="region">
           <RelationshipEmptyState
             filtered={filtered}
             canAdd={canAdd}
@@ -825,9 +917,10 @@ export function DirectedRelationshipsTable({
           />
         </div>
       ) : (
-        <DataTableMobileRegion ariaLabel="Mobile directed relationships">
+        <DataTableMobileRegion ariaLabel={t("relationshipsMobileAria")}>
           <RelationshipMobileRows
             rows={pageRows}
+            copy={copy}
             characterLabel={characterLabel}
             isActive={isActive}
             actions={actions}
@@ -835,7 +928,7 @@ export function DirectedRelationshipsTable({
         </DataTableMobileRegion>
       )}
 
-      <DataTableDesktopRegion ariaLabel="Desktop directed relationships">
+      <DataTableDesktopRegion ariaLabel={t("relationshipsDesktopAria")}>
         <Table className="min-w-[1250px] text-caption">
           <TableHeader className="bg-muted/20">
             <DataTableHeaderGroups
@@ -877,7 +970,7 @@ export function DirectedRelationshipsTable({
         busy={actions.pending}
         pageSize={search.pageSize}
         pageSizeOptions={pageSizeOptions}
-        noun="relationships"
+        noun={t("nounRelationships")}
         onPageSizeChange={(pageSize) =>
           onSearchChange({ pageSize: pageSize as RelationshipMapSearch["pageSize"], page: 1 }, true)
         }

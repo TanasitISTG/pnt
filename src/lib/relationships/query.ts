@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { getRelationshipMap, getRelationshipWorkspace } from "@/lib/relationships/functions";
 
 export const relationshipMapViewSchema = z.enum(["characters", "relationships"]);
@@ -21,7 +22,7 @@ export const relationshipMapSearchSchema = z.object({
     .number()
     .int()
     .refine((value): value is 10 | 25 | 50 => value === 10 || value === 25 || value === 50, {
-      message: "Page size must be 10, 25, or 50",
+      message: encodeMessage("validation.pageSizeInvalid"),
     })
     .default(25),
 });

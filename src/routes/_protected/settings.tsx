@@ -1,4 +1,5 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { hasAdminRole } from "@/lib/auth/roles";
@@ -15,16 +16,14 @@ export const Route = createFileRoute("/_protected/settings")({
 });
 
 function SettingsLayout() {
+  const t = useTranslations("settings");
   const { user } = Route.useRouteContext();
 
   return (
     <div className="flex flex-col gap-6">
       <div className="min-w-0">
-        <h1 className="text-section font-semibold text-foreground">Settings</h1>
-        <p className="mt-1 max-w-2xl text-body-lg text-muted-foreground">
-          Your account, your translation provider, how the app looks, and what it holds. Each
-          section saves on its own.
-        </p>
+        <h1 className="text-section font-semibold text-foreground">{t("title")}</h1>
+        <p className="mt-1 max-w-2xl text-body-lg text-muted-foreground">{t("description")}</p>
       </div>
       <SettingsNav isAdmin={hasAdminRole(user?.role)} />
       <Outlet />

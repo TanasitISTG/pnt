@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import {
   Dialog,
   DialogContent,
@@ -19,27 +21,27 @@ export function ChapterReorderDialogFallback({
   saving,
   onOpenChange,
 }: ChapterReorderDialogFallbackProps) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
   return (
     <Dialog open onOpenChange={(nextOpen) => !saving && onOpenChange(nextOpen)}>
       <DialogContent className="max-w-2xl sm:max-w-2xl" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Reorder chapters</DialogTitle>
-          <DialogDescription>
-            Drag chapters into the order they should appear in the reader.
-          </DialogDescription>
+          <DialogTitle>{t("reorderChapters")}</DialogTitle>
+          <DialogDescription>{t("reorderDescription")}</DialogDescription>
         </DialogHeader>
         <div
           role="status"
           aria-live="polite"
           className="flex min-h-32 items-center justify-center rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground"
         >
-          Preparing {chapterCount} chapters…
+          {t("reorderPreparing", { count: chapterCount })}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
+            {tCommon("cancel")}
           </Button>
-          <Button disabled>{saving ? "Saving…" : "Preparing…"}</Button>
+          <Button disabled>{saving ? tCommon("saving") : t("reorderPreparingShort")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -150,7 +150,7 @@ export const auth = betterAuth({
     // windows than the shared default.
     customRules: {
       "/sign-up/email": { window: 60, max: 5 },
-      // Signing in shares the global budget; the E2E supervisor raises both through
+      // Signing in shares the global budget; a deployment can raise both through
       // `AUTH_RATE_LIMIT_MAX` (see `src/lib/env.ts`).
       "/sign-in/email": { window: 60, max: env.AUTH_RATE_LIMIT_MAX },
       "/request-password-reset": { window: 60, max: 3 },

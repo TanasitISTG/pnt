@@ -1,5 +1,8 @@
+import { useMemo } from "react";
+import { useTranslations } from "use-intl";
+
 import { ActivityBand } from "@/components/jobs/activity-band";
-import { jobSecondaryLine, typeLabels } from "@/components/jobs/job-history-columns";
+import { jobHistoryColumnCopy } from "@/components/jobs/job-history-columns";
 import { Button } from "@/components/ui/button";
 import type { JobHistoryRow } from "@/lib/job-dashboard/contracts";
 
@@ -32,24 +35,23 @@ export function ActivityAttention({
   onViewDetails,
   onOpenNovel,
 }: ActivityAttentionProps) {
+  const t = useTranslations("jobs");
+  const copy = useMemo(() => jobHistoryColumnCopy(t), [t]);
   const total = failedTranslationJobs + failedImportJobs;
   if (total === 0) return null;
 
   return (
     <ActivityBand
-      ariaLabel="Jobs needing attention"
-      label="Needs attention"
+      ariaLabel={t("attentionAria")}
+      label={t("attentionLabel")}
       value={total}
-      detail={
-        <>
-          Translation {failedTranslationJobs} · Import {failedImportJobs}
-        </>
-      }
+      detail={t("attentionDetail", {
+        translation: failedTranslationJobs,
+        import: failedImportJobs,
+      })}
     >
       {jobs.length === 0 ? (
-        <p className="pt-3 text-caption text-muted-foreground">
-          No failed job appears on this page.
-        </p>
+        <p className="pt-3 text-caption text-muted-foreground">{t("attentionEmpty")}</p>
       ) : (
         <ul className="divide-y divide-border">
           {jobs.map((job) => (
@@ -64,7 +66,7 @@ export function ActivityAttention({
                   {job.novelTitle}
                 </button>
                 <p className="mt-0.5 truncate text-caption text-muted-foreground">
-                  {jobSecondaryLine(job)} · {typeLabels[job.type]}
+                  {copy.secondaryLine(job)} · {copy.type[job.type]}
                 </p>
                 {job.error ? (
                   <p
@@ -77,11 +79,11 @@ export function ActivityAttention({
               </div>
               <div className="flex shrink-0 gap-2">
                 <Button size="sm" variant="outline" onClick={() => onViewDetails(job)}>
-                  Details
+                  {copy.details}
                 </Button>
                 {job.canRetry ? (
                   <Button size="sm" disabled={pendingJobId === job.id} onClick={() => onRetry(job)}>
-                    {pendingJobId === job.id ? "Working…" : "Retry job"}
+                    {pendingJobId === job.id ? copy.menu.working : copy.menu.retryJob}
                   </Button>
                 ) : null}
               </div>

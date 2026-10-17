@@ -49,6 +49,7 @@ export function LibraryToolbar({
   onSearchChange,
 }: LibraryToolbarProps) {
   const t = useTranslations("catalog");
+  const tCommon = useTranslations("common");
   const [queryInputState, setQueryInputState] = useState({ query: search.q, input: search.q });
   let queryInput = queryInputState.input;
   if (queryInputState.query !== search.q) {
@@ -200,7 +201,7 @@ export function LibraryToolbar({
         {hasFilters ? (
           <Button type="button" variant="ghost" size="sm" onClick={clear}>
             <X className="size-3.5" aria-hidden="true" />
-            {t("clearFilters")}
+            {tCommon("clearFilters")}
           </Button>
         ) : null}
       </div>

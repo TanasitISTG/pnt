@@ -7,14 +7,18 @@ import { SettingsSection } from "@/components/settings/settings-section";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { LOCALE_LABELS, SUPPORTED_LOCALES } from "@/lib/i18n/locales";
+import { headTranslator } from "@/lib/i18n/route-head";
 import { useSwitchLocale } from "@/lib/i18n/use-switch-locale";
 import { useReaderSettings } from "@/lib/reader/settings";
 import { useHydrated } from "@/lib/use-hydrated";
 
 export const Route = createFileRoute("/_protected/settings/appearance")({
-  head: () => ({
-    meta: [{ title: "Appearance | Pnt - Personal Novel Translator" }],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [{ title: `${t("meta.settingsAppearance")} | ${t("meta.siteName")}` }],
+    };
+  },
   component: AppearanceSettingsPage,
 });
 
@@ -32,20 +36,18 @@ export const Route = createFileRoute("/_protected/settings/appearance")({
  * compare, which drops the Compare/Translation/Original row.
  */
 function AppearanceSettingsPage() {
-  const t = useTranslations("shell");
+  const t = useTranslations("settings");
+  const shell = useTranslations("shell");
   const { theme, setTheme } = useTheme();
   const mounted = useHydrated();
   const { settings, update } = useReaderSettings();
 
   return (
-    <SettingsSection
-      title="Appearance"
-      description="How the app and the reader look. Reading preferences live in this browser; the language follows your account."
-    >
+    <SettingsSection title={t("appearanceTitle")} description={t("appearanceDescription")}>
       <Card>
         <CardHeader>
-          <CardTitle>{t("language")}</CardTitle>
-          <CardDescription>{t("languageDescription")}</CardDescription>
+          <CardTitle>{shell("language")}</CardTitle>
+          <CardDescription>{shell("languageDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <LanguageChoice />
@@ -54,10 +56,8 @@ function AppearanceSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Theme and reading defaults</CardTitle>
-          <CardDescription>
-            The app theme applies everywhere; the reading settings apply inside a chapter.
-          </CardDescription>
+          <CardTitle>{t("themeTitle")}</CardTitle>
+          <CardDescription>{t("themeDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <ReaderAppearanceControls

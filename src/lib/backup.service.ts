@@ -6,8 +6,9 @@ import { nanoid } from "nanoid";
 import { assertCoverMagicBytes } from "@/lib/content/novel/novel.functions";
 import { deleteCoverSet, writeCoverSet } from "@/lib/content/novel/cover-storage.server";
 import { coverMimeSchema } from "@/lib/content/novel/novel.schemas";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { getPublicStorage } from "@/lib/storage/index.server";
-import { coverOriginalKey } from "@/lib/storage/keys";
+import { coverOriginalKey, coverPrefix, parseCoverPrefix } from "@/lib/storage/keys";
 import { db } from "@/lib/db";
 import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
 import {
@@ -43,13 +44,16 @@ function dateOrNull(value: string | null): Date | null {
 function exportableCoverMime(novelId: string, coverMime: string | null, hasCover: boolean) {
   if (coverMime === null) {
     if (hasCover) {
-      throw new SafeServerError(`Novel ${novelId} has a cover image without a media type`);
+      // The same rule the restore-side schema enforces, so one sentence covers both.
+      throw new SafeServerError(encodeMessage("validation.backupCoverMimeRequired"));
     }
     return null;
   }
   const parsed = coverMimeSchema.safeParse(coverMime);
   if (!parsed.success) {
-    throw new SafeServerError(`Novel ${novelId} has an unsupported cover media type: ${coverMime}`);
+    throw new SafeServerError(
+      encodeMessage("errors.backupUnsupportedCoverMime", { novelId, coverMime }),
+    );
   }
   return parsed.data;
 }
@@ -62,9 +66,18 @@ async function novelCoverForBackup(novel: typeof novels.$inferSelect) {
   if (!novel.coverKey) {
     return { coverBase64: null, coverMime: exportableCoverMime(novel.id, novel.coverMime, false) };
   }
-  const object = await getPublicStorage().get(coverOriginalKey(novel.coverKey));
+  // The key is read back from the row rather than trusted. Both a value that names no cover set and
+  // a set whose bytes are gone leave the export without a cover, which is the one failure a backup
+  // must not pass over in silence.
+  const parsed = parseCoverPrefix(novel.coverKey);
+  const object =
+    parsed === null
+      ? null
+      : await getPublicStorage().get(coverOriginalKey(coverPrefix(parsed.novelId, parsed.segment)));
   if (!object) {
-    throw new SafeServerError(`Novel ${novel.id} cover object is missing from storage`);
+    throw new SafeServerError(
+      encodeMessage("errors.backupCoverMissingFromStorage", { novelId: novel.id }),
+    );
   }
   return {
     coverBase64: Buffer.from(object.bytes).toString("base64"),
@@ -75,7 +88,9 @@ async function novelCoverForBackup(novel: typeof novels.$inferSelect) {
 async function novelToBackupScalars(novel: typeof novels.$inferSelect) {
   const relationshipMap = parseRelationshipMap(novel.relationshipMapJson);
   if (!relationshipMap) {
-    throw new SafeServerError("Novel " + novel.id + " has an invalid relationship map");
+    throw new SafeServerError(
+      encodeMessage("errors.invalidRelationshipMap", { novelId: novel.id }),
+    );
   }
   const cover = await novelCoverForBackup(novel);
   return {
@@ -139,7 +154,8 @@ export async function exportBackupForUser(userId: string, novelId?: string): Pro
     : eq(novels.userId, userId);
 
   const novelRows = await db.select().from(novels).where(where).orderBy(novels.createdAt);
-  if (novelId && novelRows.length === 0) throw new SafeServerError("Novel not found");
+  if (novelId && novelRows.length === 0)
+    throw new SafeServerError(encodeMessage("errors.novelNotFound"));
 
   const novelIds = novelRows.map((n) => n.id);
   const chapterRows = novelIds.length
@@ -206,7 +222,8 @@ export async function* streamBackupForUser(
     : eq(novels.userId, userId);
 
   const novelRows = await db.select().from(novels).where(where).orderBy(novels.createdAt);
-  if (novelId && novelRows.length === 0) throw new SafeServerError("Novel not found");
+  if (novelId && novelRows.length === 0)
+    throw new SafeServerError(encodeMessage("errors.novelNotFound"));
 
   yield `{"app":"pnt","schemaVersion":1,"exportedAt":${JSON.stringify(new Date().toISOString())},"novels":[`;
 
@@ -242,7 +259,7 @@ export async function* streamBackupForUser(
         backupChapterSchema.parse(mapped);
         const numeric = Number(mapped.number);
         if (seenNumbers.has(numeric)) {
-          throw new SafeServerError("Backup export failed validation: duplicate chapter numbers");
+          throw new SafeServerError(encodeMessage("errors.backupDuplicateChapterNumbers"));
         }
         seenNumbers.add(numeric);
         yield `${firstChapter ? "" : ","}${JSON.stringify(mapped)}`;
@@ -272,7 +289,7 @@ export async function* streamBackupForUser(
         const mapped = termToBackup(term);
         backupTermSchema.parse(mapped);
         if (seenSources.has(mapped.source)) {
-          throw new SafeServerError("Backup export failed validation: duplicate glossary sources");
+          throw new SafeServerError(encodeMessage("errors.backupDuplicateGlossarySources"));
         }
         seenSources.add(mapped.source);
         yield `${firstTerm ? "" : ","}${JSON.stringify(mapped)}`;

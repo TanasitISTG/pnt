@@ -2,6 +2,7 @@ import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { eq, and, inArray, sql, asc, gte, desc } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import {
   novels,
@@ -25,7 +26,7 @@ import {
 } from "./schemas";
 import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import type { ChunkProgress, LogEntry } from "../types/workflow";
-import { appendLogEntry, createLog, serializeLogEntries } from "../workflow/log-entry";
+import { appendLogEntry, createLogMessage, serializeLogEntries } from "../workflow/log-entry";
 import type { AIProviderClient } from "@/lib/providers/types";
 import type { TranslationBatchPreview } from "../types/api";
 import { calculateTokenCost } from "../cost";
@@ -184,7 +185,7 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
       .where(eq(chapters.id, chapterId))
       .limit(1);
     if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
-      throw new SafeServerError("Chapter not found or unauthorized");
+      throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
     }
     const [row] = await tx
       .select({ chapter: chapters, novel: novels })
@@ -200,17 +201,16 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
       .limit(1)
       .for("update", { of: chapters });
 
-    if (!row) throw new SafeServerError("Chapter not found or unauthorized");
+    if (!row) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
 
     const { chapter, novel } = row;
     const hasTranslation = Boolean(chapter.translatedContent?.trim());
     if (mode === "missing" && hasTranslation) {
-      throw new SafeServerError(
-        "Chapter already has a translation; choose re-translate to overwrite it",
-      );
+      throw new SafeServerError(encodeMessage("errors.chapterAlreadyTranslated"));
     }
     const chunkInfos = chunkText(chapter.rawContent, novel.chunkSize || 2000);
-    if (chunkInfos.length === 0) throw new SafeServerError("Chapter content is empty");
+    if (chunkInfos.length === 0)
+      throw new SafeServerError(encodeMessage("errors.chapterContentEmpty"));
 
     const activeJobs = await tx
       .select({
@@ -232,7 +232,7 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
         jobId: job.id,
         generation: job.generation,
         logsJson: job.logsJson,
-        message: "Translation cancelled because a newer translation was started.",
+        message: encodeMessage("log.cancelledNewerTranslation"),
       })),
     );
 
@@ -241,14 +241,15 @@ export const enqueueTranslationJob = createServerOnlyFn(async function enqueueTr
       text: chunk.text,
     }));
     const logs: LogEntry[] = [
-      createLog(
-        "info",
-        `Job initialized for Chapter "${chapter.title}" (${chapter.rawCharCount.toLocaleString()} chars).`,
-      ),
-      createLog(
-        "info",
-        `Split into ${chunkInfos.length} chunk(s) (target size: ${(novel.chunkSize || 2000).toLocaleString()} chars). Model: ${providerConfig.model}`,
-      ),
+      createLogMessage("info", "jobInitialized", {
+        title: chapter.title,
+        chars: chapter.rawCharCount,
+      }),
+      createLogMessage("info", "jobSplit", {
+        count: chunkInfos.length,
+        size: novel.chunkSize || 2000,
+        model: providerConfig.model,
+      }),
     ];
     const jobId = nanoid();
     const outboxId = nanoid();
@@ -527,7 +528,7 @@ export const cancelTranslationJob = createServerFn({ method: "POST" })
       });
 
       if (!result.matchedJobIds.includes(data.jobId)) {
-        throw new SafeServerError("Job not found or unauthorized");
+        throw new SafeServerError(encodeMessage("errors.jobNotFoundOrUnauthorized"));
       }
 
       await Promise.all(result.outboxIds.map(dispatchOutboxBestEffort));
@@ -574,7 +575,7 @@ export const retryTranslationJobForUser = createServerOnlyFn(
         .where(eq(translationJobs.id, jobId))
         .limit(1);
       if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
-        throw new SafeServerError("Job not found or unauthorized");
+        throw new SafeServerError(encodeMessage("errors.jobNotFoundOrUnauthorized"));
       }
       const [row] = await tx
         .select({ job: translationJobs, chapter: chapters, novelId: novels.id })
@@ -591,17 +592,15 @@ export const retryTranslationJobForUser = createServerOnlyFn(
         .limit(1)
         .for("update", { of: [translationJobs, chapters] });
 
-      if (!row) throw new SafeServerError("Job not found or unauthorized");
+      if (!row) throw new SafeServerError(encodeMessage("errors.jobNotFoundOrUnauthorized"));
       if (!["error", "cancelled"].includes(row.job.status)) {
-        throw new SafeServerError("Job is not retryable");
+        throw new SafeServerError(encodeMessage("errors.jobNotRetryable"));
       }
       if (row.job.sourceRevision !== row.chapter.sourceRevision) {
-        throw new SafeServerError("Chapter source changed; start a new translation instead");
+        throw new SafeServerError(encodeMessage("errors.chapterSourceChanged"));
       }
       if (!row.job.overwriteExisting && row.chapter.translatedContent?.trim()) {
-        throw new SafeServerError(
-          "Chapter already has a translation; choose re-translate to overwrite it",
-        );
+        throw new SafeServerError(encodeMessage("errors.chapterAlreadyTranslated"));
       }
 
       const activeJobs = await tx
@@ -625,15 +624,12 @@ export const retryTranslationJobForUser = createServerOnlyFn(
           jobId: job.id,
           generation: job.generation,
           logsJson: job.logsJson,
-          message: "Translation cancelled because a retry was started.",
+          message: encodeMessage("log.cancelledRetry"),
         })),
       );
 
       const generation = row.chapter.translationGeneration + 1;
-      const logsJson = appendLogEntry(
-        row.job.logsJson,
-        createLog("info", "Job retry initiated. Resuming from last completed chunk..."),
-      );
+      const logsJson = appendLogEntry(row.job.logsJson, createLogMessage("info", "retryInitiated"));
       await tx
         .update(translationJobChunks)
         .set({ error: null })
@@ -659,7 +655,7 @@ export const retryTranslationJobForUser = createServerOnlyFn(
           ),
         )
         .returning({ id: translationJobs.id });
-      if (updated.length === 0) throw new SafeServerError("Job is not retryable");
+      if (updated.length === 0) throw new SafeServerError(encodeMessage("errors.jobNotRetryable"));
 
       await tx
         .update(chapters)

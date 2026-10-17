@@ -1,17 +1,19 @@
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { SafeServerError } from "@/lib/server-fn-error";
 
 /**
  * The one definition of which bytes the app accepts from a browser image upload.
  *
- * A declared media type is a claim, not evidence: the first bytes of the buffer
- * must agree with it. `label` only names the subject in the error messages
- * ("Cover", "Profile"), so every upload path reports the same fixed strings.
+ * A declared media type is a claim, not evidence: the first bytes of the buffer must agree with
+ * it. The messages are codes like every other server message, and they deliberately do not name
+ * the caller's subject: the label used to be an English noun ("Cover", "Profile") interpolated
+ * into an English sentence, which cannot survive translation. The upload path that calls this is
+ * what tells the reader which image was rejected.
  */
-export function assertImageMagicBytes(buffer: Uint8Array, mime: string, label: string): void {
-  const subject = label.toLowerCase();
-  // Defense-in-depth: callers may pass null mime if schema bypassed; reject explicitly.
+export function assertImageMagicBytes(buffer: Uint8Array, mime: string): void {
+  // Defense-in-depth: callers may pass null mime if the schema was bypassed; reject explicitly.
   if (!mime) {
-    throw new SafeServerError(`${label} MIME type is required to validate ${subject} image`);
+    throw new SafeServerError(encodeMessage("errors.imageMimeRequired"));
   }
   if (mime === "image/png") {
     if (
@@ -21,11 +23,11 @@ export function assertImageMagicBytes(buffer: Uint8Array, mime: string, label: s
       buffer[2] !== 0x4e ||
       buffer[3] !== 0x47
     ) {
-      throw new SafeServerError(`${label} image magic bytes do not match declared PNG MIME type`);
+      throw new SafeServerError(encodeMessage("errors.imageTypeMismatch"));
     }
   } else if (mime === "image/jpeg") {
     if (buffer.length < 3 || buffer[0] !== 0xff || buffer[1] !== 0xd8 || buffer[2] !== 0xff) {
-      throw new SafeServerError(`${label} image magic bytes do not match declared JPEG MIME type`);
+      throw new SafeServerError(encodeMessage("errors.imageTypeMismatch"));
     }
   } else if (mime === "image/webp") {
     const isRiff =
@@ -37,9 +39,9 @@ export function assertImageMagicBytes(buffer: Uint8Array, mime: string, label: s
     const isWebp =
       buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50;
     if (!isRiff || !isWebp) {
-      throw new SafeServerError(`${label} image magic bytes do not match declared WebP MIME type`);
+      throw new SafeServerError(encodeMessage("errors.imageTypeMismatch"));
     }
   } else {
-    throw new SafeServerError(`Unsupported ${subject} MIME type: ${mime}`);
+    throw new SafeServerError(encodeMessage("errors.imageUnsupportedType", { mime }));
   }
 }

@@ -1,18 +1,13 @@
 import { useRef, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { importBackup } from "@/lib/backup.functions";
-
-const backupImportSchema = z.object({
-  file: z.custom<File>((file) => typeof File !== "undefined" && file instanceof File, {
-    message: "Choose a JSON backup file",
-  }),
-});
 
 /**
  * The operator's backup tools.
@@ -23,8 +18,16 @@ const backupImportSchema = z.object({
  * too — hiding the card is the courtesy, not the control.
  */
 export function BackupCard() {
+  const t = useTranslations("settings");
   const inputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
+  // Built here rather than at module scope: the message it carries is the reader's own
+  // language, and a module-level schema could only say it in one.
+  const backupImportSchema = z.object({
+    file: z.custom<File>((file) => typeof File !== "undefined" && file instanceof File, {
+      message: t("chooseBackupFile"),
+    }),
+  });
   const importForm = useForm({
     defaultValues: { file: null as File | null },
     validators: { onSubmit: backupImportSchema },
@@ -32,9 +35,9 @@ export function BackupCard() {
       try {
         const parsed: unknown = JSON.parse(await value.file!.text());
         const result = await importBackup({ data: { backup: parsed } });
-        toast.success(`Imported ${result.importedNovelCount} novel(s)`);
+        toast.success(t("importedNovels", { count: result.importedNovelCount }));
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to import backup");
+        toast.error(error instanceof Error ? error.message : t("importFailed"));
       } finally {
         importForm.reset();
         if (inputRef.current) inputRef.current.value = "";
@@ -49,7 +52,7 @@ export function BackupCard() {
       // The route streams the JSON, so a large library never has to be
       // serialized in memory just to start the download.
       const response = await fetch("/api/backups");
-      if (!response.ok) throw new Error("Failed to export backup");
+      if (!response.ok) throw new Error(t("exportFailed"));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -57,9 +60,9 @@ export function BackupCard() {
       link.download = `pnt-backup-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
-      toast.success("Backup exported");
+      toast.success(t("backupExported"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to export backup");
+      toast.error(error instanceof Error ? error.message : t("exportFailed"));
     } finally {
       setExporting(false);
     }
@@ -68,11 +71,8 @@ export function BackupCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Data backup</CardTitle>
-        <CardDescription>
-          Export or import novels, chapters, covers, and glossary terms. API keys are never
-          included. Imported novels are created as drafts with new IDs.
-        </CardDescription>
+        <CardTitle>{t("backupTitle")}</CardTitle>
+        <CardDescription>{t("backupDescription")}</CardDescription>
       </CardHeader>
       {/* Two columns, so the two halves of one job are the same size: side by side on a
           wide card, stacked full width on a narrow one. The form is a grid cell like the
@@ -86,7 +86,7 @@ export function BackupCard() {
           disabled={exporting}
         >
           {exporting && <Spinner />}
-          {exporting ? "Exporting…" : "Export JSON"}
+          {exporting ? t("exporting") : t("exportJson")}
         </Button>
         <form
           className="grid"
@@ -103,7 +103,7 @@ export function BackupCard() {
             disabled={importing}
           >
             {importing && <Spinner />}
-            {importing ? "Importing…" : "Import JSON"}
+            {importing ? t("importing") : t("importJson")}
           </Button>
           <importForm.Field name="file">
             {(field) => (

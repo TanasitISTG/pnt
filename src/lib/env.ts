@@ -109,9 +109,10 @@ const baseEnvSchema = z.object({
   INNGEST_DEV: z.string().optional(),
   RATE_LIMIT_TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
   // Budget per minute for the auth limiter's `/sign-in/email` rule and its global default.
-  // Production keeps the shipped ten. The E2E supervisor is the only caller that raises it,
-  // because a dozen specs sign in from one address inside one window, and a 429 there fails
-  // a spec for a rule that is working rather than protecting anything.
+  // Production keeps the shipped ten; a deployment whose sign-in volume warrants more can raise
+  // it without a code change. The E2E supervisor pins it to the shipped value instead: the
+  // suite's sessions come from a fixture (`e2e/sessions.ts`), so it signs in four times per run
+  // rather than ten, and a spec that exhausts a working limiter is a spec testing the wrong thing.
   AUTH_RATE_LIMIT_MAX: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.coerce.number().int().min(1).default(10),

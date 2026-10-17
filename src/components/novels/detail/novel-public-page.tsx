@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "use-intl";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ export interface NovelPublicPageProps {
  * behind the trail's own entry point.
  */
 export function NovelPublicPage({ novelId, signedIn }: NovelPublicPageProps) {
+  const t = useTranslations("novel");
   const novelQuery = useQuery(novelQueryOptions(novelId));
   const chaptersQuery = useQuery(chaptersQueryOptions(novelId));
   const readerState = useReaderState(novelId, signedIn);
@@ -43,7 +45,7 @@ export function NovelPublicPage({ novelId, signedIn }: NovelPublicPageProps) {
   if (novelQuery.isError || chaptersQuery.isError) {
     return (
       <QueryErrorState
-        title="Failed to load novel"
+        title={t("loadFailed")}
         error={novelQuery.error || chaptersQuery.error}
         onRetry={() => {
           novelQuery.refetch();
@@ -57,10 +59,10 @@ export function NovelPublicPage({ novelId, signedIn }: NovelPublicPageProps) {
   if (!novel) {
     return (
       <div className="py-12 text-center">
-        <h1 className="text-card-title font-semibold text-foreground">Novel not found</h1>
-        <p className="mt-2 text-muted-foreground">The novel you are looking for does not exist.</p>
+        <h1 className="text-card-title font-semibold text-foreground">{t("notFoundTitle")}</h1>
+        <p className="mt-2 text-muted-foreground">{t("notFoundDescription")}</p>
         <Button className="mt-4" render={<Link to="/{-$locale}/catalog" />}>
-          Browse the catalog
+          {t("browseCatalog")}
         </Button>
       </div>
     );

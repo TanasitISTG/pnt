@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Updater } from "@tanstack/react-table";
+import { useTranslations } from "use-intl";
 
 import { cn } from "@/lib/utils";
 
@@ -33,12 +34,6 @@ import { TableBody, TableCell, TableHead, TableRow } from "./table";
 export function resolveTableUpdater<T>(updater: Updater<T>, current: T): T {
   if (typeof updater === "function") return (updater as (old: T) => T)(current);
   return updater;
-}
-
-export function formatTableRange(first: number, last: number, total: number, noun: string) {
-  return total === 0
-    ? `0 ${noun}`
-    : `${first.toLocaleString()}–${last.toLocaleString()} of ${total.toLocaleString()} ${noun}`;
 }
 
 function DataTableSkeletonRows({ columnCount }: { columnCount: number }) {
@@ -323,6 +318,7 @@ export function DataTableSortableHeader({
   column: SortableHeaderColumn;
   label: string;
 }) {
+  const t = useTranslations("common");
   const sorted = column.getIsSorted();
   return (
     <Button
@@ -330,7 +326,7 @@ export function DataTableSortableHeader({
       size="sm"
       className="-ml-2 h-8 px-2 font-semibold text-muted-foreground hover:text-foreground"
       onClick={() => column.toggleSorting(sorted === "asc")}
-      aria-label={`Sort by ${label}`}
+      aria-label={t("sortBy", { label })}
     >
       {label}
       {sorted === "asc" ? (
@@ -455,6 +451,7 @@ export function DataTableToolbar({
   query,
   busyMessage,
 }: DataTableToolbarProps) {
+  const t = useTranslations("common");
   const [queryInputState, setQueryInputState] = useState({
     searchValue,
     input: searchValue,
@@ -540,13 +537,13 @@ export function DataTableToolbar({
                 render={
                   <Button variant="outline" size="sm" className="h-10">
                     <Columns3 className="size-4" aria-hidden="true" />
-                    Columns
+                    {t("columns")}
                   </Button>
                 }
               />
               <DropdownMenuContent align="end" className={columns.menuClassName ?? "w-48"}>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Show columns</DropdownMenuLabel>
+                  <DropdownMenuLabel>{t("showColumns")}</DropdownMenuLabel>
                   {columns.table.getAllLeafColumns().map((column) =>
                     column.getCanHide() ? (
                       <DropdownMenuCheckboxItem
@@ -569,7 +566,7 @@ export function DataTableToolbar({
         {query?.isFetching && !isChangingQuery && (
           <span className="inline-flex items-center gap-1.5" role="status" aria-live="polite">
             <Spinner className="size-3.5" aria-hidden="true" />
-            Updating…
+            {t("updating")}
           </span>
         )}
       </div>
@@ -623,6 +620,7 @@ export function DataTablePagination({
   noun,
   onPageSizeChange,
 }: DataTablePaginationProps) {
+  const t = useTranslations("common");
   const pageSizeItems = Object.fromEntries(
     pageSizeOptions.map((option) => [String(option), String(option)]),
   );
@@ -631,10 +629,14 @@ export function DataTablePagination({
   const lastDisabled = !table.getCanLastPage() || busy;
   return (
     <div className="flex flex-col gap-3 border-t border-border px-3 py-3 text-caption text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
-      <div className="tabular-nums">{formatTableRange(firstRow, lastRow, rowCount, noun)}</div>
+      <div className="tabular-nums">
+        {rowCount === 0
+          ? t("tableRangeEmpty", { noun })
+          : t("tableRange", { first: firstRow, last: lastRow, total: rowCount, noun })}
+      </div>
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-2">
-          <span>Rows</span>
+          <span>{t("rows")}</span>
           <Select
             value={String(pageSize)}
             items={pageSizeItems}
@@ -643,7 +645,7 @@ export function DataTablePagination({
               if (pageSizeOptions.includes(next)) onPageSizeChange(next);
             }}
           >
-            <SelectTrigger aria-label="Rows per page" className="h-9 w-[76px]">
+            <SelectTrigger aria-label={t("rowsPerPage")} className="h-9 w-[76px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -661,7 +663,7 @@ export function DataTablePagination({
             size="icon-sm"
             onClick={() => table.firstPage()}
             disabled={previousDisabled}
-            aria-label="First page"
+            aria-label={t("firstPage")}
           >
             <ChevronsLeft className="size-4" aria-hidden="true" />
           </Button>
@@ -670,19 +672,19 @@ export function DataTablePagination({
             size="icon-sm"
             onClick={() => table.previousPage()}
             disabled={previousDisabled}
-            aria-label="Previous page"
+            aria-label={t("previousPage")}
           >
             <ChevronLeft className="size-4" aria-hidden="true" />
           </Button>
           <span className="min-w-16 px-1 text-center tabular-nums text-foreground">
-            Page {currentPage} of {Math.max(1, table.getPageCount())}
+            {t("pageOf", { page: currentPage, pages: Math.max(1, table.getPageCount()) })}
           </span>
           <Button
             variant="outline"
             size="icon-sm"
             onClick={() => table.nextPage()}
             disabled={nextDisabled}
-            aria-label="Next page"
+            aria-label={t("nextPage")}
           >
             <ChevronRight className="size-4" aria-hidden="true" />
           </Button>
@@ -691,7 +693,7 @@ export function DataTablePagination({
             size="icon-sm"
             onClick={() => table.lastPage()}
             disabled={lastDisabled}
-            aria-label="Last page"
+            aria-label={t("lastPage")}
           >
             <ChevronsRight className="size-4" aria-hidden="true" />
           </Button>

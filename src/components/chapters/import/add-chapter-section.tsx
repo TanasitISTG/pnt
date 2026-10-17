@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { BookOpen, ClipboardPaste, Link2 } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { EpubImportSection } from "@/components/chapters/import/epub-import-section";
 import {
@@ -20,23 +21,29 @@ interface AddChapterSectionProps {
   invalidateChapters: () => void;
 }
 
+// Each mode names its own catalog keys, so the labels live in the catalog and the map stays a
+// description of the tab strip rather than a second place copy is written.
 const modeDetails: Record<
   AddChapterMode,
-  { label: string; description: string; icon: typeof ClipboardPaste }
+  {
+    labelKey: "modePaste" | "modeUrl" | "modeEpub";
+    descriptionKey: "modePasteDescription" | "modeUrlDescription" | "modeEpubDescription";
+    icon: typeof ClipboardPaste;
+  }
 > = {
   manual: {
-    label: "Paste text",
-    description: "Create one chapter from source text.",
+    labelKey: "modePaste",
+    descriptionKey: "modePasteDescription",
     icon: ClipboardPaste,
   },
   url: {
-    label: "From URL",
-    description: "Preview one chapter or import a range.",
+    labelKey: "modeUrl",
+    descriptionKey: "modeUrlDescription",
     icon: Link2,
   },
   epub: {
-    label: "EPUB file",
-    description: "Import chapters from an EPUB.",
+    labelKey: "modeEpub",
+    descriptionKey: "modeEpubDescription",
     icon: BookOpen,
   },
 };
@@ -51,6 +58,7 @@ export function AddChapterSection({
   chapters,
   invalidateChapters,
 }: AddChapterSectionProps) {
+  const t = useTranslations("studio");
   const [mode, setMode] = useState<AddChapterMode>("manual");
   const [epubUploadActive, setEpubUploadActive] = useState(false);
   const manualEditor = useManualChapterEditor({ novelId, chapters, invalidateChapters });
@@ -96,15 +104,15 @@ export function AddChapterSection({
                 <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="flex items-center gap-2 text-base font-semibold">
-                    {detail.label}
+                    {t(detail.labelKey)}
                     {running ? (
                       <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs font-normal text-primary">
-                        Running
+                        {t("running")}
                       </span>
                     ) : null}
                   </span>
                   <span className="text-sm font-normal text-muted-foreground">
-                    {detail.description}
+                    {t(detail.descriptionKey)}
                   </span>
                 </span>
               </TabsTrigger>

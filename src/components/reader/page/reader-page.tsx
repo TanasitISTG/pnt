@@ -2,6 +2,7 @@ import { notFound, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { useCallback, useRef, useState } from "react";
+import { useTranslations } from "use-intl";
 
 import { READER_FONT_SIZE_PX, useReaderSettings } from "@/lib/reader/settings";
 import { useReaderState } from "@/lib/reader/use-reader-state";
@@ -22,6 +23,7 @@ export interface ReaderPageProps {
 }
 
 export function ReaderPage({ novelId, chapterId, signedIn }: ReaderPageProps) {
+  const t = useTranslations("reader");
   const chapterQuery = useQuery(chapterQueryOptions(chapterId, novelId));
   const chaptersQuery = useQuery(readerChapterManifestQueryOptions(novelId));
   const novelQuery = useQuery(readerNovelQueryOptions(novelId));
@@ -57,7 +59,7 @@ export function ReaderPage({ novelId, chapterId, signedIn }: ReaderPageProps) {
   if (chapterQuery.isError || chaptersQuery.isError || novelQuery.isError) {
     return (
       <QueryErrorState
-        title="Failed to load chapter"
+        title={t("loadFailed")}
         error={chapterQuery.error || chaptersQuery.error || novelQuery.error}
         onRetry={() => {
           void chapterQuery.refetch();

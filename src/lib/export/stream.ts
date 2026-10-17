@@ -1,13 +1,19 @@
 import "@tanstack/react-start/server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db, queryClient } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { contentDisposition, sanitizeFilename } from "@/lib/filename";
 import { splitParagraphs } from "@/lib/translation/text/paragraphs";
 import { getPrivateStorage } from "@/lib/storage/index.server";
-import { exportObjectKey, exportRevision } from "@/lib/storage/keys";
+import {
+  EXPORT_FORMATS,
+  exportObjectKey,
+  exportRevision,
+  type ExportFormat,
+  type ObjectKey,
+} from "@/lib/storage/keys";
 import { createEpubStream, type EpubChapter, type EpubMetadata } from "./epub";
 
 interface ExportChapterRow {
@@ -93,10 +99,49 @@ const STREAM_HIGH_WATER_MARK = 64 * 1024;
 // bounded-memory guarantee never depends on the cache.
 const EXPORT_CACHE_MAX_BYTES = 32 * 1024 * 1024;
 
-interface ChapterRevisionStats {
+/** Bounds the bulk revision lookup, so a whole bucket's worth of novels is not one `IN` clause. */
+const EXPORT_REVISION_LOOKUP_CHUNK = 200;
+
+export interface ChapterRevisionStats {
   chapterCount: number;
   maxChapterUpdatedAt: Date | null;
   maxTranslationGeneration: number;
+}
+
+/** The novel fields the fingerprint covers, read from the row that owns the export. */
+export interface ExportCacheNovel {
+  id: string;
+  title: string;
+  author: string | null;
+  targetLang: string;
+}
+
+/**
+ * The cache key one novel's export of one format has right now.
+ *
+ * The single assembly of the fingerprint's inputs. `exportRevision` owns the hash, but *which* inputs
+ * feed it is the rule a sweep has to match to tell a current revision from one the content has moved
+ * past, and that rule lives here so the route that writes a cached export and every sweep that
+ * removes one read it from the same place.
+ */
+export function exportCacheKey(
+  novel: ExportCacheNovel,
+  stats: ChapterRevisionStats,
+  format: ExportFormat,
+): ObjectKey {
+  return exportObjectKey(
+    novel.id,
+    exportRevision({
+      format,
+      novelTitle: novel.title,
+      novelAuthor: novel.author,
+      targetLang: novel.targetLang,
+      chapterCount: stats.chapterCount,
+      maxChapterUpdatedAt: stats.maxChapterUpdatedAt,
+      maxTranslationGeneration: stats.maxTranslationGeneration,
+    }),
+    format,
+  );
 }
 
 async function loadChapterRevisionStats(novelId: string): Promise<ChapterRevisionStats> {
@@ -116,13 +161,83 @@ async function loadChapterRevisionStats(novelId: string): Promise<ChapterRevisio
 }
 
 /**
+ * The keys the route would compute right now, for every novel named that can be exported at all.
+ *
+ * The bulk twin of `loadChapterRevisionStats` for a sweep that holds a bucket listing rather than one
+ * novel: same aggregate fields, grouped by novel instead of filtered to one, and the same eligibility
+ * predicate the route applies (`nonblankTranslatedContent`), so a novel with nothing translated names
+ * no key. That matters more than it looks: a novel with no key is one whose cached exports the route
+ * cannot reach, so a sweep that reads this as "no current revision" is right to remove them, and a
+ * novel that is missing from the result — a row that is gone — is the orphan prune's business
+ * instead.
+ */
+export async function currentExportCacheKeys(novelIds: readonly string[]): Promise<Set<string>> {
+  const keys = new Set<string>();
+  if (novelIds.length === 0) return keys;
+
+  for (let index = 0; index < novelIds.length; index += EXPORT_REVISION_LOOKUP_CHUNK) {
+    const chunk = novelIds.slice(index, index + EXPORT_REVISION_LOOKUP_CHUNK);
+    const [novelRows, statRows, exportableRows] = await Promise.all([
+      db
+        .select({
+          id: novels.id,
+          title: novels.title,
+          author: novels.author,
+          targetLang: novels.targetLang,
+        })
+        .from(novels)
+        .where(inArray(novels.id, chunk)),
+      db
+        .select({
+          novelId: chapters.novelId,
+          chapterCount: sql<number>`count(*)::int`,
+          maxChapterUpdatedAt: sql<Date | null>`max(${chapters.updatedAt})`,
+          maxTranslationGeneration: sql<number>`coalesce(max(${chapters.translationGeneration}), 0)::int`,
+        })
+        .from(chapters)
+        .where(inArray(chapters.novelId, chunk))
+        .groupBy(chapters.novelId),
+      db
+        .select({ novelId: chapters.novelId })
+        .from(chapters)
+        .where(and(inArray(chapters.novelId, chunk), nonblankTranslatedContent()))
+        .groupBy(chapters.novelId),
+    ]);
+
+    const statsByNovel = new Map(
+      statRows.map((row) => [
+        row.novelId,
+        {
+          chapterCount: Number(row.chapterCount ?? 0),
+          maxChapterUpdatedAt: row.maxChapterUpdatedAt ?? null,
+          maxTranslationGeneration: Number(row.maxTranslationGeneration ?? 0),
+        } satisfies ChapterRevisionStats,
+      ]),
+    );
+    const exportable = new Set(exportableRows.map((row) => row.novelId));
+
+    for (const novel of novelRows) {
+      if (!exportable.has(novel.id)) continue;
+      const stats = statsByNovel.get(novel.id) ?? {
+        chapterCount: 0,
+        maxChapterUpdatedAt: null,
+        maxTranslationGeneration: 0,
+      };
+      for (const format of EXPORT_FORMATS) keys.add(exportCacheKey(novel, stats, format));
+    }
+  }
+
+  return keys;
+}
+
+/**
  * Tees a generated export into object storage while the client streams it, so a
  * repeat download of an unchanged novel never re-walks every chapter. Cache writes
  * are best-effort: a failure must not fail or truncate the download.
  */
 function spoolExportToStorage(
   source: ReadableStream<Uint8Array>,
-  key: string,
+  key: ObjectKey,
   contentType: string,
 ): ReadableStream<Uint8Array> {
   const reader = source.getReader();
@@ -268,19 +383,7 @@ export async function createNovelExportResponse(
   if (!includeBody) return new Response(null, { status: 200, headers });
 
   const stats = await loadChapterRevisionStats(manifest.novel.id);
-  const cacheKey = exportObjectKey(
-    manifest.novel.id,
-    exportRevision({
-      format,
-      novelTitle: manifest.novel.title,
-      novelAuthor: manifest.novel.author,
-      targetLang: manifest.novel.targetLang,
-      chapterCount: stats.chapterCount,
-      maxChapterUpdatedAt: stats.maxChapterUpdatedAt,
-      maxTranslationGeneration: stats.maxTranslationGeneration,
-    }),
-    format,
-  );
+  const cacheKey = exportCacheKey(manifest.novel, stats, format);
 
   // Exports stay private: a cached object is streamed back through this
   // authenticated route, never handed to the browser as a signed URL.

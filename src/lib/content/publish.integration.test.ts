@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { type Sql } from "postgres";
 import type * as AdminDetail from "@/lib/content/novel/admin-novel-detail.service";
 import type * as Publish from "@/lib/content/publish/publish.service";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import { encodeMessage } from "@/lib/i18n/message-code";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let getAdminNovelDetailCoreForUser: typeof AdminDetail.getAdminNovelDetailCoreForUser;
@@ -82,23 +85,16 @@ async function cleanupFixture(fixture: PublicationFixture): Promise<void> {
   await sql`DELETE FROM "user" WHERE "id" IN (${fixture.ownerUserId}, ${fixture.otherUserId})`;
 }
 
-integrationDescribe("translation-aware publication PostgreSQL invariants", () => {
+describeIntegration("translation-aware publication PostgreSQL invariants", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     ({ getAdminNovelDetailCoreForUser } =
       await import("@/lib/content/novel/admin-novel-detail.service"));
     ({ setChapterPublishedForUser, setAllChaptersPublishedForUser } =
       await import("@/lib/content/publish/publish.service"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   it("rejects foreign and deleted chapter publication without changing other rows", async () => {
     const fixture = await seedFixture();
@@ -108,7 +104,7 @@ integrationDescribe("translation-aware publication PostgreSQL invariants", () =>
           chapterId: fixture.chapterIds[6],
           publishedAt: null,
         }),
-      ).rejects.toThrow("Chapter not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
       expect(await guestVisibleChapterIds(fixture.novelId)).toEqual([fixture.chapterIds[6]]);
       await sql`DELETE FROM "chapters" WHERE "id" = ${fixture.chapterIds[6]}`;
       await expect(
@@ -116,7 +112,7 @@ integrationDescribe("translation-aware publication PostgreSQL invariants", () =>
           chapterId: fixture.chapterIds[6],
           publishedAt: new Date(PAST),
         }),
-      ).rejects.toThrow("Chapter not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
       expect(await guestVisibleChapterIds(fixture.novelId)).toEqual([]);
     } finally {
       await cleanupFixture(fixture);
@@ -139,7 +135,7 @@ integrationDescribe("translation-aware publication PostgreSQL invariants", () =>
           chapterId: fixture.chapterIds[0]!,
           publishedAt: new Date(PAST),
         }),
-      ).rejects.toThrow("Translate the chapter before publishing.");
+      ).rejects.toThrow(encodeMessage("errors.chapterNotTranslatedForPublish"));
 
       await expect(
         setChapterPublishedForUser(fixture.ownerUserId, {
@@ -150,7 +146,7 @@ integrationDescribe("translation-aware publication PostgreSQL invariants", () =>
 
       await expect(
         setAllChaptersPublishedForUser(fixture.otherUserId, fixture.novelId, new Date(PAST)),
-      ).rejects.toThrow("Novel not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
       await expect(
         setAllChaptersPublishedForUser(fixture.ownerUserId, fixture.novelId, new Date(PAST)),

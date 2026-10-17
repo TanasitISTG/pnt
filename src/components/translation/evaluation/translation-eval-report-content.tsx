@@ -1,4 +1,5 @@
 import { RefreshCw } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import { TranslationEvalReviewRow } from "@/components/translation/evaluation/translation-eval-review-row";
@@ -17,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { translateMessage } from "@/lib/i18n/server-error";
 import type {
   EvalReportDetail,
   EvalReportSummary,
@@ -48,50 +50,47 @@ function EmptyReviewState({
   report: EvalReportSummary;
   legacy: boolean;
 }) {
+  const t = useTranslations("evaluation");
   if (report.chapterCount === 0) {
-    return (
-      <p className="py-5 text-sm text-muted-foreground">No chapters matched this selection.</p>
-    );
+    return <p className="py-5 text-sm text-muted-foreground">{t("emptyNoChapters")}</p>;
   }
   if (filter === "attention") {
     if (!legacy && report.meta?.evaluatedChapterCount === 0) {
       return (
         <p className="rounded-xl border border-border bg-muted/20 p-5 text-sm text-muted-foreground">
-          Nothing was evaluated in this check. Translate the selected chapters, then run the check
-          again.
+          {t("emptyNothingEvaluated")}
         </p>
       );
     }
     return (
       <p className="rounded-xl border border-border bg-muted/20 p-5 text-sm text-muted-foreground">
-        No heuristic issues found in this check. Change the filter to inspect all selected chapters.
+        {t("emptyNoIssues")}
       </p>
     );
   }
   return (
     <p className="rounded-xl border border-border bg-muted/20 p-5 text-sm text-muted-foreground">
-      {legacy
-        ? "This older report cannot classify untranslated chapters. Run it again for that filter."
-        : "No untranslated chapters in this selection. Change the filter to inspect all findings."}
+      {legacy ? t("emptyLegacyUntranslated") : t("emptyNoUntranslated")}
     </p>
   );
 }
 
 function ReportSummary({ report }: { report: EvalReportSummary }) {
+  const t = useTranslations("evaluation");
   if (report.status !== "done") return null;
   const metrics = report.meta
     ? [
-        ["Selected", report.chapterCount],
-        ["Evaluated", report.meta.evaluatedChapterCount],
-        ["Not translated", report.meta.skippedChapterCount],
-        ["Needs attention", report.meta.attentionChapterCount],
+        [t("metricSelected"), report.chapterCount],
+        [t("metricEvaluated"), report.meta.evaluatedChapterCount],
+        [t("metricNotTranslated"), report.meta.skippedChapterCount],
+        [t("metricNeedsAttention"), report.meta.attentionChapterCount],
       ]
     : [
-        ["Selected", report.chapterCount],
-        ["Residual script letters", report.residualScriptLetters],
-        ["Paragraph differences", report.markerMismatches],
+        [t("metricSelected"), report.chapterCount],
+        [t("metricResidualScript"), report.residualScriptLetters],
+        [t("metricParagraphDifferences"), report.markerMismatches],
         [
-          "Glossary adhered / matched",
+          t("metricGlossaryAdhered"),
           `${report.adheredGlossaryTerms} / ${report.matchedGlossaryTerms}`,
         ],
       ];
@@ -120,14 +119,17 @@ function ReportFindings({
   legacy: boolean;
   fetching: boolean;
 }) {
+  const t = useTranslations("evaluation");
+  // The report's failure is stored as a code (`errors.qualityCheckFailed`) by the worker that
+  // stopped, long before this panel existed, so it is resolved the way a job's log row is.
+  const tRoot = useTranslations();
   if (detail.detailsState === "unavailable") {
     return (
       <div
         role="alert"
         className="rounded-xl border border-border bg-surface p-4 text-sm text-foreground"
       >
-        This saved quality report is unavailable because its stored details are malformed or from an
-        unknown version. Run it again.
+        {t("detailsUnavailable")}
       </div>
     );
   }
@@ -135,10 +137,10 @@ function ReportFindings({
     return (
       <div className="rounded-xl border border-border bg-surface p-4 text-sm text-foreground">
         {detail.report.status === "error"
-          ? detail.report.error
+          ? (translateMessage(detail.report.error ?? "", tRoot) ?? detail.report.error)
           : detail.report.status === "running"
-            ? "The quality check is still running."
-            : "The quality check is queued and will appear here when complete."}
+            ? t("noticeRunning")
+            : t("noticeQueued")}
       </div>
     );
   }
@@ -146,7 +148,7 @@ function ReportFindings({
     return <EmptyReviewState filter={reviewFilter} report={detail.report} legacy={legacy} />;
   }
   return (
-    <ol className="flex flex-col gap-3" aria-label="Quality check chapters" aria-busy={fetching}>
+    <ol className="flex flex-col gap-3" aria-label={t("listLabel")} aria-busy={fetching}>
       {detail.rows.map((row) => (
         <TranslationEvalReviewRow key={row.chapterId} novelId={novelId} row={row} />
       ))}
@@ -168,6 +170,7 @@ function ReadyReportContent({
   TranslationEvalReportContentProps,
   "detail" | "error" | "isError" | "isPending" | "onRetry"
 > & { detail: EvalReportDetail }) {
+  const t = useTranslations("evaluation");
   const report = detail.report;
   const detailsReady = detail.detailsState === "ready";
   const legacy = detailsReady && report.meta === null;
@@ -175,7 +178,7 @@ function ReadyReportContent({
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <DialogDescription>Findings are a snapshot from this check.</DialogDescription>
+        <DialogDescription>{t("snapshotNotice")}</DialogDescription>
         <Button
           variant="outline"
           className="min-h-11"
@@ -183,25 +186,25 @@ function ReadyReportContent({
           disabled={queueing}
         >
           <RefreshCw className="size-4" aria-hidden="true" />
-          {queueing ? "Queueing…" : "Run again"}
+          {queueing ? t("queueing") : t("runAgain")}
         </Button>
       </div>
 
       {detail.contextChanged === true ? (
         <div className="rounded-xl border border-border bg-surface p-4 text-sm text-foreground">
-          The language pair or approved glossary changed. Run this check again.
+          {t("contextChanged")}
         </div>
       ) : null}
 
       <ReportSummary report={report} />
       <div className="flex flex-col gap-2 sm:max-w-sm">
-        <Label htmlFor="translationEvalFilter">Show</Label>
+        <Label htmlFor="translationEvalFilter">{t("showLabel")}</Label>
         <Select
           value={reviewSearch.reviewFilter}
           items={{
-            attention: "Needs attention",
-            all: "All selected chapters",
-            untranslated: "Not translated",
+            attention: t("filterAttention"),
+            all: t("filterAll"),
+            untranslated: t("filterUntranslated"),
           }}
           onValueChange={(value) => {
             if (value === "attention" || value === "all" || value === "untranslated") {
@@ -213,16 +216,16 @@ function ReadyReportContent({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="attention">Needs attention</SelectItem>
-            <SelectItem value="all">All selected chapters</SelectItem>
-            <SelectItem value="untranslated">Not translated</SelectItem>
+            <SelectItem value="attention">{t("filterAttention")}</SelectItem>
+            <SelectItem value="all">{t("filterAll")}</SelectItem>
+            <SelectItem value="untranslated">{t("filterUntranslated")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {detailsReady && legacy ? (
         <div className="rounded-xl border border-border bg-surface p-4 text-sm text-foreground">
-          This older report cannot show freshness or all details. Run it again.
+          {t("legacyNotice")}
         </div>
       ) : null}
 
@@ -245,7 +248,7 @@ function ReadyReportContent({
             busy={isFetching}
             pageSize={detail.pageSize}
             pageSizeOptions={[10, 25, 50]}
-            noun="chapters"
+            noun={t("nounChapters")}
             onPageSizeChange={(pageSize) => {
               if (pageSize === 10 || pageSize === 25 || pageSize === 50) {
                 onReviewSearchChange({ reviewPageSize: pageSize, reviewPage: 1 });
@@ -259,10 +262,11 @@ function ReadyReportContent({
 }
 
 export function TranslationEvalReportContent(props: TranslationEvalReportContentProps) {
+  const t = useTranslations("evaluation");
   if (props.isError) {
     return (
       <QueryErrorState
-        title="Failed to load quality check"
+        title={t("contentFailed")}
         error={props.error}
         onRetry={props.onRetry}
         className="my-0 min-h-0"
@@ -273,14 +277,14 @@ export function TranslationEvalReportContent(props: TranslationEvalReportContent
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
         <Spinner variant="primary" className="mb-3 size-8" aria-hidden="true" />
-        <p className="text-body">Loading quality check…</p>
+        <p className="text-body">{t("loading")}</p>
       </div>
     );
   }
   if (!props.detail) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center py-16 text-muted-foreground">
-        <p className="text-body">Quality report not found.</p>
+        <p className="text-body">{t("notFound")}</p>
       </div>
     );
   }

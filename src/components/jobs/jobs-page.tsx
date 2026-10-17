@@ -2,6 +2,7 @@ import { getRouteApi } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "use-intl";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ActivityAttention } from "@/components/jobs/activity-attention";
@@ -28,6 +29,8 @@ import type {
 } from "@/lib/job-dashboard/contracts";
 import { cancelTranslationJob, retryTranslationJob } from "@/lib/translation/api/mutations";
 import { cancelImportJob, startImportJob } from "@/lib/scrape/functions";
+import { formatNumber } from "@/lib/i18n/format";
+import type { JobsTranslator } from "@/components/jobs/job-history-columns";
 import { useHydrated } from "@/lib/use-hydrated";
 
 type Operation = {
@@ -49,12 +52,12 @@ const EMPTY_STATS: JobStats = {
 
 const EMPTY_ROWS: JobHistoryRow[] = [];
 
-async function handleCopyJobId(job: JobHistoryRow) {
+async function copyJobId(job: JobHistoryRow, t: JobsTranslator) {
   try {
     await navigator.clipboard.writeText(job.id);
-    toast.success("Job ID copied");
+    toast.success(t("jobIdCopied"));
   } catch {
-    toast.error("Unable to copy job ID");
+    toast.error(t("jobIdCopyFailed"));
   }
 }
 
@@ -68,6 +71,8 @@ async function handleCopyJobId(job: JobHistoryRow) {
  * it going?" rather than "what should I do now?".
  */
 export function JobsPage() {
+  const t = useTranslations("jobs");
+  const locale = useLocale();
   const search = jobsRoute.useSearch();
   const navigate = jobsRoute.useNavigate();
   const queryClient = useQueryClient();
@@ -119,7 +124,7 @@ export function JobsPage() {
         (result) =>
           result.status === "rejected" || (result.status === "fulfilled" && result.value.isError),
       );
-      if (failed) toast.error("Some job dashboard data could not be refreshed");
+      if (failed) toast.error(t("refreshFailed"));
     } finally {
       setIsRefreshing(false);
     }
@@ -146,10 +151,10 @@ export function JobsPage() {
         } else {
           await cancelImportJob({ data: { jobId: job.id } });
         }
-        toast.success("Job cancellation requested");
+        toast.success(t("cancellationRequested"));
       } else if (job.type === "translation") {
         await retryTranslationJob({ data: { jobId: job.id } });
-        toast.success("Translation retry queued");
+        toast.success(t("retryQueued"));
       } else if (job.type === "scrape" && job.scrapeProvider) {
         await startImportJob({
           data: {
@@ -160,14 +165,14 @@ export function JobsPage() {
             provider: job.scrapeProvider,
           },
         });
-        toast.success("New scrape job queued");
+        toast.success(t("importQueued"));
       } else {
-        throw new Error("This job cannot be retried");
+        throw new Error(t("notRetryable"));
       }
       await invalidateAffectedQueries(job);
       setOperation(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Job operation failed");
+      toast.error(error instanceof Error ? error.message : t("operationFailed"));
     } finally {
       setPendingJobId(null);
     }
@@ -211,11 +216,11 @@ export function JobsPage() {
       onViewDetails: handleViewDetails,
       onOpenNovel: handleOpenNovel,
       onOpenChapter: handleOpenChapter,
-      onCopyJobId: (job: JobHistoryRow) => void handleCopyJobId(job),
+      onCopyJobId: (job: JobHistoryRow) => void copyJobId(job, t),
       onCancel: handleCancelJob,
       onRetry: handleRetryJob,
     }),
-    [handleCancelJob, handleOpenChapter, handleOpenNovel, handleRetryJob, handleViewDetails],
+    [handleCancelJob, handleOpenChapter, handleOpenNovel, handleRetryJob, handleViewDetails, t],
   );
 
   const stats = statsQuery.data ?? EMPTY_STATS;
@@ -234,11 +239,11 @@ export function JobsPage() {
   const totalTokens = Number(stats.promptTokens) + Number(stats.completionTokens);
   const compactTokenCount = useMemo(
     () =>
-      new Intl.NumberFormat(undefined, {
+      formatNumber(totalTokens, locale, {
         notation: "compact",
         maximumFractionDigits: 1,
-      }).format(totalTokens),
-    [totalTokens],
+      }),
+    [locale, totalTokens],
   );
 
   const rows = history?.rows ?? EMPTY_ROWS;
@@ -253,30 +258,27 @@ export function JobsPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-caption font-semibold tracking-overline text-muted-foreground uppercase">
-            Operations
+            {t("eyebrow")}
           </p>
-          <h1 className="mt-1 text-section font-semibold text-foreground">Activity</h1>
-          <p className="mt-1 max-w-2xl text-body-lg text-muted-foreground">
-            Translation and import runs for your account. What is running and what failed lead; the
-            retained history follows.
-          </p>
+          <h1 className="mt-1 text-section font-semibold text-foreground">{t("title")}</h1>
+          <p className="mt-1 max-w-2xl text-body-lg text-muted-foreground">{t("description")}</p>
         </div>
         <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
-          {isRefreshing ? "Refreshing…" : "Refresh"}
+          {isRefreshing ? t("refreshing") : t("refresh")}
         </Button>
       </div>
 
       {activityQuery.isError ? (
         <InlineNotice
           tone="warning"
-          title="Live progress is unavailable"
+          title={t("liveUnavailable")}
           action={
             <Button size="sm" variant="outline" onClick={() => void activityQuery.refetch()}>
-              Retry
+              {t("retry")}
             </Button>
           }
         >
-          Retained history is still shown below.
+          {t("liveUnavailableRetained")}
         </InlineNotice>
       ) : null}
 
@@ -304,19 +306,17 @@ export function JobsPage() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Metric
             framed={false}
-            label="Avg chunk latency"
-            value={formatDuration(stats.avgChunkLatencyMs)}
+            label={t("metricAvgLatency")}
+            value={formatDuration(stats.avgChunkLatencyMs, t)}
           />
           <Metric
             framed={false}
-            label="Tokens"
-            value={mounted ? compactTokenCount : totalTokens}
-            detail={
-              <>
-                Prompt {stats.promptTokens.toLocaleString()} · Completion{" "}
-                {stats.completionTokens.toLocaleString()}
-              </>
-            }
+            label={t("metricTokens")}
+            value={mounted ? compactTokenCount : formatNumber(totalTokens, locale)}
+            detail={t("metricTokensDetail", {
+              prompt: formatNumber(stats.promptTokens, locale),
+              completion: formatNumber(stats.completionTokens, locale),
+            })}
           />
         </CardContent>
       </Card>
@@ -340,10 +340,14 @@ export function JobsPage() {
       <ConfirmDialog
         open={operation !== null}
         onOpenChange={(open) => !open && setOperation(null)}
-        title={operation ? getOperationTitle(operation) : "Confirm job operation"}
-        description={operation ? getOperationDescription(operation) : ""}
+        title={operation ? operationTitle(operation, t) : t("confirmFallbackTitle")}
+        description={operation ? operationDescription(operation, t) : ""}
         confirmText={
-          pendingJobId ? "Working…" : operation?.kind === "cancel" ? "Cancel job" : "Retry job"
+          pendingJobId
+            ? t("working")
+            : operation?.kind === "cancel"
+              ? t("cancelJob")
+              : t("retryJob")
         }
         variant={operation?.kind === "cancel" ? "destructive" : "default"}
         pending={pendingJobId !== null}
@@ -366,23 +370,28 @@ export function JobsPage() {
   );
 }
 
-function getOperationTitle(operation: Exclude<Operation, null>) {
-  return operation.kind === "cancel" ? "Cancel this job?" : "Retry this job?";
+function operationTitle(operation: Exclude<Operation, null>, t: JobsTranslator) {
+  return operation.kind === "cancel" ? t("confirmCancelTitle") : t("confirmRetryTitle");
 }
 
-function getOperationDescription(operation: Exclude<Operation, null>) {
+function operationDescription(operation: Exclude<Operation, null>, t: JobsTranslator) {
   const { job } = operation;
   const target = `${job.novelTitle} (${job.id})`;
   if (operation.kind === "cancel") {
-    return `Cancel ${target}? The worker will stop before its next step.`;
+    return t("confirmCancelBody", { target });
   }
   if (job.type === "translation") {
-    return `Retry ${target}? Completed chunks will be resumed, and a newer active translation for this chapter may be cancelled.`;
+    return t("confirmRetryTranslationBody", { target });
   }
-  return `Retry ${target}? This creates a new history row and cancels any active import for the novel.`;
+  return t("confirmRetryImportBody", { target });
 }
 
-function formatDuration(value: number) {
-  if (value < 1000) return `${value}ms`;
-  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}s`;
+/**
+ * A latency, whichever unit it lands in. The unit is a word — Thai says วินาที where
+ * English says `s` — so both branches read from the catalog rather than off a suffix.
+ */
+function formatDuration(value: number, t: JobsTranslator) {
+  if (value < 1000) return t("durationMilliseconds", { value });
+  const seconds = (value / 1000).toFixed(value < 10000 ? 1 : 0);
+  return t("durationSeconds", { value: seconds });
 }

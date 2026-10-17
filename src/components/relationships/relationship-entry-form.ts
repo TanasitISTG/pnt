@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import {
   MAX_CHARACTER_ALIASES,
   MAX_EVIDENCE_LENGTH,
@@ -70,22 +71,33 @@ export function splitAliases(value: string): string[] {
     .filter(Boolean);
 }
 
+// A schema is a module: it has no reader at the moment it runs, so each message is a key the field
+// resolves in the reader's language (`lib/i18n/message-code.ts`). The limit travels as a value,
+// which is why the sentence can name it without the schema knowing what language the reader reads.
 export const characterEntryFormSchema = z
   .object({
-    sourceName: z.string().trim().min(1, "Source name is required").max(MAX_NAME_LENGTH),
+    sourceName: z
+      .string()
+      .trim()
+      .min(1, encodeMessage("validation.relationshipSourceNameRequired"))
+      .max(MAX_NAME_LENGTH),
     targetName: z.string().max(MAX_NAME_LENGTH),
     aliases: z.string().superRefine((value, context) => {
       const aliases = splitAliases(value);
       if (aliases.length > MAX_CHARACTER_ALIASES) {
         context.addIssue({
           code: "custom",
-          message: `Aliases can contain at most ${MAX_CHARACTER_ALIASES} names`,
+          message: encodeMessage("validation.relationshipAliasesTooMany", {
+            max: MAX_CHARACTER_ALIASES,
+          }),
         });
       }
       if (aliases.some((alias) => alias.length > MAX_NAME_LENGTH)) {
         context.addIssue({
           code: "custom",
-          message: `Each alias must be ${MAX_NAME_LENGTH} characters or fewer`,
+          message: encodeMessage("validation.relationshipAliasTooLong", {
+            max: MAX_NAME_LENGTH,
+          }),
         });
       }
     }),
@@ -106,12 +118,20 @@ export const characterEntryFormSchema = z
 
 export const relationshipEntryFormSchema = z
   .object({
-    speakerId: z.string().trim().min(1, "Speaker is required").max(MAX_NAME_LENGTH),
-    listenerId: z.string().trim().min(1, "Listener is required").max(MAX_NAME_LENGTH),
+    speakerId: z
+      .string()
+      .trim()
+      .min(1, encodeMessage("validation.relationshipSpeakerRequired"))
+      .max(MAX_NAME_LENGTH),
+    listenerId: z
+      .string()
+      .trim()
+      .min(1, encodeMessage("validation.relationshipListenerRequired"))
+      .max(MAX_NAME_LENGTH),
     relationship: z
       .string()
       .trim()
-      .min(1, "Relationship is required")
+      .min(1, encodeMessage("validation.relationshipKindRequired"))
       .max(MAX_RELATIONSHIP_TEXT_LENGTH),
     speakerStatus: speakerStatusSchema,
     familiarity: familiaritySchema,
@@ -123,7 +143,7 @@ export const relationshipEntryFormSchema = z
     evidence: z.string().max(MAX_EVIDENCE_LENGTH),
   })
   .refine((value) => value.speakerId !== value.listenerId, {
-    message: "Speaker and listener must be different characters",
+    message: encodeMessage("validation.relationshipPairSame"),
     path: ["listenerId"],
   })
   .transform((value) => ({

@@ -5,6 +5,7 @@ import { NovelPending } from "@/components/novels/detail/novel-detail-pending";
 import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
 import { hydrateAdminNovelDetailCore, novelQueryOptions } from "@/lib/content/novel/novel.query";
 import { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
+import { headTranslator } from "@/lib/i18n/route-head";
 import { readerStateQueryOptions } from "@/lib/reader/query";
 
 /**
@@ -73,16 +74,20 @@ export const Route = createFileRoute("/{-$locale}/_public/novels/$novelId/")({
   pendingMs: 100,
   pendingMinMs: 200,
   pendingComponent: NovelPending,
-  head: ({ loaderData }) => {
+  // The tab title and the social description are read in the page's own language. `head`
+  // runs before any provider exists, so it takes the same translator the document does
+  // (i18n.md §3).
+  head: async ({ loaderData }) => {
+    const t = await headTranslator();
     const novel = loaderData?.novel;
     const title = novel
-      ? `${novel.title} | Pnt - Personal Novel Translator`
-      : "Novel Detail | Pnt - Personal Novel Translator";
+      ? `${novel.title} | ${t("meta.siteName")}`
+      : `${t("meta.novelDetail")} | ${t("meta.siteName")}`;
     const description = novel?.description
       ? novel.description.length > 160
         ? `${novel.description.slice(0, 157)}...`
         : novel.description
-      : "Read translated web novel chapters.";
+      : t("meta.novelDescription");
     const appUrl = import.meta.env.VITE_APP_URL;
     const proxiedCoverUrl = novel?.hasCover ? `/api/covers/${novel.id}` : null;
     // Live novels carry a CDN URL; drafts fall back to the proxied route so the

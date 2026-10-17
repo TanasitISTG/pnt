@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, asc, eq, exists, gt, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, glossaryTerms, novels, translationJobs } from "@/lib/db/schema";
 import { mapWithConcurrency } from "@/lib/async";
@@ -45,7 +46,7 @@ export async function getResidualScriptChaptersForOwnedNovel(
     .limit(1);
 
   if (!novel) {
-    throw new SafeServerError("Novel not found or unauthorized");
+    throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   }
 
   const approvedTerms = await db
@@ -107,7 +108,7 @@ export async function getResidualScriptChaptersForUser(
     .from(novels)
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1);
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   return getResidualScriptChaptersForOwnedNovel(novelId);
 }
 
@@ -122,7 +123,7 @@ export async function translateMissingTitlesForUser(
     .limit(1);
 
   if (!novel) {
-    throw new SafeServerError("Novel not found or unauthorized");
+    throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   }
 
   const missing = await db
@@ -220,7 +221,7 @@ export async function deleteAllNovelTranslationsForUser(
       .limit(1)
       .for("update");
 
-    if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+    if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
     const novelChapters = await tx
       .select()
@@ -254,7 +255,7 @@ export async function deleteAllNovelTranslationsForUser(
         jobId: job.id,
         generation: job.generation,
         logsJson: job.logsJson,
-        message: "Translation cancelled because all translations were deleted.",
+        message: encodeMessage("log.cancelledTranslationsDeleted"),
       })),
       now,
     );

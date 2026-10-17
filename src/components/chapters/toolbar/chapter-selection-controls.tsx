@@ -1,11 +1,13 @@
 import { useForm } from "@tanstack/react-form";
 import { Play, RotateCw, Square, X } from "lucide-react";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 export interface ChapterSelectionControlsProps {
   selectedCount: number;
@@ -23,7 +25,8 @@ export interface ChapterSelectionControlsProps {
   onSelectRange: (from: number, to: number) => void;
 }
 
-const RANGE_ERROR = "Enter a valid range (from ≥ 1, from ≤ to)";
+// The message is a key (i18n.md §3), resolved by `FieldError` in the reader's language.
+const RANGE_ERROR = encodeMessage("validation.chapterRange");
 const chapterRangeSchema = z
   .object({
     from: z.string(),
@@ -58,6 +61,7 @@ export function ChapterSelectionControls({
   onClearSelection,
   onSelectRange,
 }: ChapterSelectionControlsProps) {
+  const t = useTranslations("studio");
   const form = useForm({
     defaultValues: {
       from: "",
@@ -77,13 +81,15 @@ export function ChapterSelectionControls({
     return (
       <>
         <span className="self-center text-caption text-muted-foreground">
-          {selectedCount}/{selectableCount} selected
-          {hiddenSelectedCount > 0 ? ` · ${hiddenSelectedCount} hidden by search` : ""}
+          {t("selectedCount", { selected: selectedCount, total: selectableCount })}
+          {hiddenSelectedCount > 0
+            ? ` · ${t("hiddenBySearch", { count: hiddenSelectedCount })}`
+            : ""}
         </span>
         {selectedMissingCount > 0 ? (
           <Button size="sm" onClick={onBatchTranslate} disabled={batchPending}>
             {batchStarting ? <Spinner /> : <Play className="size-4" />}
-            {`Translate selected (${selectedMissingCount})`}
+            {t("translateSelected", { count: selectedMissingCount })}
           </Button>
         ) : null}
         {selectedTranslatedCount > 0 ? (
@@ -94,7 +100,7 @@ export function ChapterSelectionControls({
             disabled={batchPending}
           >
             {batchStarting ? <Spinner /> : <RotateCw className="size-4" />}
-            {`Re-translate selected (${selectedTranslatedCount})`}
+            {t("retranslateSelected", { count: selectedTranslatedCount })}
           </Button>
         ) : null}
         <Button
@@ -104,11 +110,11 @@ export function ChapterSelectionControls({
           disabled={selectedActiveCount === 0 || batchPending}
         >
           {batchStopping ? <Spinner /> : <Square className="size-4" />}
-          {`Stop selected (${selectedActiveCount})`}
+          {t("stopSelected", { count: selectedActiveCount })}
         </Button>
         <Button variant="ghost" size="sm" onClick={onClearSelection}>
           <X className="size-4" />
-          Clear selection
+          {t("clearSelection")}
         </Button>
       </>
     );
@@ -129,7 +135,7 @@ export function ChapterSelectionControls({
           return (
             <Field data-invalid={invalid || undefined} className="w-24 gap-1">
               <FieldLabel htmlFor="chapter-range-from" variant="mutedCaption">
-                From chapter
+                {t("rangeFrom")}
               </FieldLabel>
               <Input
                 id="chapter-range-from"
@@ -156,7 +162,7 @@ export function ChapterSelectionControls({
           return (
             <Field data-invalid={invalid || undefined} className="w-24 gap-1">
               <FieldLabel htmlFor="chapter-range-to" variant="mutedCaption">
-                To chapter
+                {t("rangeTo")}
               </FieldLabel>
               <Input
                 id="chapter-range-to"
@@ -181,7 +187,7 @@ export function ChapterSelectionControls({
         {(isSubmitting) => (
           <Button variant="outline" size="sm" type="submit" disabled={isSubmitting}>
             {isSubmitting && <Spinner />}
-            Select range
+            {t("selectRange")}
           </Button>
         )}
       </form.Subscribe>

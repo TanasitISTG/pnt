@@ -1,82 +1,73 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
-const adminEmail = "e2e-admin@example.test";
-const adminPassword = "e2e-password-123";
+import { readShared } from "./fixtures";
+import {
+  addChapter,
+  appearanceGroup,
+  closeReaderAppearance,
+  createNovel,
+  fillChapterForm,
+  openChapter,
+  openReaderAppearance,
+  selectLanguage,
+  studioSection,
+} from "./novels";
+import { openReadingHome, takeSession, waitForHydration } from "./sessions";
+
+test.use({ storageState: takeSession("admin", "read") });
+
+const appUrl = readShared("app").url;
 const novelTitle = "Father and Son at Dawn";
 const chapterTitle = "黎明";
 const draftNovelTitle = "Unpublished Draft at Noon";
 const zhEnNovelTitle = "Father and Son in English";
 const zhEnChapterTitle = "黎明（英文）";
 const slowTranslationMarker = "慢速测试标记";
-async function waitForReactHydration(page: import("@playwright/test").Page) {
-  await page.waitForFunction(() => {
-    const submit = document.querySelector('button[type="submit"]');
-    return submit && Object.keys(submit).some((key) => key.startsWith("__reactProps$"));
-  });
-}
-
-async function rejectOptionalAnalytics(page: import("@playwright/test").Page) {
-  const rejectButton = page.getByRole("button", { name: "Reject optional" });
-  if (await rejectButton.isVisible()) await rejectButton.click();
+/**
+ * Switches the language of the signed-in work areas for the next document request.
+ *
+ * They carry no locale prefix - `/jobs`, `/admin` and a novel's studio paths are deliberately
+ * unshared and unindexed - so their language comes from the `pnt-locale` cookie, exactly as
+ * `use-switch-locale` sets it for a reader who picks one. The account's own remembered locale
+ * is the fallback behind the cookie, and it is not a spec's to change (`SHARED`,
+ * `e2e/fixtures.ts`): a switch made as that account would decide the language of every spec
+ * that runs afterwards.
+ */
+async function setLocaleCookie(page: import("@playwright/test").Page, locale: "en" | "th") {
+  await page
+    .context()
+    .addCookies([{ name: "pnt-locale", value: locale, url: new URL(page.url()).origin }]);
 }
 
 async function waitForTransientToastsToClear(page: import("@playwright/test").Page) {
   await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 15_000 });
 }
 
-/**
- * Choose a language in one of the novel form's two pickers.
- *
- * Base UI keeps a closed Select mounted, so an unscoped `getByRole("option", …)` can also
- * match the *other* picker's copy of the same language — which is what a target picker sees
- * whenever the source picker lists the language too. The open select is the only one whose
- * trigger points at its list, so the option is addressed through `aria-controls`.
- */
-async function selectLanguage(
-  page: import("@playwright/test").Page,
-  trigger: "#sourceLang" | "#targetLang",
-  name: string,
-) {
-  const triggerLocator = page.locator(trigger);
-  await triggerLocator.click();
-  // Base UI writes `aria-controls` on the render after the click, and a just-closed
-  // picker keeps a stale one, so wait for a live pointer at the open list.
-  await expect(triggerLocator).toHaveAttribute("aria-controls", /./);
-  const listId = await triggerLocator.getAttribute("aria-controls");
-  if (!listId) throw new Error(`The ${trigger} picker did not open`);
-  await page.locator(`#${listId}`).getByRole("option", { name }).click();
-}
-
 test("admin translates and publishes a chapter that a signed-out guest can read", async ({
+  browser,
   context,
   page,
 }) => {
   test.setTimeout(180_000);
-  await page.goto("/login");
-  await context.grantPermissions(["clipboard-write"], { origin: new URL(page.url()).origin });
-  await waitForReactHydration(page);
-  await rejectOptionalAnalytics(page);
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(adminPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
-
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
-  await page.getByRole("button", { name: "New novel" }).click();
-  await waitForReactHydration(page);
-  await page.getByLabel("Title *").fill(novelTitle);
-
-  await selectLanguage(page, "#sourceLang", "Chinese (ZH)");
-  await selectLanguage(page, "#targetLang", "Thai (TH)");
-  await page.getByRole("button", { name: "Create Novel" }).click();
-
-  // Creating a novel opens its studio on the add-chapters section; the reading page is a
-  // separate URL that the trail links to.
-  await expect(page.getByRole("heading", { name: "Add chapters" })).toBeVisible();
-  const novelDetailUrl = `/novels/${new URL(page.url()).pathname.split("/")[2]}`;
+  // The copy-to-clipboard toast is one of the things this test reads, and the permission belongs
+  // to the context rather than to a page: granted up front, it survives every navigation below.
+  await context.grantPermissions(["clipboard-write"], { origin: appUrl });
+  await openReadingHome(page);
+  // The reading page is a separate address the trail links to, and the creation hands back the id
+  // it is built from.
+  const novelId = await createNovel(page, {
+    title: novelTitle,
+    pair: { source: "Chinese (ZH)", target: "Thai (TH)" },
+  });
+  const novelDetailUrl = `/novels/${novelId}`;
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByLabel("Chapter number *").fill("1");
-  await page.getByLabel("Chapter title *").fill(chapterTitle);
-  await page.getByLabel("Source text *").fill("儿子对父亲说：“我会回来的。”\n父亲点了点头。");
+  await fillChapterForm(page, {
+    number: "1",
+    title: chapterTitle,
+    source: "儿子对父亲说：“我会回来的。”\n父亲点了点头。",
+  });
 
   await page.getByRole("tab", { name: /^From URL/ }).click();
   await page.getByLabel("Chapter source URL").fill("https://www.quanben.io/n/test/1.html");
@@ -107,10 +98,13 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole("button", { name: "Add chapter" }).click();
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
+  await page.getByRole("button", { name: "Add chapter", exact: true }).click();
+  await studioSection(page, "Chapters").click();
 
-  await page.getByRole("link", { name: "Relationships", exact: true }).click();
+  // Kept for the Thai sweep near the end of this test, which visits this workspace again.
+  const chaptersPath = new URL(page.url()).pathname;
+
+  await studioSection(page, "Relationships").click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
   await page.getByRole("tab", { name: /Directed relationships/ }).click();
   const addRelationshipButton = page.getByRole("button", { name: "Add directed relationship" });
@@ -127,7 +121,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(sourceNameInput).toHaveAttribute("aria-describedby", /character-source-error/);
   await expect(page.locator("#character-source-error")).toHaveAttribute("role", "alert");
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
+  await studioSection(page, "Chapters").click();
 
   const sourceChapterRow = page.getByRole("row", { name: new RegExp(chapterTitle) });
   await expect(sourceChapterRow).toBeVisible();
@@ -163,25 +157,18 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);
+
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(novelDetailUrl);
   await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
 
   await page.getByRole("button", { name: "Manage" }).click();
-  // Addressed through the studio's sub-nav: the progress card also links to the glossary.
-  await page
-    .getByRole("navigation", { name: "Novel studio" })
-    .getByRole("link", { name: "Glossary" })
-    .click();
+  // Addressed through the studio's sub-nav, whose helper says why: the progress card also links
+  // to the glossary.
+  await studioSection(page, "Glossary").click();
   await expect(page.getByRole("heading", { name: `${novelTitle} Glossary` })).toBeVisible();
   const bulkImportButton = page.getByRole("button", { name: "Bulk Import (TSV)" });
-  await expect
-    .poll(() =>
-      bulkImportButton.evaluate((button) =>
-        Object.keys(button).some((key) => key.startsWith("__reactProps$")),
-      ),
-    )
-    .toBe(true);
+  await waitForHydration(bulkImportButton);
   await bulkImportButton.click();
   const glossaryImport = Array.from({ length: 26 }, (_, index) => {
     const number = index + 1;
@@ -211,8 +198,12 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).resolves.toBe(true);
   await page.screenshot({ path: ".tura/e2e/glossary-mobile.png", fullPage: true });
+
+  // Kept for the Thai sweep near the end of this test, which visits the glossary again.
+  const glossaryPath = new URL(page.url()).pathname;
+
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole("link", { name: "Relationships", exact: true }).click();
+  await studioSection(page, "Relationships").click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Characters" })).toBeVisible();
   const relationshipsTab = page.getByRole("tab", { name: /Directed relationships/ });
@@ -270,7 +261,7 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await page.getByRole("button", { name: "Save relationship" }).click();
   await expect(relationshipMobileRows.getByText(/ผม/)).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
+  await studioSection(page, "Chapters").click();
   const chapterRow = page
     .getByRole("link", { name: "ยามรุ่งอรุณ", exact: true })
     .filter({ visible: true })
@@ -312,6 +303,21 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     translatedChapterRow.getByRole("button", { name: "Publishing options" }),
   ).toContainText("Live");
 
+  // The export menu is the owner's way out of the app with the book. The unit suite proves the
+  // route it asks for and the sentence it shows when there is nothing to export; this proves
+  // the file: the browser receives a download whose body is the translation on the page above.
+  const [exported] = await Promise.all([
+    page.waitForEvent("download"),
+    (async () => {
+      await page.getByRole("button", { name: "Export", exact: true }).click();
+      await page.getByRole("menuitem", { name: /^Export as TXT/ }).click();
+    })(),
+  ]);
+  expect(exported.suggestedFilename()).toBe(`${novelTitle}.txt`);
+  const exportedPath = await exported.path();
+  if (!exportedPath) throw new Error("the export download was saved nowhere to read");
+  expect(readFileSync(exportedPath, "utf8")).toContain("ผมจะ กลับมา");
+
   await page.getByRole("link", { name: "Library", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
   await expect(
@@ -322,72 +328,123 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(
     page.getByRole("combobox", { name: "Sort by" }).locator('[data-slot="select-value"]'),
   ).toHaveText("Newest first");
-  await page.getByRole("button", { name: "New novel" }).click();
-  await waitForReactHydration(page);
-  await page.getByLabel("Title *").fill(draftNovelTitle);
-  await page.getByRole("button", { name: "Create Novel" }).click();
-  await expect(page.getByRole("heading", { name: "Add chapters" })).toBeVisible();
+  // The shelf offers the control itself, which is where this spec is standing.
+  await createNovel(page, { title: draftNovelTitle });
   await page.getByRole("link", { name: "Library", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Your Library" })).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(novelTitle) })).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(draftNovelTitle) })).toBeVisible();
 
-  await page.getByRole("button", { name: /E2E Admin/ }).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-  // Signing out from the shelf lands a guest on `/`, which serves the shared catalog:
-  // published novels only, and none of the owner affordances.
-  await expect(page.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your Library", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: new RegExp(novelTitle) })).toBeVisible();
-  await expect(page.getByRole("link", { name: new RegExp(draftNovelTitle) })).toHaveCount(0);
+  // The five signed-in surfaces this test has just visited, once more in the language the app
+  // actually ships in and at the width where each is tightest.
+  //
+  // A work area carries no language in its URL on purpose (`IGNORED_EXACT_PATHS` in
+  // `src/lib/i18n/locales.ts`: these pages are neither shared nor indexed), so Thai here comes
+  // from the `pnt-locale` cookie - what the switcher writes - and the account's remembered
+  // locale is only its fallback. That is why nothing below has to change `user.locale`, the
+  // shared state every other spec in the run asserts English copy against. And no unit test can
+  // stand in for it: jsdom has no layout engine, and Thai runs longer than English per wrapped
+  // line, in these very controls - a job's ID button, a status badge, a column header.
+  const thaiSurfaces = [
+    { path: "/library", heading: "คลังของฉัน" },
+    {
+      path: "/jobs",
+      heading: "ความเคลื่อนไหว",
+      control: { role: "button", name: "คัดลอกรหัสงาน" },
+    },
+    { path: chaptersPath, heading: "บทที่" },
+    { path: glossaryPath, heading: `อภิธานศัพท์ของ ${novelTitle}` },
+    { path: `${novelDetailUrl}/relationships`, heading: "ตัวละครและความสัมพันธ์" },
+  ] as const;
 
-  await page.getByRole("link", { name: new RegExp(novelTitle) }).click();
-  await expect(page.getByRole("heading", { name: novelTitle })).toBeVisible();
-  await page.getByRole("link", { name: "ยามรุ่งอรุณ" }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setLocaleCookie(page, "th");
+  for (const surface of thaiSurfaces) {
+    await page.goto(surface.path);
+    await expect(page.locator("html")).toHaveAttribute("lang", "th");
+    await expect(page.getByRole("heading", { name: surface.heading })).toBeVisible();
+    if ("control" in surface) {
+      await expect(
+        page.getByRole(surface.control.role, { name: surface.control.name }).first(),
+      ).toBeVisible();
+    }
+    await expect(
+      page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).resolves.toBe(true);
+  }
 
-  await expect(page.getByRole("heading", { name: "ยามรุ่งอรุณ" })).toBeVisible();
-  await expect(page.getByText("“ผมจะ กลับมา” ลูกชายบอกพ่อ")).toBeVisible();
-  await expect(page.getByText("return مرحبا мир")).toHaveCount(0);
-  await expect(page.getByText("Machine-translated from Chinese.")).toBeVisible();
-  await page.screenshot({ path: ".tura/e2e/guest-reader.png", fullPage: true });
+  // The rest of this test is what a reader sees *after* the owner leaves, and signing out ends
+  // the session it is given - so it runs in a context with a session of its own, declared as this
+  // spec's to end (`SESSIONS` in `e2e/sessions.ts`). The shared one stays alive for the two tests
+  // below, and for `reader-smoke.spec.ts` and `reports.spec.ts`, which run after this file.
+  const guestContext = await browser.newContext({
+    storageState: takeSession("publish-translation", "sign-out"),
+  });
+  try {
+    const guest = await guestContext.newPage();
+
+    // The shelf the sign-out step expects: signing out of a protected page would land on the
+    // sign-in screen, and what follows is the guest's catalogue.
+    await guest.setViewportSize({ width: 1280, height: 900 });
+    await guest.goto("/library");
+    await expect(guest.getByRole("heading", { name: "Your Library" })).toBeVisible();
+
+    // A document load renders the account menu's button a moment before React attaches its
+    // handlers - a click that lands first only focuses it, and the menu never opens. So the
+    // click is retried until the menu answers.
+    await expect(async () => {
+      await guest.getByRole("button", { name: /E2E Admin/ }).click();
+      await expect(guest.getByRole("menuitem", { name: "Sign out" })).toBeVisible({
+        timeout: 1_000,
+      });
+    }).toPass({ timeout: 20_000 });
+    await guest.getByRole("menuitem", { name: "Sign out" }).click();
+    await expect(guest.getByRole("button", { name: "Sign in" })).toBeVisible();
+    // Signing out from the shelf lands a guest on `/`, which serves the shared catalog:
+    // published novels only, and none of the owner affordances.
+    await expect(guest.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
+    await expect(guest.getByRole("heading", { name: "Your Library", exact: true })).toHaveCount(0);
+    await expect(guest.getByRole("link", { name: new RegExp(novelTitle) })).toBeVisible();
+    await expect(guest.getByRole("link", { name: new RegExp(draftNovelTitle) })).toHaveCount(0);
+
+    await guest.getByRole("link", { name: new RegExp(novelTitle) }).click();
+    await expect(guest.getByRole("heading", { name: novelTitle })).toBeVisible();
+    await guest.getByRole("link", { name: "ยามรุ่งอรุณ" }).click();
+
+    await expect(guest.getByRole("heading", { name: "ยามรุ่งอรุณ" })).toBeVisible();
+    await expect(guest.getByText("“ผมจะ กลับมา” ลูกชายบอกพ่อ")).toBeVisible();
+    await expect(guest.getByText("return مرحبا мир")).toHaveCount(0);
+    await expect(guest.getByText("Machine-translated from Chinese.")).toBeVisible();
+    await guest.screenshot({ path: ".tura/e2e/guest-reader.png", fullPage: true });
+  } finally {
+    await guestContext.close();
+  }
 });
 test("admin translates Chinese-to-English relationships and resets them on pair change", async ({
   page,
 }) => {
   test.setTimeout(180_000);
 
-  await page.goto("/login");
-  await waitForReactHydration(page);
-  await rejectOptionalAnalytics(page);
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(adminPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await openReadingHome(page);
+  await createNovel(page, {
+    title: zhEnNovelTitle,
+    pair: { source: "Chinese (ZH)", target: "English (EN)" },
+  });
+  await addChapter(page, {
+    number: "1",
+    title: zhEnChapterTitle,
+    source: `儿子对父亲说：“我会回来的。”\n${slowTranslationMarker}`,
+  });
+  await studioSection(page, "Chapters").click();
 
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
-  await page.getByRole("button", { name: "New novel" }).click();
-  await waitForReactHydration(page);
-  await page.getByLabel("Title *").fill(zhEnNovelTitle);
-  await selectLanguage(page, "#sourceLang", "Chinese (ZH)");
-  await selectLanguage(page, "#targetLang", "English (EN)");
-  await page.getByRole("button", { name: "Create Novel" }).click();
-  await expect(page.getByRole("heading", { name: "Add chapters" })).toBeVisible();
-  await page.getByLabel("Chapter number *").fill("1");
-  await page.getByLabel("Chapter title *").fill(zhEnChapterTitle);
-  await page
-    .getByLabel("Source text *")
-    .fill(`儿子对父亲说：“我会回来的。”\n${slowTranslationMarker}`);
-  await page.getByRole("button", { name: "Add chapter" }).click();
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
-
-  await page.getByRole("link", { name: "Relationships", exact: true }).click();
+  await studioSection(page, "Relationships").click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
   await expect(page.getByText("ZH → EN", { exact: true })).toBeVisible();
   await expect(page.getByText(/Chinese-to-English dialogue/)).toBeVisible();
   await page.getByRole("button", { name: "Add character profile" }).click();
   await expect(page.getByLabel("English name")).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
+  await studioSection(page, "Chapters").click();
 
   let chapterRow = page.getByRole("row", { name: new RegExp(zhEnChapterTitle) });
   await chapterRow.getByRole("button", { name: "Translate chapter" }).click();
@@ -402,11 +459,13 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   await selectLanguage(page, "#targetLang", "Thai (TH)");
   await page.getByRole("button", { name: "Save Changes" }).click();
   await expect(
-    page.getByText("Cancel active translations before changing the language pair", { exact: true }),
+    page.getByText("Cancel active translations before changing the language pair.", {
+      exact: true,
+    }),
   ).toBeVisible();
   expect(page.url()).toBe(editUrl);
 
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
+  await studioSection(page, "Chapters").click();
   chapterRow = page.getByRole("row", { name: new RegExp(zhEnChapterTitle) });
   await expect(chapterRow.getByRole("button", { name: "Cancel translation" })).toBeVisible({
     timeout: 15_000,
@@ -414,18 +473,10 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   await expect(chapterRow.getByRole("button", { name: "Cancel translation" })).toHaveCount(0, {
     timeout: 90_000,
   });
-  await expect(page.getByRole("link", { name: "Dawn", exact: true })).toBeVisible({
-    timeout: 30_000,
-  });
-  await page.getByRole("link", { name: "Dawn", exact: true }).click();
-  await page.getByRole("button", { name: "Reading settings" }).click();
-  await page
-    .getByRole("group", { name: "View" })
-    .getByRole("button", { name: "Translation" })
-    .click();
-  // The appearance popover has no close button: its trigger toggles it, as it opened it.
-  await page.getByRole("button", { name: "Reading settings" }).click();
-  await expect(page.getByRole("group", { name: "View" })).toHaveCount(0);
+  await openChapter(page, "Dawn");
+  await openReaderAppearance(page);
+  await appearanceGroup(page, "View").getByRole("button", { name: "Translation" }).click();
+  await closeReaderAppearance(page);
   await expect(
     page.getByText('"I will return," Son said to Father.', { exact: true }),
   ).toBeVisible();
@@ -433,7 +484,7 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   await page.goBack();
   await expect(page.getByRole("heading", { name: "Chapters", exact: true })).toBeVisible();
 
-  await page.getByRole("link", { name: "Relationships", exact: true }).click();
+  await studioSection(page, "Relationships").click();
   await expect(page.getByRole("heading", { name: "Character & Relationships" })).toBeVisible();
   await expect(
     page.getByLabel("Desktop character profiles").getByText("Father", { exact: true }),
@@ -458,7 +509,7 @@ test("admin translates Chinese-to-English relationships and resets them on pair 
   // Saving stays on the settings section instead of leaving the studio.
   await expect(page.getByRole("heading", { name: "Novel settings" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Relationships", exact: true }).click();
+  await studioSection(page, "Relationships").click();
   await expect(page.getByText("EN → TH", { exact: true })).toBeVisible();
   await expect(
     page
@@ -485,36 +536,24 @@ test("admin stops selected translations and reviews card metadata in both views"
   test.setTimeout(180_000);
   const bulkNovelTitle = "Bulk Stop Translation";
 
-  await page.goto("/login");
-  await waitForReactHydration(page);
-  await rejectOptionalAnalytics(page);
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(adminPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await openReadingHome(page);
+  await createNovel(page, {
+    title: bulkNovelTitle,
+    pair: { source: "Chinese (ZH)", target: "English (EN)" },
+  });
 
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
-  await page.getByRole("button", { name: "New novel" }).click();
-  await waitForReactHydration(page);
-  await page.getByLabel("Title *").fill(bulkNovelTitle);
-  await selectLanguage(page, "#sourceLang", "Chinese (ZH)");
-  await selectLanguage(page, "#targetLang", "English (EN)");
-  await page.getByRole("button", { name: "Create Novel" }).click();
-  await expect(page.getByRole("heading", { name: "Add chapters" })).toBeVisible();
-
-  const addChapter = async (number: number, title: string, content: string) => {
-    await page.getByLabel("Chapter number *").fill(String(number));
-    await page.getByLabel("Chapter title *").fill(title);
-    await page.getByLabel("Source text *").fill(content);
-    await page.getByRole("button", { name: "Add chapter" }).click();
-    await expect(
-      page.getByText("Chapter added successfully", { exact: true }).first(),
-    ).toBeVisible();
-  };
-
-  await addChapter(1, "Bulk chapter one", `儿子对父亲说：“我会回来的。”\n${slowTranslationMarker}`);
-  await addChapter(2, "Bulk chapter two", `父亲点了点头。\n${slowTranslationMarker}`);
-  await addChapter(3, "Idle chapter", "儿子在黎明时回家。");
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
+  await addChapter(page, {
+    number: "1",
+    title: "Bulk chapter one",
+    source: `儿子对父亲说：“我会回来的。”\n${slowTranslationMarker}`,
+  });
+  await addChapter(page, {
+    number: "2",
+    title: "Bulk chapter two",
+    source: `父亲点了点头。\n${slowTranslationMarker}`,
+  });
+  await addChapter(page, { number: "3", title: "Idle chapter", source: "儿子在黎明时回家。" });
+  await studioSection(page, "Chapters").click();
 
   const firstRow = page.getByRole("row", { name: /Bulk chapter one/ });
   const secondRow = page.getByRole("row", { name: /Bulk chapter two/ });

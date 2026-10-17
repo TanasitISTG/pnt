@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { TablePager } from "@/components/admin/table-pager";
 import { DataTableSection } from "@/components/ui/data-table-parts";
 import {
@@ -34,17 +36,18 @@ export function ReportCaseTable({
   onPageChange,
   onReview,
 }: ReportCaseTableProps) {
+  const t = useTranslations("admin");
   return (
-    <DataTableSection ariaLabel="Open report cases" busy={isPending}>
+    <DataTableSection ariaLabel={t("casesAria")} busy={isPending}>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Target</TableHead>
-            <TableHead>Reports</TableHead>
-            <TableHead className="hidden sm:table-cell">State</TableHead>
-            <TableHead className="hidden md:table-cell">Waiting since</TableHead>
+            <TableHead>{t("columnTarget")}</TableHead>
+            <TableHead>{t("columnReports")}</TableHead>
+            <TableHead className="hidden sm:table-cell">{t("columnState")}</TableHead>
+            <TableHead className="hidden md:table-cell">{t("columnWaitingSince")}</TableHead>
             <TableHead className="w-12">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("columnActions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -59,7 +62,7 @@ export function ReportCaseTable({
           {!isPending && cases.length === 0 && (
             <TableRow>
               <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
-                {searching ? "No open cases match that search." : "No open reports."}
+                {searching ? t("casesEmptySearch") : t("casesEmpty")}
               </TableCell>
             </TableRow>
           )}
@@ -69,7 +72,7 @@ export function ReportCaseTable({
         page={page}
         pageSize={pageSize}
         rowCount={rowCount}
-        noun="cases"
+        noun={t("nounCases")}
         isPending={isPending}
         onPageChange={onPageChange}
       />

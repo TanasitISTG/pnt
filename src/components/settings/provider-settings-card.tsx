@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Cpu, ExternalLink, ShieldCheck, Zap } from "lucide-react";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { ProviderSelectionSection } from "./provider-selection-section";
@@ -36,83 +37,106 @@ import {
 import { isOpenCodeLunaModel } from "@/lib/translation/providers/provider-compatibility";
 import type { ProviderType, ReasoningEffort } from "@/lib/providers/types";
 
+type ReasoningEffortLabelKey =
+  | "reasoningEffortDefault"
+  | "reasoningEffortNone"
+  | "reasoningEffortMinimal"
+  | "reasoningEffortLow"
+  | "reasoningEffortMedium"
+  | "reasoningEffortHigh"
+  | "reasoningEffortXHigh"
+  | "reasoningEffortMax";
+
 const REASONING_EFFORT_OPTIONS: Array<{
   value: ReasoningEffort | "default";
-  label: string;
+  labelKey: ReasoningEffortLabelKey;
 }> = [
-  { value: "default", label: "Provider default" },
-  { value: "none", label: "None" },
-  { value: "minimal", label: "Minimal" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra high" },
-  { value: "max", label: "Maximum" },
+  { value: "default", labelKey: "reasoningEffortDefault" },
+  { value: "none", labelKey: "reasoningEffortNone" },
+  { value: "minimal", labelKey: "reasoningEffortMinimal" },
+  { value: "low", labelKey: "reasoningEffortLow" },
+  { value: "medium", labelKey: "reasoningEffortMedium" },
+  { value: "high", labelKey: "reasoningEffortHigh" },
+  { value: "xhigh", labelKey: "reasoningEffortXHigh" },
+  { value: "max", labelKey: "reasoningEffortMax" },
 ];
 
-const reasoningEffortItems = Object.fromEntries(
-  REASONING_EFFORT_OPTIONS.map((option) => [option.value, option.label]),
-) as Record<ReasoningEffort | "default", string>;
+/** The handful of sentences this form says about its own fields. */
+type ProviderMessageKey =
+  | "baseUrlInvalid"
+  | "modelRequired"
+  | "timeoutInvalid"
+  | "priceNegative"
+  | "temperatureMin"
+  | "temperatureMax";
 
-const optionalTimeoutSchema = z.string().superRefine((value, context) => {
-  if (value === "") return;
-  const timeout = Number(value);
-  if (!/^\d+$/.test(value) || !Number.isInteger(timeout) || timeout < 10 || timeout > 600) {
-    context.addIssue({
-      code: "custom",
-      message: "Request timeout must be a whole number from 10 to 600",
-    });
-  }
-});
+type ProviderMessage = (key: ProviderMessageKey) => string;
 
-const optionalPriceSchema = z.string().superRefine((value, context) => {
-  if (value === "") return;
-  const price = Number(value);
-  if (!Number.isFinite(price) || price < 0) {
-    context.addIssue({ code: "custom", message: "Price must be zero or greater" });
-  }
-});
-
-const providerSettingsFormSchema = z
-  .object({
-    provider: z.enum(["openai", "gemini"]),
-    baseUrl: z.url("Base URL must be a valid URL").or(z.literal("")),
-    apiKey: z.string().max(4096),
-    model: z.string().trim().min(1, "Model name is required"),
-    fastModel: z.string(),
-    reasoningEffort: z
-      .enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"])
-      .nullable(),
-    temperature: z.number().min(0, "Min temperature is 0").max(2, "Max temperature is 2"),
-    requestTimeoutSec: optionalTimeoutSchema,
-    inputPrice: z.string(),
-    outputPrice: z.string(),
-    action: z.enum(["save", "test"]),
-  })
-  .superRefine((value, context) => {
-    if (value.action !== "save") return;
-    for (const name of ["inputPrice", "outputPrice"] as const) {
-      const result = optionalPriceSchema.safeParse(value[name]);
-      if (result.success) continue;
-      for (const issue of result.error.issues) {
-        context.addIssue({ ...issue, path: [name] });
-      }
+/**
+ * The form's own rules, with their messages in the reader's language.
+ *
+ * A factory rather than a module constant, so the spend and timeout sentences can be
+ * translated: a schema built at import time could only ever say them in one language. The
+ * rules themselves are unchanged, and the two the server also enforces keep the same bounds.
+ */
+function buildProviderSettingsFormSchema(t: ProviderMessage) {
+  const optionalTimeoutSchema = z.string().superRefine((value, context) => {
+    if (value === "") return;
+    const timeout = Number(value);
+    if (!/^\d+$/.test(value) || !Number.isInteger(timeout) || timeout < 10 || timeout > 600) {
+      context.addIssue({ code: "custom", message: t("timeoutInvalid") });
     }
-  })
-  .transform((value): SaveProviderSettingsInput => ({
-    provider: value.provider,
-    baseUrl: value.baseUrl,
-    apiKey: value.apiKey.trim() || undefined,
-    model: value.model.trim(),
-    fastModel: value.fastModel.trim() || null,
-    reasoningEffort: value.reasoningEffort,
-    temperature: value.temperature,
-    requestTimeoutSec: value.requestTimeoutSec === "" ? null : Number(value.requestTimeoutSec),
-    inputPricePer1M: value.inputPrice === "" ? null : Number(value.inputPrice),
-    outputPricePer1M: value.outputPrice === "" ? null : Number(value.outputPrice),
-  }));
+  });
 
-type ProviderSettingsFormValues = z.input<typeof providerSettingsFormSchema>;
+  const optionalPriceSchema = z.string().superRefine((value, context) => {
+    if (value === "") return;
+    const price = Number(value);
+    if (!Number.isFinite(price) || price < 0) {
+      context.addIssue({ code: "custom", message: t("priceNegative") });
+    }
+  });
+
+  return z
+    .object({
+      provider: z.enum(["openai", "gemini"]),
+      baseUrl: z.url(t("baseUrlInvalid")).or(z.literal("")),
+      apiKey: z.string().max(4096),
+      model: z.string().trim().min(1, t("modelRequired")),
+      fastModel: z.string(),
+      reasoningEffort: z
+        .enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"])
+        .nullable(),
+      temperature: z.number().min(0, t("temperatureMin")).max(2, t("temperatureMax")),
+      requestTimeoutSec: optionalTimeoutSchema,
+      inputPrice: z.string(),
+      outputPrice: z.string(),
+      action: z.enum(["save", "test"]),
+    })
+    .superRefine((value, context) => {
+      if (value.action !== "save") return;
+      for (const name of ["inputPrice", "outputPrice"] as const) {
+        const result = optionalPriceSchema.safeParse(value[name]);
+        if (result.success) continue;
+        for (const issue of result.error.issues) {
+          context.addIssue({ ...issue, path: [name] });
+        }
+      }
+    })
+    .transform((value): SaveProviderSettingsInput => ({
+      provider: value.provider,
+      baseUrl: value.baseUrl,
+      apiKey: value.apiKey.trim() || undefined,
+      model: value.model.trim(),
+      fastModel: value.fastModel.trim() || null,
+      reasoningEffort: value.reasoningEffort,
+      temperature: value.temperature,
+      requestTimeoutSec: value.requestTimeoutSec === "" ? null : Number(value.requestTimeoutSec),
+      inputPricePer1M: value.inputPrice === "" ? null : Number(value.inputPrice),
+      outputPricePer1M: value.outputPrice === "" ? null : Number(value.outputPrice),
+    }));
+}
+
+type ProviderSettingsFormValues = z.input<ReturnType<typeof buildProviderSettingsFormSchema>>;
 type ProviderSettingsFieldName = Exclude<keyof ProviderSettingsFormValues, "action">;
 
 const providerFieldIds: Record<ProviderSettingsFieldName, string> = {
@@ -165,10 +189,17 @@ export function ProviderSettingsCard({
   onSave,
   onTest,
 }: ProviderSettingsCardProps) {
+  const t = useTranslations("settings");
+  const tc = useTranslations("common");
   const [hasApiKey, setHasApiKey] = useState(initialSettings.hasApiKey);
   const [apiKeyMasked, setApiKeyMasked] = useState(initialSettings.apiKeyMasked);
   const [showFullError, setShowFullError] = useState(false);
   const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
+  // One schema per language, so the messages under the fields follow the reader.
+  const providerSettingsFormSchema = useMemo(() => buildProviderSettingsFormSchema(t), [t]);
+  const reasoningEffortItems = Object.fromEntries(
+    REASONING_EFFORT_OPTIONS.map((option) => [option.value, t(option.labelKey)]),
+  ) as Record<ReasoningEffort | "default", string>;
   const form = useForm({
     defaultValues: {
       provider: initialSettings.provider,
@@ -253,12 +284,9 @@ export function ProviderSettingsCard({
       <CardHeader>
         <div className="flex items-center gap-2">
           <Cpu className="size-5 text-muted-foreground" />
-          <CardTitle>AI Provider Settings</CardTitle>
+          <CardTitle>{t("providerSettingsTitle")}</CardTitle>
         </div>
-        <CardDescription>
-          Connect an OpenAI-compatible API or Google AI Studio (Gemini API key). API keys are
-          encrypted at rest using AES-256-GCM.
-        </CardDescription>
+        <CardDescription>{t("providerSettingsDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form
@@ -291,7 +319,7 @@ export function ProviderSettingsCard({
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="baseUrl">Base URL</FieldLabel>
+                  <FieldLabel htmlFor="baseUrl">{t("baseUrlLabel")}</FieldLabel>
                   <Input
                     id="baseUrl"
                     name={field.name}
@@ -316,7 +344,7 @@ export function ProviderSettingsCard({
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="model">Model Name</FieldLabel>
+                  <FieldLabel htmlFor="model">{t("modelNameLabel")}</FieldLabel>
                   <Input
                     id="model"
                     name={field.name}
@@ -336,7 +364,7 @@ export function ProviderSettingsCard({
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="fastModel">Fast Model (Cheaper tasks)</FieldLabel>
+                  <FieldLabel htmlFor="fastModel">{t("fastModelLabel")}</FieldLabel>
                   <Input
                     id="fastModel"
                     name={field.name}
@@ -346,10 +374,7 @@ export function ProviderSettingsCard({
                     placeholder={provider === "gemini" ? "gemini-2.5-flash" : "gpt-4o-mini"}
                     aria-invalid={invalid}
                   />
-                  <FieldDescription>
-                    Optional. Used for title translation, chapter summaries, term suggestions, and
-                    story context updates to reduce costs.
-                  </FieldDescription>
+                  <FieldDescription>{t("fastModelDescription")}</FieldDescription>
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
               );
@@ -363,7 +388,7 @@ export function ProviderSettingsCard({
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-1.5">
                       <FieldLabel htmlFor="apiKey">
-                        {provider === "gemini" ? "Google AI Studio API Key" : "API Key"}
+                        {provider === "gemini" ? t("googleApiKeyLabel") : t("apiKeyLabel")}
                       </FieldLabel>
                       {provider === "gemini" && (
                         <a
@@ -372,7 +397,7 @@ export function ProviderSettingsCard({
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-0.5 text-caption text-primary hover:underline"
                         >
-                          Get Key
+                          {t("getKey")}
                           <ExternalLink className="size-3" />
                         </a>
                       )}
@@ -380,7 +405,7 @@ export function ProviderSettingsCard({
                     {hasApiKey && (
                       <span className="flex items-center gap-1 text-caption text-success">
                         <ShieldCheck className="size-3.5" />
-                        Key saved ({apiKeyMasked})
+                        {t("keySaved", { masked: apiKeyMasked })}
                       </span>
                     )}
                   </div>
@@ -393,16 +418,14 @@ export function ProviderSettingsCard({
                     onChange={(event) => field.handleChange(event.target.value)}
                     placeholder={
                       hasApiKey
-                        ? `Leave blank to keep saved key (${apiKeyMasked})`
+                        ? t("apiKeyKeepHint", { masked: apiKeyMasked })
                         : provider === "gemini"
                           ? "AIzaSy…"
                           : "sk-proj-…"
                     }
                     aria-invalid={invalid}
                   />
-                  <FieldDescription>
-                    Your key is encrypted on the server and never sent to the browser.
-                  </FieldDescription>
+                  <FieldDescription>{t("apiKeyDescription")}</FieldDescription>
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
               );
@@ -415,7 +438,7 @@ export function ProviderSettingsCard({
                 const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={invalid || undefined}>
-                    <FieldLabel htmlFor="reasoningEffort">Reasoning Effort</FieldLabel>
+                    <FieldLabel htmlFor="reasoningEffort">{t("reasoningEffortLabel")}</FieldLabel>
                     <Select
                       name={field.name}
                       value={field.state.value ?? "default"}
@@ -438,15 +461,14 @@ export function ProviderSettingsCard({
                         <SelectGroup>
                           {REASONING_EFFORT_OPTIONS.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
-                              {option.label}
+                              {t(option.labelKey)}
                             </SelectItem>
                           ))}
                         </SelectGroup>
                       </SelectContent>
                     </Select>
                     <FieldDescription className="max-w-2xl">
-                      OpenAI-compatible models only. Provider default omits the parameter; explicit
-                      levels may be rejected by models that do not support reasoning effort.
+                      {t("reasoningEffortDescription")}
                     </FieldDescription>
                     {invalid && <FieldError errors={field.state.meta.errors} />}
                   </Field>
@@ -461,14 +483,14 @@ export function ProviderSettingsCard({
               return (
                 <Field data-invalid={invalid || undefined}>
                   <div className="flex items-center justify-between">
-                    <FieldLabel htmlFor="temperature">Temperature</FieldLabel>
+                    <FieldLabel htmlFor="temperature">{t("temperatureLabel")}</FieldLabel>
                     <span className="font-mono text-body text-foreground">
                       {field.state.value.toFixed(1)}
                     </span>
                   </div>
                   <Slider
                     id="temperature"
-                    aria-label="Temperature"
+                    aria-label={t("temperatureLabel")}
                     min={0}
                     max={2}
                     step={0.1}
@@ -482,9 +504,7 @@ export function ProviderSettingsCard({
                     onValueCommitted={field.handleBlur}
                   />
                   <FieldDescription>
-                    {isTemperatureDisabled
-                      ? "OpenCode Luna does not support a custom temperature."
-                      : "Lower values (0.2–0.5) produce more accurate translations; higher values (0.7–1.0) allow more creative flair."}
+                    {isTemperatureDisabled ? t("temperatureLocked") : t("temperatureDescription")}
                   </FieldDescription>
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
@@ -497,7 +517,7 @@ export function ProviderSettingsCard({
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="requestTimeoutSec">Request Timeout (seconds)</FieldLabel>
+                  <FieldLabel htmlFor="requestTimeoutSec">{t("timeoutLabel")}</FieldLabel>
                   <Input
                     id="requestTimeoutSec"
                     name={field.name}
@@ -510,9 +530,7 @@ export function ProviderSettingsCard({
                     placeholder="240"
                     aria-invalid={invalid}
                   />
-                  <FieldDescription>
-                    Request timeout (seconds). Raise for slow/free APIs; keep ≤270 on Vercel Hobby
-                  </FieldDescription>
+                  <FieldDescription>{t("timeoutDescription")}</FieldDescription>
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
               );
@@ -520,7 +538,7 @@ export function ProviderSettingsCard({
           </form.Field>
 
           <FieldSet>
-            <FieldLegend variant="label">Token Prices (USD per 1M tokens, optional)</FieldLegend>
+            <FieldLegend variant="label">{t("currencyLegend")}</FieldLegend>
             <div className="grid grid-cols-2 gap-4">
               <form.Field name="inputPrice">
                 {(field) => {
@@ -536,11 +554,11 @@ export function ProviderSettingsCard({
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(event) => field.handleChange(event.target.value)}
-                        placeholder="Input, e.g. 0.075"
-                        aria-label="Input price"
+                        placeholder={t("inputPricePlaceholder")}
+                        aria-label={t("inputPriceAria")}
                         aria-invalid={invalid}
                       />
-                      <FieldDescription>Input / prompt</FieldDescription>
+                      <FieldDescription>{t("inputPriceLabel")}</FieldDescription>
                       {invalid && <FieldError errors={field.state.meta.errors} />}
                     </Field>
                   );
@@ -560,21 +578,18 @@ export function ProviderSettingsCard({
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(event) => field.handleChange(event.target.value)}
-                        placeholder="Output, e.g. 0.30"
-                        aria-label="Output price"
+                        placeholder={t("outputPricePlaceholder")}
+                        aria-label={t("outputPriceAria")}
                         aria-invalid={invalid}
                       />
-                      <FieldDescription>Output / completion</FieldDescription>
+                      <FieldDescription>{t("outputPriceLabel")}</FieldDescription>
                       {invalid && <FieldError errors={field.state.meta.errors} />}
                     </Field>
                   );
                 }}
               </form.Field>
             </div>
-            <FieldDescription>
-              Used to show per-chapter translation cost on the novel page. Leave blank to track
-              tokens only.
-            </FieldDescription>
+            <FieldDescription>{t("pricesDescription")}</FieldDescription>
           </FieldSet>
 
           {testResult && (
@@ -587,11 +602,11 @@ export function ProviderSettingsCard({
           <div className="flex flex-wrap items-center gap-4 pt-2">
             <Button type="submit" data-action="save" disabled={isSubmitting}>
               {savePending && <Spinner />}
-              {savePending ? "Saving…" : "Save Settings"}
+              {savePending ? tc("saving") : t("saveSettings")}
             </Button>
             <Button type="submit" data-action="test" variant="outline" disabled={isSubmitting}>
               {testPending ? <Spinner /> : <Zap className="size-4" />}
-              {testPending ? "Testing…" : "Test Connection"}
+              {testPending ? t("testing") : t("testConnection")}
             </Button>
           </div>
         </form>

@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { type Sql } from "postgres";
 import { sql as drizzleSql } from "drizzle-orm";
 import type * as ChapterOpsService from "@/lib/content/chapter/chapter-ops.service";
 import type * as NovelEditService from "@/lib/content/novel/novel-edit.service";
 import type * as TranslationMutations from "@/lib/translation/api/mutations";
 import type * as BackupService from "@/lib/backup.service";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import { encodeMessage } from "@/lib/i18n/message-code";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let deleteAllNovelTranslationsForUser: typeof ChapterOpsService.deleteAllNovelTranslationsForUser;
@@ -478,19 +481,9 @@ async function waitForNovelWaiter(blockerPid: number) {
   throw new Error("Competing mutation never waited on the novel gate");
 }
 
-integrationDescribe("novel maintenance PostgreSQL invariants", () => {
+describeIntegration("novel maintenance PostgreSQL invariants", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    // The gates below pause one transaction while a second must queue on the same novel
-    // row, which a single pooled connection cannot express: raise the pool so the wait
-    // happens on the row lock instead of on the client's connection queue.
-    process.env.DATABASE_POOL_MAX ||= "5";
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     // Server-only modules must load after DATABASE_URL points at the disposable test database.
     ({ deleteAllNovelTranslationsForUser, getResidualScriptChaptersForUser } =
       await import("@/lib/content/chapter/chapter-ops.service"));
@@ -502,9 +495,7 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
     ({ exportBackupForUser, importBackupForUser } = await import("@/lib/backup.service"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
   it("restores multiple novels across chapter and glossary batch boundaries without losing legacy content", async () => {
     const fixture = await seedPairChangeFixture();
     try {
@@ -736,7 +727,7 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
           sourceLang: "en",
           targetLang: "th",
         }),
-      ).rejects.toThrow("Cancel active translations before changing the language pair");
+      ).rejects.toThrow(encodeMessage("errors.languagePairNeedsCancel"));
       const guarded = await readPairChangeSnapshot(fixture.novelId);
       expect(guarded).toMatchObject({
         sourceLang: "zh",
@@ -804,7 +795,7 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
         });
       } else {
         expect(pairChange.reason).toMatchObject({
-          message: "Cancel active translations before changing the language pair",
+          message: encodeMessage("errors.languagePairNeedsCancel"),
         });
         expect(snapshot).toMatchObject({
           sourceLang: "zh",
@@ -825,13 +816,13 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
 
       await expect(
         deleteAllNovelTranslationsForUser(fixture.otherUserId, fixture.novelId, skipEagerDispatch),
-      ).rejects.toThrow("Novel not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       await expect(
         rejectAllPendingGlossaryTermsForUser(fixture.otherUserId, fixture.novelId),
-      ).rejects.toThrow("Novel not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       await expect(
         deleteAllGlossaryTermsForUser(fixture.otherUserId, fixture.novelId),
-      ).rejects.toThrow("Novel not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
       expect(await readNovelSnapshot(fixture.novelId)).toEqual(ownerBefore);
       expect(await readNovelSnapshot(fixture.otherNovelId)).toEqual(otherBefore);
@@ -1057,7 +1048,7 @@ integrationDescribe("novel maintenance PostgreSQL invariants", () => {
       `;
 
       await expect(getResidualScriptChaptersForUser(otherUserId, novelId)).rejects.toThrow(
-        "Novel not found or unauthorized",
+        encodeMessage("errors.novelNotFoundOrUnauthorized"),
       );
 
       const results = await getResidualScriptChaptersForUser(ownerUserId, novelId);

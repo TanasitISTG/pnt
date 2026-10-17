@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Search, X } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import type { ChapterTableProps } from "@/components/chapters/table/chapter-table";
@@ -57,6 +58,11 @@ function ChapterSearchToolbar({
   disabled,
   onChange,
 }: ChapterSearchToolbarProps) {
+  // The list of chapters is the same object the reading page shows, so its search says the
+  // words the reading page's search says.
+  const t = useTranslations("novel");
+  const tStudio = useTranslations("studio");
+  const tCommon = useTranslations("common");
   const [queryInputState, setQueryInputState] = useState({ query, input: query });
   let queryInput = queryInputState.input;
   if (queryInputState.query !== query) {
@@ -90,20 +96,18 @@ function ChapterSearchToolbar({
         <Input
           value={queryInput}
           onChange={(event) => setQueryInputState({ query, input: event.target.value })}
-          placeholder="Search chapter number or title"
-          aria-label="Search chapters"
+          placeholder={t("searchPlaceholder")}
+          aria-label={t("searchLabel")}
           disabled={disabled}
           className="h-10 pl-9"
         />
       </div>
       <div className="flex items-center justify-between gap-3 text-caption text-muted-foreground">
-        <span>
-          {resultCount} of {totalCount} chapters
-        </span>
+        <span>{tStudio("searchResults", { shown: resultCount, total: totalCount })}</span>
         {queryInput ? (
           <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={handleClear}>
             <X className="size-3.5" />
-            Clear
+            {tCommon("clear")}
           </Button>
         ) : null}
       </div>
@@ -159,6 +163,8 @@ export function NovelDetailChapterPanel({
     deletingAllTranslations,
     setDeleteAllTranslationsOpen,
   } = detail;
+  const t = useTranslations("studio");
+  const tNovel = useTranslations("novel");
   const filteredChapters = useMemo(
     () => filterChapters(chapters, chapterQuery),
     [chapterQuery, chapters],
@@ -178,7 +184,7 @@ export function NovelDetailChapterPanel({
     <div className="flex flex-col gap-4">
       {activeJobsError ? (
         <QueryErrorState
-          title="Unable to refresh translation status"
+          title={t("statusRefreshFailed")}
           error={activeJobsError}
           onRetry={() => void refetchActiveJobs()}
           className="my-0 min-h-0"
@@ -223,7 +229,7 @@ export function NovelDetailChapterPanel({
       )}
       {!chapterTableLoading && filteredChapters.length === 0 && chapters.length > 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-10 text-center">
-          <p className="text-sm text-muted-foreground">No chapters match this search.</p>
+          <p className="text-sm text-muted-foreground">{tNovel("noSearchMatches")}</p>
         </div>
       ) : (
         <ChaptersTableSection

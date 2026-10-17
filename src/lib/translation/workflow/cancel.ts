@@ -5,7 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { db } from "@/lib/db";
 import { translationJobs, workflowOutbox } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
-import { appendLogEntry, createLog } from "./log-entry";
+import { appendLogEntry, createLog, logMessage } from "./log-entry";
 
 export type TranslationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -45,7 +45,9 @@ export async function cancelActiveTranslationJobsInTransaction(
         status: "cancelled",
         logsJson: appendLogEntry(
           candidate.logsJson,
-          createLog("warn", candidate.message ?? "Job cancelled by user."),
+          // A message the cancelling transaction already composed wins; otherwise the run is
+          // being cancelled without one, and the reason is the app's own sentence.
+          createLog("warn", candidate.message ?? logMessage("jobCancelled")),
         ),
         updatedAt: now,
       })

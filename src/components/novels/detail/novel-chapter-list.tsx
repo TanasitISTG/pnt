@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, FileText, Search, X } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import {
   Accordion,
@@ -39,6 +40,8 @@ function ChapterRowLink({
   read: boolean;
   current: boolean;
 }) {
+  const t = useTranslations("novel");
+
   return (
     <Link
       to="/{-$locale}/novels/$novelId/chapters/$chapterId"
@@ -58,7 +61,7 @@ function ChapterRowLink({
       {read ? (
         <span className="shrink-0 text-muted-foreground">
           <Check className="size-4" aria-hidden="true" />
-          <span className="sr-only">Read</span>
+          <span className="sr-only">{t("readMarker")}</span>
         </span>
       ) : null}
     </Link>
@@ -79,6 +82,7 @@ export function NovelChapterList({
   loading,
   canManage,
 }: NovelChapterListProps) {
+  const t = useTranslations("novel");
   const [query, setQuery] = useState("");
 
   const filteredChapters = useMemo(() => filterChapters(chapters, query), [chapters, query]);
@@ -111,13 +115,13 @@ export function NovelChapterList({
           id="novel-chapters-heading"
           className="text-card-title font-semibold tracking-tight text-foreground"
         >
-          Chapters
+          {t("chapters")}
         </h2>
         {chapters.length > 0 ? (
           <p className="text-caption tabular-nums text-muted-foreground">
             {readCount > 0
-              ? `${readCount} of ${chapters.length} read`
-              : `${chapters.length} chapter${chapters.length === 1 ? "" : "s"}`}
+              ? t("chaptersRead", { read: readCount, total: chapters.length })
+              : t("chapterCount", { count: chapters.length })}
           </p>
         ) : null}
       </div>
@@ -127,20 +131,20 @@ export function NovelChapterList({
           className="rounded-xl border border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground"
           aria-live="polite"
         >
-          Loading chapters…
+          {t("loadingChapters")}
         </div>
       ) : chapters.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 py-12 text-center">
           <FileText className="mb-2 size-8 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
-            {canManage ? "No chapters in this novel yet." : "No chapters published yet."}
+            {canManage ? t("emptyOwn") : t("emptyPublished")}
           </p>
           {canManage ? (
             <Button
               className="mt-5"
               render={<Link to="/novels/$novelId/manage/add" params={{ novelId }} />}
             >
-              Add chapters
+              {t("addChapters")}
             </Button>
           ) : null}
         </div>
@@ -155,8 +159,8 @@ export function NovelChapterList({
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search chapter number or title"
-                aria-label="Search chapters"
+                placeholder={t("searchPlaceholder")}
+                aria-label={t("searchLabel")}
                 className="h-11 pr-11 pl-9"
               />
               {query ? (
@@ -164,7 +168,7 @@ export function NovelChapterList({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  aria-label="Clear chapter search"
+                  aria-label={t("clearSearch")}
                   className="absolute top-1/2 right-1 -translate-y-1/2"
                   onClick={() => setQuery("")}
                 >
@@ -176,7 +180,7 @@ export function NovelChapterList({
 
           {filteredChapters.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-10 text-center">
-              <p className="text-sm text-muted-foreground">No chapters match this search.</p>
+              <p className="text-sm text-muted-foreground">{t("noSearchMatches")}</p>
             </div>
           ) : groups.length <= 1 ? (
             <ul className="rounded-xl border border-border bg-card p-1.5">
@@ -207,7 +211,10 @@ export function NovelChapterList({
                   >
                     <AccordionTrigger className="min-w-0">
                       <span className="min-w-0 flex-1">
-                        Chapters {Number(group[0].number)}–{Number(group[group.length - 1].number)}{" "}
+                        {t("chapterGroup", {
+                          from: Number(group[0].number),
+                          to: Number(group[group.length - 1].number),
+                        })}{" "}
                         <span className="font-normal text-muted-foreground tabular-nums">
                           ({group.length})
                         </span>

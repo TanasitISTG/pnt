@@ -1,4 +1,5 @@
 import { Ban, Eye, LogOut, MoreHorizontal, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { describeBan } from "@/lib/admin/ban-status";
 import type { AdminUserRow } from "@/lib/admin/functions";
 import { hasAdminRole } from "@/lib/auth/roles";
+import { formatDate } from "@/lib/i18n/format";
 import { CURRENT_TERMS_VERSION } from "@/lib/terms";
 
 export interface AdminUserRowActions {
@@ -32,46 +34,54 @@ export interface AdminUserRowActions {
  * report a suspension that has already stopped applying.
  */
 function SuspensionStatus({ row }: { row: AdminUserRow }) {
+  const t = useTranslations("admin");
+  const locale = useLocale();
   const status = describeBan(row);
 
   return (
     <div className="flex flex-col gap-1">
       {status.state === "active" ? (
-        <Badge variant="secondary">{row.emailVerified ? "Verified" : "Unverified"}</Badge>
+        <Badge variant="secondary">
+          {row.emailVerified ? t("statusVerified") : t("statusUnverified")}
+        </Badge>
       ) : status.state === "expired" ? (
-        <Badge variant="warning">Suspended (expired)</Badge>
+        <Badge variant="warning">{t("statusSuspendedExpired")}</Badge>
       ) : (
         <Badge variant="destructive">
           {status.expiresAt
-            ? `Suspended until ${status.expiresAt.toLocaleDateString()}`
-            : "Suspended"}
+            ? t("statusSuspendedUntil", { date: formatDate(status.expiresAt, locale) })
+            : t("statusSuspended")}
         </Badge>
       )}
       {status.state !== "active" && row.banReason && (
         // Labelled because the reason is free text the operator typed: unlabelled it
         // reads as another status value rather than the note behind the suspension.
-        <span className="text-caption text-muted-foreground">Reason: {row.banReason}</span>
+        <span className="text-caption text-muted-foreground">
+          {t("statusReason", { reason: row.banReason })}
+        </span>
       )}
     </div>
   );
 }
 
 function TermsStatus({ row }: { row: AdminUserRow }) {
+  const t = useTranslations("admin");
+  const locale = useLocale();
   if (!row.termsVersion) {
-    return <span className="text-caption text-muted-foreground">Not recorded</span>;
+    return <span className="text-caption text-muted-foreground">{t("termsNotRecorded")}</span>;
   }
 
   const outdated = row.termsVersion !== CURRENT_TERMS_VERSION;
   return (
     <div className="flex flex-col gap-1">
       {outdated ? (
-        <Badge variant="warning">Outdated</Badge>
+        <Badge variant="warning">{t("termsOutdated")}</Badge>
       ) : (
         <span className="text-caption text-muted-foreground">{row.termsVersion}</span>
       )}
       {row.termsAcceptedAt && (
         <span className="text-caption text-muted-foreground">
-          {new Date(row.termsAcceptedAt).toLocaleDateString()}
+          {formatDate(row.termsAcceptedAt, locale)}
         </span>
       )}
     </div>
@@ -89,6 +99,8 @@ export function AdminUserTableRow({
   busy: boolean;
   actions: AdminUserRowActions;
 }) {
+  const t = useTranslations("admin");
+  const locale = useLocale();
   const isOperator = hasAdminRole(row.role);
 
   return (
@@ -101,7 +113,7 @@ export function AdminUserTableRow({
       </TableCell>
       <TableCell>
         <Badge variant={isOperator ? "default" : "secondary"}>
-          {isOperator ? "Operator" : "Member"}
+          {isOperator ? t("roleOperator") : t("roleMember")}
         </Badge>
       </TableCell>
       <TableCell>
@@ -111,16 +123,16 @@ export function AdminUserTableRow({
         <TermsStatus row={row} />
       </TableCell>
       <TableCell className="hidden text-muted-foreground sm:table-cell">
-        {new Date(row.createdAt).toLocaleDateString()}
+        {formatDate(row.createdAt, locale)}
       </TableCell>
       <TableCell>
         {isSelf ? (
-          <span className="text-caption text-muted-foreground">You</span>
+          <span className="text-caption text-muted-foreground">{t("self")}</span>
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={<Button variant="ghost" size="icon-sm" />}
-              aria-label={`Actions for ${row.email}`}
+              aria-label={t("actionsForAccount", { email: row.email })}
               disabled={busy}
             >
               {busy ? <Spinner /> : <MoreHorizontal className="size-4" aria-hidden="true" />}
@@ -130,42 +142,42 @@ export function AdminUserTableRow({
                 {isOperator ? (
                   <DropdownMenuItem onClick={() => actions.onSetRole("user")}>
                     <ShieldOff className="size-4" />
-                    Remove operator access
+                    {t("actionRoleRemoved")}
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuItem onClick={() => actions.onSetRole("admin")}>
                     <ShieldCheck className="size-4" />
-                    Grant operator access
+                    {t("actionRoleGranted")}
                   </DropdownMenuItem>
                 )}
                 {row.banned ? (
                   <DropdownMenuItem onClick={actions.onRestore}>
                     <ShieldCheck className="size-4" />
-                    Restore account
+                    {t("actionRestore")}
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuItem onClick={actions.onSuspend}>
                     <Ban className="size-4" />
-                    Suspend account
+                    {t("actionSuspend")}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={actions.onRevokeSessions}>
                   <LogOut className="size-4" />
-                  Sign out all devices
+                  {t("actionSignOutAll")}
                 </DropdownMenuItem>
                 {/* Operator accounts cannot be viewed as another account, so the
                     action is absent rather than present and failing. */}
                 {!isOperator && (
                   <DropdownMenuItem onClick={actions.onViewAs}>
                     <Eye className="size-4" />
-                    View as this account
+                    {t("actionViewAs")}
                   </DropdownMenuItem>
                 )}
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={actions.onRequestDelete}>
                 <Trash2 className="size-4" />
-                Delete account
+                {t("actionDelete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

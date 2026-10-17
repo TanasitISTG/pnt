@@ -1,5 +1,8 @@
 # Generated files
 src/routeTree.gen.ts
+# Written by drizzle-kit, in its own indentation: formatting it here is undone by the next
+# `bun run db:generate`, and the migrations it describes are never hand-edited.
+drizzle/meta/
 
 # Build output
 .output

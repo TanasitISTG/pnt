@@ -27,6 +27,7 @@ import {
   createProviderFetch,
   normalizeProviderBaseUrl,
 } from "./provider-network.server";
+import { englishWords, rejectionOf, thrownBy } from "@/test/messages";
 
 const connectOptions = {
   hostname: "provider.example",
@@ -127,19 +128,23 @@ describe("provider connection policy", () => {
   });
   it("validates configuration without leaking resolver details", async () => {
     expect(normalizeProviderBaseUrl("", "openai")).toBe("https://api.openai.com/v1");
-    expect(() => normalizeProviderBaseUrl("https://user:secret@example.com", "gemini")).toThrow(
-      "Provider URL is invalid",
+    // Each refusal travels as the code the catalog resolves, so the settings banner says why in the
+    // reader's language - and says nothing about the credentials in the address it refused.
+    const credentialsRefusal = thrownBy(() =>
+      normalizeProviderBaseUrl("https://user:secret@example.com", "gemini"),
     );
-    expect(() =>
+    expect(englishWords(credentialsRefusal.message)).toBe("The provider URL is invalid.");
+    const queryRefusal = thrownBy(() =>
       normalizeProviderBaseUrl("https://provider.example/v1?tenant=secret", "openai"),
-    ).toThrow("Provider URL is invalid");
+    );
+    expect(englishWords(queryRefusal.message)).toBe("The provider URL is invalid.");
+
     mocks.lookup.mockRejectedValue(new Error("secret DNS details"));
-    await expect(
+    const failure = await rejectionOf(
       assertProviderBaseUrl("https://provider.example/base", "gemini"),
-    ).rejects.toMatchObject({
-      code: "DNS_FAILED",
-      message: "Provider hostname could not be resolved",
-    });
+    );
+    expect(failure).toMatchObject({ code: "DNS_FAILED" });
+    expect(englishWords(failure.message)).toBe("The provider hostname could not be resolved.");
   });
 });
 
@@ -168,10 +173,9 @@ describe("scoped fetch", () => {
     const response = await createProviderFetch("https://provider.example")(
       "https://provider.example/completion",
     );
-    await expect(response.arrayBuffer()).rejects.toMatchObject({
-      code: "RESPONSE_TOO_LARGE",
-      message: "Provider response exceeded the size limit",
-    });
+    const failure = await rejectionOf(response.arrayBuffer());
+    expect(failure).toMatchObject({ code: "RESPONSE_TOO_LARGE" });
+    expect(englishWords(failure.message)).toBe("The provider's response exceeded the size limit.");
   });
   it("rejects cross-origin input before credentials reach transport", async () => {
     await expect(

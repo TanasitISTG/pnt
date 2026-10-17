@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, lt, or, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
 import { novelReadable, chapterReadable } from "@/lib/content/publish/publish";
 import {
@@ -38,7 +39,7 @@ export async function assertNovelReadableByUser(userId: string, novelId: string)
     .where(and(eq(novels.id, novelId), novelReadable(userId)))
     .limit(1);
 
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 }
 
 export async function assertChapterReadableByUser(
@@ -53,7 +54,7 @@ export async function assertChapterReadableByUser(
     .where(and(eq(chapters.id, chapterId), eq(chapters.novelId, novelId), chapterReadable(userId)))
     .limit(1);
 
-  if (!chapter) throw new SafeServerError("Chapter not found or unauthorized");
+  if (!chapter) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
 }
 
 const READER_BOOKMARK_PAGE_SIZE = 200;
@@ -176,7 +177,7 @@ async function lockReaderChapter(
       .from(novels)
       .where(and(eq(novels.id, novelId), novelReadable(userId)))
       .limit(1);
-    if (!readable) throw new SafeServerError("Chapter not found or unauthorized");
+    if (!readable) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
   }
 
   const [chapter] = await tx
@@ -186,7 +187,7 @@ async function lockReaderChapter(
     .where(and(eq(chapters.id, chapterId), eq(chapters.novelId, novelId), chapterReadable(userId)))
     .limit(1)
     .for(strength, { of: chapters });
-  if (!chapter) throw new SafeServerError("Chapter not found or unauthorized");
+  if (!chapter) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
 }
 
 // An omitted fraction opens the chapter; a supplied fraction is a delayed scroll sample.
@@ -294,7 +295,7 @@ export async function createReaderBookmarkForUser(
       .orderBy(asc(readerBookmarks.createdAt), asc(readerBookmarks.id))
       .limit(1);
     if (!existing) {
-      throw new SafeServerError("Bookmark changed while it was being saved; try again");
+      throw new SafeServerError(encodeMessage("errors.bookmarkSaveConflict"));
     }
     return { id: existing.id, duplicate: true };
   });

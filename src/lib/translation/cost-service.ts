@@ -7,6 +7,7 @@ import { chapters, novels, providerSettings, translationJobs } from "@/lib/db/sc
 import { SafeServerError } from "@/lib/server-fn-error";
 import type { NovelCostData, NovelCostSource } from "@/lib/translation/types/api";
 import { calculateTokenCost } from "@/lib/translation/cost";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 function parseUsage(
   value: string | null,
@@ -139,6 +140,6 @@ export async function getNovelCostsForUser(
     .from(novels)
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1);
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
   return getNovelCostsForOwnedNovel(userId, novelId);
 }

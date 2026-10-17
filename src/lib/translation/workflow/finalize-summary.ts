@@ -1,7 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import type { novels, chapters } from "@/lib/db/schema";
-import { createLog } from "./log-entry";
+import { createLogMessage } from "./log-entry";
 import { retryOperation } from "@/lib/retry";
 import type { AIProviderClient } from "@/lib/providers/types";
 import type { GlossaryTermInput } from "../types/glossary";
@@ -55,13 +55,13 @@ export async function generateSummaryArtifacts({
   completionTokens += titleRes.completionTokens;
   if (titleRes.translated) {
     translatedTitle = titleRes.translated;
-    logs.push(createLog("success", `Title translated: "${titleRes.translated}"`));
+    logs.push(createLogMessage("success", "titleTranslated", { title: titleRes.translated }));
   } else {
-    logs.push(createLog("warn", "Title translation skipped; keeping raw title."));
+    logs.push(createLogMessage("warn", "titleSkipped"));
   }
 
   // Generate chapter summary in English
-  logs.push(createLog("info", "Generating English chapter summary..."));
+  logs.push(createLogMessage("info", "summaryGenerating"));
   const summaryStartTime = Date.now();
 
   let freshSummary: string | undefined;
@@ -91,7 +91,7 @@ export async function generateSummaryArtifacts({
     });
     freshSummary = summaryContent;
     const summaryTime = ((Date.now() - summaryStartTime) / 1000).toFixed(1);
-    logs.push(createLog("success", `Summary generated in ${summaryTime}s.`));
+    logs.push(createLogMessage("success", "summaryGenerated", { seconds: summaryTime }));
 
     // Update rolling story summary on novel (non-fatal)
     try {
@@ -118,21 +118,19 @@ export async function generateSummaryArtifacts({
         if (!content) throw new Error("Empty story summary completion");
         return content;
       });
-      logs.push(createLog("info", "Updated rolling story summary."));
+      logs.push(createLogMessage("info", "storySummaryUpdated"));
     } catch (storyErr) {
       logs.push(
-        createLog(
-          "warn",
-          `Rolling story summary update skipped: ${storyErr instanceof Error ? storyErr.message : "Failed"}`,
-        ),
+        createLogMessage("warn", "storySummarySkipped", {
+          error: storyErr instanceof Error ? storyErr.message : "Failed",
+        }),
       );
     }
   } catch (sumErr) {
     logs.push(
-      createLog(
-        "warn",
-        `Summary generation skipped: ${sumErr instanceof Error ? sumErr.message : "Failed"}`,
-      ),
+      createLogMessage("warn", "summarySkipped", {
+        error: sumErr instanceof Error ? sumErr.message : "Failed",
+      }),
     );
   }
 

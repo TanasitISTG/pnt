@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Check, X } from "lucide-react";
+import { useTranslations } from "use-intl";
+
+import { familiarityLabels, genderLabels, speakerStatusLabels } from "./relationship-labels";
 
 import {
   EMPTY_CHARACTER_FORM,
@@ -38,28 +41,6 @@ import type {
   RelationshipGender,
   SpeakerStatus,
 } from "@/lib/relationships/schemas";
-
-const relationshipGenderItems: Record<RelationshipGender, string> = {
-  male: "Male",
-  female: "Female",
-  nonbinary: "Nonbinary",
-  unknown: "Unknown",
-};
-
-const speakerStatusItems: Record<SpeakerStatus, string> = {
-  lower: "Lower",
-  peer: "Peer",
-  higher: "Higher",
-  unknown: "Unknown",
-};
-
-const familiarityItems: Record<Familiarity, string> = {
-  intimate: "Intimate",
-  close: "Close",
-  familiar: "Familiar",
-  distant: "Distant",
-  unknown: "Unknown",
-};
 
 const characterFieldIds: Record<keyof CharacterFormState, string> = {
   sourceName: "character-source",
@@ -119,6 +100,9 @@ export function CharacterFormDialog({
   onSubmit,
   onOpenChange,
 }: CharacterFormDialogProps) {
+  const t = useTranslations("relationships");
+  const tCommon = useTranslations("common");
+  const genderItems = genderLabels(t);
   const form = useForm({
     defaultValues: EMPTY_CHARACTER_FORM,
     validators: { onSubmit: characterEntryFormSchema },
@@ -162,11 +146,9 @@ export function CharacterFormDialog({
       >
         <DialogHeader className="pr-8">
           <DialogTitle>
-            {descriptor?.id ? "Edit character profile" : "Add character profile"}
+            {descriptor?.id ? t("editCharacterProfile") : t("addCharacterProfile")}
           </DialogTitle>
-          <DialogDescription>
-            Manual saves are locked so automatic analysis cannot replace them.
-          </DialogDescription>
+          <DialogDescription>{t("characterDialogDescription")}</DialogDescription>
         </DialogHeader>
         <DialogClose
           render={
@@ -174,7 +156,7 @@ export function CharacterFormDialog({
               variant="ghost"
               size="icon-sm"
               className="absolute top-2 right-2"
-              aria-label="Close character profile dialog"
+              aria-label={t("closeCharacterDialog")}
               disabled={pending}
             />
           }
@@ -196,7 +178,9 @@ export function CharacterFormDialog({
                 const errorId = errorIdOf(characterFieldIds.sourceName);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={characterFieldIds.sourceName}>Source name</FieldLabel>
+                    <FieldLabel htmlFor={characterFieldIds.sourceName}>
+                      {t("sourceNameLabel")}
+                    </FieldLabel>
                     <Input
                       id={characterFieldIds.sourceName}
                       name={field.name}
@@ -220,7 +204,7 @@ export function CharacterFormDialog({
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
                     <FieldLabel htmlFor={characterFieldIds.targetName}>
-                      {targetLanguage} name
+                      {t("targetNameLabel", { language: targetLanguage })}
                     </FieldLabel>
                     <Input
                       id={characterFieldIds.targetName}
@@ -232,9 +216,7 @@ export function CharacterFormDialog({
                       aria-invalid={invalid}
                       aria-describedby={describedBy(hintId, invalid ? errorId : undefined)}
                     />
-                    <FieldDescription id={hintId}>
-                      An approved character glossary mapping wins at translation time.
-                    </FieldDescription>
+                    <FieldDescription id={hintId}>{t("targetNameHint")}</FieldDescription>
                     {invalid && <FieldError id={errorId} errors={field.state.meta.errors} />}
                   </Field>
                 );
@@ -247,7 +229,7 @@ export function CharacterFormDialog({
                 const errorId = errorIdOf(characterFieldIds.aliases);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={characterFieldIds.aliases}>Aliases</FieldLabel>
+                    <FieldLabel htmlFor={characterFieldIds.aliases}>{t("aliasesLabel")}</FieldLabel>
                     <Input
                       id={characterFieldIds.aliases}
                       name={field.name}
@@ -257,7 +239,7 @@ export function CharacterFormDialog({
                       aria-invalid={invalid}
                       aria-describedby={describedBy(hintId, invalid ? errorId : undefined)}
                     />
-                    <FieldDescription id={hintId}>Comma-separated; up to eight.</FieldDescription>
+                    <FieldDescription id={hintId}>{t("aliasesHint")}</FieldDescription>
                     {invalid && <FieldError id={errorId} errors={field.state.meta.errors} />}
                   </Field>
                 );
@@ -269,11 +251,11 @@ export function CharacterFormDialog({
                 const errorId = errorIdOf(characterFieldIds.gender);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={characterFieldIds.gender}>Gender</FieldLabel>
+                    <FieldLabel htmlFor={characterFieldIds.gender}>{t("genderLabel")}</FieldLabel>
                     <Select
                       name={field.name}
                       value={field.state.value}
-                      items={relationshipGenderItems}
+                      items={genderItems}
                       onValueChange={(value) =>
                         value && field.handleChange(value as RelationshipGender)
                       }
@@ -288,10 +270,10 @@ export function CharacterFormDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
-                          <SelectItem value="nonbinary">Nonbinary</SelectItem>
-                          <SelectItem value="unknown">Unknown</SelectItem>
+                          <SelectItem value="male">{genderItems.male}</SelectItem>
+                          <SelectItem value="female">{genderItems.female}</SelectItem>
+                          <SelectItem value="nonbinary">{genderItems.nonbinary}</SelectItem>
+                          <SelectItem value="unknown">{genderItems.unknown}</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -306,7 +288,7 @@ export function CharacterFormDialog({
                 const errorId = errorIdOf(characterFieldIds.role);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={characterFieldIds.role}>Role</FieldLabel>
+                    <FieldLabel htmlFor={characterFieldIds.role}>{t("roleLabel")}</FieldLabel>
                     <Input
                       id={characterFieldIds.role}
                       name={field.name}
@@ -328,7 +310,7 @@ export function CharacterFormDialog({
                 const errorId = errorIdOf(characterFieldIds.notes);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={characterFieldIds.notes}>Notes</FieldLabel>
+                    <FieldLabel htmlFor={characterFieldIds.notes}>{t("notesLabel")}</FieldLabel>
                     <Textarea
                       id={characterFieldIds.notes}
                       name={field.name}
@@ -351,7 +333,9 @@ export function CharacterFormDialog({
                 const errorId = errorIdOf(characterFieldIds.evidence);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={characterFieldIds.evidence}>Evidence</FieldLabel>
+                    <FieldLabel htmlFor={characterFieldIds.evidence}>
+                      {t("evidenceLabel")}
+                    </FieldLabel>
                     <Textarea
                       id={characterFieldIds.evidence}
                       name={field.name}
@@ -362,9 +346,7 @@ export function CharacterFormDialog({
                       aria-invalid={invalid}
                       aria-describedby={describedBy(hintId, invalid ? errorId : undefined)}
                     />
-                    <FieldDescription id={hintId}>
-                      Optional source excerpt for the fact.
-                    </FieldDescription>
+                    <FieldDescription id={hintId}>{t("evidenceHint")}</FieldDescription>
                     {invalid && <FieldError id={errorId} errors={field.state.meta.errors} />}
                   </Field>
                 );
@@ -377,11 +359,11 @@ export function CharacterFormDialog({
                 onClick={() => onOpenChange(false)}
                 disabled={pending}
               >
-                Cancel
+                {tCommon("cancel")}
               </Button>
               <Button type="submit" disabled={pending}>
                 {pending ? <Spinner /> : <Check className="size-4" />}
-                {pending ? "Saving…" : "Save character"}
+                {pending ? tCommon("saving") : t("saveCharacter")}
               </Button>
             </DialogFooter>
           </form>
@@ -406,6 +388,10 @@ export function RelationshipFormDialog({
   onSubmit,
   onOpenChange,
 }: RelationshipFormDialogProps) {
+  const t = useTranslations("relationships");
+  const tCommon = useTranslations("common");
+  const speakerStatusItems = speakerStatusLabels(t);
+  const familiarityItems = familiarityLabels(t);
   const form = useForm({
     defaultValues: EMPTY_RELATIONSHIP_FORM,
     validators: { onSubmit: relationshipEntryFormSchema },
@@ -449,11 +435,9 @@ export function RelationshipFormDialog({
       >
         <DialogHeader className="pr-8">
           <DialogTitle>
-            {descriptor?.id ? "Edit directed relationship" : "Add directed relationship"}
+            {descriptor?.id ? t("editDirectedRelationship") : t("addDirectedRelationship")}
           </DialogTitle>
-          <DialogDescription>
-            Choose the speaker and listener first; pronouns and particles are directional.
-          </DialogDescription>
+          <DialogDescription>{t("relationshipDialogDescription")}</DialogDescription>
         </DialogHeader>
         <DialogClose
           render={
@@ -461,7 +445,7 @@ export function RelationshipFormDialog({
               variant="ghost"
               size="icon-sm"
               className="absolute top-2 right-2"
-              aria-label="Close directed relationship dialog"
+              aria-label={t("closeRelationshipDialog")}
               disabled={pending}
             />
           }
@@ -483,7 +467,9 @@ export function RelationshipFormDialog({
                 const errorId = errorIdOf(relationshipFieldIds.speakerId);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={relationshipFieldIds.speakerId}>Speaker</FieldLabel>
+                    <FieldLabel htmlFor={relationshipFieldIds.speakerId}>
+                      {t("speakerLabel")}
+                    </FieldLabel>
                     <CharacterSelect
                       id={relationshipFieldIds.speakerId}
                       name={field.name}
@@ -505,7 +491,9 @@ export function RelationshipFormDialog({
                 const errorId = errorIdOf(relationshipFieldIds.listenerId);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={relationshipFieldIds.listenerId}>Listener</FieldLabel>
+                    <FieldLabel htmlFor={relationshipFieldIds.listenerId}>
+                      {t("listenerLabel")}
+                    </FieldLabel>
                     <CharacterSelect
                       id={relationshipFieldIds.listenerId}
                       name={field.name}
@@ -528,7 +516,7 @@ export function RelationshipFormDialog({
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
                     <FieldLabel htmlFor={relationshipFieldIds.relationship}>
-                      Relationship
+                      {t("relationshipLabel")}
                     </FieldLabel>
                     <Input
                       id={relationshipFieldIds.relationship}
@@ -552,7 +540,7 @@ export function RelationshipFormDialog({
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
                     <FieldLabel htmlFor={relationshipFieldIds.speakerStatus}>
-                      Speaker status
+                      {t("speakerStatusLabel")}
                     </FieldLabel>
                     <Select
                       name={field.name}
@@ -570,10 +558,10 @@ export function RelationshipFormDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="lower">Lower</SelectItem>
-                          <SelectItem value="peer">Peer</SelectItem>
-                          <SelectItem value="higher">Higher</SelectItem>
-                          <SelectItem value="unknown">Unknown</SelectItem>
+                          <SelectItem value="lower">{speakerStatusItems.lower}</SelectItem>
+                          <SelectItem value="peer">{speakerStatusItems.peer}</SelectItem>
+                          <SelectItem value="higher">{speakerStatusItems.higher}</SelectItem>
+                          <SelectItem value="unknown">{speakerStatusItems.unknown}</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -588,7 +576,9 @@ export function RelationshipFormDialog({
                 const errorId = errorIdOf(relationshipFieldIds.familiarity);
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor={relationshipFieldIds.familiarity}>Familiarity</FieldLabel>
+                    <FieldLabel htmlFor={relationshipFieldIds.familiarity}>
+                      {t("familiarityLabel")}
+                    </FieldLabel>
                     <Select
                       name={field.name}
                       value={field.state.value}
@@ -605,11 +595,11 @@ export function RelationshipFormDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="intimate">Intimate</SelectItem>
-                          <SelectItem value="close">Close</SelectItem>
-                          <SelectItem value="familiar">Familiar</SelectItem>
-                          <SelectItem value="distant">Distant</SelectItem>
-                          <SelectItem value="unknown">Unknown</SelectItem>
+                          <SelectItem value="intimate">{familiarityItems.intimate}</SelectItem>
+                          <SelectItem value="close">{familiarityItems.close}</SelectItem>
+                          <SelectItem value="familiar">{familiarityItems.familiar}</SelectItem>
+                          <SelectItem value="distant">{familiarityItems.distant}</SelectItem>
+                          <SelectItem value="unknown">{familiarityItems.unknown}</SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -622,7 +612,7 @@ export function RelationshipFormDialog({
               {(field) => (
                 <TextEntryField
                   id={relationshipFieldIds.selfPronoun}
-                  label="Preferred self-pronoun"
+                  label={t("selfPronounLabel")}
                   field={field}
                   maxLength={80}
                 />
@@ -632,7 +622,7 @@ export function RelationshipFormDialog({
               {(field) => (
                 <TextEntryField
                   id={relationshipFieldIds.addresseeTerm}
-                  label="Addressee term / title"
+                  label={t("addresseeTermLabel")}
                   field={field}
                   maxLength={80}
                 />
@@ -642,7 +632,7 @@ export function RelationshipFormDialog({
               {(field) => (
                 <TextEntryField
                   id={relationshipFieldIds.sentenceParticles}
-                  label="Sentence particles"
+                  label={t("sentenceParticlesLabel")}
                   field={field}
                   maxLength={80}
                 />
@@ -652,7 +642,7 @@ export function RelationshipFormDialog({
               {(field) => (
                 <TextEntryField
                   id={relationshipFieldIds.register}
-                  label="Register"
+                  label={t("registerLabel")}
                   field={field}
                   maxLength={160}
                 />
@@ -662,7 +652,7 @@ export function RelationshipFormDialog({
               {(field) => (
                 <TextareaEntryField
                   id={relationshipFieldIds.notes}
-                  label="Notes"
+                  label={t("notesLabel")}
                   field={field}
                   maxLength={500}
                 />
@@ -672,7 +662,7 @@ export function RelationshipFormDialog({
               {(field) => (
                 <TextareaEntryField
                   id={relationshipFieldIds.evidence}
-                  label="Evidence"
+                  label={t("evidenceLabel")}
                   field={field}
                   maxLength={300}
                 />
@@ -685,11 +675,11 @@ export function RelationshipFormDialog({
                 onClick={() => onOpenChange(false)}
                 disabled={pending}
               >
-                Cancel
+                {tCommon("cancel")}
               </Button>
               <Button type="submit" disabled={pending || characters.length < 2}>
                 {pending ? <Spinner /> : <Check className="size-4" />}
-                {pending ? "Saving…" : "Save relationship"}
+                {pending ? tCommon("saving") : t("saveRelationship")}
               </Button>
             </DialogFooter>
           </form>
@@ -794,6 +784,7 @@ function CharacterSelect({
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
 }) {
+  const t = useTranslations("relationships");
   return (
     <Select
       name={name}
@@ -812,7 +803,7 @@ function CharacterSelect({
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
       >
-        <SelectValue placeholder="Select character" />
+        <SelectValue placeholder={t("selectCharacter")} />
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

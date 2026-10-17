@@ -13,6 +13,7 @@ import {
   sourceUrlForLog,
 } from "@/lib/scrape";
 import { assertPublicHost, isPrivateIp } from "@/lib/scrape/network-policy.server";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 const QUANBEN_URL = "https://www.quanben.io/n/some-novel/30.html";
 
@@ -144,7 +145,7 @@ describe("parseChapter (quanben)", () => {
 
   it("throws when content markers are missing", () => {
     expect(() => parseChapter("<html><body>nope</body></html>", QUANBEN_URL)).toThrow(
-      "Could not find chapter title",
+      encodeMessage("errors.scrapeNoTitle"),
     );
   });
 });
@@ -180,7 +181,7 @@ describe("parseChapter (twkan)", () => {
 
   it("throws instead of fabricating a heading when no title source exists", () => {
     expect(() => parseChapter(twkanChapterHtml(null), TWKAN_URL)).toThrow(
-      "Could not find chapter title on page",
+      encodeMessage("errors.scrapeNoTitle"),
     );
   });
 });
@@ -239,7 +240,7 @@ describe("parseChapter (biquge)", () => {
   });
 
   it("rejects explicit numbers outside the stored numeric(8,2) range or scale", () => {
-    const invalid = "Could not determine a valid chapter number from the source page";
+    const invalid = encodeMessage("errors.scrapeChapterNumberInvalid");
     expect(() => parseChapter(biqugeChapterHtml("第1000000章 溢出"), BIQUGE_URL)).toThrow(invalid);
     expect(() => parseChapter(biqugeChapterHtml("第1.234章 精度"), BIQUGE_URL)).toThrow(invalid);
     expect(() => parseChapter(biqugeChapterHtml("1234567 心動小島"), BIQUGE_URL)).toThrow(invalid);
@@ -249,7 +250,7 @@ describe("parseChapter (biquge)", () => {
   it("rejects malformed explicit chapter tokens without prefix truncation", () => {
     for (const heading of ["Chapter 1e3", "1.2.3 Title", "第-1章 標題"]) {
       expect(() => parseChapter(biqugeChapterHtml(heading), BIQUGE_URL)).toThrow(
-        "Could not determine a valid chapter number from the source page",
+        encodeMessage("errors.scrapeChapterNumberInvalid"),
       );
     }
   });
@@ -368,13 +369,13 @@ describe("findSource", () => {
 
   it("rejects embedded source credentials before transport", () => {
     expect(() => findSource("https://alice:secret@twkan.com/txt/93984/52204812")).toThrow(
-      "Credentials in source URLs are not allowed",
+      encodeMessage("errors.scrapeUrlCredentials"),
     );
   });
 
   it("rejects source URL fragments before logging or proxying", () => {
     expect(() => findSource("https://twkan.com/txt/93984/52204812#access_token=secret")).toThrow(
-      "Fragments in source URLs are not allowed",
+      encodeMessage("errors.scrapeUrlFragment"),
     );
   });
 
@@ -410,9 +411,7 @@ describe("chapterUrlFor", () => {
     "https://www.quanben.io/n/some-novel/",
     "https://www.quanben.io/n/book/chapter30.html?lang=zh#text",
   ])("rejects a range URL without a replaceable chapter suffix", (url) => {
-    expect(() => chapterUrlFor(url, 31)).toThrow(
-      "Quanben range imports require a chapter URL ending in /<number>.html",
-    );
+    expect(() => chapterUrlFor(url, 31)).toThrow(encodeMessage("errors.scrapeQuanbenUrlRange"));
   });
 
   it("does not rewrite an .html-looking query value", () => {

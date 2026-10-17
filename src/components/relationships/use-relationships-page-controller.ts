@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import type {
@@ -23,6 +24,7 @@ import {
   upsertCharacterProfile,
   upsertCharacterRelationship,
 } from "@/lib/relationships/functions";
+import { translateServerError } from "@/lib/i18n/server-error";
 import {
   deleteRelationshipEntrySchema,
   setRelationshipEntryAutoManagedSchema,
@@ -40,6 +42,8 @@ type DeleteTarget = {
 };
 
 export function useRelationshipsPageController(novelId: string) {
+  const t = useTranslations("relationships");
+  const tRoot = useTranslations();
   const queryClient = useQueryClient();
   const [characterDialog, setCharacterDialog] = useState<CharacterDialogDescriptor | null>(null);
   const [relationshipDialog, setRelationshipDialog] = useState<RelationshipDialogDescriptor | null>(
@@ -56,10 +60,10 @@ export function useRelationshipsPageController(novelId: string) {
       upsertCharacterProfile({ data: payload }),
     onSuccess: () => {
       invalidateMap();
-      toast.success("Character profile saved");
+      toast.success(t("characterSaved"));
       setCharacterDialog(null);
     },
-    onError: (error) => toast.error(error.message || "Failed to save character profile"),
+    onError: (error) => toast.error(translateServerError(error, tRoot, t("characterSaveFailed"))),
   });
 
   const saveRelationship = useMutation({
@@ -67,10 +71,11 @@ export function useRelationshipsPageController(novelId: string) {
       upsertCharacterRelationship({ data: payload }),
     onSuccess: () => {
       invalidateMap();
-      toast.success("Directed relationship saved");
+      toast.success(t("relationshipSaved"));
       setRelationshipDialog(null);
     },
-    onError: (error) => toast.error(error.message || "Failed to save directed relationship"),
+    onError: (error) =>
+      toast.error(translateServerError(error, tRoot, t("relationshipSaveFailed"))),
   });
 
   const toggleEntry = useMutation({
@@ -78,11 +83,9 @@ export function useRelationshipsPageController(novelId: string) {
       setRelationshipEntryEnabled({ data: payload }),
     onSuccess: (_data, variables) => {
       invalidateMap();
-      toast.success(
-        variables.enabled ? "Relationship entry restored" : "Relationship entry disabled",
-      );
+      toast.success(t(variables.enabled ? "entryRestored" : "entryDisabled"));
     },
-    onError: (error) => toast.error(error.message || "Failed to update relationship entry"),
+    onError: (error) => toast.error(translateServerError(error, tRoot, t("entryUpdateFailed"))),
   });
 
   const useAutoUpdates = useMutation({
@@ -90,9 +93,9 @@ export function useRelationshipsPageController(novelId: string) {
       setRelationshipEntryAutoManaged({ data: payload }),
     onSuccess: () => {
       invalidateMap();
-      toast.success("Automatic updates enabled");
+      toast.success(t("autoUpdatesEnabled"));
     },
-    onError: (error) => toast.error(error.message || "Failed to enable automatic updates"),
+    onError: (error) => toast.error(translateServerError(error, tRoot, t("autoUpdatesFailed"))),
   });
 
   const removeEntry = useMutation({
@@ -100,10 +103,10 @@ export function useRelationshipsPageController(novelId: string) {
       deleteRelationshipEntry({ data: payload }),
     onSuccess: () => {
       invalidateMap();
-      toast.success("Relationship entry deleted");
+      toast.success(t("entryDeleted"));
       setDeleteTarget(null);
     },
-    onError: (error) => toast.error(error.message || "Failed to delete relationship entry"),
+    onError: (error) => toast.error(translateServerError(error, tRoot, t("entryDeleteFailed"))),
   });
 
   const openCharacterAdd = () => {

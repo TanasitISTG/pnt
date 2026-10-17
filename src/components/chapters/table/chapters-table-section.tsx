@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { FileText, Plus } from "lucide-react";
+import { useTranslations } from "use-intl";
 import { Button } from "@/components/ui/button";
 import { ChapterGroupsAccordion } from "@/components/chapters/table/chapter-groups-accordion";
 import { ChapterTable, type ChapterTableProps } from "@/components/chapters/table/chapter-table";
@@ -26,6 +27,9 @@ export function ChaptersTableSection({
   groupResetKey = "",
   onAddChapters,
 }: ChaptersTableSectionProps) {
+  // A list of chapters says the same things here as it does on the reading page — how many
+  // there are, that there are none, that one can be added — so the words come from there.
+  const t = useTranslations("novel");
   const chapterGroups = useMemo(() => {
     const groups: ChapterRow[][] = [];
     for (let i = 0; i < chapters.length; i += CHAPTER_GROUP_SIZE) {
@@ -45,7 +49,7 @@ export function ChaptersTableSection({
         className="rounded-xl border border-border bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground"
         aria-live="polite"
       >
-        Loading chapters…
+        {t("loadingChapters")}
       </div>
     );
   }
@@ -55,12 +59,12 @@ export function ChaptersTableSection({
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 py-12 text-center">
         <FileText className="mb-2 size-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
-          {isAdmin ? "No chapters in this novel yet." : "No chapters published yet."}
+          {isAdmin ? t("emptyOwn") : t("emptyPublished")}
         </p>
         {isAdmin && onAddChapters ? (
           <Button type="button" variant="outline" className="mt-5" onClick={onAddChapters}>
             <Plus className="size-4" />
-            Add chapters
+            {t("addChapters")}
           </Button>
         ) : null}
       </div>

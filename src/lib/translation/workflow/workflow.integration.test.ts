@@ -1,15 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { type Sql } from "postgres";
 import { sql as drizzleSql } from "drizzle-orm";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { relationshipAnalysisSchema } from "@/lib/relationships/schemas";
 import type * as RelationshipService from "@/lib/relationships/service";
 import type * as ChapterEditService from "@/lib/content/chapter/chapter-edit.service";
 import type * as GlossaryService from "@/lib/glossary/service";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let completeChunk: typeof import("./job-store").completeChunk;
@@ -103,7 +106,7 @@ async function waitForNovelWaiter(blockerPid: number) {
   while (Date.now() < deadline) {
     const rows = await sql`
       SELECT pid FROM pg_stat_activity
-      WHERE ${blockerPid} = ANY(pg_blocking_pids(pid))
+      WHERE datname = current_database() AND ${blockerPid} = ANY(pg_blocking_pids(pid))
         AND wait_event_type = 'Lock'
         AND query LIKE '%for update%'
         AND query LIKE '%novels%'
@@ -207,20 +210,10 @@ async function seedRunningAnalysisJob(
     WHERE "id" = ${fixture.chapterId}
   `;
 }
-integrationDescribe("translation workflow PostgreSQL invariants", () => {
+describeIntegration("translation workflow PostgreSQL invariants", () => {
   // Load server modules only after DATABASE_URL points at the isolated integration database.
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    // The gates below pause one transaction while a second must queue on the same novel
-    // row, which a single pooled connection cannot express: raise the pool so the wait
-    // happens on the row lock instead of on the client's connection queue.
-    process.env.DATABASE_POOL_MAX ||= "5";
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     ({ completeChunk, completeJob, applyRelationshipAnalysis } = await import("./job-store"));
     ({ enqueueTranslationJob } = await import("../api/mutations"));
     ({ updateChapterForUser } = await import("@/lib/content/chapter/chapter-edit.service"));
@@ -237,9 +230,7 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
     } = await import("@/lib/relationships/service"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   for (const winner of ["edit", "worker"] as const) {
     it(`serializes source edit and chunk completion with ${winner} winning the novel gate`, async () => {
@@ -561,7 +552,7 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
           "missing",
           skipEagerDispatch,
         ),
-      ).rejects.toThrow("already has a translation");
+      ).rejects.toThrow(encodeMessage("errors.chapterAlreadyTranslated"));
 
       const [unchanged] = await sql<
         {
@@ -990,7 +981,7 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
       await expect(
         getRelationshipMapForUser(fixture.userId, fixture.novelId),
       ).rejects.toMatchObject({
-        message: "Relationship maps are not supported for this language pair",
+        message: encodeMessage("errors.relationshipMapUnsupportedPair"),
       });
     } finally {
       await deleteFixture(fixture.userId);
@@ -1155,7 +1146,9 @@ integrationDescribe("translation workflow PostgreSQL invariants", () => {
           evidence: null,
         }),
       ).rejects.toMatchObject({
-        message: expect.stringContaining("Relationship map update is invalid:"),
+        // The service throws the schema's own issue code rather than wrapping it, so the
+        // assertion names the rule that failed.
+        message: expect.stringContaining("relationshipNameDuplicate"),
       });
     } finally {
       await deleteFixture(fixture.userId);

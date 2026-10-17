@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
+import { translateServerError } from "@/lib/i18n/server-error";
 import { deleteReview, saveReview } from "@/lib/reviews/functions";
 
 import { createReviewReport } from "@/lib/reports/functions";
@@ -15,6 +17,11 @@ import type { ReportReason } from "@/lib/reports/reasons";
  * `viewerReported` flag.
  */
 export function useReviewMutations(novelId: string) {
+  const t = useTranslations("reviews");
+  // The report's two sentences belong to the surface that owns reporting, shared with a comment's
+  // report and a novel's.
+  const tReports = useTranslations("reports");
+  const tRoot = useTranslations();
   const queryClient = useQueryClient();
   const invalidateReviews = () => {
     void queryClient.invalidateQueries({ queryKey: ["novelRating", novelId] });
@@ -26,32 +33,30 @@ export function useReviewMutations(novelId: string) {
     mutationFn: (input: { rating: number; body?: string }) =>
       saveReview({ data: { novelId, rating: input.rating, body: input.body } }),
     onSuccess: () => {
-      toast.success("Review saved.");
+      toast.success(t("saved"));
       invalidateReviews();
     },
-    onError: (error: unknown) =>
-      toast.error(error instanceof Error ? error.message : "That review could not be saved"),
+    onError: (error: unknown) => toast.error(translateServerError(error, tRoot, t("saveFailed"))),
   });
 
   const remove = useMutation({
     mutationFn: () => deleteReview({ data: { novelId } }),
     onSuccess: () => {
-      toast.success("Review deleted.");
+      toast.success(t("deleted"));
       invalidateReviews();
     },
-    onError: (error: unknown) =>
-      toast.error(error instanceof Error ? error.message : "That review could not be deleted"),
+    onError: (error: unknown) => toast.error(translateServerError(error, tRoot, t("deleteFailed"))),
   });
 
   const report = useMutation({
     mutationFn: (input: { reviewId: string; reason: ReportReason; details?: string }) =>
       createReviewReport({ data: input }),
     onSuccess: () => {
-      toast.success("Report sent. An operator will review it.");
+      toast.success(tReports("sent"));
       invalidateReviews();
     },
     onError: (error: unknown) =>
-      toast.error(error instanceof Error ? error.message : "That report did not go through"),
+      toast.error(translateServerError(error, tRoot, tReports("failed"))),
   });
 
   return { save, remove, report };

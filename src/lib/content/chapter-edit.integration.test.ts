@@ -1,15 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { type Sql } from "postgres";
 import { sql as drizzleSql } from "drizzle-orm";
 import type {
   reorderChaptersForUser as ReorderChaptersForUser,
   updateChapterForUser as UpdateChapterForUser,
 } from "@/lib/content/chapter/chapter-edit.service";
 import type { deleteChapterForUser as DeleteChapterForUser } from "@/lib/content/chapter/chapter-delete.service";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import { encodeMessage } from "@/lib/i18n/message-code";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let updateChapterForUser: typeof UpdateChapterForUser;
@@ -214,28 +217,16 @@ async function waitForNovelWaiter(blockerPid: number) {
   throw new Error("Competing mutation never waited on the novel gate");
 }
 
-integrationDescribe("chapter edit PostgreSQL invariants", () => {
+describeIntegration("chapter edit PostgreSQL invariants", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    // The gates below pause one transaction while a second must queue on the same novel
-    // row, which a single pooled connection cannot express: raise the pool so the wait
-    // happens on the row lock instead of on the client's connection queue.
-    process.env.DATABASE_POOL_MAX ||= "5";
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     // Load server-only database code after the test database override is set.
     ({ updateChapterForUser, reorderChaptersForUser } =
       await import("@/lib/content/chapter/chapter-edit.service"));
     ({ deleteChapterForUser } = await import("@/lib/content/chapter/chapter-delete.service"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   it.each([
     "unchanged",
@@ -342,7 +333,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           { chapterId: fixture.chapterIds[0], translatedTitle: "Not allowed" },
           skipEagerDispatch,
         ),
-      ).rejects.toThrow("Chapter not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
 
       await expect(
         updateChapterForUser(
@@ -382,7 +373,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           },
           skipEagerDispatch,
         ),
-      ).rejects.toThrow("Source title is required");
+      ).rejects.toThrow(encodeMessage("validation.sourceTitleRequired"));
       await expect(
         updateChapterForUser(
           fixture.ownerUserId,
@@ -393,7 +384,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           },
           skipEagerDispatch,
         ),
-      ).rejects.toThrow("Source content is required");
+      ).rejects.toThrow(encodeMessage("validation.sourceContentRequired"));
       await expect(
         updateChapterForUser(
           fixture.ownerUserId,
@@ -403,7 +394,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           },
           skipEagerDispatch,
         ),
-      ).rejects.toThrow("Translation cannot be empty");
+      ).rejects.toThrow(encodeMessage("validation.translationRequired"));
       expect(await readChapters(fixture.novelId)).toEqual(before);
     } finally {
       await deleteFixture(fixture);
@@ -448,7 +439,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           { chapterId: fixture.chapterIds[0], rawContent: "Changed raw" },
           skipEagerDispatch,
         ),
-      ).rejects.toThrow("Choose whether to keep or clear the translation");
+      ).rejects.toThrow(encodeMessage("errors.chapterTranslationDecisionRequired"));
       expect(await readChapters(fixture.novelId)).toEqual(before);
 
       await updateChapterForUser(
@@ -506,7 +497,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           { chapterId: fixture.chapterIds[0], translatedContent: null },
           skipEagerDispatch,
         ),
-      ).rejects.toThrow("Translated content can only be cleared");
+      ).rejects.toThrow(encodeMessage("errors.translationClearRequiresSourceClear"));
     } finally {
       await deleteFixture(fixture);
     }
@@ -618,7 +609,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           novelId: staleFixture.novelId,
           chapterIds: [staleFixture.chapterIds[0], staleFixture.chapterIds[1]],
         }),
-      ).rejects.toThrow("Chapter order is stale");
+      ).rejects.toThrow(encodeMessage("errors.chapterOrderStale"));
       expect(await readChapters(staleFixture.novelId)).toEqual(before);
       await expect(
         reorderChaptersForUser(staleFixture.ownerUserId, {
@@ -629,7 +620,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
             staleFixture.chapterIds[2],
           ],
         }),
-      ).rejects.toThrow("Chapter order is stale");
+      ).rejects.toThrow(encodeMessage("errors.chapterOrderStale"));
       expect(await readChapters(staleFixture.novelId)).toEqual(before);
     } finally {
       await deleteFixture(staleFixture);
@@ -647,7 +638,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
             activeFixture.chapterIds[1],
           ],
         }),
-      ).rejects.toThrow("Chapter order cannot change while translation is active");
+      ).rejects.toThrow(encodeMessage("errors.chapterOrderTranslationActive"));
       expect(await readChapters(activeFixture.novelId)).toEqual(before);
     } finally {
       await deleteFixture(activeFixture);
@@ -662,7 +653,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           (${fixture.otherUserId}, ${fixture.novelId}, ${fixture.chapterIds[2]}, 0.4)`;
       await expect(
         deleteChapterForUser(fixture.otherUserId, fixture.chapterIds[0], async () => {}),
-      ).rejects.toThrow("Chapter not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
 
       await expect(
         deleteChapterForUser(fixture.ownerUserId, fixture.chapterIds[0], async (outboxId) => {
@@ -964,7 +955,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
           expect(order).toMatchObject({
             status: "rejected",
             reason: {
-              message: "Chapter order cannot change while translation is active",
+              message: encodeMessage("errors.chapterOrderTranslationActive"),
             },
           });
           expect(
@@ -1039,7 +1030,7 @@ integrationDescribe("chapter edit PostgreSQL invariants", () => {
         {
           status: "rejected",
           reason: expect.objectContaining({
-            message: "Chapter order is stale; refresh and try again",
+            message: encodeMessage("errors.chapterOrderStale"),
           }),
         },
       ]);

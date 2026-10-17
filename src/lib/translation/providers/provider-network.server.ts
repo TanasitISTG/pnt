@@ -12,6 +12,7 @@ import {
   resolveHostAddresses,
 } from "@/lib/scrape/network-policy.server";
 import { normalizeOpenCodeBaseUrl } from "./provider-compatibility";
+import { providerFailureCodes } from "./provider-failures";
 const PROVIDER_RESPONSE_SIZE_LIMIT_BYTES = 8 * 1024 * 1024;
 
 export function parseLocalProviderOrigins(raw: string): ReadonlySet<string> {
@@ -38,13 +39,13 @@ export function assertProviderUrl(url: URL, expectedOrigin?: string): void {
     url.search ||
     url.hash
   ) {
-    throw new ProviderRequestError("Provider URL is invalid", "INVALID_URL");
+    throw new ProviderRequestError(providerFailureCodes.INVALID_URL, "INVALID_URL");
   }
   if (expectedOrigin !== undefined && url.origin !== expectedOrigin) {
-    throw new ProviderRequestError("Provider origin is not allowed", "ORIGIN_MISMATCH");
+    throw new ProviderRequestError(providerFailureCodes.ORIGIN_MISMATCH, "ORIGIN_MISMATCH");
   }
   if (url.protocol !== "https:" && !localOrigins.has(url.origin)) {
-    throw new ProviderRequestError("Provider HTTPS is required", "HTTPS_REQUIRED");
+    throw new ProviderRequestError(providerFailureCodes.HTTPS_REQUIRED, "HTTPS_REQUIRED");
   }
 }
 
@@ -58,7 +59,7 @@ export function normalizeProviderBaseUrl(value: string, provider: ProviderType):
         : "https://generativelanguage.googleapis.com");
     url = new URL(provider === "openai" ? normalizeOpenCodeBaseUrl(base) : base);
   } catch {
-    throw new ProviderRequestError("Provider URL is invalid", "INVALID_URL");
+    throw new ProviderRequestError(providerFailureCodes.INVALID_URL, "INVALID_URL");
   }
   assertProviderUrl(url);
   return url.toString().replace(/\/$/, "");
@@ -75,14 +76,14 @@ async function approvedAddresses(url: URL) {
     if (error instanceof HostResolutionError) {
       throw new ProviderRequestError(
         error.code === "DNS_TIMEOUT"
-          ? "Provider hostname lookup timed out"
+          ? providerFailureCodes.DNS_TIMEOUT
           : error.code === "NON_PUBLIC"
-            ? "Provider host resolves to a non-public address"
-            : "Provider hostname could not be resolved",
+            ? providerFailureCodes.NON_PUBLIC
+            : providerFailureCodes.DNS_FAILED,
         error.code,
       );
     }
-    throw new ProviderRequestError("Provider hostname could not be resolved", "DNS_FAILED");
+    throw new ProviderRequestError(providerFailureCodes.DNS_FAILED, "DNS_FAILED");
   }
 }
 
@@ -108,7 +109,7 @@ const connector: buildConnector.connector = (options, callback) => {
   };
   void (async () => {
     if (options.socketPath || options.httpSocket) {
-      throw new ProviderRequestError("Provider transport is not allowed", "INVALID_TRANSPORT");
+      throw new ProviderRequestError(providerFailureCodes.INVALID_TRANSPORT, "INVALID_TRANSPORT");
     }
     const hostname = options.hostname.replace(/^\[|\]$/g, "");
     const host = hostname.includes(":") ? `[${hostname}]` : hostname;
@@ -118,7 +119,11 @@ const connector: buildConnector.connector = (options, callback) => {
     const expectedHostname = hostname.toLowerCase();
     const pinnedLookup: LookupFunction = (requestedHostname, lookupOptions, done) => {
       if (requestedHostname.replace(/^\[|\]$/g, "").toLowerCase() !== expectedHostname) {
-        done(new ProviderRequestError("Provider origin is not allowed", "ORIGIN_MISMATCH"), "", 0);
+        done(
+          new ProviderRequestError(providerFailureCodes.ORIGIN_MISMATCH, "ORIGIN_MISMATCH"),
+          "",
+          0,
+        );
         return;
       }
       if (lookupOptions.all) {
@@ -132,11 +137,7 @@ const connector: buildConnector.connector = (options, callback) => {
         (item) => !lookupOptions.family || item.family === lookupOptions.family,
       );
       if (!answer) {
-        done(
-          new ProviderRequestError("Provider hostname could not be resolved", "DNS_FAILED"),
-          "",
-          0,
-        );
+        done(new ProviderRequestError(providerFailureCodes.DNS_FAILED, "DNS_FAILED"), "", 0);
         return;
       }
       done(null, answer.address, answer.family);
@@ -154,10 +155,7 @@ const connector: buildConnector.connector = (options, callback) => {
       const remote = socket.remoteAddress && normalizeIpAddress(socket.remoteAddress);
       if (!remote || !addresses.some((answer) => answer.address === remote.address)) {
         socket.destroy();
-        finish(
-          new ProviderRequestError("Provider connection address is not allowed", "PEER_MISMATCH"),
-          null,
-        );
+        finish(new ProviderRequestError(providerFailureCodes.PEER_MISMATCH, "PEER_MISMATCH"), null);
         return;
       }
       finish(null, socket);
@@ -166,10 +164,7 @@ const connector: buildConnector.connector = (options, callback) => {
     finish(
       error instanceof ProviderRequestError
         ? error
-        : new ProviderRequestError(
-            "Could not connect to the provider. Check the settings and try again.",
-            "CONNECTION_FAILED",
-          ),
+        : new ProviderRequestError(providerFailureCodes.CONNECTION_FAILED, "CONNECTION_FAILED"),
       null,
     ),
   );
@@ -189,10 +184,7 @@ function limitDecodedResponseBody(response: Response): Response {
         bytesRead += chunk.byteLength;
         if (bytesRead > PROVIDER_RESPONSE_SIZE_LIMIT_BYTES) {
           controller.error(
-            new ProviderRequestError(
-              "Provider response exceeded the size limit",
-              "RESPONSE_TOO_LARGE",
-            ),
+            new ProviderRequestError(providerFailureCodes.RESPONSE_TOO_LARGE, "RESPONSE_TOO_LARGE"),
           );
           return;
         }
@@ -224,7 +216,7 @@ export function createProviderFetch(baseUrl: string): typeof globalThis.fetch {
     try {
       effectiveUrl = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
     } catch {
-      throw new ProviderRequestError("Provider URL is invalid", "INVALID_URL");
+      throw new ProviderRequestError(providerFailureCodes.INVALID_URL, "INVALID_URL");
     }
     assertProviderUrl(effectiveUrl, expectedOrigin);
     const request = typeof input === "object" && !(input instanceof URL) ? input : undefined;
@@ -260,7 +252,10 @@ export function createProviderFetch(baseUrl: string): typeof globalThis.fetch {
     }
     if (response.status >= 300 && response.status <= 399) {
       await response.body?.cancel().catch(() => undefined);
-      throw new ProviderRequestError("Provider redirect is not allowed", "REDIRECT_NOT_ALLOWED");
+      throw new ProviderRequestError(
+        providerFailureCodes.REDIRECT_NOT_ALLOWED,
+        "REDIRECT_NOT_ALLOWED",
+      );
     }
     // Undici's agent limit applies before content decoding. Count the decoded
     // Fetch body as well so compressed responses cannot expand without bound.

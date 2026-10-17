@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
@@ -34,7 +35,7 @@ export async function setChapterPublishedForUser(
       .where(eq(chapters.id, input.chapterId))
       .limit(1);
     if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
-      throw new SafeServerError("Chapter not found or unauthorized");
+      throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
     }
     const [existing] = await tx
       .select({
@@ -54,10 +55,10 @@ export async function setChapterPublishedForUser(
       .for("update", { of: chapters });
 
     if (!existing) {
-      throw new SafeServerError("Chapter not found or unauthorized");
+      throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
     }
     if (input.publishedAt !== null && !chapterIsReady(existing)) {
-      throw new SafeServerError("Translate the chapter before publishing.");
+      throw new SafeServerError(encodeMessage("errors.chapterNotTranslatedForPublish"));
     }
 
     await tx
@@ -83,7 +84,7 @@ export async function setAllChaptersPublishedForUser(
       .for("update");
 
     if (!novel) {
-      throw new SafeServerError("Novel not found or unauthorized");
+      throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
     }
 
     const chapterRows = await tx

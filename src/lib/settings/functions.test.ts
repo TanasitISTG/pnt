@@ -43,11 +43,13 @@ vi.mock("@/lib/translation/providers/provider-network.server", () => ({
   ProviderRequestError: class extends Error {},
 }));
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import {
   passwordChangeFailureMessage,
   providerConnectionFailure,
   saveProviderSettingsForUser,
 } from "@/lib/settings/functions";
+import { englishWords } from "@/test/messages";
 
 describe("providerConnectionFailure", () => {
   it.each([
@@ -57,10 +59,15 @@ describe("providerConnectionFailure", () => {
       "ACCESS_DENIED",
       "Provider denied access. Check account/model permissions and deployment IP restrictions.",
     ],
-  ])("distinguishes HTTP %s from the provider", async (status, code, message) => {
-    await expect(
-      providerConnectionFailure(Object.assign(new Error("sensitive upstream details"), { status })),
-    ).resolves.toEqual({ code, message });
+  ] as const)("distinguishes HTTP %s from the provider", async (status, code, words) => {
+    const failure = await providerConnectionFailure(
+      Object.assign(new Error("sensitive upstream details"), { status }),
+    );
+
+    // The banner receives a code, and this is the sentence it resolves it to - the same words a
+    // job's log row shows for the same failure. None of the upstream text above is in it.
+    expect(failure.code).toBe(code);
+    expect(englishWords(failure.message)).toBe(words);
   });
 });
 
@@ -106,20 +113,20 @@ describe("saveProviderSettings", () => {
 describe("passwordChangeFailureMessage", () => {
   it("maps Better Auth's documented body.code to the fixed wrong-password message", () => {
     expect(passwordChangeFailureMessage(errorWith({ body: { code: "INVALID_PASSWORD" } }))).toBe(
-      "Current password is incorrect.",
+      encodeMessage("errors.passwordIncorrect"),
     );
   });
   it("maps only documented body.code (including nested cause) to the wrong-password message", () => {
     const withCause = errorWith({ cause: errorWith({ body: { code: "INVALID_PASSWORD" } }) });
-    expect(passwordChangeFailureMessage(withCause)).toBe("Current password is incorrect.");
+    expect(passwordChangeFailureMessage(withCause)).toBe(encodeMessage("errors.passwordIncorrect"));
   });
 
   it("never maps a top-level code or message text", () => {
     expect(passwordChangeFailureMessage(errorWith({ code: "INVALID_PASSWORD" }))).toBe(
-      "Could not change password. Try again.",
+      encodeMessage("errors.passwordChangeFailed"),
     );
     expect(passwordChangeFailureMessage(new Error("text mentioning INVALID_PASSWORD"))).toBe(
-      "Could not change password. Try again.",
+      encodeMessage("errors.passwordChangeFailed"),
     );
   });
 });

@@ -229,14 +229,14 @@ describe("EPUB Parser", () => {
 
     // Missing container.xml
     const noContainer = createEpubBuffer({ "test.txt": "hello" });
-    expect(() => parseEpubArchive(noContainer)).toThrow(/container\.xml/);
+    expect(() => parseEpubArchive(noContainer)).toThrow(/epubMissingContainer/);
 
     // Dangerous path
     const dangerous = createEpubBuffer({
       "META-INF/container.xml": `<container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>`,
       "../etc/passwd": "root:x:0:0",
     });
-    expect(() => parseEpubArchive(dangerous)).toThrow(/invalid file path/);
+    expect(() => parseEpubArchive(dangerous)).toThrow(/epubInvalidFilePath/);
     const malformedPath = createEpubBuffer({
       "META-INF/container.xml": `<container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>`,
       "content.opf": `<package><metadata><dc:title>Test</dc:title></metadata><manifest><item id="chapter" href="%ZZ.xhtml"/></manifest><spine><itemref idref="chapter"/></spine></package>`,
@@ -247,7 +247,7 @@ describe("EPUB Parser", () => {
       "META-INF/container.xml": `<container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>`,
       "safe/%2e%2e/passwd": "root:x:0:0",
     });
-    expect(() => parseEpubArchive(encodedDangerous)).toThrow(/invalid file path/);
+    expect(() => parseEpubArchive(encodedDangerous)).toThrow(/epubInvalidFilePath/);
   });
 
   it("rejects archive containing only front matter or empty chapters", () => {
@@ -261,7 +261,7 @@ describe("EPUB Parser", () => {
       "Cover.xhtml": coverXhtml,
     });
 
-    expect(() => parseEpubArchive(epubBuf)).toThrow(/no usable chapters/);
+    expect(() => parseEpubArchive(epubBuf)).toThrow(/epubNoUsableChapters/);
   });
 
   it("excludes navigation manifest items and rejects missing package metadata", () => {
@@ -289,7 +289,7 @@ describe("EPUB Parser", () => {
           "chapter.xhtml": chapterXhtml,
         }),
       ),
-    ).toThrow(/package metadata/);
+    ).toThrow(/epubMissingPackageMetadata/);
   });
 
   it("merges only sequential multipart chapters and removes number-only markers", () => {

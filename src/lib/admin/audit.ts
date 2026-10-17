@@ -31,24 +31,37 @@ export type AdminAction = (typeof ADMIN_ACTIONS)[number];
  */
 export type AdminActionDetail = Record<string, string | number | boolean | null>;
 
-const ADMIN_ACTION_LABELS: Record<AdminAction, string> = {
-  "role.granted": "Operator access granted",
-  "role.revoked": "Operator access removed",
-  "account.banned": "Account suspended",
-  "account.unbanned": "Account restored",
-  "account.sessions_revoked": "Sessions signed out",
-  "account.deleted": "Account deleted",
-  "impersonation.started": "Viewed as account",
-  "impersonation.stopped": "Returned to operator",
-  "report.upheld": "Report upheld",
-  "report.dismissed": "Report dismissed",
-  "comment.removed": "Comment removed",
-  "review.removed": "Review removed",
-};
+/**
+ * The `admin` catalog key each action reads as.
+ *
+ * A key rather than a sentence, because the trail is read in the operator's own language:
+ * this module is shared with the server, which must not guess a reader's locale, and the
+ * activity screen resolves the key where the reader is. The same key is what the action's
+ * toast says, so an action cannot read two ways in two places.
+ */
+const ADMIN_ACTION_KEYS = {
+  "role.granted": "actionRoleGranted",
+  "role.revoked": "actionRoleRemoved",
+  "account.banned": "actionAccountSuspended",
+  "account.unbanned": "actionAccountRestored",
+  "account.sessions_revoked": "actionSessionsSignedOut",
+  "account.deleted": "actionAccountDeleted",
+  "impersonation.started": "actionImpersonationStarted",
+  "impersonation.stopped": "actionImpersonationStopped",
+  "report.upheld": "actionReportUpheld",
+  "report.dismissed": "actionReportDismissed",
+  "comment.removed": "actionCommentRemoved",
+  "review.removed": "actionReviewRemoved",
+} as const satisfies Record<AdminAction, string>;
 
-/** Falls back to the raw value so an action added later still renders something. */
-export function describeAdminAction(action: string): string {
-  return ADMIN_ACTION_LABELS[action as AdminAction] ?? action;
+export type AdminActionKey = (typeof ADMIN_ACTION_KEYS)[AdminAction];
+
+/**
+ * The key an action reads as, or null when this release does not know the action. The caller
+ * falls back to the raw value, so a row written by a newer deploy still renders something.
+ */
+export function adminActionKey(action: string): AdminActionKey | null {
+  return isAdminAction(action) ? ADMIN_ACTION_KEYS[action] : null;
 }
 
 export function isAdminAction(action: string): action is AdminAction {

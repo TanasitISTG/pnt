@@ -9,6 +9,7 @@ import {
   type ReactFormExtendedApi,
 } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -17,11 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { createChapter } from "@/lib/content/chapter/chapter.functions";
-import {
-  chapterNumberSchema,
-  createChapterSchema,
-  type CreateChapterInput,
-} from "@/lib/content/novel/novel.schemas";
+import type { CreateChapterInput } from "@/lib/content/novel/novel.schemas";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 export interface FetchedChapterDraft {
   number: string;
@@ -30,11 +28,35 @@ export interface FetchedChapterDraft {
   sourceUrl: string;
 }
 
-const manualChapterFormSchema = createChapterSchema.omit({ novelId: true }).extend({
+// The client's own copy of the three field rules, keyed rather than worded (i18n.md §3): the
+// shared schema still guards the same input on the server, and these bounds mirror it the way
+// NovelForm mirrors its own.
+const manualChapterFormSchema = z.object({
   number: z
     .string()
     .transform((value) => Number(value))
-    .pipe(chapterNumberSchema),
+    .pipe(
+      z
+        .number()
+        .positive(encodeMessage("validation.chapterNumberPositive"))
+        .max(999_999.99, encodeMessage("validation.chapterNumberMax"))
+        .multipleOf(0.01, encodeMessage("validation.chapterNumberDecimals")),
+    ),
+  title: z
+    .string()
+    .min(1, encodeMessage("validation.titleRequired"))
+    .max(500)
+    .refine(
+      (value) => value.length === 0 || value.trim().length > 0,
+      encodeMessage("validation.titleRequired"),
+    ),
+  rawContent: z
+    .string()
+    .min(1, encodeMessage("validation.sourceContentRequired"))
+    .refine(
+      (value) => value.length === 0 || value.trim().length > 0,
+      encodeMessage("validation.sourceContentRequired"),
+    ),
 });
 interface ManualChapterFormValues {
   number: string;
@@ -81,6 +103,7 @@ export function useManualChapterEditor({
   chapters: Array<{ number: string }>;
   invalidateChapters: () => void;
 }) {
+  const t = useTranslations("studio");
   const autoNextNumber = useMemo(() => {
     if (chapters.length === 0) return 1;
     const maxNumber = Math.max(...chapters.map((chapter) => Number(chapter.number || 0)), 0);
@@ -151,9 +174,9 @@ export function useManualChapterEditor({
           },
           { keepDefaultValues: true },
         );
-        toast.success("Chapter added successfully");
+        toast.success(t("chapterAdded"));
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to add chapter";
+        const message = error instanceof Error ? error.message : t("chapterAddFailed");
         setSubmitError(message);
         toast.error(message);
       }
@@ -220,6 +243,7 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
     markNumberEdited,
     clearSubmitError,
   } = controller;
+  const t = useTranslations("studio");
   const [canSubmit, isSubmitting] = useStore(
     form.store,
     (state) => [state.canSubmit, state.isSubmitting] as const,
@@ -229,23 +253,23 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h3 className="text-xl font-semibold tracking-tight text-foreground">Create one chapter</h3>
-        <p className="text-sm text-muted-foreground">
-          Paste source text, review the details, then add it to the novel.
-        </p>
+        <h3 className="text-xl font-semibold tracking-tight text-foreground">
+          {t("manualHeading")}
+        </h3>
+        <p className="text-sm text-muted-foreground">{t("manualLead")}</p>
       </header>
 
       {sourceUrl ? (
         <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm">
           <p className="min-w-0 text-foreground">
-            <span className="font-semibold">Fetched from URL.</span>{" "}
+            <span className="font-semibold">{t("fetchedFromUrl")}</span>{" "}
             <span className="text-muted-foreground">
-              Review the draft before adding it. Source:{" "}
+              {t("fetchedReview")} {t("fetchedSource")}{" "}
               <span title={sourceUrl}>{truncateUrl(sourceUrl)}</span>
             </span>
           </p>
           <Button type="button" variant="outline" size="sm" onClick={resetManualDraft}>
-            Start fresh
+            {t("startFresh")}
           </Button>
         </div>
       ) : null}
@@ -266,7 +290,7 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
                 const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={invalid || undefined}>
-                    <FieldLabel htmlFor="chapNumber">Chapter number *</FieldLabel>
+                    <FieldLabel htmlFor="chapNumber">{t("chapterNumberLabel")}</FieldLabel>
                     <Input
                       ref={numberRef}
                       id="chapNumber"
@@ -276,7 +300,7 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
                       min="0.01"
                       max="999999.99"
                       autoComplete="off"
-                      placeholder="e.g. 1"
+                      placeholder={t("chapterNumberPlaceholder")}
                       value={field.state.value}
                       aria-invalid={invalid}
                       aria-describedby={invalid ? "chap-number-error" : undefined}
@@ -300,13 +324,13 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
                 const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={invalid || undefined}>
-                    <FieldLabel htmlFor="chapTitle">Chapter title *</FieldLabel>
+                    <FieldLabel htmlFor="chapTitle">{t("chapterTitleLabel")}</FieldLabel>
                     <Input
                       ref={titleRef}
                       id="chapTitle"
                       name={field.name}
                       autoComplete="off"
-                      placeholder="e.g. The Awakening"
+                      placeholder={t("chapterTitlePlaceholder")}
                       value={field.state.value}
                       aria-invalid={invalid}
                       aria-describedby={invalid ? "chap-title-error" : undefined}
@@ -332,9 +356,9 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
               return (
                 <Field data-invalid={invalid || undefined}>
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <FieldLabel htmlFor="chapContent">Source text *</FieldLabel>
+                    <FieldLabel htmlFor="chapContent">{t("sourceTextLabel")}</FieldLabel>
                     <span className="text-sm text-muted-foreground">
-                      {field.state.value.length.toLocaleString()} characters
+                      {t("characterCount", { count: field.state.value.length })}
                     </span>
                   </div>
                   <Textarea
@@ -342,7 +366,7 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
                     id="chapContent"
                     name={field.name}
                     autoComplete="off"
-                    placeholder="Paste raw chapter text here..."
+                    placeholder={t("sourceTextPlaceholder")}
                     value={field.state.value}
                     aria-invalid={invalid}
                     aria-describedby={invalid ? "chap-content-error" : undefined}
@@ -374,7 +398,7 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
         <footer className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-end">
           <Button type="submit" disabled={!canSubmit || isSubmitting}>
             {isSubmitting && <Spinner />}
-            {isSubmitting ? "Adding chapter…" : "Add chapter"}
+            {isSubmitting ? t("addingChapter") : t("addChapterButton")}
           </Button>
         </footer>
       </form>

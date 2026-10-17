@@ -319,7 +319,7 @@ describe("AddChapterSection", () => {
     ["Chapter number *", "1.234", "Chapter number must have at most two decimal places"],
     ["Chapter number *", "1000000", "Chapter number must be at most 999999.99"],
     ["Chapter title *", " \t ", "Title is required"],
-    ["Source text *", "\n ", "Content is required"],
+    ["Source text *", "\n ", "Source content is required"],
   ])("surfaces invalid manual %s values before mutation", async (label, value, message) => {
     renderAddChapter();
     fireEvent.change(screen.getByRole("spinbutton", { name: "Chapter number *" }), {

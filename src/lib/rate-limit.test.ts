@@ -25,6 +25,7 @@ vi.mock("@/lib/env", () => ({
 }));
 vi.mock("@/lib/log", () => ({ log }));
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { checkRateLimit, checkRateLimitForSubject, extractIp, isOverLimit } from "@/lib/rate-limit";
 import { RateLimitError } from "@/lib/server-fn-error";
 
@@ -131,7 +132,10 @@ describe("rate-limit request behavior", () => {
       (error: unknown) => {
         events.push("rejected");
         expect(error).toBeInstanceOf(RateLimitError);
-        expect(error).toMatchObject({ name: "RateLimitError", message: "Too many requests" });
+        expect(error).toMatchObject({
+          name: "RateLimitError",
+          message: encodeMessage("errors.rateLimited"),
+        });
       },
     );
     expect(events).toEqual(["status:429", "rejected"]);

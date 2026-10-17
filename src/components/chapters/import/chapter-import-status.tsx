@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { Button } from "@/components/ui/button";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/jobs/status-badge";
@@ -18,6 +20,7 @@ export function ChapterImportStatus({
   statusError,
   onRetryStatus,
 }: ChapterImportStatusProps) {
+  const t = useTranslations("studio");
   if (!job && !statusError) return null;
 
   const total = job ? (job.kind === "epub" ? job.toNumber : job.toNumber - job.fromNumber + 1) : 0;
@@ -25,14 +28,14 @@ export function ChapterImportStatus({
   const percent = total > 0 ? Math.min(100, Math.max(0, (processed / total) * 100)) : 0;
   const progressText =
     !job || job.toNumber === 0
-      ? "Preparing…"
-      : `${Math.min(processed, total)} of ${total} chapters`;
+      ? t("importPreparing")
+      : t("importProgress", { processed: Math.min(processed, total), total });
 
   return (
     <div className="flex flex-col gap-4 border-t border-border pt-5">
       {job ? (
         <p className="sr-only" role="status">
-          {label}: {job.status}. {progressText}.
+          {t("importStatusLine", { label, status: job.status, progress: progressText })}
         </p>
       ) : null}
       {job ? (
@@ -51,9 +54,15 @@ export function ChapterImportStatus({
       ) : null}
 
       {job ? (
-        <Progress value={percent} aria-label={`${label} progress`} className="gap-2">
+        <Progress
+          value={percent}
+          aria-label={t("importProgressLabel", { label })}
+          className="gap-2"
+        >
           <div className="flex w-full items-center gap-3 text-sm text-muted-foreground">
-            <ProgressLabel>{active ? "Running on the server" : "Import progress"}</ProgressLabel>
+            <ProgressLabel>
+              {active ? t("importRunningOnServer") : t("importProgressTitle")}
+            </ProgressLabel>
             <ProgressValue>{() => `${Math.round(percent)}%`}</ProgressValue>
           </div>
         </Progress>
@@ -62,15 +71,15 @@ export function ChapterImportStatus({
       {job ? (
         <dl className="grid grid-cols-3 gap-3 text-sm">
           <div className="flex flex-col gap-1">
-            <dt className="text-muted-foreground">Added</dt>
+            <dt className="text-muted-foreground">{t("importStatAdded")}</dt>
             <dd className="tabular-nums text-foreground">{job.added}</dd>
           </div>
           <div className="flex flex-col gap-1">
-            <dt className="text-muted-foreground">Skipped</dt>
+            <dt className="text-muted-foreground">{t("importStatSkipped")}</dt>
             <dd className="tabular-nums text-foreground">{job.skipped}</dd>
           </div>
           <div className="flex flex-col gap-1">
-            <dt className="text-muted-foreground">Failed</dt>
+            <dt className="text-muted-foreground">{t("importStatFailed")}</dt>
             <dd className="tabular-nums text-foreground">{job.failed}</dd>
           </div>
         </dl>
@@ -85,7 +94,7 @@ export function ChapterImportStatus({
         >
           <span>{statusError.message}</span>
           <Button type="button" size="sm" variant="outline" onClick={() => void onRetryStatus()}>
-            Retry status
+            {t("retryStatus")}
           </Button>
         </div>
       ) : null}

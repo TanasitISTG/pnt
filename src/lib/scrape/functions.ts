@@ -3,6 +3,7 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { novels, chapters, importJobs } from "@/lib/db/schema";
 // Import status is polled through owner-scoped reads, so they use
@@ -47,7 +48,7 @@ export const importChapter = createServerFn({ method: "POST" })
         .from(novels)
         .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
         .limit(1);
-      if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+      if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
       const scraped = await fetchAndParse(data.url, data.provider);
 
@@ -55,12 +56,12 @@ export const importChapter = createServerFn({ method: "POST" })
       // but a single import has no authoritative position to fall back on.
       const chapterNumber = scraped.number;
       if (chapterNumber === null) {
-        throw new SafeServerError("Could not determine a chapter number from the source page");
+        throw new SafeServerError(encodeMessage("errors.scrapeChapterNumberMissing"));
       }
 
       return db.transaction(async (tx) => {
         if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
-          throw new SafeServerError("Novel not found or unauthorized");
+          throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
         }
         const id = nanoid();
         const [inserted] = await tx
@@ -95,7 +96,7 @@ export const startImportJobSchema = z
   })
   .refine(({ from, to }) => from <= to && to - from + 1 <= MAX_IMPORT_RANGE_LENGTH, {
     path: ["to"],
-    message: "Invalid range (from ≤ to, max 500 chapters)",
+    message: encodeMessage("validation.scrapeRangeInvalid"),
   })
   .superRefine((data, context) => {
     try {

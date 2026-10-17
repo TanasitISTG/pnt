@@ -324,8 +324,28 @@
   --radius-xl: 10px;
   --radius-2xl: 14px;
 
-  /* Type scale (DESIGN.md §3) — a fluid application ramp, not a landing page.
-     Weights: 400 body · 500 interface · 600 titles · 480 display alt. */
+  /* Motion — budgets and curves live in DESIGN.md §6.1 */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Fonts — Thai fallback is mandatory */
+  --font-sans: "Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+  --font-reader: "Sarabun", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * Type scale (DESIGN.md §3) — a fluid application ramp, not a landing page.
+ * Weights: 400 body · 500 interface · 600 titles · 480 display alt.
+ *
+ * Deliberately a plain `@theme` rather than another `inline` one. Inlining bakes each value
+ * into the utility that reads it, which is what the color tokens want — they are one hop from
+ * the palette that flips per theme. The ramp wants the opposite: Thai re-declares a step's
+ * tracking and its leading under `:lang(th)` (i18n.md §5), and that rule can only reach a
+ * utility that consults the variable. Inlined, `--text-section--letter-spacing` is a literal
+ * inside `.text-section` and the Thai block is dead code.
+ */
+@theme {
   --text-display: clamp(2.25rem, 1.55rem + 3.1vw, 3.25rem);
   --text-display--line-height: 1.04;
   --text-display--letter-spacing: -0.03em;
@@ -361,15 +381,6 @@
   --text-badge-count: 0.625rem;
   --text-metric: clamp(1.75rem, 1.3rem + 2vw, 2.25rem);
   --tracking-overline: 0.14em;
-
-  /* Motion — budgets and curves live in DESIGN.md §6.1 */
-  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
-  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-
-  /* Fonts — Thai fallback is mandatory */
-  --font-sans: "Sofia Sans Variable", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
-  --font-reader: "Sarabun", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
 }
 
 @utility transition-width {

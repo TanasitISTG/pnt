@@ -3,6 +3,7 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
 import { novels, chapters, glossaryTerms, termCategoryEnum } from "@/lib/db/schema";
 // Terms, stats, and replacement previews are owner-scoped reads; they authenticate
@@ -35,7 +36,7 @@ async function lockOwnedTerm(tx: NovelMutationTransaction, userId: string, termI
     .where(eq(glossaryTerms.id, termId))
     .limit(1);
   if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
-    throw new SafeServerError("Glossary term not found or unauthorized");
+    throw new SafeServerError(encodeMessage("errors.glossaryTermNotFoundOrUnauthorized"));
   }
   const [term] = await tx
     .select({ id: glossaryTerms.id })
@@ -43,7 +44,7 @@ async function lockOwnedTerm(tx: NovelMutationTransaction, userId: string, termI
     .where(and(eq(glossaryTerms.id, termId), eq(glossaryTerms.novelId, parent.novelId)))
     .limit(1)
     .for("update", { of: glossaryTerms });
-  if (!term) throw new SafeServerError("Glossary term not found or unauthorized");
+  if (!term) throw new SafeServerError(encodeMessage("errors.glossaryTermNotFoundOrUnauthorized"));
   return term;
 }
 
@@ -64,7 +65,7 @@ export const createGlossaryTerm = createServerFn({ method: "POST" })
 
       return db.transaction(async (tx) => {
         if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
-          throw new SafeServerError("Novel not found or unauthorized");
+          throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
         }
 
         const [existing] = await tx
@@ -79,7 +80,9 @@ export const createGlossaryTerm = createServerFn({ method: "POST" })
           .limit(1);
 
         if (existing) {
-          throw new SafeServerError(`Term with source "${data.source.trim()}" already exists`);
+          throw new SafeServerError(
+            encodeMessage("errors.glossaryTermExists", { source: data.source.trim() }),
+          );
         }
 
         const termId = nanoid();
@@ -120,7 +123,7 @@ export const previewTermReplacement = createServerFn({ method: "GET" })
         .limit(1);
 
       if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
+        throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       }
 
       const [row] = await db
@@ -168,7 +171,7 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
         .limit(1);
 
       if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
+        throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       }
 
       const lines = data.tsv
@@ -195,7 +198,7 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
         const parts = line.split("\t").map((p) => p.trim());
 
         if (parts.length < 2) {
-          errors.push(`Line ${index + 1}: Must have at least source and target (separated by tab)`);
+          errors.push(encodeMessage("errors.glossaryImportColumnsMissing", { line: index + 1 }));
           continue;
         }
 
@@ -205,7 +208,7 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
         let note: string | null = null;
 
         if (!source || !target) {
-          errors.push(`Line ${index + 1}: Source and target cannot be empty`);
+          errors.push(encodeMessage("errors.glossaryImportValueEmpty", { line: index + 1 }));
           continue;
         }
 
@@ -248,7 +251,7 @@ export const bulkImportGlossaryTerms = createServerFn({ method: "POST" })
         const chunk = rowsToInsert.slice(i, i + CHUNK_SIZE);
         const existingCount = await db.transaction(async (tx) => {
           if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
-            throw new SafeServerError("Novel not found or unauthorized");
+            throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
           }
           const existingTerms = await tx
             .select({ source: glossaryTerms.source })
@@ -310,7 +313,7 @@ export const approveAllPendingTerms = createServerFn({ method: "POST" })
 
       return db.transaction(async (tx) => {
         if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
-          throw new SafeServerError("Novel not found or unauthorized");
+          throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
         }
         await tx
           .update(glossaryTerms)

@@ -7,6 +7,8 @@ import {
   type ChunkRelationshipAnalysisInput,
 } from "./analyzer";
 import { relationshipMapSchema } from "./schemas";
+import { logMessage } from "@/lib/translation/workflow/log-entry";
+import { englishWords } from "@/test/messages";
 
 const updatedAt = "2026-01-01T00:00:00.000Z";
 
@@ -327,7 +329,7 @@ describe("relationship source analyzer", () => {
 
     expect(generateChatCompletion).toHaveBeenCalledTimes(4);
     expect(result.analysis).toEqual({ characters: [], relationships: [], activePairs: [] });
-    expect(result.warning).toBeNull();
+    expect(result.warnings).toEqual([]);
     expect(result.promptTokens).toBe(9);
     expect(result.completionTokens).toBe(6);
   });
@@ -354,7 +356,12 @@ describe("relationship source analyzer", () => {
     expect(result.context?.activePairs).toEqual([
       { speakerId: "a", listenerId: "b", relationshipId: "pair" },
     ]);
-    expect(result.warning).toBe("Relationship analysis failed: provider unavailable.");
+    // The warning is a stored code, resolved here the way the log drawer resolves it: a row read
+    // six months later still says what happened, in whichever language its reader reads.
+    expect(result.warnings).toHaveLength(1);
+    expect(englishWords(result.warnings[0] ?? "")).toBe(
+      "Relationship analysis failed: provider unavailable",
+    );
     expect(result.promptTokens).toBe(0);
     expect(result.completionTokens).toBe(0);
   });
@@ -378,7 +385,7 @@ describe("chunk relationship analysis", () => {
         }),
       );
 
-      expect(result.warning).toBeNull();
+      expect(result.warnings).toEqual([]);
       expect(result.promptTokens).toBe(3);
       expect(result.completionTokens).toBe(2);
       expect(result.context).toEqual(null);
@@ -402,7 +409,7 @@ describe("chunk relationship analysis", () => {
     expect(generateChatCompletion).not.toHaveBeenCalled();
     expect(result).toEqual({
       context: null,
-      warning: null,
+      warnings: [],
       promptTokens: 0,
       completionTokens: 0,
     });
@@ -426,7 +433,9 @@ describe("chunk relationship analysis", () => {
     expect(result.context?.activePairs).toEqual([
       { speakerId: "a", listenerId: "b", relationshipId: "pair" },
     ]);
-    expect(result.warning).toBe("Relationship analysis unavailable: provider unavailable.");
+    expect(englishWords(result.warnings[0] ?? "")).toBe(
+      "Relationship analysis unavailable: provider unavailable",
+    );
     expect(result.promptTokens).toBe(0);
     expect(result.completionTokens).toBe(0);
   });
@@ -521,10 +530,15 @@ describe("chunk relationship analysis", () => {
       [character("a", "甲"), character("b", "乙")],
       [relationship("pair", "a", "b")],
     );
+    // The port reports one code per refusal, the way the merge does; the analyzer keeps the list.
+    const persistedWarning = logMessage("relationshipAliasCapReached", {
+      name: "甲",
+      alias: "阿甲",
+    });
     const persistAnalysis = vi.fn(async () => ({
       applied: true,
       map: persisted,
-      warnings: ["Stored map adjusted."],
+      warnings: [persistedWarning],
     }));
 
     const result = await analyzeChunkRelationshipsForChunk(
@@ -539,6 +553,9 @@ describe("chunk relationship analysis", () => {
     expect(result.context?.activePairs).toEqual([
       { speakerId: "a", listenerId: "b", relationshipId: "pair" },
     ]);
-    expect(result.warning).toBe("Stored map adjusted.");
+    expect(result.warnings).toEqual([persistedWarning]);
+    expect(englishWords(result.warnings[0] ?? "")).toBe(
+      "Alias cap reached for automatic character “甲”; discarded “阿甲”.",
+    );
   });
 });

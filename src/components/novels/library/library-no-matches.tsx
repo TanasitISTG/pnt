@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 export function LibraryNoMatches({ onClear }: { onClear: () => void }) {
   const t = useTranslations("catalog");
+  const tCommon = useTranslations("common");
 
   return (
     <EmptyState
@@ -16,7 +17,7 @@ export function LibraryNoMatches({ onClear }: { onClear: () => void }) {
     >
       <Button type="button" variant="outline" onClick={onClear}>
         <X className="size-3.5" aria-hidden="true" />
-        {t("clearFilters")}
+        {tCommon("clearFilters")}
       </Button>
     </EmptyState>
   );

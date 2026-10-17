@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { getStorage, isLocalStorage } from "@/lib/storage/index.server";
+import { parseObjectKey } from "@/lib/storage/keys";
 import { verifyLocalUploadToken } from "@/lib/storage/local.server";
 
 /**
@@ -27,8 +28,14 @@ export const Route = createFileRoute("/api/storage/upload")({
           return new Response("Forbidden", { status: 403 });
         }
 
+        // The signed token covers this exact key, but the key still arrives as a request value: it
+        // is read back before it reaches the bucket, so this route can only ever write a key the
+        // vocabulary derives.
+        const stored = parseObjectKey(key);
+        if (!stored) return new Response("Bad Request", { status: 400 });
+
         const bytes = new Uint8Array(await request.arrayBuffer());
-        await getStorage()[bucket].put(key, bytes, {
+        await getStorage()[bucket].put(stored.key, bytes, {
           contentType: request.headers.get("content-type") ?? "application/octet-stream",
         });
         return new Response(null, { status: 200 });

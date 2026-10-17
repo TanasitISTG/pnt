@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useForm } from "@tanstack/react-form";
 import { ArrowLeft, Check } from "lucide-react";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -26,12 +27,12 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  createTermSchema,
   GLOSSARY_TERM_NOTE_MAX_LENGTH,
   GLOSSARY_TERM_TEXT_MAX_LENGTH,
   termCategorySchema,
   type TermCategory,
 } from "@/lib/glossary/schemas";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 export interface GlossaryTermDraft {
   source: string;
@@ -74,20 +75,27 @@ const emptyDraft: GlossaryTermDraft = {
   note: "",
 };
 
+// The dialog's own copy of the two rules that carry words (i18n.md §3): the shared schema still
+// guards the same input on the server, and these bounds mirror it.
 const glossaryTermFormSchema = z.object({
-  source: createTermSchema.shape.source,
-  target: createTermSchema.shape.target,
+  source: z
+    .string()
+    .trim()
+    .min(1, encodeMessage("validation.glossarySourceRequired"))
+    .max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
+  target: z
+    .string()
+    .trim()
+    .min(1, encodeMessage("validation.glossaryTargetRequired"))
+    .max(GLOSSARY_TERM_TEXT_MAX_LENGTH),
   category: termCategorySchema,
   note: z.string().max(GLOSSARY_TERM_NOTE_MAX_LENGTH),
 });
 
-const categoryItems: Record<string, string> = {
-  character: "Character",
-  place: "Place",
-  skill: "Skill",
-  item: "Item",
-  other: "Other",
-};
+/** The span `studio.glossaryReplaceBody` wraps the old target in, at module scope for stability. */
+const RENDER_OLD_TARGET = (chunks: ReactNode) => (
+  <span className="font-medium text-foreground">{chunks}</span>
+);
 
 function GlossaryReplacementStep({
   replacement,
@@ -102,24 +110,26 @@ function GlossaryReplacementStep({
   onBack: () => void;
   onConfirm: (applyToChapters: boolean) => void;
 }) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">
-        <p className="font-medium text-foreground">Replace this target in translated chapters?</p>
+        <p className="font-medium text-foreground">{t("glossaryReplaceTitle")}</p>
         <p className="mt-2 text-muted-foreground">
-          The old target <span className="font-medium text-foreground">“{originalTarget}”</span>{" "}
-          appears in {replacement.chapterCount} translated chapter(s) ({replacement.occurrences}{" "}
-          occurrence(s)).
+          {t.rich("glossaryReplaceBody", {
+            target: originalTarget,
+            chapters: replacement.chapterCount,
+            occurrences: replacement.occurrences,
+            b: RENDER_OLD_TARGET,
+          })}
         </p>
       </div>
-      <p className="text-caption text-muted-foreground">
-        Replacement is an exact, case-sensitive match and may also match inside longer words. This
-        cannot be undone.
-      </p>
+      <p className="text-caption text-muted-foreground">{t("glossaryReplaceWarning")}</p>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onBack} disabled={savingEdit}>
           <ArrowLeft className="size-4" />
-          Back
+          {tCommon("back")}
         </Button>
         <Button
           type="button"
@@ -127,11 +137,11 @@ function GlossaryReplacementStep({
           onClick={() => onConfirm(false)}
           disabled={savingEdit}
         >
-          Save glossary only
+          {t("glossarySaveOnly")}
         </Button>
         <Button type="button" onClick={() => onConfirm(true)} disabled={savingEdit}>
           {savingEdit && <Spinner />}
-          {savingEdit ? "Saving…" : "Replace & save"}
+          {savingEdit ? tCommon("saving") : t("glossaryReplaceAndSave")}
         </Button>
       </DialogFooter>
     </div>
@@ -150,6 +160,8 @@ export function GlossaryTermDialog({
   onBackFromReplacement,
   onReplaceConfirm,
 }: GlossaryTermDialogProps) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
   const form = useForm({
     defaultValues: emptyDraft,
     validators: {
@@ -180,11 +192,15 @@ export function GlossaryTermDialog({
 
   if (!descriptor) return null;
   const pending = addingTerm || savingEdit || previewingReplace || form.state.isSubmitting;
-  const title = descriptor.mode === "edit" ? "Edit glossary term" : "Add glossary term";
-  const description =
-    descriptor.mode === "edit"
-      ? "Update the mapping used to keep future translations consistent."
-      : "Add a source-to-target mapping for this novel's future translations.";
+  const title = descriptor.mode === "edit" ? t("glossaryEditTitle") : t("glossaryAddTitle");
+  const description = descriptor.mode === "edit" ? t("glossaryEditLead") : t("glossaryAddLead");
+  const categoryItems = {
+    character: t("termCategoryCharacter"),
+    place: t("termCategoryPlace"),
+    skill: t("termCategorySkill"),
+    item: t("termCategoryItem"),
+    other: t("termCategoryOther"),
+  };
 
   return (
     <Dialog
@@ -208,7 +224,7 @@ export function GlossaryTermDialog({
               variant="ghost"
               size="icon-sm"
               className="absolute top-2 right-2"
-              aria-label="Close glossary term dialog"
+              aria-label={t("glossaryCloseDialog")}
               disabled={pending}
             />
           }
@@ -239,7 +255,7 @@ export function GlossaryTermDialog({
                 const errorId = invalid ? "glossary-source-error" : undefined;
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor="glossary-source">Source term</FieldLabel>
+                    <FieldLabel htmlFor="glossary-source">{t("glossarySourceLabel")}</FieldLabel>
                     <Input
                       id="glossary-source"
                       name={field.name}
@@ -262,7 +278,7 @@ export function GlossaryTermDialog({
                 const errorId = invalid ? "glossary-target-error" : undefined;
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor="glossary-target">Target translation</FieldLabel>
+                    <FieldLabel htmlFor="glossary-target">{t("glossaryTargetLabel")}</FieldLabel>
                     <Input
                       id="glossary-target"
                       name={field.name}
@@ -285,7 +301,9 @@ export function GlossaryTermDialog({
                 const errorId = "glossary-category-error";
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor="glossary-category">Category</FieldLabel>
+                    <FieldLabel htmlFor="glossary-category">
+                      {t("glossaryCategoryLabel")}
+                    </FieldLabel>
                     <Select
                       name={field.name}
                       value={field.state.value}
@@ -302,11 +320,11 @@ export function GlossaryTermDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="character">Character</SelectItem>
-                          <SelectItem value="place">Place</SelectItem>
-                          <SelectItem value="skill">Skill</SelectItem>
-                          <SelectItem value="item">Item</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
+                          {Object.entries(categoryItems).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -323,7 +341,7 @@ export function GlossaryTermDialog({
                 const errorId = invalid ? "glossary-note-error" : undefined;
                 return (
                   <Field data-invalid={invalid || undefined} className="min-w-0">
-                    <FieldLabel htmlFor="glossary-note">Note</FieldLabel>
+                    <FieldLabel htmlFor="glossary-note">{t("glossaryNoteLabel")}</FieldLabel>
                     <Textarea
                       id="glossary-note"
                       name={field.name}
@@ -335,9 +353,7 @@ export function GlossaryTermDialog({
                       aria-describedby={[hintId, errorId].filter(Boolean).join(" ")}
                       className="min-h-10"
                     />
-                    <FieldDescription id={hintId}>
-                      Optional context for future editing.
-                    </FieldDescription>
+                    <FieldDescription id={hintId}>{t("glossaryNoteHint")}</FieldDescription>
                     {invalid && <FieldError id={errorId} errors={field.state.meta.errors} />}
                   </Field>
                 );
@@ -354,19 +370,19 @@ export function GlossaryTermDialog({
                       onClick={() => onOpenChange(false)}
                       disabled={pending || isSubmitting}
                     >
-                      Cancel
+                      {tCommon("cancel")}
                     </Button>
                     <Button type="submit" disabled={pending || isSubmitting}>
                       {pending || isSubmitting ? <Spinner /> : <Check className="size-4" />}
                       {descriptor.mode === "add"
                         ? pending || isSubmitting
-                          ? "Adding…"
-                          : "Add term"
+                          ? t("glossaryAdding")
+                          : t("glossaryAddTerm")
                         : previewingReplace
-                          ? "Checking chapters…"
+                          ? t("glossaryCheckingChapters")
                           : pending || isSubmitting
-                            ? "Saving…"
-                            : "Save term"}
+                            ? tCommon("saving")
+                            : t("glossarySaveTerm")}
                     </Button>
                   </>
                 )}

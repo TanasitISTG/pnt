@@ -1,14 +1,16 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 
 import { ReviewRowDetails } from "@/components/translation/evaluation/translation-eval-review-row-details";
 import { Badge } from "@/components/ui/badge";
 import type { EvalReviewRow } from "@/lib/translation/evaluation/eval.schemas";
 
-function snapshotLabel(state: EvalReviewRow["snapshotState"]): string {
-  if (state === "current") return "Current snapshot";
-  if (state === "changed") return "Changed since check";
-  if (state === "deleted") return "Chapter deleted";
-  return "Freshness unknown";
+/** The key a chapter's freshness is named by, so the badge holds no word of its own. */
+function snapshotKey(state: EvalReviewRow["snapshotState"]) {
+  if (state === "current") return "snapshotCurrent" as const;
+  if (state === "changed") return "snapshotChanged" as const;
+  if (state === "deleted") return "snapshotDeleted" as const;
+  return "snapshotUnknown" as const;
 }
 
 function snapshotVariant(
@@ -24,6 +26,7 @@ export function TranslationEvalReviewRow({
   novelId: string;
   row: EvalReviewRow;
 }) {
+  const t = useTranslations("evaluation");
   const canOpenChapter = row.snapshotState !== "deleted";
 
   return (
@@ -32,10 +35,13 @@ export function TranslationEvalReviewRow({
         <div className="min-w-0">
           <div className="flex flex-wrap items-start gap-2">
             <h3 className="min-w-0 break-words text-body-lg font-semibold text-foreground">
-              Ch. {Number(row.chapterNumber)}: {row.chapterTitle}
+              {t("chapterTitle", {
+                number: Number(row.chapterNumber),
+                title: row.chapterTitle,
+              })}
             </h3>
             <Badge variant={snapshotVariant(row.snapshotState)}>
-              {snapshotLabel(row.snapshotState)}
+              {t(snapshotKey(row.snapshotState))}
             </Badge>
           </div>
           <ReviewRowDetails novelId={novelId} row={row} />
@@ -48,11 +54,11 @@ export function TranslationEvalReviewRow({
               params={{ novelId, chapterId: row.chapterId }}
               className="inline-flex min-h-11 items-center justify-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              Open chapter
+              {t("openChapter")}
             </Link>
           ) : (
             <span className="inline-flex min-h-11 items-center text-sm text-muted-foreground">
-              Chapter deleted
+              {t("snapshotDeleted")}
             </span>
           )}
         </div>

@@ -8,6 +8,7 @@ import {
   librarySearchSchema,
   type LibrarySearch,
 } from "@/components/novels/library/library-search";
+import { headTranslator } from "@/lib/i18n/route-head";
 
 /**
  * The account's own shelf. It used to be what `/` showed a signed-in user, which meant
@@ -27,9 +28,12 @@ export const Route = createFileRoute("/_protected/library")({
   pendingMs: 100,
   pendingMinMs: 200,
   pendingComponent: LibraryPending,
-  head: () => ({
-    meta: [{ title: "Your Library | Pnt - Personal Novel Translator" }],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [{ title: `${t("meta.library")} | ${t("meta.siteName")}` }],
+    };
+  },
   component: LibraryRoute,
 });
 

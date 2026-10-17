@@ -10,6 +10,7 @@ import {
   avatarVariantKey,
   defaultAvatarWidth,
   parseAvatarPrefix,
+  type KeySetPrefix,
 } from "@/lib/storage/keys";
 import { nanoid } from "@/lib/utils";
 
@@ -29,7 +30,7 @@ export async function writeAvatarSet(
   userId: string,
   buffer: Uint8Array,
   mime: string,
-): Promise<string> {
+): Promise<KeySetPrefix> {
   const storage = getPublicStorage();
   const prefix = avatarPrefix(userId, nanoid(16));
 
@@ -44,10 +45,16 @@ export async function writeAvatarSet(
   return prefix;
 }
 
-/** Removes every object belonging to an avatar prefix; a missing prefix is a no-op. */
+/**
+ * Removes every object belonging to an avatar prefix; a missing prefix is a no-op.
+ *
+ * The value arrives from a row, so it is read back rather than trusted: a value that names no photo
+ * set is left alone rather than handed to the bucket.
+ */
 export async function deleteAvatarSet(imageKey: string | null | undefined): Promise<void> {
-  if (!imageKey) return;
-  await getPublicStorage().deletePrefix(imageKey);
+  const parsed = imageKey ? parseAvatarPrefix(imageKey) : null;
+  if (!parsed) return;
+  await getPublicStorage().deletePrefix(avatarPrefix(parsed.userId, parsed.segment));
 }
 
 /**
@@ -63,9 +70,10 @@ export function resolveUserAvatar(imageKey: string | null): ResolvedAvatar | nul
   const parsed = parseAvatarPrefix(imageKey);
   if (!parsed) return null;
 
+  const set = avatarPrefix(parsed.userId, parsed.segment);
   const storage = getPublicStorage();
   const variantUrl = (width: (typeof AVATAR_WIDTHS)[number]): string =>
-    storage.publicUrl(avatarVariantKey(imageKey, width)) ??
+    storage.publicUrl(avatarVariantKey(set, width)) ??
     avatarProxyPath(parsed.userId, parsed.segment, width);
 
   const srcSet = AVATAR_WIDTHS.map((width) => `${variantUrl(width)} ${width}w`).join(", ");

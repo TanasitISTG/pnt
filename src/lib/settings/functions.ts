@@ -3,6 +3,7 @@ import { getRequestHeaders } from "@tanstack/react-start/server";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { providerSettings } from "@/lib/db/schema";
 // Provider settings are read back masked, so the read tolerates an operator's
 // read-only view while every write below stays refused.
@@ -14,6 +15,10 @@ import {
   OpenAIProviderClient,
   GeminiProviderClient,
 } from "@/lib/translation/providers/provider-client";
+import {
+  providerFailureCodes,
+  type ProviderFailureCode,
+} from "@/lib/translation/providers/provider-failures";
 import type { ProviderType, ReasoningEffort } from "@/lib/providers/types";
 import {
   saveProviderSettingsSchema,
@@ -29,24 +34,6 @@ function maskApiKey(key: string): string {
   if (key.length <= 8) return "••••••••";
   return `${key.slice(0, 3)}…${key.slice(-4)}`;
 }
-
-type ProviderFailureCode =
-  | "AUTH_FAILED"
-  | "ACCESS_DENIED"
-  | "NOT_FOUND"
-  | "RATE_LIMITED"
-  | "TIMEOUT"
-  | "CONNECTION_FAILED";
-
-const PROVIDER_FAILURE_MESSAGES: Record<ProviderFailureCode, string> = {
-  AUTH_FAILED: "Provider authentication failed. Check the API key.",
-  ACCESS_DENIED:
-    "Provider denied access. Check account/model permissions and deployment IP restrictions.",
-  NOT_FOUND: "Provider endpoint or model was not found.",
-  RATE_LIMITED: "Provider rate limit reached. Try again later.",
-  TIMEOUT: "Provider request timed out.",
-  CONNECTION_FAILED: "Could not connect to the provider. Check the settings and try again.",
-};
 
 const TIMEOUT_ERROR_NAMES: Record<string, true> = {
   APIConnectionTimeoutError: true,
@@ -123,6 +110,10 @@ function providerFailureCode(fields: TrustedErrorFields): ProviderFailureCode | 
 /**
  * Maps a provider client failure to a fixed public message using only trusted structured fields
  * (numeric status, error code, class name). Upstream bodies, messages, URLs and keys never escape.
+ *
+ * What it returns is a code the reader's catalog resolves, not a sentence, so the banner under the
+ * settings form says the same thing in Thai as it does in English - and says exactly what the same
+ * failure says in a job's log row, because both read the one vocabulary.
  */
 export const providerConnectionFailure = createServerOnlyFn(
   async function providerConnectionFailure(
@@ -131,20 +122,23 @@ export const providerConnectionFailure = createServerOnlyFn(
     // Dynamic import is required so this `.server` transport never enters the client graph.
     const { ProviderRequestError } =
       await import("@/lib/translation/providers/provider-network.server");
-    // The transport policy classifies unsupported JSON response mode itself; keep its fixed literal.
+    // The transport policy classifies unsupported JSON response mode itself; keep its fixed code.
     if (error instanceof ProviderRequestError && error.code === "JSON_MODE_UNSUPPORTED") {
       return { code: error.code, message: error.message };
     }
     const failure = providerFailureCode(readTrustedErrorFields(error));
-    if (failure) return { code: failure, message: PROVIDER_FAILURE_MESSAGES[failure] };
-    // Transport policy failures already carry fixed, non-forwarding literals (URL, DNS, redirect).
+    if (failure) return { code: failure, message: providerFailureCodes[failure] };
+    // Transport policy failures carry their own code and, since the policy writes every message
+    // from the same vocabulary, a code here too (URL, DNS, redirect, origin).
     if (error instanceof ProviderRequestError) return { code: error.code, message: error.message };
-    return { code: "CONNECTION_FAILED", message: PROVIDER_FAILURE_MESSAGES.CONNECTION_FAILED };
+    return { code: "CONNECTION_FAILED", message: providerFailureCodes.CONNECTION_FAILED };
   },
 );
 
-const PASSWORD_INCORRECT_MESSAGE = "Current password is incorrect.";
-const PASSWORD_GENERIC_MESSAGE = "Could not change password. Try again.";
+// Codes, not sentences: the caller compares against the constant and the reader is the one who
+// decides what it says, so the two can never drift.
+const PASSWORD_INCORRECT_MESSAGE = encodeMessage("errors.passwordIncorrect");
+const PASSWORD_GENERIC_MESSAGE = encodeMessage("errors.passwordChangeFailed");
 
 /**
  * Maps a password change failure to its fixed public message using only trusted structured
@@ -176,7 +170,7 @@ const assertProviderSettingsUrl = createServerOnlyFn(async function assertProvid
       throw new SafeServerError(error.message);
     }
     log("warn", "Provider URL validation failed", { provider });
-    throw new SafeServerError("Provider URL is invalid");
+    throw new SafeServerError(encodeMessage("errors.providerUrlInvalid"));
   }
 });
 
@@ -254,7 +248,7 @@ export const saveProviderSettingsForUser = createServerOnlyFn(
 
     const insertApiKeyEnc = newApiKeyEnc ?? existing?.apiKeyEnc;
     if (!insertApiKeyEnc) {
-      throw new SafeServerError("API key is required for initial configuration");
+      throw new SafeServerError(encodeMessage("errors.providerApiKeyRequired"));
     }
 
     const updatedAt = new Date();
@@ -319,7 +313,7 @@ export const testProviderConnection = createServerFn({ method: "POST" })
       if (!apiKey) {
         return {
           success: false as const,
-          error: "API key is required to test the connection.",
+          error: encodeMessage("settings.providerTestApiKeyRequired"),
         };
       }
 
@@ -356,8 +350,7 @@ export const testProviderConnection = createServerFn({ method: "POST" })
         if (!sample) {
           return {
             success: false as const,
-            error:
-              "Provider returned no visible response. The model may have exhausted its output on reasoning.",
+            error: encodeMessage("settings.providerEmptyResponse"),
           };
         }
         return {

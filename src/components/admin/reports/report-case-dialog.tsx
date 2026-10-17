@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useLocale, useTranslations } from "use-intl";
 
+import { reportReasonLabel } from "@/components/admin/reports/report-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,13 +16,19 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  describeReportReason,
-  describeReportTarget,
-  type ReportDecision,
-} from "@/lib/reports/reasons";
+import { formatDateTime } from "@/lib/i18n/format";
+import type { ReportDecision } from "@/lib/reports/reasons";
 import { REPORT_NOTE_MAX_LENGTH } from "@/lib/reports/schemas";
 import type { ReportCase } from "@/lib/reports/types";
+
+/**
+ * The emphasis a case description puts on the target's title. It is a module-level function
+ * rather than one per render because it closes over nothing: a tag renderer that is rebuilt
+ * every render is a new function identity for `t.rich` to resolve.
+ */
+function nameTag(chunks: ReactNode) {
+  return <span className="font-medium text-foreground">{chunks}</span>;
+}
 
 export interface ReportCaseDecisionSubmission {
   decision: ReportDecision;
@@ -65,6 +73,10 @@ export function ReportCaseDialog({
   onResolve,
   onRemove,
 }: ReportCaseDialogProps) {
+  const t = useTranslations("admin");
+  const tReports = useTranslations("reports");
+  const tCommon = useTranslations("common");
+  const locale = useLocale();
   const [note, setNote] = useState("");
   const [pending, setPending] = useState<ReportDecision | null>(null);
   const [removalOpen, setRemovalOpen] = useState(false);
@@ -81,6 +93,17 @@ export function ReportCaseDialog({
     onResolve({ decision, note: trimmed ? trimmed : undefined });
   };
 
+  // The heading names the kind of content this case is about, which is three sentences
+  // rather than one sentence with a noun dropped into it: Thai does not lowercase a noun,
+  // and "Reported novel" is not a sentence any language assembles.
+  const title = !target
+    ? t("caseFallbackTitle")
+    : target.type === "novel"
+      ? t("caseTitleNovel")
+      : target.type === "comment"
+        ? t("caseTitleComment")
+        : t("caseTitleReview");
+
   return (
     <Dialog
       open={open}
@@ -94,26 +117,28 @@ export function ReportCaseDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {target
-              ? `Reported ${describeReportTarget(target.type).toLowerCase()}`
-              : "Reported content"}
-          </DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {reportCase ? (
               <>
-                {reportCase.openCount === 1
-                  ? "One open report on"
-                  : `${reportCase.openCount} open reports on`}{" "}
-                <span className="font-medium text-foreground">{reportCase.target.title}</span>
-                {reportCase.target.type === "novel" && reportCase.target.ownerEmail
-                  ? ` by ${reportCase.target.ownerEmail}`
-                  : null}
-                {reportCase.target.type !== "novel" && reportCase.target.authorEmail
-                  ? `, written by ${reportCase.target.authorEmail}`
-                  : null}
-                . The decision below is recorded on every one of them; it does not suspend the
-                account or take the content down.
+                {reportCase.target.type === "novel"
+                  ? t.rich("caseDescriptionNovel", {
+                      count: reportCase.openCount,
+                      title: reportCase.target.title,
+                      owner: reportCase.target.ownerEmail ?? t("casesAccountRemoved"),
+                      name: nameTag,
+                    })
+                  : t.rich(
+                      reportCase.target.type === "comment"
+                        ? "caseDescriptionComment"
+                        : "caseDescriptionReview",
+                      {
+                        count: reportCase.openCount,
+                        title: reportCase.target.title,
+                        author: reportCase.target.authorEmail ?? t("casesAccountRemoved"),
+                        name: nameTag,
+                      },
+                    )}
                 {reportCase.target.novelId ? (
                   <>
                     {" "}
@@ -121,7 +146,7 @@ export function ReportCaseDialog({
                       to="/{-$locale}/novels/$novelId"
                       params={{ novelId: reportCase.target.novelId }}
                     >
-                      Open the novel
+                      {t("caseOpenNovel")}
                     </Link>
                   </>
                 ) : null}
@@ -135,12 +160,16 @@ export function ReportCaseDialog({
             {reportCase.target.type !== "novel" ? (
               <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-foreground">Reported content</span>
-                  {alreadyRemoved ? <Badge variant="muted">Removed</Badge> : null}
-                  {reportCase.target.deleted ? <Badge variant="muted">Deleted</Badge> : null}
+                  <span className="text-sm font-medium text-foreground">
+                    {t("caseReportedContent")}
+                  </span>
+                  {alreadyRemoved ? <Badge variant="muted">{t("caseRemoved")}</Badge> : null}
+                  {reportCase.target.deleted ? (
+                    <Badge variant="muted">{t("caseDeleted")}</Badge>
+                  ) : null}
                 </div>
                 <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
-                  {reportCase.target.excerpt ?? "The reported words are no longer available."}
+                  {reportCase.target.excerpt ?? t("caseExcerptMissing")}
                 </p>
                 {reportCase.target.chapterId && reportCase.target.novelId ? (
                   <Link
@@ -151,29 +180,27 @@ export function ReportCaseDialog({
                       chapterId: reportCase.target.chapterId,
                     }}
                   >
-                    Open the chapter
+                    {t("caseOpenChapter")}
                   </Link>
                 ) : null}
 
                 {removable && onRemove ? (
                   alreadyRemoved ? (
-                    <p className="text-caption text-muted-foreground">
-                      This content has already been removed; the decision still needs recording.
-                    </p>
+                    <p className="text-caption text-muted-foreground">{t("caseAlreadyRemoved")}</p>
                   ) : removalOpen ? (
                     <div className="flex flex-col gap-2 pt-1">
                       <Field>
-                        <FieldLabel htmlFor="report-removal-reason">Reason for removal</FieldLabel>
+                        <FieldLabel htmlFor="report-removal-reason">
+                          {t("caseRemovalReasonLabel")}
+                        </FieldLabel>
                         <Textarea
                           id="report-removal-reason"
                           value={removalReason}
                           maxLength={REPORT_NOTE_MAX_LENGTH}
-                          placeholder="What breaks the rules, in a sentence."
+                          placeholder={t("caseRemovalReasonPlaceholder")}
                           onChange={(event) => setRemovalReason(event.target.value)}
                         />
-                        <FieldDescription>
-                          Stored with the author's notice and in the activity trail.
-                        </FieldDescription>
+                        <FieldDescription>{t("caseRemovalReasonHint")}</FieldDescription>
                       </Field>
                       <div className="flex items-center justify-end gap-2">
                         <Button
@@ -182,7 +209,7 @@ export function ReportCaseDialog({
                           disabled={removing}
                           onClick={() => setRemovalOpen(false)}
                         >
-                          Cancel
+                          {tCommon("cancel")}
                         </Button>
                         <Button
                           variant="destructive"
@@ -194,7 +221,7 @@ export function ReportCaseDialog({
                           }}
                         >
                           {removing ? <Spinner /> : null}
-                          Remove content
+                          {t("caseRemoveContent")}
                         </Button>
                       </div>
                     </div>
@@ -205,7 +232,7 @@ export function ReportCaseDialog({
                         size="sm"
                         onClick={() => setRemovalOpen(true)}
                       >
-                        Remove content…
+                        {t("caseRemoveContentAction")}
                       </Button>
                     </div>
                   )
@@ -221,10 +248,10 @@ export function ReportCaseDialog({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-medium text-foreground">
-                      {describeReportReason(entry.reason)}
+                      {reportReasonLabel(tReports, entry.reason)}
                     </span>
                     <span className="text-caption text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleString()}
+                      {formatDateTime(entry.createdAt, locale)}
                     </span>
                   </div>
                   {entry.details ? (
@@ -232,33 +259,30 @@ export function ReportCaseDialog({
                       {entry.details}
                     </p>
                   ) : (
-                    <p className="text-caption text-muted-foreground">No explanation given.</p>
+                    <p className="text-caption text-muted-foreground">{t("caseNoExplanation")}</p>
                   )}
                   <span className="text-caption text-muted-foreground">
-                    Reported by {entry.reporterEmail ?? "an account that has been removed"}
+                    {t("caseReportedBy", {
+                      who: entry.reporterEmail ?? t("casesAccountRemoved"),
+                    })}
                   </span>
                 </li>
               ))}
             </ul>
             {reportCase.truncated ? (
-              <p className="text-caption text-muted-foreground">
-                Older reports in this case are not listed, but the decision applies to all of them.
-              </p>
+              <p className="text-caption text-muted-foreground">{t("caseTruncated")}</p>
             ) : null}
 
             <Field>
-              <FieldLabel htmlFor="report-decision-note">Decision note</FieldLabel>
+              <FieldLabel htmlFor="report-decision-note">{t("caseNoteLabel")}</FieldLabel>
               <Textarea
                 id="report-decision-note"
                 value={note}
                 maxLength={REPORT_NOTE_MAX_LENGTH}
-                placeholder="What you found, and what you decided."
+                placeholder={t("caseNotePlaceholder")}
                 onChange={(event) => setNote(event.target.value)}
               />
-              <FieldDescription>
-                A note is required to uphold a case. It is stored with the decision and shown with
-                it afterwards.
-              </FieldDescription>
+              <FieldDescription>{t("caseNoteHint")}</FieldDescription>
               <span className="text-caption text-muted-foreground">
                 {note.length}/{REPORT_NOTE_MAX_LENGTH}
               </span>
@@ -268,11 +292,11 @@ export function ReportCaseDialog({
 
         <DialogFooter>
           <Button variant="outline" disabled={busy || removing} onClick={() => onOpenChange(false)}>
-            Close
+            {tCommon("close")}
           </Button>
           <Button variant="outline" disabled={busy || removing} onClick={() => submit("dismissed")}>
             {busy && pending === "dismissed" ? <Spinner /> : null}
-            Dismiss
+            {t("caseDismiss")}
           </Button>
           <Button
             variant="default"
@@ -280,7 +304,7 @@ export function ReportCaseDialog({
             onClick={() => submit("upheld")}
           >
             {busy && pending === "upheld" ? <Spinner /> : null}
-            Uphold
+            {t("caseUphold")}
           </Button>
         </DialogFooter>
       </DialogContent>

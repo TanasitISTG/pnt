@@ -3,6 +3,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { novels, chapters } from "@/lib/db/schema";
 import { ensureSession, getSession } from "@/lib/auth/functions";
@@ -50,7 +51,7 @@ export const listChapters = createServerFn({ method: "GET" })
         .limit(1);
 
       if (!novel) {
-        throw new SafeServerError("Novel not found or unauthorized");
+        throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       }
 
       const chapterList = await db
@@ -105,7 +106,7 @@ export const getReaderChapterManifest = createServerFn({ method: "GET" })
           .from(novels)
           .where(and(eq(novels.id, data.novelId), novelReadable(session?.user.id ?? null)))
           .limit(1);
-        if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+        if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       }
 
       return rows;
@@ -168,7 +169,7 @@ export const createChapter = createServerFn({ method: "POST" })
 
       return db.transaction(async (tx) => {
         if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
-          throw new SafeServerError("Novel not found or unauthorized");
+          throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
         }
         const chapterId = nanoid();
         await tx.insert(chapters).values({

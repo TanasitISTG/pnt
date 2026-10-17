@@ -1,4 +1,5 @@
 import type { Ref } from "react";
+import { useTranslations } from "use-intl";
 
 import type { ReaderHighlightsLookup } from "./reader-content-types";
 import { ReaderProse } from "./reader-content-prose";
@@ -24,11 +25,10 @@ export function ReaderUntranslatedContent({
   highlightsFor,
   proseRef,
 }: ReaderUntranslatedContentProps) {
+  const t = useTranslations("reader");
   return (
     <div className="flex flex-col gap-8">
-      <p className="text-caption italic text-muted-foreground">
-        Not translated yet. Showing raw text.
-      </p>
+      <p className="text-caption italic text-muted-foreground">{t("untranslatedNotice")}</p>
       <ReaderProse
         paragraphs={rawParagraphs}
         fontSizePx={fontSizePx}

@@ -15,3 +15,15 @@ import { defaultLocale } from "@/lib/i18n/locales";
 export function TestI18nProvider({ children }: { children: ReactNode }) {
   return <I18nProvider locale={defaultLocale}>{children}</I18nProvider>;
 }
+
+/**
+ * The same provider, pinned to Thai.
+ *
+ * The default suite runs in English because its copy assertions are the behaviour contract
+ * (i18n.md §7). Thai is what actually ships, so the shipped default gets cases of its own
+ * instead of being covered only by the catalog checks: these render the real surfaces and read
+ * the real words, which is the one thing `bun run i18n:check` can never confirm.
+ */
+export function ThaiI18nProvider({ children }: { children: ReactNode }) {
+  return <I18nProvider locale="th">{children}</I18nProvider>;
+}

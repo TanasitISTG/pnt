@@ -1,5 +1,6 @@
 import { AlertTriangle, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +8,10 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { deleteUser } from "@/lib/auth/auth-client";
+
+/** The address the link went to, and the one to type out: module scope, so the tags hold. */
+const RENDER_STRONG = (chunks: ReactNode) => <strong>{chunks}</strong>;
+const RENDER_MONO = (chunks: ReactNode) => <span className="font-mono">{chunks}</span>;
 
 export interface DeleteAccountCardProps {
   email: string;
@@ -21,6 +26,7 @@ export interface DeleteAccountCardProps {
  * support request can reverse.
  */
 export function DeleteAccountCard({ email }: DeleteAccountCardProps) {
+  const t = useTranslations("settings");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -33,12 +39,12 @@ export function DeleteAccountCard({ email }: DeleteAccountCardProps) {
     try {
       const { error: deleteError } = await deleteUser({ callbackURL: "/" });
       if (deleteError) {
-        setError(deleteError.message || "Could not start the deletion process.");
+        setError(deleteError.message || t("deleteStartFailed"));
         return;
       }
       setSent(true);
     } catch {
-      setError("The request did not finish. Try again.");
+      setError(t("deleteStartFailed"));
     } finally {
       setPending(false);
     }
@@ -49,24 +55,20 @@ export function DeleteAccountCard({ email }: DeleteAccountCardProps) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <AlertTriangle className="size-5 text-destructive-text" aria-hidden="true" />
-          <CardTitle>Delete Account</CardTitle>
+          <CardTitle>{t("deleteTitle")}</CardTitle>
         </div>
-        <CardDescription>
-          Removes the account and everything in it: novels, chapters, translations, glossary, and
-          reader state.
-        </CardDescription>
+        <CardDescription>{t("deleteDescription")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {sent ? (
           <p className="text-body text-muted-foreground">
-            A confirmation link is on its way to <strong>{email}</strong>. Open it to finish
-            deleting this account; the link expires in one hour.
+            {t.rich("deleteSent", { email, strong: RENDER_STRONG })}
           </p>
         ) : (
           <>
             <Field>
               <FieldLabel htmlFor="deleteConfirmation">
-                Type <span className="font-mono">{email}</span> to confirm
+                {t.rich("typeToConfirm", { email, mono: RENDER_MONO })}
               </FieldLabel>
               <Input
                 id="deleteConfirmation"
@@ -74,9 +76,7 @@ export function DeleteAccountCard({ email }: DeleteAccountCardProps) {
                 onChange={(event) => setConfirmation(event.target.value)}
                 autoComplete="off"
               />
-              <FieldDescription>
-                We email a final confirmation link before anything is deleted.
-              </FieldDescription>
+              <FieldDescription>{t("deleteEmailDescription")}</FieldDescription>
             </Field>
 
             {error && (
@@ -91,7 +91,7 @@ export function DeleteAccountCard({ email }: DeleteAccountCardProps) {
               onClick={() => void handleDelete()}
             >
               {pending ? <Spinner /> : <Trash2 className="size-4" aria-hidden="true" />}
-              {pending ? "Starting…" : "Delete my account"}
+              {pending ? t("deleteStarting") : t("deleteMyAccount")}
             </Button>
           </>
         )}

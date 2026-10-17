@@ -9,6 +9,8 @@ import {
   coverPrefix,
   coverVariantKey,
   defaultCoverWidth,
+  parseCoverPrefix,
+  type KeySetPrefix,
 } from "@/lib/storage/keys";
 import { nanoid } from "@/lib/utils";
 
@@ -31,7 +33,7 @@ export async function writeCoverSet(
   novelId: string,
   buffer: Uint8Array,
   mime: string,
-): Promise<string> {
+): Promise<KeySetPrefix> {
   const storage = getPublicStorage();
   const prefix = coverPrefix(novelId, nanoid(16));
 
@@ -46,10 +48,17 @@ export async function writeCoverSet(
   return prefix;
 }
 
-/** Removes every object belonging to a cover prefix; a missing prefix is a no-op. */
+/**
+ * Removes every object belonging to a cover prefix; a missing prefix is a no-op.
+ *
+ * The value arrives from a row, so it is read back rather than trusted: a value that names no cover
+ * set is left alone rather than handed to the bucket, which is what keeps a malformed
+ * `cover_key` from reaching another novel's objects.
+ */
 export async function deleteCoverSet(coverKey: string | null | undefined): Promise<void> {
-  if (!coverKey) return;
-  await getPublicStorage().deletePrefix(coverKey);
+  const parsed = coverKey ? parseCoverPrefix(coverKey) : null;
+  if (!parsed) return;
+  await getPublicStorage().deletePrefix(coverPrefix(parsed.novelId, parsed.segment));
 }
 
 /**
@@ -64,16 +73,18 @@ export function resolvePublicCover(
   publishedAt: Date | null,
   now: Date = new Date(),
 ): ResolvedCover | null {
-  if (!coverKey) return null;
+  const parsed = coverKey ? parseCoverPrefix(coverKey) : null;
+  if (!parsed) return null;
   if (publishState(publishedAt, now) !== "live") return null;
 
+  const set = coverPrefix(parsed.novelId, parsed.segment);
   const storage = getPublicStorage();
-  const widest = coverVariantKey(coverKey, defaultCoverWidth());
+  const widest = coverVariantKey(set, defaultCoverWidth());
   const url = storage.publicUrl(widest);
   if (!url) return null;
 
   const srcSet = COVER_WIDTHS.map((width) => {
-    const variantUrl = storage.publicUrl(coverVariantKey(coverKey, width));
+    const variantUrl = storage.publicUrl(coverVariantKey(set, width));
     return variantUrl ? `${variantUrl} ${width}w` : null;
   })
     .filter((entry): entry is string => entry !== null)

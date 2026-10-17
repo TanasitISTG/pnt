@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { type Sql } from "postgres";
 import { sql as drizzleSql } from "drizzle-orm";
 import type * as NovelLocks from "@/lib/db/novel-lock";
 import type * as Storage from "@/lib/storage/index.server";
-import { COVER_WIDTHS, coverVariantKey, epubUploadKey } from "@/lib/storage/keys";
+import {
+  COVER_WIDTHS,
+  coverPrefix,
+  coverVariantKey,
+  epubUploadKey,
+  type ObjectKey,
+} from "@/lib/storage/keys";
 import * as fflate from "fflate";
 import type {
   prepareEpubImportJob as PrepareEpubImportJob,
@@ -14,9 +20,11 @@ import type {
   cleanupExpiredEpubUploads as CleanupExpiredEpubUploads,
 } from "./worker";
 import type { cancelImportJobForUser as CancelImportJobForUser } from "@/lib/import/commands";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let prepareEpubImportJob: typeof PrepareEpubImportJob;
@@ -29,7 +37,7 @@ let novelLocks: typeof NovelLocks;
 let storage: typeof Storage;
 
 /** Writes the staged archive where the presigned upload would have put it. */
-async function stageArchive(objectKey: string, bytes: Uint8Array): Promise<void> {
+async function stageArchive(objectKey: ObjectKey, bytes: Uint8Array): Promise<void> {
   await storage.getPrivateStorage().put(objectKey, bytes, {
     contentType: "application/epub+zip",
   });
@@ -81,7 +89,7 @@ async function waitForNovelWaiter(blockerPid: number) {
   while (Date.now() < deadline) {
     const rows = await sql`
       SELECT pid FROM pg_stat_activity
-      WHERE ${blockerPid} = ANY(pg_blocking_pids(pid))
+      WHERE datname = current_database() AND ${blockerPid} = ANY(pg_blocking_pids(pid))
         AND wait_event_type = 'Lock'
         AND query LIKE '%for update%'
         AND query LIKE '%novels%'
@@ -130,24 +138,14 @@ function createTestEpubBuffer(): Uint8Array {
   });
 }
 
-integrationDescribe("EPUB import PostgreSQL integration", () => {
+describeIntegration("EPUB import PostgreSQL integration", () => {
   const userId = `user-${randomUUID()}`;
   const novelId = `novel-${randomUUID()}`;
   const uploadId = `upload-${randomUUID()}`;
   const jobId = `job-${randomUUID()}`;
 
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    // The gates below pause one transaction while a second must queue on the same novel
-    // row, which a single pooled connection cannot express: raise the pool so the wait
-    // happens on the row lock instead of on the client's connection queue.
-    process.env.DATABASE_POOL_MAX ||= "5";
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     // Defer server-only imports until DATABASE_URL points to the disposable database.
     novelLocks = await import("@/lib/db/novel-lock");
     storage = await import("@/lib/storage/index.server");
@@ -175,7 +173,7 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
   afterAll(async () => {
     if (sql) {
       await sql`DELETE FROM "user" WHERE "id" = ${userId}`.catch(() => {});
-      await sql.end({ timeout: 1 });
+      await closeIntegrationDatabase();
     }
   });
 
@@ -423,13 +421,13 @@ integrationDescribe("EPUB import PostgreSQL integration", () => {
     const activeJobId = `job-${randomUUID()}`;
     // The cascade must also reclaim the novel's public cover objects, so this
     // fixture carries one; the dispatch snapshot observes it alongside the rows.
-    const coverPrefix = `covers/${parentId}/race-${randomUUID()}`;
-    const coverObjectKey = coverVariantKey(coverPrefix, COVER_WIDTHS[0]);
+    const coverSet = coverPrefix(parentId, `race-${randomUUID()}`);
+    const coverObjectKey = coverVariantKey(coverSet, COVER_WIDTHS[0]);
     await storage.getPublicStorage().put(coverObjectKey, Uint8Array.from([1]), {
       contentType: "image/webp",
     });
     await sql`INSERT INTO "novels" ("id", "user_id", "title", "source_lang", "target_lang", "cover_key")
-      VALUES (${parentId}, ${userId}, 'EPUB deletion race', 'zh', 'en', ${coverPrefix})`;
+      VALUES (${parentId}, ${userId}, 'EPUB deletion race', 'zh', 'en', ${coverSet})`;
     await sql`INSERT INTO "epub_uploads"
       ("id", "novel_id", "file_name", "file_size", "object_key", "status", "expires_at")
       VALUES (${resourceId}, ${parentId}, 'source.epub', 3, ${epubUploadKey(resourceId)}, ${operation === "stage" ? "queued" : "staged"}, now() + interval '1 day')`;

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 // Progress and bookmarks are owner-scoped reads: an operator viewing the account may
 // read them, while every write below still goes through `ensureSession`.
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { ensureSession, ensureSessionForRead } from "@/lib/auth/functions";
 import { SafeServerError, withSafeHandler } from "@/lib/server-fn-error";
 import {
@@ -104,7 +105,7 @@ export const updateBookmarkNote = createServerFn({ method: "POST" })
         data.bookmarkId,
         data.note,
       );
-      if (!updated) throw new SafeServerError("Bookmark not found");
+      if (!updated) throw new SafeServerError(encodeMessage("errors.bookmarkNotFound"));
       return { success: true };
     });
   });
@@ -115,7 +116,7 @@ export const deleteBookmark = createServerFn({ method: "POST" })
     return withSafeHandler(async () => {
       const session = await ensureSession();
       const deleted = await deleteReaderBookmarkForUser(session.user.id, data.bookmarkId);
-      if (!deleted) throw new SafeServerError("Bookmark not found");
+      if (!deleted) throw new SafeServerError(encodeMessage("errors.bookmarkNotFound"));
       return { success: true };
     });
   });

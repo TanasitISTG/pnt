@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { blobToDataUrl } from "@/lib/utils";
@@ -37,6 +38,7 @@ export function CoverUpload({
   onChange,
   onRemoveCover,
 }: CoverUploadProps) {
+  const t = useTranslations("studio");
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   // Set on explicit remove so a cached existing cover never reappears.
   const [removed, setRemoved] = useState(false);
@@ -80,7 +82,7 @@ export function CoverUpload({
     clearActiveImage(activeImageRef);
 
     if (file.size > 2 * 1024 * 1024) {
-      toast.error("Cover image must be smaller than 2MB");
+      toast.error(t("coverTooLarge"));
       return;
     }
 
@@ -115,7 +117,7 @@ export function CoverUpload({
     const onError = () => {
       releaseImage();
       if (operationRef.current === operation) {
-        toast.error("Could not read that image file");
+        toast.error(t("coverReadFailed"));
       }
     };
 
@@ -133,7 +135,7 @@ export function CoverUpload({
     } catch {
       releaseImage();
       if (operationRef.current === operation) {
-        toast.error("Could not read that image file");
+        toast.error(t("coverReadFailed"));
       }
     }
   };
@@ -165,14 +167,14 @@ export function CoverUpload({
         <Skeleton shape="panel" className="aspect-3/4 w-48" />
       ) : preview ? (
         <div className="relative group/cover aspect-3/4 w-48 overflow-hidden rounded-xl border border-border bg-muted">
-          <img src={preview} alt="Novel Cover Preview" className="h-full w-full object-cover" />
+          <img src={preview} alt={t("coverPreviewAlt")} className="h-full w-full object-cover" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover/cover:opacity-100">
             <div className="flex gap-2">
               <Button variant="cream" size="sm" onClick={() => fileInputRef.current?.click()}>
-                Change
+                {t("coverChange")}
               </Button>
               <Button variant="destructive" size="sm" onClick={handleRemove}>
-                Remove
+                {t("coverRemove")}
               </Button>
             </div>
           </div>
@@ -185,9 +187,9 @@ export function CoverUpload({
         >
           <Upload className="size-6" />
           <span className="text-caption">
-            Upload Cover
+            {t("coverUpload")}
             <br />
-            (Max 2MB)
+            {t("coverMaxSize")}
           </span>
         </button>
       )}

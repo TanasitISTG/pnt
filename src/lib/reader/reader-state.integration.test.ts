@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { type Sql } from "postgres";
 import type { deleteChapterForUser as DeleteChapterForUser } from "@/lib/content/chapter/chapter-delete.service";
 import type { db as Db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 import { sql as drizzleSql } from "drizzle-orm";
 
 import {
@@ -20,9 +26,6 @@ import type {
   setReaderChapterForUser as SetReaderChapterForUser,
   updateReaderBookmarkNoteForUser as UpdateReaderBookmarkNoteForUser,
 } from "@/lib/reader/reader-state.service";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 let sql: Sql;
 let getReaderNovelStateForUser: typeof GetReaderNovelStateForUser;
@@ -197,15 +200,10 @@ async function waitForNovelLockWaiter(holderPid: number): Promise<void> {
   }
 }
 
-integrationDescribe("reader state service", () => {
+describeIntegration("reader state service", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl;
-    // Files that make two transactions contend for one novel row need more than the
-    // single production connection; these gates pause one while the other must queue
-    // on the row lock itself, not on the pool.
-    process.env.DATABASE_POOL_MAX ||= "5";
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 1 }));
     // Load server modules only after isolating their database connection from application data.
-    sql = postgres(testDatabaseUrl as string, { max: 1 });
     ({ db } = await import("@/lib/db"));
     ({ getReaderNovelStateForUser } = await import("@/lib/reader/reader-state.service"));
     ({ getReaderBookmarksForUser } = await import("@/lib/reader/reader-state.service"));
@@ -218,9 +216,7 @@ integrationDescribe("reader state service", () => {
     ({ deleteChapterForUser } = await import("@/lib/content/chapter/chapter-delete.service"));
   });
 
-  afterAll(async () => {
-    await sql?.end({ timeout: 5 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   it("reports an empty state for a novel the user never read", async () => {
     const fixture = await seedReaderFixture();
@@ -250,14 +246,14 @@ integrationDescribe("reader state service", () => {
       [fixture.otherUserId, fixture.otherNovelId],
     ]) {
       await expect(setReaderChapterForUser(userId, novelId, fixture.chapterIds[0])).rejects.toThrow(
-        "Chapter not found or unauthorized",
+        encodeMessage("errors.chapterNotFoundOrUnauthorized"),
       );
       await expect(
         saveReaderPositionForUser(userId, novelId, fixture.chapterIds[0], 0.5),
-      ).rejects.toThrow("Chapter not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
       await expect(
         markReaderChapterReadForUser(userId, novelId, fixture.chapterIds[0]),
-      ).rejects.toThrow("Chapter not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
       await expect(
         createReaderBookmarkForUser(userId, novelId, {
           chapterId: fixture.chapterIds[0],
@@ -266,7 +262,7 @@ integrationDescribe("reader state service", () => {
           excerpt: "foreign",
           note: "do not write",
         }),
-      ).rejects.toThrow("Chapter not found or unauthorized");
+      ).rejects.toThrow(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
       expect(await getReaderNovelStateForUser(userId, novelId)).toEqual({
         lastChapterId: null,
         scrollFraction: null,
@@ -624,7 +620,9 @@ integrationDescribe("reader state service", () => {
         } else {
           expect(secondResult).toMatchObject({
             status: "rejected",
-            reason: expect.objectContaining({ message: "Chapter not found or unauthorized" }),
+            reason: expect.objectContaining({
+              message: encodeMessage("errors.chapterNotFoundOrUnauthorized"),
+            }),
           });
         }
         expect(await readProgress(fixture.userId, fixture.novelId)).toMatchObject({
@@ -679,7 +677,7 @@ integrationDescribe("reader state service", () => {
     expect(state.scrollFraction).toBe(0);
     await expect(
       saveReaderPositionForUser(fixture.userId, fixture.novelId, fixture.chapterIds[0], 0.8),
-    ).rejects.toThrow("Chapter not found or unauthorized");
+    ).rejects.toThrow(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
     expect(await readProgress(fixture.userId, fixture.novelId)).toMatchObject({
       last_chapter_id: null,
       scroll_fraction: 0,

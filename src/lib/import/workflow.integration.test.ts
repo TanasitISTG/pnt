@@ -1,17 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { type Sql } from "postgres";
 import { sql as drizzleSql } from "drizzle-orm";
 import type * as NovelLocks from "@/lib/db/novel-lock";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import type {
   cancelImportJobForUser as CancelImportJobForUser,
   startScrapeImportForUser as StartScrapeImportForUser,
 } from "./commands";
 import type { commitScrapeImportChapter as CommitScrapeImportChapter } from "./job-store";
 import type { dispatchWorkflowOutboxEvent as DispatchWorkflowOutboxEvent } from "@/lib/inngest/outbox";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let startScrapeImportForUser: typeof StartScrapeImportForUser;
@@ -66,7 +69,7 @@ async function waitForNovelWaiter(blockerPid: number) {
   while (Date.now() < deadline) {
     const rows = await sql`
       SELECT pid FROM pg_stat_activity
-      WHERE ${blockerPid} = ANY(pg_blocking_pids(pid))
+      WHERE datname = current_database() AND ${blockerPid} = ANY(pg_blocking_pids(pid))
         AND wait_event_type = 'Lock'
         AND query LIKE '%for update%'
         AND query LIKE '%novels%'
@@ -83,18 +86,9 @@ async function deleteOutboxRows(ids: readonly string[]) {
   for (const id of ids) await sql`DELETE FROM "workflow_outbox" WHERE "id" = ${id}`;
 }
 
-integrationDescribe("import workflow PostgreSQL integration", () => {
+describeIntegration("import workflow PostgreSQL integration", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    // The gates below pause one transaction while a second must queue on the same novel
-    // row, which a single pooled connection cannot express: raise the pool so the wait
-    // happens on the row lock instead of on the client's connection queue.
-    process.env.DATABASE_POOL_MAX ||= "5";
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
 
     // Defer server-only imports until DATABASE_URL points to the disposable database.
     novelLocks = await import("@/lib/db/novel-lock");
@@ -116,7 +110,7 @@ integrationDescribe("import workflow PostgreSQL integration", () => {
     if (sql) {
       await sql`DELETE FROM "workflow_outbox" WHERE "payload_json" LIKE ${`%${novelId}%`}`;
       await sql`DELETE FROM "novels" WHERE "id" = ${novelId}`;
-      await sql.end({ timeout: 1 });
+      await closeIntegrationDatabase();
     }
   });
 
@@ -181,7 +175,7 @@ integrationDescribe("import workflow PostgreSQL integration", () => {
         },
         async () => {},
       ),
-    ).rejects.toThrow("Invalid range");
+    ).rejects.toThrow(encodeMessage("errors.importRangeInvalid"));
 
     await expect(
       startScrapeImportForUser(
@@ -195,7 +189,7 @@ integrationDescribe("import workflow PostgreSQL integration", () => {
         },
         async () => {},
       ),
-    ).rejects.toThrow("Invalid range");
+    ).rejects.toThrow(encodeMessage("errors.importRangeInvalid"));
 
     const jobs = await sql`
       SELECT "id" FROM "import_jobs"

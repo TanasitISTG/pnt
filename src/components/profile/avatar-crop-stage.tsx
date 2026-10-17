@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslations } from "use-intl";
 
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,7 @@ export function AvatarCropStage({
   onCropChange,
   disabled = false,
 }: AvatarCropStageProps) {
+  const t = useTranslations("settings");
   // The crop is captured when the drag starts and every move is measured from there, so
   // the photo tracks the pointer instead of drifting with each new delta.
   const dragRef = useRef<{ pointerId: number; x: number; y: number; crop: AvatarCrop } | null>(
@@ -92,7 +94,7 @@ export function AvatarCropStage({
   return (
     <div
       role="group"
-      aria-label="Adjust the photo: drag it, or use the arrow keys, to choose what the circle keeps."
+      aria-label={t("cropStageLabel")}
       tabIndex={disabled ? -1 : 0}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

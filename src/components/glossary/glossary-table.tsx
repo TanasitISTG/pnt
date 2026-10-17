@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
+import { useTranslations } from "use-intl";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import { Badge } from "@/components/ui/badge";
@@ -61,31 +62,26 @@ export interface GlossaryTableProps {
   actions: GlossaryTableActions;
 }
 
-const categoryItems: Record<string, string> = {
-  all: "All categories",
-  character: "Character",
-  place: "Place",
-  skill: "Skill",
-  item: "Item",
-  other: "Other",
-};
-
-const statusItems: Record<string, string> = {
-  all: "All statuses",
-  approved: "Approved",
-  pending: "Pending",
-  rejected: "Rejected",
-};
+/**
+ * The words a column needs, resolved where the catalog is reachable. The column factory stays a
+ * plain function so the table's shape is not written twice.
+ */
+interface GlossaryColumnLabels {
+  source: string;
+  target: string;
+  category: string;
+  status: string;
+  note: string;
+  termActions: (source: string) => string;
+  menu: string;
+  edit: string;
+  approve: string;
+  reject: string;
+  restore: string;
+  remove: string;
+}
 
 const pageSizeOptions = [10, 25, 50] as const;
-const columnLabels: Record<string, string> = {
-  source: "Source",
-  target: "Target",
-  category: "Category",
-  status: "Status",
-  note: "Note",
-  actions: "Actions",
-};
 const sortableSearchColumns: Record<string, GlossaryListSearch["sort"]> = {
   source: "source",
   target: "target",
@@ -98,13 +94,20 @@ function hasActiveFilters(search: GlossaryListSearch) {
 }
 
 function StatusBadge({ status }: { status: TermStatus }) {
+  const t = useTranslations("studio");
+  const label =
+    status === "approved"
+      ? t("termStatusApproved")
+      : status === "pending"
+        ? t("termStatusPending")
+        : t("termStatusRejected");
   return (
     <Badge
       variant={
         status === "approved" ? "secondary" : status === "pending" ? "outline" : "destructive"
       }
     >
-      {statusItems[status]}
+      {label}
     </Badge>
   );
 }
@@ -117,12 +120,12 @@ function CategoryBadge({ category }: { category: TermCategory | string }) {
   );
 }
 
-function createGlossaryColumns(actions: GlossaryTableActions) {
+function createGlossaryColumns(actions: GlossaryTableActions, labels: GlossaryColumnLabels) {
   return columnHelper.columns([
     columnHelper.accessor("source", {
       id: "source",
       enableHiding: false,
-      header: ({ column }) => <DataTableSortableHeader column={column} label="Source" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label={labels.source} />,
       cell: ({ row }) => (
         <div
           className="min-w-[180px] max-w-[280px] truncate font-medium text-foreground"
@@ -135,7 +138,7 @@ function createGlossaryColumns(actions: GlossaryTableActions) {
     columnHelper.accessor("target", {
       id: "target",
       enableHiding: false,
-      header: ({ column }) => <DataTableSortableHeader column={column} label="Target" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label={labels.target} />,
       cell: ({ row }) => (
         <div
           className="min-w-[180px] max-w-[280px] truncate text-foreground"
@@ -147,17 +150,17 @@ function createGlossaryColumns(actions: GlossaryTableActions) {
     }),
     columnHelper.accessor("category", {
       id: "category",
-      header: ({ column }) => <DataTableSortableHeader column={column} label="Category" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label={labels.category} />,
       cell: ({ row }) => <CategoryBadge category={row.original.category} />,
     }),
     columnHelper.accessor("status", {
       id: "status",
-      header: ({ column }) => <DataTableSortableHeader column={column} label="Status" />,
+      header: ({ column }) => <DataTableSortableHeader column={column} label={labels.status} />,
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     }),
     columnHelper.accessor("note", {
       id: "note",
-      header: "Note",
+      header: labels.note,
       cell: ({ row }) => (
         <div
           className="max-w-[280px] truncate text-caption text-muted-foreground"
@@ -175,22 +178,22 @@ function createGlossaryColumns(actions: GlossaryTableActions) {
         const term = row.original;
         return (
           <DataTableRowActions
-            triggerLabel={`Actions for ${term.source}`}
-            menuLabel="Term actions"
+            triggerLabel={labels.termActions(term.source)}
+            menuLabel={labels.menu}
             pending={actions.pending}
             items={[
-              { label: "Edit", onSelect: () => actions.onEdit(term) },
+              { label: labels.edit, onSelect: () => actions.onEdit(term) },
               ...(term.status === "pending"
                 ? [
-                    { label: "Approve", onSelect: () => actions.onApprove(term.id) },
-                    { label: "Reject", onSelect: () => actions.onReject(term.id) },
+                    { label: labels.approve, onSelect: () => actions.onApprove(term.id) },
+                    { label: labels.reject, onSelect: () => actions.onReject(term.id) },
                   ]
                 : []),
               ...(term.status === "rejected"
-                ? [{ label: "Restore", onSelect: () => actions.onApprove(term.id) }]
+                ? [{ label: labels.restore, onSelect: () => actions.onApprove(term.id) }]
                 : []),
               {
-                label: "Delete",
+                label: labels.remove,
                 variant: "destructive" as const,
                 onSelect: () => actions.onDelete(term.id),
               },
@@ -220,10 +223,11 @@ function GlossaryUpdateError({
   error: unknown;
   onRetry: () => void;
 }) {
+  const t = useTranslations("studio");
   if (!visible) return null;
   return (
     <QueryErrorState
-      title="Unable to update glossary terms"
+      title={t("glossaryUpdateFailed")}
       error={error}
       onRetry={onRetry}
       className="m-3 min-h-0 sm:m-4"
@@ -238,17 +242,19 @@ function GlossaryMobileRows({
   rows: GlossaryListRow[];
   actions: GlossaryTableActions;
 }) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
   return (
     <>
       {rows.map((term) => (
         <article key={term.id} className="space-y-3 p-4">
           <div className="grid min-w-0 gap-2 sm:grid-cols-2">
             <div className="min-w-0">
-              <p className="text-caption text-muted-foreground">Source</p>
+              <p className="text-caption text-muted-foreground">{t("termColumnSource")}</p>
               <p className="break-words font-medium text-foreground">{term.source}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-caption text-muted-foreground">Target</p>
+              <p className="text-caption text-muted-foreground">{t("termColumnTarget")}</p>
               <p className="break-words text-foreground">{term.target}</p>
             </div>
           </div>
@@ -267,7 +273,7 @@ function GlossaryMobileRows({
               disabled={actions.pending}
               onClick={() => actions.onEdit(term)}
             >
-              Edit
+              {tCommon("edit")}
             </Button>
             {term.status === "pending" ? (
               <>
@@ -277,7 +283,7 @@ function GlossaryMobileRows({
                   disabled={actions.pending}
                   onClick={() => actions.onApprove(term.id)}
                 >
-                  Approve
+                  {t("termActionApprove")}
                 </Button>
                 <Button
                   size="sm"
@@ -286,7 +292,7 @@ function GlossaryMobileRows({
                   disabled={actions.pending}
                   onClick={() => actions.onReject(term.id)}
                 >
-                  Reject
+                  {t("termActionReject")}
                 </Button>
               </>
             ) : term.status === "rejected" ? (
@@ -296,7 +302,7 @@ function GlossaryMobileRows({
                 disabled={actions.pending}
                 onClick={() => actions.onApprove(term.id)}
               >
-                Restore
+                {t("termActionRestore")}
               </Button>
             ) : null}
             <Button
@@ -306,7 +312,7 @@ function GlossaryMobileRows({
               disabled={actions.pending}
               onClick={() => actions.onDelete(term.id)}
             >
-              Delete
+              {tCommon("delete")}
             </Button>
           </div>
         </article>
@@ -322,6 +328,8 @@ export function GlossaryTable({
   onSearchChange,
   actions,
 }: GlossaryTableProps) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
   const { page, isPending, isFetching, isPlaceholderData, isError, error } = query;
 
   useEffect(() => {
@@ -329,7 +337,38 @@ export function GlossaryTable({
     onSearchChange({ page: page.page }, true);
   }, [isFetching, isPlaceholderData, onSearchChange, page, search.page]);
 
-  const columns = useMemo(() => createGlossaryColumns(actions), [actions]);
+  const categoryItems = {
+    all: t("termAllCategories"),
+    character: t("termCategoryCharacter"),
+    place: t("termCategoryPlace"),
+    skill: t("termCategorySkill"),
+    item: t("termCategoryItem"),
+    other: t("termCategoryOther"),
+  };
+  const statusItems = {
+    all: t("termAllStatuses"),
+    approved: t("termStatusApproved"),
+    pending: t("termStatusPending"),
+    rejected: t("termStatusRejected"),
+  };
+  const columns = useMemo(
+    () =>
+      createGlossaryColumns(actions, {
+        source: t("termColumnSource"),
+        target: t("termColumnTarget"),
+        category: t("termColumnCategory"),
+        status: t("termColumnStatus"),
+        note: t("termColumnNote"),
+        termActions: (source: string) => t("glossaryTermActions", { source }),
+        menu: t("glossaryTermActionsMenu"),
+        edit: tCommon("edit"),
+        approve: t("termActionApprove"),
+        reject: t("termActionReject"),
+        restore: t("termActionRestore"),
+        remove: tCommon("delete"),
+      }),
+    [actions, t, tCommon],
+  );
   const data = page?.rows ?? EMPTY_GLOSSARY_ROWS;
   const rowCount = page?.rowCount ?? 0;
   const currentPage = page?.page ?? search.page;
@@ -371,7 +410,7 @@ export function GlossaryTable({
   if (isError && !page) {
     return (
       <QueryErrorState
-        title="Unable to load glossary terms"
+        title={t("glossaryLoadFailed")}
         error={error}
         onRetry={onRetry}
         className="my-0"
@@ -380,49 +419,59 @@ export function GlossaryTable({
   }
 
   return (
-    <DataTableSection ariaLabel="Glossary terms" busy={isFetching}>
+    <DataTableSection ariaLabel={t("glossaryTableLabel")} busy={isFetching}>
       <DataTableToolbar
         searchValue={search.q}
-        searchLabel="Search glossary"
-        searchPlaceholder="Search source, target, or note"
+        searchLabel={t("glossarySearchLabel")}
+        searchPlaceholder={t("glossarySearchPlaceholder")}
         onSearchChange={(q) => onSearchChange({ q, page: 1 }, true)}
         filters={[
           {
-            ariaLabel: "Filter by category",
+            ariaLabel: t("glossaryFilterCategory"),
             value: search.category,
             items: categoryItems,
             onChange: (value) =>
               onSearchChange({ category: value as GlossaryListSearch["category"], page: 1 }, true),
           },
           {
-            ariaLabel: "Filter by status",
+            ariaLabel: t("glossaryFilterStatus"),
             value: search.status,
             items: statusItems,
             onChange: (value) =>
               onSearchChange({ status: value as GlossaryListSearch["status"], page: 1 }, true),
           },
         ]}
-        columns={{ table, labels: columnLabels }}
-        clearLabel="Clear filters"
+        columns={{
+          table,
+          labels: {
+            source: t("termColumnSource"),
+            target: t("termColumnTarget"),
+            category: t("termColumnCategory"),
+            status: t("termColumnStatus"),
+            note: t("termColumnNote"),
+            actions: t("termColumnActions"),
+          },
+        }}
+        clearLabel={tCommon("clearFilters")}
         filtered={filtered}
         onClearFilters={clearFilters}
-        description="Approved glossary mappings used in future translations"
+        description={t("glossaryTableDescription")}
         query={{ isFetching, isPlaceholderData }}
-        busyMessage="Loading glossary page…"
+        busyMessage={t("glossaryLoading")}
       />
 
       <GlossaryUpdateError visible={isError && Boolean(page)} error={error} onRetry={onRetry} />
 
-      <DataTableMobileRegion ariaLabel={noRows || isPending ? undefined : "Mobile glossary terms"}>
+      <DataTableMobileRegion ariaLabel={noRows || isPending ? undefined : t("glossaryMobileLabel")}>
         {isPending && !page ? (
-          <DataTableMobileLoading message="Loading glossary terms…" />
+          <DataTableMobileLoading message={t("glossaryLoadingTerms")} />
         ) : noRows ? (
           <DataTableMobileEmpty
             filtered={filtered}
-            emptyTitle="No glossary terms yet"
-            filteredTitle="No terms match these filters"
-            emptyDescription="Add a term to get started."
-            filteredDescription="Try a different search or clear the filters."
+            emptyTitle={t("glossaryEmptyTitle")}
+            filteredTitle={t("glossaryFilteredTitle")}
+            emptyDescription={t("glossaryEmptyMobile")}
+            filteredDescription={t("glossaryFilteredMobile")}
             onClearFilters={clearFilters}
           />
         ) : (
@@ -430,7 +479,7 @@ export function GlossaryTable({
         )}
       </DataTableMobileRegion>
 
-      <DataTableDesktopRegion ariaLabel="Desktop glossary terms">
+      <DataTableDesktopRegion ariaLabel={t("glossaryDesktopLabel")}>
         <Table className="min-w-[860px] text-caption">
           <TableHeader className="bg-muted/20">
             <DataTableHeaderGroups
@@ -444,10 +493,10 @@ export function GlossaryTable({
             filtered={filtered}
             visibleColumnCount={visibleColumnCount}
             rows={renderedRows}
-            emptyTitle="No glossary terms yet"
-            filteredTitle="No terms match these filters"
-            emptyDescription="Add a term or bulk import TSV mappings to keep translations consistent."
-            filteredDescription="Try a different search or clear the filters to see all terms."
+            emptyTitle={t("glossaryEmptyTitle")}
+            filteredTitle={t("glossaryFilteredTitle")}
+            emptyDescription={t("glossaryEmptyDesktop")}
+            filteredDescription={t("glossaryFilteredDesktop")}
             onClearFilters={clearFilters}
           />
         </Table>
@@ -462,7 +511,7 @@ export function GlossaryTable({
         busy={paginationBusy}
         pageSize={search.pageSize}
         pageSizeOptions={pageSizeOptions}
-        noun="terms"
+        noun={t("glossaryNounTerms")}
         onPageSizeChange={(pageSize) =>
           onSearchChange({ pageSize: pageSize as GlossaryListSearch["pageSize"], page: 1 }, true)
         }

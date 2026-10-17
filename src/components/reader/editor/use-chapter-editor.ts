@@ -9,10 +9,13 @@ import {
 } from "@tanstack/react-form";
 import { useBlocker } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { updateChapter } from "@/lib/content/chapter/chapter.functions";
 import { editChapterSchema, type EditChapterInput } from "@/lib/content/novel/novel.schemas";
+import { encodeMessage } from "@/lib/i18n/message-code";
+import { translateServerError } from "@/lib/i18n/server-error";
 
 interface EditableChapter {
   id: string;
@@ -64,13 +67,17 @@ const emptyChapterEditorValues: ChapterEditorFormValues = {
   sourceChangePolicy: null,
 };
 
+// The schema is built at module scope, where no reader exists, so its messages are keys the
+// form's `FieldError` resolves against the catalog (i18n.md §3).
 const chapterEditorObjectSchema = z.object({
   title: z
     .string()
     .max(500)
-    .refine((value) => value.trim().length > 0, "Source title is required"),
+    .refine((value) => value.trim().length > 0, encodeMessage("validation.sourceTitleRequired")),
   translatedTitle: z.string().max(500),
-  rawContent: z.string().refine((value) => value.trim().length > 0, "Source content is required"),
+  rawContent: z
+    .string()
+    .refine((value) => value.trim().length > 0, encodeMessage("validation.sourceContentRequired")),
   translatedContent: z.string(),
   sourceChangePolicy: z.enum(["keep", "clear"]).nullable(),
 });
@@ -80,8 +87,7 @@ const chapterEditorSchemaWithStoredTranslation: ChapterEditorSchema =
     if (value.sourceChangePolicy !== "clear" && value.translatedContent.trim().length === 0) {
       context.addIssue({
         code: "custom",
-        message:
-          "Translation cannot be empty. Restore it, or change the source text and choose Clear Translation.",
+        message: encodeMessage("validation.translationRequired"),
         path: ["translatedContent"],
       });
     }
@@ -102,6 +108,10 @@ export function useChapterEditor({
   canEdit,
   jobRunning,
 }: UseChapterEditorOptions) {
+  const t = useTranslations("reader");
+  // A message code carries its own namespace, so the server's words are resolved with the
+  // root translator (see `translateServerError`).
+  const tRoot = useTranslations();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
@@ -184,9 +194,9 @@ export function useChapterEditor({
         form.reset(parsed, { keepDefaultValues: true });
         setEditing(false);
         setSourcePolicyDialogOpen(false);
-        toast.success("Chapter saved");
+        toast.success(t("chapterSaved"));
       } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : "Failed to save chapter");
+        toast.error(translateServerError(error, tRoot, t("saveFailed")));
       }
     },
   });

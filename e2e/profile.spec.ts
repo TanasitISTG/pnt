@@ -2,44 +2,38 @@ import { expect, test, type Page } from "@playwright/test";
 import postgres from "postgres";
 import sharp from "sharp";
 
-const adminId = "e2e-admin";
-const adminEmail = "e2e-admin@example.test";
-const adminPassword = "e2e-password-123";
-const seededName = "E2E Admin";
+import { claimShared, readShared } from "./fixtures";
+import { openReadingHome, takeSession, waitForHydration } from "./sessions";
+
+test.use({ storageState: takeSession("admin", "read") });
+
+/** The operator whose stored profile this spec is the one spec allowed to change. */
+const admin = readShared("admin-account");
 const renamedTo = "E2E Curator";
 
-async function waitForReactHydration(page: Page, selector = 'button[type="submit"]') {
-  await page.waitForFunction((target) => {
-    const node = document.querySelector(target);
-    return Boolean(node && Object.keys(node).some((key) => key.startsWith("__reactProps$")));
-  }, selector);
-}
-
-async function rejectOptionalAnalytics(page: Page) {
-  const rejectButton = page.getByRole("button", { name: "Reject optional" });
-  if (await rejectButton.isVisible()) await rejectButton.click();
-}
-
-async function signIn(page: Page) {
-  await page.goto("/login");
-  await waitForReactHydration(page);
-  await rejectOptionalAnalytics(page);
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(adminPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  // The account's front door is the reading home; the shelf is its own page.
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+/**
+ * Sets the language of the signed-in work areas for the next document request.
+ *
+ * `/settings` is one of them: a work area carries no locale prefix, so its language comes
+ * from the `pnt-locale` cookie - what `use-switch-locale` writes - and the account's own
+ * remembered locale sits behind it. Only the cookie is touched: the remembered value is not a
+ * spec's to change (`SHARED`, `e2e/fixtures.ts`).
+ */
+async function setLocaleCookie(page: Page, locale: "en" | "th") {
+  await page
+    .context()
+    .addCookies([{ name: "pnt-locale", value: locale, url: new URL(page.url()).origin }]);
 }
 
 /** The account trigger carries only the photo, so an empty locator means no photo. */
-function headerAvatar(page: Page, accountName = seededName) {
+function headerAvatar(page: Page, accountName: string = admin.name) {
   return page.getByRole("button", { name: new RegExp(accountName) }).locator("img");
 }
 
 async function saveName(page: Page, next: string) {
   // Typing before hydration only writes the DOM: React then replaces the value with
   // its own state and the form submits the old name.
-  await waitForReactHydration(page);
+  await waitForHydration(page);
   await page.getByLabel("Display Name").fill(next);
   await page.getByRole("button", { name: "Save Changes" }).click();
   // The shell renders the name from the router context, so this also proves the
@@ -54,7 +48,7 @@ test.afterEach(async () => {
   try {
     // Restore the seeded profile rather than trusting the UI to have done it: the
     // name and photo have to be as found for the specs that run after this file.
-    await sql`UPDATE "user" SET "name" = ${seededName}, "image" = NULL WHERE "id" = ${adminId}`;
+    await sql`UPDATE "user" SET "name" = ${admin.name}, "image" = NULL WHERE "id" = ${admin.id}`;
   } finally {
     await sql.end({ timeout: 1 });
   }
@@ -62,28 +56,33 @@ test.afterEach(async () => {
 
 test("the account section owns the display name and photo", async ({ page }) => {
   test.setTimeout(120_000);
-  await signIn(page);
+  await openReadingHome(page);
 
   // The account menu offers Account, which opens the settings hub's account section.
-  await page.getByRole("button", { name: new RegExp(seededName) }).click();
+  await page.getByRole("button", { name: new RegExp(admin.name) }).click();
   await expect(page.getByRole("menuitem", { name: "Account" })).toBeVisible();
   await page.getByRole("menuitem", { name: "Account" }).click();
   await expect(page).toHaveURL(/\/settings\/account$/);
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Account" })).toBeVisible();
   // Exact: the change-email form on the same page also carries an "Email" label.
-  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(adminEmail);
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(admin.email);
 
   // The bare hub opens on the same section, and the sections are real destinations
   // rather than one page's worth of stacked cards.
   await page.goto("/settings");
   await expect(page).toHaveURL(/\/settings\/account$/);
-  await waitForReactHydration(page, 'a[href="/settings/security"]');
+  await waitForHydration(page.getByRole("link", { name: "Security" }));
   await page.getByRole("link", { name: "Security" }).click();
   await expect(page).toHaveURL(/\/settings\/security$/);
   await expect(page.getByRole("heading", { level: 2, name: "Security" })).toBeVisible();
   await page.getByRole("link", { name: "Account" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Account" })).toBeVisible();
+
+  // Everything below changes what the header shows for the seeded account - the name every other
+  // spec clicks by - and puts it back before the test ends. The claim is the declaration's
+  // (`SHARED`, `e2e/fixtures.ts`), and this is the only place in the run that takes it.
+  claimShared("admin-account", "change", "profile");
 
   await saveName(page, renamedTo);
 
@@ -103,7 +102,7 @@ test("the account section owns the display name and photo", async ({ page }) => 
     .png()
     .toBuffer();
 
-  await waitForReactHydration(page);
+  await waitForHydration(page);
   await page.setInputFiles('input[aria-label="Profile photo file"]', {
     name: "profile.png",
     mimeType: "image/png",
@@ -141,6 +140,18 @@ test("the account section owns the display name and photo", async ({ page }) => 
   await expect(headerAvatar(page, renamedTo)).toHaveCount(0);
 
   // Leave the seeded name behind for the specs that click it.
-  await saveName(page, seededName);
+  await saveName(page, admin.name);
   await expect(headerAvatar(page)).toHaveCount(0);
+
+  // The settings hub in Thai, at phone width: the section nav, the two headings and the form
+  // labels are all keyed copy, and this is the one screen every account visits.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setLocaleCookie(page, "th");
+  await page.goto("/settings/account");
+  await expect(page.locator("html")).toHaveAttribute("lang", "th");
+  await expect(page.getByRole("heading", { level: 1, name: "การตั้งค่า" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "บัญชี" })).toBeVisible();
+  await expect(
+    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).resolves.toBe(true);
 });

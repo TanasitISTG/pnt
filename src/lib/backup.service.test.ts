@@ -257,14 +257,14 @@ describe("backup export", () => {
     seedStoredCover("image/gif");
     selectQueue = [[novelRow({ coverKey: COVER_KEY, coverMime: "image/gif" })], [], []];
 
-    await expect(exportBackupForUser("user-1")).rejects.toThrow(/unsupported cover media type/);
+    await expect(exportBackupForUser("user-1")).rejects.toThrow(/backupUnsupportedCoverMime/);
   });
 
   it("refuses to export cover bytes with no media type", async () => {
     seedStoredCover(null);
     selectQueue = [[novelRow({ coverKey: COVER_KEY, coverMime: null })], [], []];
 
-    await expect(exportBackupForUser("user-1")).rejects.toThrow(/cover image without a media type/);
+    await expect(exportBackupForUser("user-1")).rejects.toThrow(/backupCoverMimeRequired/);
   });
 
   it("reads the cover back out of storage so the file stays self-contained", async () => {
@@ -316,7 +316,7 @@ describe("backup import", () => {
       coverMime: "image/png",
     });
 
-    await expect(importBackupForUser("user-1", backup)).rejects.toThrow(/magic bytes/);
+    await expect(importBackupForUser("user-1", backup)).rejects.toThrow(/imageTypeMismatch/);
     expect(db.transaction).not.toHaveBeenCalled();
   });
 

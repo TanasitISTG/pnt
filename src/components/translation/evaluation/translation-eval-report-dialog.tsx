@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { TranslationEvalReportContent } from "@/components/translation/evaluation/translation-eval-report-content";
 import { Badge } from "@/components/ui/badge";
 import { type DataTablePaginationTable } from "@/components/ui/data-table-parts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatLocalDateTime } from "@/lib/date-time";
+import { formatDateTime } from "@/lib/i18n/format";
 import { translationEvalReportQueryOptions } from "@/lib/translation/evaluation/eval.query";
 import type {
   EvalReportSummary,
@@ -21,11 +22,12 @@ interface TranslationEvalReportDialogProps {
   queueing: boolean;
 }
 
-function statusLabel(status: EvalReportSummary["status"]): string {
-  if (status === "pending") return "Queued";
-  if (status === "running") return "Checking…";
-  if (status === "error") return "Failed";
-  return "Complete";
+/** The key a report's status is named by, so a badge never holds a word of its own. */
+function statusKey(status: EvalReportSummary["status"]) {
+  if (status === "pending") return "statusQueued" as const;
+  if (status === "running") return "statusChecking" as const;
+  if (status === "error") return "statusFailed" as const;
+  return "statusComplete" as const;
 }
 
 function statusVariant(
@@ -43,6 +45,8 @@ export function TranslationEvalReportDialog({
   onRunAgain,
   queueing,
 }: TranslationEvalReportDialogProps) {
+  const t = useTranslations("evaluation");
+  const locale = useLocale();
   const open = Boolean(reviewSearch.reviewReport);
   const mounted = useHydrated();
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -98,22 +102,22 @@ export function TranslationEvalReportDialog({
                 initialFocus
                 className="break-words text-card-title font-semibold tracking-tight"
               >
-                Quality check
+                {t("dialogTitle")}
               </DialogTitle>
               {report ? (
                 <p className="mt-1 break-words text-sm text-muted-foreground">
-                  {report.chapterSelector} · {report.completedAt ? "Checked" : "Created"}{" "}
-                  {mounted ? formatLocalDateTime(report.completedAt ?? report.createdAt) : "—"}
+                  {report.chapterSelector} · {report.completedAt ? t("checked") : t("created")}{" "}
+                  {mounted ? formatDateTime(report.completedAt ?? report.createdAt, locale) : "—"}
                 </p>
               ) : null}
             </div>
             <span role="status" aria-live="polite">
               {status ? (
-                <Badge variant={statusVariant(status)}>{statusLabel(status)}</Badge>
+                <Badge variant={statusVariant(status)}>{t(statusKey(status))}</Badge>
               ) : detailQuery.isError ? (
-                "Unavailable"
+                t("unavailable")
               ) : (
-                "Loading quality check…"
+                t("loading")
               )}
             </span>
           </div>

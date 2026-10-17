@@ -1,4 +1,5 @@
 import { useForm, useStore } from "@tanstack/react-form";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { CoverUpload } from "@/components/novels/form/cover-upload";
@@ -16,6 +17,8 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { coverMimeSchema, createNovelSchema } from "@/lib/content/novel/novel.schemas";
+import { languageName } from "@/lib/i18n/language-name";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { isSupportedLanguagePair } from "@/lib/language-pair";
 
 type NovelFormData = z.input<typeof createNovelSchema> & {
@@ -43,48 +46,64 @@ interface NovelFormProps {
   submitLabel: string;
 }
 
-const SOURCE_LANG_ITEMS: Record<string, string> = {
-  en: "English (EN)",
-  zh: "Chinese (ZH)",
-};
+// A field message is a key (i18n.md §3), so the same sentence is written once and read
+// through the catalog of whatever language the form is being filled in. The keys are named
+// out rather than built from the field name, so the orphan-key sweep can see them and a
+// renamed field cannot silently lose its message.
+const INTEGER_FIELD_MESSAGES = {
+  chunkSize: {
+    required: "validation.chunkSizeRequired",
+    whole: "validation.chunkSizeWhole",
+    range: "validation.chunkSizeRange",
+  },
+  contextTailLength: {
+    required: "validation.contextTailLengthRequired",
+    whole: "validation.contextTailLengthWhole",
+    range: "validation.contextTailLengthRange",
+  },
+} as const;
 
-const TARGET_LANG_ITEMS: Record<string, string> = {
-  th: "Thai (TH)",
-  en: "English (EN)",
-};
-
-const integerInputSchema = (label: string, minimum: number, maximum: number) =>
-  z
+const integerInputSchema = (
+  field: keyof typeof INTEGER_FIELD_MESSAGES,
+  minimum: number,
+  maximum: number,
+) => {
+  const messages = INTEGER_FIELD_MESSAGES[field];
+  return z
     .string()
     .trim()
-    .min(1, `${label} is required`)
-    .regex(/^\d+$/, `${label} must be a whole number`)
-    .refine((value) => {
-      const number = Number(value);
-      return number >= minimum && number <= maximum;
-    }, `${label} must be between ${minimum} and ${maximum}`);
+    .min(1, encodeMessage(messages.required))
+    .regex(/^\d+$/, encodeMessage(messages.whole))
+    .refine(
+      (value) => {
+        const number = Number(value);
+        return number >= minimum && number <= maximum;
+      },
+      encodeMessage(messages.range, { min: minimum, max: maximum }),
+    );
+};
 
 const novelFormSchema = z
   .object({
-    title: z.string().trim().min(1, "Title is required").max(500),
+    title: z.string().trim().min(1, encodeMessage("validation.titleRequired")).max(500),
     originalTitle: z.string().max(500),
     author: z.string().max(200),
     description: z.string().max(5000),
     sourceLang: z.enum(["en", "zh"]),
     targetLang: z.enum(["en", "th"]),
     customPrompt: z.string().max(10000),
-    chunkSize: integerInputSchema("Chunk size", 500, 10000),
-    contextTailLength: integerInputSchema("Context tail length", 100, 2000),
+    chunkSize: integerInputSchema("chunkSize", 500, 10000),
+    contextTailLength: integerInputSchema("contextTailLength", 100, 2000),
     cover: z.string().max(1_400_000).nullable(),
     coverMime: coverMimeSchema.nullable(),
     removeCover: z.boolean(),
   })
   .refine((data) => !data.cover || !!data.coverMime, {
-    message: "Cover MIME type is required when cover image is provided",
+    message: encodeMessage("validation.coverMimeRequired"),
     path: ["cover"],
   })
   .refine((data) => isSupportedLanguagePair(data.sourceLang, data.targetLang), {
-    message: "Unsupported language pair. Use EN→TH, ZH→EN, or ZH→TH",
+    message: encodeMessage("validation.languagePairUnsupported"),
     path: ["targetLang"],
   });
 
@@ -106,6 +125,21 @@ function createInitialNovelForm(defaultValues: NovelFormProps["defaultValues"]):
 }
 
 export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormProps) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
+  const tRoot = useTranslations();
+  // The option's label pairs the language's name in the interface language with the code the
+  // pair is stored as, so a Thai owner picks ภาษาอังกฤษ rather than decoding "en".
+  const languageOption = (code: "en" | "zh" | "th") =>
+    t("langOption", { language: languageName(tRoot, code) ?? code, code: code.toUpperCase() });
+  const sourceLangItems: Record<string, string> = {
+    en: languageOption("en"),
+    zh: languageOption("zh"),
+  };
+  const targetLangItems: Record<string, string> = {
+    th: languageOption("th"),
+    en: languageOption("en"),
+  };
   const form = useForm({
     defaultValues: createInitialNovelForm(defaultValues),
     validators: {
@@ -149,14 +183,14 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="title">Title *</FieldLabel>
+                  <FieldLabel htmlFor="title">{t("fieldTitle")}</FieldLabel>
                   <Input
                     id="title"
                     name={field.name}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="e.g. Solo Leveling"
+                    placeholder={t("titlePlaceholder")}
                     required
                     maxLength={500}
                     aria-invalid={invalid}
@@ -172,14 +206,14 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="originalTitle">Original Title</FieldLabel>
+                  <FieldLabel htmlFor="originalTitle">{t("fieldOriginalTitle")}</FieldLabel>
                   <Input
                     id="originalTitle"
                     name={field.name}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="e.g. 나 혼자만 레벨업"
+                    placeholder={t("originalTitlePlaceholder")}
                     maxLength={500}
                     aria-invalid={invalid}
                   />
@@ -194,14 +228,14 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="author">Author</FieldLabel>
+                  <FieldLabel htmlFor="author">{t("fieldAuthor")}</FieldLabel>
                   <Input
                     id="author"
                     name={field.name}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="e.g. Chugong"
+                    placeholder={t("authorPlaceholder")}
                     maxLength={200}
                     aria-invalid={invalid}
                   />
@@ -217,7 +251,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined} className="shrink-0">
-                <FieldLabel>Cover Image</FieldLabel>
+                <FieldLabel>{t("fieldCover")}</FieldLabel>
                 <CoverUpload
                   existingNovelId={defaultValues?.id}
                   hasExistingCover={defaultValues?.hasCover}
@@ -251,12 +285,12 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor="sourceLang">Source Language</FieldLabel>
+                <FieldLabel htmlFor="sourceLang">{t("fieldSourceLang")}</FieldLabel>
                 <Select
                   name={field.name}
                   value={field.state.value}
                   onValueChange={(value) => value && field.handleChange(value)}
-                  items={SOURCE_LANG_ITEMS}
+                  items={sourceLangItems}
                 >
                   <SelectTrigger
                     id="sourceLang"
@@ -264,12 +298,12 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
                     onBlur={field.handleBlur}
                     aria-invalid={invalid}
                   >
-                    <SelectValue placeholder="Select source language" />
+                    <SelectValue placeholder={t("sourceLangPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent className="min-w-36">
                     <SelectGroup>
-                      <SelectItem value="en">English (EN)</SelectItem>
-                      <SelectItem value="zh">Chinese (ZH)</SelectItem>
+                      <SelectItem value="en">{sourceLangItems.en}</SelectItem>
+                      <SelectItem value="zh">{sourceLangItems.zh}</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -284,12 +318,12 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor="targetLang">Target Language</FieldLabel>
+                <FieldLabel htmlFor="targetLang">{t("fieldTargetLang")}</FieldLabel>
                 <Select
                   name={field.name}
                   value={field.state.value}
                   onValueChange={(value) => value && field.handleChange(value)}
-                  items={TARGET_LANG_ITEMS}
+                  items={targetLangItems}
                 >
                   <SelectTrigger
                     id="targetLang"
@@ -297,13 +331,13 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
                     onBlur={field.handleBlur}
                     aria-invalid={invalid}
                   >
-                    <SelectValue placeholder="Select target language" />
+                    <SelectValue placeholder={t("targetLangPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent className="min-w-36">
                     <SelectGroup>
-                      <SelectItem value="th">Thai (TH)</SelectItem>
+                      <SelectItem value="th">{targetLangItems.th}</SelectItem>
                       <SelectItem value="en" disabled={sourceLang === "en"}>
-                        English (EN)
+                        {targetLangItems.en}
                       </SelectItem>
                     </SelectGroup>
                   </SelectContent>
@@ -320,14 +354,14 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
           const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
           return (
             <Field data-invalid={invalid || undefined}>
-              <FieldLabel htmlFor="description">Description</FieldLabel>
+              <FieldLabel htmlFor="description">{t("fieldDescription")}</FieldLabel>
               <Textarea
                 id="description"
                 name={field.name}
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(event) => field.handleChange(event.target.value)}
-                placeholder="Enter a brief description of the novel..."
+                placeholder={t("descriptionPlaceholder")}
                 rows={4}
                 maxLength={5000}
                 aria-invalid={invalid}
@@ -343,14 +377,14 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
           const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
           return (
             <Field data-invalid={invalid || undefined}>
-              <FieldLabel htmlFor="customPrompt">Custom AI Prompt Override</FieldLabel>
+              <FieldLabel htmlFor="customPrompt">{t("fieldCustomPrompt")}</FieldLabel>
               <Textarea
                 id="customPrompt"
                 name={field.name}
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(event) => field.handleChange(event.target.value)}
-                placeholder="Optional: Custom instructions for the AI translator. E.g. 'Use formal language for elder characters...'"
+                placeholder={t("customPromptPlaceholder")}
                 rows={4}
                 maxLength={10000}
                 aria-invalid={invalid}
@@ -367,7 +401,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor="chunkSize">Chunk Size (chars)</FieldLabel>
+                <FieldLabel htmlFor="chunkSize">{t("fieldChunkSize")}</FieldLabel>
                 <Input
                   id="chunkSize"
                   name={field.name}
@@ -380,7 +414,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
                   onChange={(event) => field.handleChange(event.target.value)}
                   aria-invalid={invalid}
                 />
-                <FieldDescription>Target char count per chunk (default: 4,000)</FieldDescription>
+                <FieldDescription>{t("chunkSizeHint")}</FieldDescription>
                 {invalid && <FieldError errors={field.state.meta.errors} />}
               </Field>
             );
@@ -392,7 +426,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor="contextTailLength">Context Tail Length (chars)</FieldLabel>
+                <FieldLabel htmlFor="contextTailLength">{t("fieldContextTail")}</FieldLabel>
                 <Input
                   id="contextTailLength"
                   name={field.name}
@@ -405,9 +439,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
                   onChange={(event) => field.handleChange(event.target.value)}
                   aria-invalid={invalid}
                 />
-                <FieldDescription>
-                  Length of previous chunk tail passed as context (default: 500)
-                </FieldDescription>
+                <FieldDescription>{t("contextTailHint")}</FieldDescription>
                 {invalid && <FieldError errors={field.state.meta.errors} />}
               </Field>
             );
@@ -418,7 +450,7 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
       <div className="flex justify-end gap-3 border-t border-border pt-4">
         <Button type="submit" disabled={!canSubmit || isSubmitting}>
           {isSubmitting && <Spinner />}
-          {isSubmitting ? "Saving..." : submitLabel}
+          {isSubmitting ? tCommon("saving") : submitLabel}
         </Button>
       </div>
     </form>

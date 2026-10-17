@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
 import type { ScrapeProvider } from "@/lib/scrape/types";
 
 export const jobHistoryTypeSchema = z.enum(["all", "translation", "scrape", "epub"]);
@@ -31,7 +32,7 @@ export const jobHistorySearchSchema = z.object({
     .number()
     .int()
     .refine((value): value is 10 | 25 | 50 => value === 10 || value === 25 || value === 50, {
-      message: "Page size must be 10, 25, or 50",
+      message: encodeMessage("validation.pageSizeInvalid"),
     })
     .default(25),
 });

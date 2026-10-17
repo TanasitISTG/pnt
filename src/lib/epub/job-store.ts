@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { lockNovelForMutation, type NovelMutationTransaction } from "@/lib/db/novel-lock";
 import { chapters, importJobs, importJobItems, epubUploads } from "@/lib/db/schema";
 import { getPrivateStorage } from "@/lib/storage/index.server";
+import { parseObjectKey } from "@/lib/storage/keys";
 import { nanoid } from "@/lib/utils";
 
 export async function loadEpubImportJob(jobId: string) {
@@ -28,14 +29,20 @@ export async function loadEpubUploadObjectKey(uploadId: string): Promise<string 
  * memory anyway, so this matches the previous concatenated-chunk memory profile.
  */
 export async function readStagedEpubArchive(objectKey: string): Promise<Uint8Array | null> {
-  const object = await getPrivateStorage().get(objectKey);
+  // The key comes from a row, so it is read back rather than trusted: a value that names no staged
+  // archive reads as an archive that is not there.
+  const stored = parseObjectKey(objectKey);
+  if (!stored) return null;
+  const object = await getPrivateStorage().get(stored.key);
   return object?.bytes ?? null;
 }
 
 /** Best-effort removal of a staged archive; a missing object is not an error. */
 export async function deleteStagedEpubArchive(objectKey: string): Promise<void> {
+  const stored = parseObjectKey(objectKey);
+  if (!stored) return;
   await getPrivateStorage()
-    .delete(objectKey)
+    .delete(stored.key)
     .catch(() => {});
 }
 

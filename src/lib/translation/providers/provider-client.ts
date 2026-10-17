@@ -15,6 +15,7 @@ import type {
 } from "@/lib/providers/types";
 import { MAX_PERSISTED_TOKEN_COUNT } from "@/lib/translation/token-count";
 import { OPEN_CODE_GO_BASE_URL, isOpenCodeLunaModel } from "./provider-compatibility";
+import { providerFailureCodes } from "./provider-failures";
 import {
   assertProviderBaseUrl,
   createProviderFetch,
@@ -22,8 +23,10 @@ import {
   ProviderRequestError,
 } from "./provider-network.server";
 
+// Both are read in a job's log row and, for the mismatch, in the retry the reader is being asked
+// for: a code rather than a sentence, so the row reads in whoever opened it.
 export class ProviderNotConfiguredError extends Error {
-  constructor(message = "AI provider settings are not configured") {
+  constructor(message = providerFailureCodes.NOT_CONFIGURED) {
     super(message);
     this.name = "ProviderNotConfiguredError";
   }
@@ -31,7 +34,7 @@ export class ProviderNotConfiguredError extends Error {
 
 export class ProviderSnapshotMismatchError extends Error {
   constructor() {
-    super("The configured AI provider changed after this job was queued; retry the job.");
+    super(providerFailureCodes.SNAPSHOT_MISMATCH);
     this.name = "ProviderSnapshotMismatchError";
   }
 }
@@ -60,17 +63,6 @@ const openAIResponseSchema = z.object({
     })
     .nullish(),
 });
-
-const providerFailureMessages = {
-  AUTH_FAILED: "Provider authentication failed. Check the API key.",
-  ACCESS_DENIED:
-    "Provider denied access. Check account/model permissions and deployment IP restrictions.",
-  NOT_FOUND: "Provider endpoint or model was not found.",
-  RATE_LIMITED: "Provider rate limit reached. Try again later.",
-  TIMEOUT: "Provider request timed out.",
-  CONNECTION_FAILED: "Could not connect to the provider. Check the settings and try again.",
-  JSON_MODE_UNSUPPORTED: "Provider does not support JSON response mode.",
-} as const;
 
 function providerErrorStatus(error: unknown): number | undefined {
   if (!error || typeof error !== "object") return undefined;
@@ -140,28 +132,28 @@ function mapOpenAIError(error: unknown, jsonModeRequested: boolean): ProviderReq
   const status = providerErrorStatus(error);
   if (jsonModeRequested && isUnsupportedJsonModeError(error, status)) {
     return new ProviderRequestError(
-      providerFailureMessages.JSON_MODE_UNSUPPORTED,
+      providerFailureCodes.JSON_MODE_UNSUPPORTED,
       "JSON_MODE_UNSUPPORTED",
       status,
     );
   }
   if (status === 401) {
-    return new ProviderRequestError(providerFailureMessages.AUTH_FAILED, "AUTH_FAILED", status);
+    return new ProviderRequestError(providerFailureCodes.AUTH_FAILED, "AUTH_FAILED", status);
   }
   if (status === 403) {
-    return new ProviderRequestError(providerFailureMessages.ACCESS_DENIED, "ACCESS_DENIED", status);
+    return new ProviderRequestError(providerFailureCodes.ACCESS_DENIED, "ACCESS_DENIED", status);
   }
   if (status === 404) {
-    return new ProviderRequestError(providerFailureMessages.NOT_FOUND, "NOT_FOUND", status);
+    return new ProviderRequestError(providerFailureCodes.NOT_FOUND, "NOT_FOUND", status);
   }
   if (status === 429) {
-    return new ProviderRequestError(providerFailureMessages.RATE_LIMITED, "RATE_LIMITED", status);
+    return new ProviderRequestError(providerFailureCodes.RATE_LIMITED, "RATE_LIMITED", status);
   }
   if (isTimeoutError(error)) {
-    return new ProviderRequestError(providerFailureMessages.TIMEOUT, "TIMEOUT");
+    return new ProviderRequestError(providerFailureCodes.TIMEOUT, "TIMEOUT");
   }
   return new ProviderRequestError(
-    providerFailureMessages.CONNECTION_FAILED,
+    providerFailureCodes.CONNECTION_FAILED,
     "CONNECTION_FAILED",
     status,
   );
@@ -221,7 +213,7 @@ export class OpenAIProviderClient implements AIProviderClient {
         });
         const parsed = openAIResponseSchema.safeParse(response);
         if (!parsed.success) {
-          throw new ProviderRequestError("Invalid provider response", "INVALID_RESPONSE");
+          throw new ProviderRequestError(providerFailureCodes.INVALID_RESPONSE, "INVALID_RESPONSE");
         }
 
         return {
@@ -245,7 +237,7 @@ export class OpenAIProviderClient implements AIProviderClient {
       });
       const parsed = openAIChatResponseSchema.safeParse(completion);
       if (!parsed.success) {
-        throw new ProviderRequestError("Invalid provider response", "INVALID_RESPONSE");
+        throw new ProviderRequestError(providerFailureCodes.INVALID_RESPONSE, "INVALID_RESPONSE");
       }
 
       return {
@@ -321,10 +313,7 @@ export class GeminiProviderClient implements AIProviderClient {
     this.baseUrl = normalizeProviderBaseUrl(config.baseUrl ?? "", "gemini");
     this.requestTimeoutSec = config.requestTimeoutSec;
     if (config.apiKey.startsWith("auth_tokens/")) {
-      throw new ProviderRequestError(
-        "Provider authentication failed. Check the API key.",
-        "AUTH_FAILED",
-      );
+      throw new ProviderRequestError(providerFailureCodes.AUTH_FAILED, "AUTH_FAILED");
     }
     this.apiKey = config.apiKey;
     this.fetch = createProviderFetch(this.baseUrl);
@@ -347,7 +336,7 @@ export class GeminiProviderClient implements AIProviderClient {
 
     const model = options.model ?? this.model;
     if (!model || /\.\.|[?&]/.test(model) || model.split("/").some((part) => !part)) {
-      throw new ProviderRequestError("Provider model is invalid", "INVALID_MODEL");
+      throw new ProviderRequestError(providerFailureCodes.INVALID_MODEL, "INVALID_MODEL");
     }
     const resource =
       model.startsWith("models/") || model.startsWith("tunedModels/") ? model : `models/${model}`;
@@ -404,14 +393,14 @@ export class GeminiProviderClient implements AIProviderClient {
         }
         throw new ProviderRequestError(
           response.status === 401
-            ? providerFailureMessages.AUTH_FAILED
+            ? providerFailureCodes.AUTH_FAILED
             : response.status === 403
-              ? providerFailureMessages.ACCESS_DENIED
+              ? providerFailureCodes.ACCESS_DENIED
               : response.status === 404
-                ? providerFailureMessages.NOT_FOUND
+                ? providerFailureCodes.NOT_FOUND
                 : response.status === 429
-                  ? providerFailureMessages.RATE_LIMITED
-                  : providerFailureMessages.CONNECTION_FAILED,
+                  ? providerFailureCodes.RATE_LIMITED
+                  : providerFailureCodes.CONNECTION_FAILED,
           unsupportedJson
             ? "JSON_MODE_UNSUPPORTED"
             : response.status === 401
@@ -427,11 +416,11 @@ export class GeminiProviderClient implements AIProviderClient {
         payload = await response.json();
       } catch (error) {
         if (signal.aborted) throw error;
-        throw new ProviderRequestError("Invalid provider response", "INVALID_RESPONSE");
+        throw new ProviderRequestError(providerFailureCodes.INVALID_RESPONSE, "INVALID_RESPONSE");
       }
       const parsed = geminiResponseSchema.safeParse(payload);
       if (!parsed.success)
-        throw new ProviderRequestError("Invalid provider response", "INVALID_RESPONSE");
+        throw new ProviderRequestError(providerFailureCodes.INVALID_RESPONSE, "INVALID_RESPONSE");
       const parts = parsed.data.candidates?.[0]?.content?.parts ?? [];
       return {
         content: parts
@@ -446,12 +435,9 @@ export class GeminiProviderClient implements AIProviderClient {
     } catch (error) {
       if (error instanceof ProviderRequestError) throw error;
       if (signal.aborted || isTimeoutError(error)) {
-        throw new ProviderRequestError("Provider request timed out.", "TIMEOUT");
+        throw new ProviderRequestError(providerFailureCodes.TIMEOUT, "TIMEOUT");
       }
-      throw new ProviderRequestError(
-        "Could not connect to the provider. Check the settings and try again.",
-        "CONNECTION_FAILED",
-      );
+      throw new ProviderRequestError(providerFailureCodes.CONNECTION_FAILED, "CONNECTION_FAILED");
     }
   }
 }

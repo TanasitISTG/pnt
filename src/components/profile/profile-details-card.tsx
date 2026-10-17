@@ -1,5 +1,6 @@
 import { useForm, useStore } from "@tanstack/react-form";
 import { UserRound } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,8 @@ export interface ProfileDetailsCardProps {
 }
 
 export function ProfileDetailsCard({ initialName, email, onSubmit }: ProfileDetailsCardProps) {
+  const t = useTranslations("settings");
+  const tc = useTranslations("common");
   const form = useForm({
     defaultValues: { name: initialName } satisfies UpdateProfileNameInput,
     validators: { onSubmit: updateProfileNameSchema },
@@ -33,9 +36,9 @@ export function ProfileDetailsCard({ initialName, email, onSubmit }: ProfileDeta
       <CardHeader>
         <div className="flex items-center gap-2">
           <UserRound className="size-5 text-muted-foreground" />
-          <CardTitle>Profile Details</CardTitle>
+          <CardTitle>{t("detailsTitle")}</CardTitle>
         </div>
-        <CardDescription>The name other readers will see beside your novels.</CardDescription>
+        <CardDescription>{t("detailsDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form
@@ -51,7 +54,7 @@ export function ProfileDetailsCard({ initialName, email, onSubmit }: ProfileDeta
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="displayName">Display Name</FieldLabel>
+                  <FieldLabel htmlFor="displayName">{t("displayNameLabel")}</FieldLabel>
                   <Input
                     id="displayName"
                     name={field.name}
@@ -71,15 +74,15 @@ export function ProfileDetailsCard({ initialName, email, onSubmit }: ProfileDeta
           </form.Field>
           <Field>
             <FieldLabel htmlFor="profileEmail" variant="mutedCaption">
-              Email
+              {t("emailFieldLabel")}
             </FieldLabel>
             <Input id="profileEmail" value={email} readOnly disabled />
-            <FieldDescription>Used to sign in. Change it in the email card below.</FieldDescription>
+            <FieldDescription>{t("emailFieldDescription")}</FieldDescription>
           </Field>
           <div className="pt-2">
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Spinner />}
-              {isSubmitting ? "Saving…" : "Save Changes"}
+              {isSubmitting ? tc("saving") : t("saveChanges")}
             </Button>
           </div>
         </form>

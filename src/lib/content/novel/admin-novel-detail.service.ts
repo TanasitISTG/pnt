@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { chapters, novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { chapterHasTranslation } from "@/lib/content/publish/publish";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { resolvePublicCover } from "@/lib/content/novel/cover-storage.server";
 import { getGlossaryStatsForOwnedNovel } from "@/lib/glossary/service";
 import { getNovelCostsForOwnedNovel } from "@/lib/translation/cost-service";
@@ -91,7 +92,7 @@ export async function getAdminNovelDetailMetricsForUser(
     .from(novels)
     .where(and(eq(novels.id, novelId), eq(novels.userId, userId)))
     .limit(1);
-  if (!novel) throw new SafeServerError("Novel not found or unauthorized");
+  if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 
   // The residual-script scan deliberately stays out of this bundle: it reads
   // every translated chapter body, and the admin detail query is fetched often.

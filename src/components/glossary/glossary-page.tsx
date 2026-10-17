@@ -1,5 +1,6 @@
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { useTranslations } from "use-intl";
 
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -14,11 +15,15 @@ import type { GlossaryListSearch } from "@/lib/glossary/schemas";
 
 const glossaryRoute = getRouteApi("/_protected/novels/$novelId/manage/glossary");
 function GlossaryNotFound() {
+  // The missing novel is not the glossary's own state, so its title and the way back are the
+  // words the rest of the app already uses for them.
+  const t = useTranslations("studio");
+  const tNovel = useTranslations("novel");
   return (
     <div className="py-12 text-center">
-      <h2 className="text-card-title font-semibold text-foreground">Novel not found</h2>
+      <h2 className="text-card-title font-semibold text-foreground">{tNovel("notFoundTitle")}</h2>
       <Button className="mt-4" render={<Link to="/" />}>
-        Back to Library
+        {t("backToLibrary")}
       </Button>
     </div>
   );
@@ -33,19 +38,18 @@ function PendingSuggestionsNotice({
   isViewingPending: boolean;
   onReview: () => void;
 }) {
+  const t = useTranslations("studio");
   if (pendingCount === 0 || isViewingPending) return null;
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="font-medium text-foreground">
-          {pendingCount.toLocaleString()} AI suggestions awaiting review
+          {t("glossarySuggestions", { count: pendingCount })}
         </p>
-        <p className="mt-1 text-caption text-muted-foreground">
-          Review extracted mappings before they influence future translations.
-        </p>
+        <p className="mt-1 text-caption text-muted-foreground">{t("glossarySuggestionsLead")}</p>
       </div>
       <Button variant="outlineWarning" size="sm" onClick={onReview}>
-        Review suggestions
+        {t("glossaryReviewSuggestions")}
       </Button>
     </section>
   );
@@ -70,18 +74,19 @@ function PendingBulkActions({
   onApproveAll,
   onRejectAll,
 }: PendingBulkActionsProps) {
+  const t = useTranslations("studio");
   if (!isViewingPending || pendingCount === 0) return null;
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
       <div>
-        <p className="font-medium text-foreground">Pending suggestions</p>
+        <p className="font-medium text-foreground">{t("glossaryPendingTitle")}</p>
         <p className="mt-1 text-caption text-muted-foreground">
-          Bulk actions apply to all {pendingCount.toLocaleString()} pending terms in this novel.
+          {t("glossaryBulkLead", { count: pendingCount })}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={onApproveAll} disabled={hasPendingActions}>
-          {approvingAll ? "Approving…" : `Approve all ${pendingCount} pending`}
+          {approvingAll ? t("glossaryApproving") : t("glossaryApproveAll", { count: pendingCount })}
         </Button>
         <Button
           variant="outlineDestructive"
@@ -89,7 +94,7 @@ function PendingBulkActions({
           onClick={onRejectAll}
           disabled={hasPendingActions}
         >
-          {rejectingAll ? "Rejecting…" : `Reject all ${pendingCount} pending`}
+          {rejectingAll ? t("glossaryRejecting") : t("glossaryRejectAll", { count: pendingCount })}
         </Button>
       </div>
     </div>

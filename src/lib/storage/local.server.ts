@@ -6,7 +6,14 @@ import path from "node:path";
 
 import { env } from "@/lib/env";
 
-import type { ObjectStorage, StorageHead, StorageObject, StoragePutOptions } from "./types";
+import type { KeySetScope, ObjectKey } from "./keys";
+import type {
+  ObjectStorageBackend,
+  StorageHead,
+  StorageObject,
+  StorageObjectEntry,
+  StoragePutOptions,
+} from "./types";
 
 /**
  * Filesystem adapter used when R2 is not configured (local dev, CI, unit tests).
@@ -41,12 +48,15 @@ function assertSafePrefix(prefix: string): void {
 const META_SUFFIX = ".meta.json";
 
 /**
- * Recursively collects the keys stored under a directory. Each object is paired with
+ * Recursively collects the objects stored under a directory. Each object is paired with
  * a `<key>.meta.json` sidecar, which is this adapter's own bookkeeping rather than a
  * key a caller stored; the sidecar is skipped only when the file it annotates is
  * present, so a key that genuinely carries that suffix still lists.
+ *
+ * The write time comes from the object's own file, not its sidecar: it is what the bucket
+ * would report, and it is what a sweep with a grace period reads.
  */
-async function listKeysUnder(rootDir: string, prefix: string): Promise<string[]> {
+async function listObjectsUnder(rootDir: string, prefix: string): Promise<StorageObjectEntry[]> {
   // A directory that was never written is an empty bucket. Any other failure is a
   // real one and is raised: a caller that reconciled on a swallowed error would
   // read "nothing was inspected" as "nothing is there".
@@ -56,25 +66,26 @@ async function listKeysUnder(rootDir: string, prefix: string): Promise<string[]>
     throw error;
   });
   const files = new Set(entries.filter((entry) => entry.isFile()).map((entry) => entry.name));
-  const keys: string[] = [];
+  const objects: StorageObjectEntry[] = [];
 
   for (const entry of entries) {
     const key = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
     if (entry.isDirectory()) {
-      keys.push(...(await listKeysUnder(path.join(rootDir, entry.name), key)));
+      objects.push(...(await listObjectsUnder(path.join(rootDir, entry.name), key)));
       continue;
     }
     if (!entry.isFile()) continue;
     if (entry.name.endsWith(META_SUFFIX) && files.has(entry.name.slice(0, -META_SUFFIX.length))) {
       continue;
     }
-    keys.push(key);
+    const stats = await stat(path.join(rootDir, entry.name));
+    objects.push({ key, lastModified: stats.mtime });
   }
 
-  return keys;
+  return objects;
 }
 
-function objectPath(bucket: string, key: string): string {
+function objectPath(bucket: string, key: ObjectKey): string {
   assertSafeKey(key);
   return path.join(STORAGE_ROOT, bucket, key);
 }
@@ -101,9 +112,20 @@ async function readMeta(objectFilePath: string): Promise<LocalMeta | null> {
   }
 }
 
-export function createLocalObjectStorage(bucket: string): ObjectStorage {
+export function createLocalObjectStorage(bucket: string): ObjectStorageBackend {
+  // One traversal, two views: a caller that only wants keys maps them here rather than
+  // walking the tree a second time.
+  const listObjectsInSet = async (scope: KeySetScope): Promise<StorageObjectEntry[]> => {
+    assertSafePrefix(scope.name);
+    const rootDir = path.join(STORAGE_ROOT, bucket, scope.name);
+    // Sorted so two adapters agree; a caller never depends on the order.
+    return (await listObjectsUnder(rootDir, scope.name)).toSorted((left, right) =>
+      left.key.localeCompare(right.key),
+    );
+  };
+
   return {
-    async put(key, bytes, options: StoragePutOptions) {
+    async put(key: ObjectKey, bytes, options: StoragePutOptions) {
       const file = objectPath(bucket, key);
       await mkdir(path.dirname(file), { recursive: true });
       await writeFile(file, bytes);
@@ -111,7 +133,7 @@ export function createLocalObjectStorage(bucket: string): ObjectStorage {
       await writeFile(metaPath(file), JSON.stringify(meta));
     },
 
-    async get(key): Promise<StorageObject | null> {
+    async get(key: ObjectKey): Promise<StorageObject | null> {
       const file = objectPath(bucket, key);
       try {
         const bytes = await readFile(file);
@@ -124,7 +146,7 @@ export function createLocalObjectStorage(bucket: string): ObjectStorage {
       }
     },
 
-    async head(key): Promise<StorageHead | null> {
+    async head(key: ObjectKey): Promise<StorageHead | null> {
       const file = objectPath(bucket, key);
       try {
         return { size: (await stat(file)).size };
@@ -133,26 +155,25 @@ export function createLocalObjectStorage(bucket: string): ObjectStorage {
       }
     },
 
-    async delete(key) {
+    async delete(key: ObjectKey) {
       const file = objectPath(bucket, key);
       await unlink(file).catch(() => {});
       await unlink(metaPath(file)).catch(() => {});
     },
 
-    async deletePrefix(prefix) {
-      assertSafePrefix(prefix);
-      await rm(path.join(STORAGE_ROOT, bucket, prefix), { recursive: true, force: true });
+    async removeSet(scope: KeySetScope) {
+      // The port resolved the set; this adapter only has to name the directory it is.
+      assertSafePrefix(scope.name);
+      await rm(path.join(STORAGE_ROOT, bucket, scope.name), { recursive: true, force: true });
     },
 
-    async listKeys(prefix) {
-      assertSafePrefix(prefix);
-      const rootDir =
-        prefix === "" ? path.join(STORAGE_ROOT, bucket) : path.join(STORAGE_ROOT, bucket, prefix);
-      // Sorted so two adapters agree; a caller never depends on the order.
-      return (await listKeysUnder(rootDir, prefix)).toSorted();
+    async listSet(scope: KeySetScope) {
+      return (await listObjectsInSet(scope)).map((object) => object.key);
     },
 
-    async presignPut(key, { expiresIn }) {
+    listObjects: listObjectsInSet,
+
+    async presignPut(key: ObjectKey, { expiresIn }) {
       assertSafeKey(key);
       const expires = Math.min(expiresIn, LOCAL_UPLOAD_MAX_EXPIRES_SECONDS);
       const expiresAt = Math.floor(Date.now() / 1000) + expires;

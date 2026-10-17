@@ -3,6 +3,7 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { novels, chapters } from "@/lib/db/schema";
 // Mutations authenticate through `ensureSession`. The owner-scoped reads below use
 // `ensureSessionForRead`, which still requires an account but does not refuse an
@@ -221,7 +222,7 @@ export const getAdminNovelDetailMetrics = createServerFn({ method: "GET" })
 
 /** Cover-labelled view of the shared upload check, kept for existing callers. */
 export function assertCoverMagicBytes(buffer: Uint8Array, mime: string): void {
-  assertImageMagicBytes(buffer, mime, "Cover");
+  assertImageMagicBytes(buffer, mime);
 }
 
 export const createNovel = createServerFn({ method: "POST" })
@@ -302,7 +303,7 @@ export const setNovelPublished = createServerFn({ method: "POST" })
         .limit(1);
 
       if (!existing) {
-        throw new SafeServerError("Novel not found or unauthorized");
+        throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       }
 
       const updated = await db
@@ -311,7 +312,7 @@ export const setNovelPublished = createServerFn({ method: "POST" })
         .where(and(eq(novels.id, data.novelId), eq(novels.userId, session.user.id)))
         .returning({ id: novels.id });
       if (updated.length === 0) {
-        throw new SafeServerError("Novel not found or unauthorized");
+        throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
       }
 
       return { id: data.novelId };

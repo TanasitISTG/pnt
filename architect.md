@@ -185,6 +185,74 @@ them indefinitely, while publication state still gates whether a cover URL is ex
 draft and scheduled covers resolve to null and fall back to the ownership-checked
 `/api/covers/:novelId` route.
 
+Its builders return branded `ObjectKey` and `KeySetPrefix` values rather than plain strings, and
+the two brands are distinct, so a plain string cannot be passed to a bucket at compile time and a
+set cannot be handed to a method that wants one object. That is the compile-time half of the same
+rule the port enforces at runtime: a key is either produced by a builder or read back out of the
+string it arrived as (`parseObjectKey`, `isObjectKeyPrefix`), and the only way past the type is a
+cast that says so.
+
+A prefix names a _key set_ — `covers/<novelId>/<segment>` for one uploaded cover,
+`covers/<novelId>` for every cover of a novel, `avatars/<userId>/<segment>` for one photo —
+and a listing or a prefix delete works on that set's own keys alone. `keySetScope` is the one
+reading of a prefix: it resolves a set once, into the name a row stores (`name`, which a
+directory is also named) and the boundary a store that matches raw string prefixes works on,
+so a caller never writes a separator itself and a set can never reach a sibling that
+merely shares its characters — listing `avatars` cannot return `avatars-archive/...`, and one
+novel's prefix cannot reach a longer id that starts with it.
+
+That resolution happens in `port.ts`, not in an adapter. An adapter receives an
+`ObjectStorageBackend` contract: objects by key, and sets as an already-resolved
+`KeySetScope`, whose two fields it reads as its transport requires — the filesystem names the
+directory `name`, R2 lists or batch-deletes `boundary`. No adapter is handed a prefix, so a
+third one cannot read a set differently from the other two, which is the drift this shape
+removes: the same derived prefix could previously mean one set on the filesystem and another
+on R2.
+
+Two rules decide what a bucket stops holding, and both run in the same daily sweep
+(`src/lib/account/purge.server.ts`). Deleting an account cascades its rows away without reaching
+storage, so `pruneOrphanNovelAssets` removes what a novel that is gone owned: its cover sets and its
+export cache, by prefix. A _surviving_ owner leaves residue its own row stopped naming, which
+`reapSupersededAssets` removes: the cover segment a replacement superseded (a novel names one
+segment, so every other one under its prefix is residue), the cached export revision the content has
+moved past, and the staged archive no upload row names. What makes that second rule safe to run
+unattended is age rather than a second read: an object's owner is always written _last_ — a cover row
+names a segment only once that segment's objects exist, an export is spooled as the download that
+produced it finishes — so a listing that reports when each object was written (`listObjects`, from
+R2's `LastModified` and the filesystem's `mtime`) lets the sweep require a set's newest object to be
+older than `SUPERSEDED_GRACE_MS` before it may call the set abandoned. A staged archive is removed by
+key rather than by prefix, because its key _is_ its set. And which export revision is current is not a
+second rule either: `exportCacheKey` assembles the fingerprint the route writes under — the one place
+the inputs are named — so the route, the reaper and `storage:audit` cannot disagree about what is
+still reachable.
+
+One consequence is worth stating for the test runs: a set a run creates is exactly the kind the daily
+sweep only reaches after its grace period — its row died with the database the run dropped — while the
+buckets it wrote to are the application's own. A test run is made of exactly those sets — it migrates a
+database it drops, and a staged archive that fails verification is deliberate in the suites that
+assert the failure — so both runs measure the buckets before they start and remove the sets they
+created once they have finished, one object at a time through the port (`scripts/bucket-footprint.ts`).
+Objects are removed by key rather than by prefix, because a staged archive is a single object whose key
+_is_ its set and a prefix delete of it has nothing to sweep — the filesystem adapter would remove the
+file, a boundary listing in the bucket would match nothing. A container set goes the same way, one
+object at a time; every key in it is new by the rule that made the set the run's, so removing them all
+removes the set. A set that already held an object, and a key no rule reads, are reported and left
+alone: with the buckets shared with the application, only what the run itself wrote may be removed, and
+only inside its own window — the integration run takes it around the whole Vitest run rather than
+around each suite, since the suites run at the same time.
+
+The same `port.ts` refuses what the vocabulary does not derive, at the one place an adapter is
+chosen, so a `put`, `get`, `head`, `delete`, `presignPut`, `listKeys` or `deletePrefix` naming
+a path no builder produces rejects before the adapter is touched, and a hand-built key cannot
+reach a bucket even if a caller tries. The declared types carry that rule as well — the port and
+the `ObjectStorageBackend` beneath it are both keyed with the branded values — so the runtime check
+is what remains for a value that bypassed the type: a row, a listing, a request parameter, or a
+caller outside this application's TypeScript. Refusals reject rather than throw, because the callers
+that tolerate a missing object attach `.catch(...)` and a synchronous throw would escape it.
+`publicUrl` is deliberately outside the guard: it reaches no bucket, and the pages that call
+it resolve a key stored on a row, so a malformed row degrades to a missing image instead of
+failing the whole render.
+
 Caching is a property of the delivery path, not of a write. The app never sets a per-object
 `Cache-Control`, and the storage port has no option to: cover variants are kept by a long-lived
 immutable rule on the public bucket's custom domain, which makes the same guarantee for objects

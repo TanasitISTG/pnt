@@ -1,7 +1,16 @@
 import { z } from "zod";
 
-export const EVAL_SELECTOR_ERROR =
-  "Use first3, all, or chapter numbers and ranges such as 1,1.5,5-8.";
+import { encodeMessage } from "@/lib/i18n/message-code";
+
+/**
+ * The one sentence a bad chapter selector produces, as a code.
+ *
+ * It is a code and not a sentence because it is thrown from three places that cannot agree on
+ * a language - a parser, a schema refinement and a service - and rendered by a fourth, the
+ * panel the author is looking at. The tests import the constant rather than repeating the
+ * words, so they follow the key instead of drifting from it.
+ */
+export const EVAL_SELECTOR_ERROR = encodeMessage("validation.evalSelectorInvalid");
 
 const MAX_SELECTOR_LENGTH = 512;
 const MIN_CHAPTER_HUNDREDTHS = 1;
@@ -125,7 +134,7 @@ export const evalPageSizeSchema = z.coerce
   .number()
   .int()
   .refine((value): value is 10 | 25 | 50 => value === 10 || value === 25 || value === 50, {
-    message: "Page size must be 10, 25, or 50",
+    message: encodeMessage("validation.pageSizeInvalid"),
   });
 
 export const getTranslationEvalReportSchema = z.object({

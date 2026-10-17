@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { type Sql } from "postgres";
 
 import { encodeMessage } from "@/lib/i18n/message-code";
 import en from "@/lib/i18n/messages/en";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 import type { ReportQueueInput } from "./schemas";
 import { REPORT_CASE_PAGE_SIZE } from "./schemas";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 
 /**
  * The wire form of a refusal (i18n.md §3).
@@ -110,15 +112,9 @@ async function insertNovel(input: {
   `;
 }
 
-integrationDescribe("novel reporting", () => {
+describeIntegration("novel reporting", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     ({
       createNovelReportForUser,
       createCommentReportForUser,
@@ -135,8 +131,6 @@ integrationDescribe("novel reporting", () => {
     ({ saveReviewForUser, getNovelRatingForViewer, listNovelReviewsForViewer } =
       await import("@/lib/reviews/review.service.server"));
 
-    // The reports table belongs to this suite and the database is disposable, so the
-    // queue counts below are exact numbers rather than a baseline plus an offset.
     await sql`DELETE FROM "reports"`;
 
     authorId = `report-author-${randomUUID()}`;
@@ -207,7 +201,7 @@ integrationDescribe("novel reporting", () => {
     await sql`DELETE FROM "admin_audit_log" WHERE "actor_id" = ${operatorId}`;
     await sql`DELETE FROM "novels" WHERE "user_id" = ${authorId} OR "user_id" = ${reporterId}`;
     await sql`DELETE FROM "user" WHERE "id" IN (${authorId}, ${reporterId}, ${secondReporterId}, ${operatorId})`;
-    await sql.end({ timeout: 1 });
+    await closeIntegrationDatabase();
   });
 
   it("files one report as one case the operator can read", async () => {
@@ -255,7 +249,7 @@ integrationDescribe("novel reporting", () => {
     // so two concurrent submits cannot both land.
     await expect(
       createNovelReportForUser(reporterId, { novelId: liveNovelId, reason: "spam_or_scam" }),
-    ).rejects.toThrow("You already have an open report for this novel.");
+    ).rejects.toThrow(encodeMessage("errors.reportDuplicateNovel"));
 
     await createNovelReportForUser(secondReporterId, {
       novelId: liveNovelId,
@@ -338,7 +332,7 @@ integrationDescribe("novel reporting", () => {
         { id: operatorId, email: operatorEmail },
         { caseKey: liveNovelId, decision: "dismissed" },
       ),
-    ).rejects.toThrow("That case has already been decided.");
+    ).rejects.toThrow(encodeMessage("errors.reportCaseDecided"));
 
     const history = await listReportHistory(queue({ tab: "history" }));
     expect(history.rowCount).toBe(2);
@@ -480,7 +474,7 @@ integrationDescribe("novel reporting", () => {
         reason: "other",
         details: "More.",
       }),
-    ).rejects.toThrow("You already have an open report for this comment.");
+    ).rejects.toThrow(encodeMessage("errors.reportDuplicateComment"));
 
     const commentCases = await listReportCases(queue({ target: "comment" }));
     expect(commentCases.rowCount).toBe(2);
@@ -525,7 +519,7 @@ integrationDescribe("novel reporting", () => {
         { id: operatorId, email: operatorEmail },
         { caseKey: comment.id, reason: "Again." },
       ),
-    ).rejects.toThrow("That comment was already removed.");
+    ).rejects.toThrow(encodeMessage("errors.commentAlreadyRemoved"));
 
     // Enforcement is per target: clearing one case leaves the words in another case alone.
     const secondRemoval = await removeReportedTargetForOperator(
@@ -601,7 +595,7 @@ integrationDescribe("novel reporting", () => {
         reason: "other",
         details: "Again.",
       }),
-    ).rejects.toThrow("You already have an open report for this review.");
+    ).rejects.toThrow(encodeMessage("errors.reportDuplicateReview"));
 
     const removal = await removeReportedTargetForOperator(
       { id: operatorId, email: operatorEmail },

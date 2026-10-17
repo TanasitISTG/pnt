@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 
 import { NAV_LINK_ACTIVE_CLASS, NAV_LINK_CLASS } from "@/components/shell/nav-styles";
 import { cn } from "@/lib/utils";
@@ -11,17 +12,23 @@ interface StudioLink {
     | "/novels/$novelId/manage/glossary"
     | "/novels/$novelId/manage/relationships"
     | "/novels/$novelId/manage/settings";
-  label: string;
+  labelKey:
+    | "sectionChapters"
+    | "sectionAdd"
+    | "sectionQuality"
+    | "sectionGlossary"
+    | "sectionRelationships"
+    | "sectionSettings";
 }
 
 /** Ordered by how often an owner visits each, which is why Settings sits last. */
 const STUDIO_LINKS: readonly StudioLink[] = [
-  { to: "/novels/$novelId/manage/chapters", label: "Chapters" },
-  { to: "/novels/$novelId/manage/add", label: "Add chapters" },
-  { to: "/novels/$novelId/manage/quality", label: "Quality" },
-  { to: "/novels/$novelId/manage/glossary", label: "Glossary" },
-  { to: "/novels/$novelId/manage/relationships", label: "Relationships" },
-  { to: "/novels/$novelId/manage/settings", label: "Settings" },
+  { to: "/novels/$novelId/manage/chapters", labelKey: "sectionChapters" },
+  { to: "/novels/$novelId/manage/add", labelKey: "sectionAdd" },
+  { to: "/novels/$novelId/manage/quality", labelKey: "sectionQuality" },
+  { to: "/novels/$novelId/manage/glossary", labelKey: "sectionGlossary" },
+  { to: "/novels/$novelId/manage/relationships", labelKey: "sectionRelationships" },
+  { to: "/novels/$novelId/manage/settings", labelKey: "sectionSettings" },
 ];
 
 export interface StudioNavProps {
@@ -36,13 +43,14 @@ export interface StudioNavProps {
  * Chapters and Add chapters is the most common thing an owner does here.
  */
 export function StudioNav({ novelId, showRelationships }: StudioNavProps) {
+  const t = useTranslations("studio");
   const links = STUDIO_LINKS.filter(
     (link) => showRelationships || link.to !== "/novels/$novelId/manage/relationships",
   );
 
   return (
     <nav
-      aria-label="Novel studio"
+      aria-label={t("navLabel")}
       className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 [scrollbar-width:none]"
     >
       {links.map((link) => (
@@ -53,7 +61,7 @@ export function StudioNav({ novelId, showRelationships }: StudioNavProps) {
           className={cn(NAV_LINK_CLASS, "shrink-0")}
           activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
         >
-          {link.label}
+          {t(link.labelKey)}
         </Link>
       ))}
     </nav>

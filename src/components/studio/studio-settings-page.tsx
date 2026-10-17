@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { NovelForm } from "@/components/novels/form/novel-form";
 import { PublishMenu } from "@/components/publish-menu";
@@ -10,6 +11,7 @@ import { useNovelPublishState } from "@/components/novels/use-novel-publish-stat
 import { updateNovel } from "@/lib/content/novel/novel.functions";
 import type { UpdateNovelInput } from "@/lib/content/novel/novel.schemas";
 import { novelQueryOptions } from "@/lib/content/novel/novel.query";
+import { translateServerError } from "@/lib/i18n/server-error";
 import { emptyRelationshipMap } from "@/lib/relationships/map";
 
 export interface StudioSettingsPageProps {
@@ -23,6 +25,11 @@ export interface StudioSettingsPageProps {
  * surfaces here rather than in a toast that has already left.
  */
 export function StudioSettingsPage({ novelId }: StudioSettingsPageProps) {
+  const t = useTranslations("studio");
+  const tRoot = useTranslations();
+  // The novel itself is a reader's object, so the one sentence here that is about the novel
+  // rather than about editing it comes from the reader's namespace.
+  const tNovel = useTranslations("novel");
   const queryClient = useQueryClient();
   const novelQuery = useQuery(novelQueryOptions(novelId));
   const novel = novelQuery.data;
@@ -52,22 +59,20 @@ export function StudioSettingsPage({ novelId }: StudioSettingsPageProps) {
         queryClient.invalidateQueries({ queryKey: ["readerNovel", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["relationshipMap", novelId] }),
       ]);
-      toast.success("Novel updated successfully");
+      toast.success(t("updated"));
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to update novel");
+      toast.error(translateServerError(error, tRoot, t("updateFailed")));
     },
   });
 
   if (!novel) {
     return (
       <div className="py-12 text-center">
-        <h2 className="text-card-title font-semibold text-foreground">Novel not found</h2>
-        <p className="mt-2 text-muted-foreground">
-          The novel you are trying to edit does not exist or you do not have access.
-        </p>
+        <h2 className="text-card-title font-semibold text-foreground">{tNovel("notFoundTitle")}</h2>
+        <p className="mt-2 text-muted-foreground">{t("notFoundDescription")}</p>
         <Button className="mt-4" render={<Link to="/library" />}>
-          Back to your library
+          {t("backToLibrary")}
         </Button>
       </div>
     );
@@ -77,11 +82,9 @@ export function StudioSettingsPage({ novelId }: StudioSettingsPageProps) {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-card-title font-semibold tracking-tight text-foreground sm:text-sub">
-          Novel settings
+          {t("settingsTitle")}
         </h1>
-        <p className="mt-0.5 text-body text-muted-foreground">
-          Details, language pair and translation instructions for this novel.
-        </p>
+        <p className="mt-0.5 text-body text-muted-foreground">{t("settingsDescription")}</p>
       </div>
 
       <NovelForm
@@ -89,17 +92,16 @@ export function StudioSettingsPage({ novelId }: StudioSettingsPageProps) {
         onSubmit={async (data) => {
           await update({ ...data, novelId });
         }}
-        submitLabel="Save Changes"
+        submitLabel={t("saveChanges")}
       />
 
       <Card className="max-w-3xl">
         <CardContent className="flex items-center justify-between gap-4 p-6">
           <div>
-            <h2 className="text-card-title font-semibold text-foreground">Publishing</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Guests can see this novel and its published chapters once it is live. Chapters are
-              published individually from the chapter list.
-            </p>
+            <h2 className="text-card-title font-semibold text-foreground">
+              {t("publishingTitle")}
+            </h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">{t("publishingDescription")}</p>
           </div>
           <PublishMenu
             publishedAt={novel.publishedAt}

@@ -87,6 +87,7 @@ bun run inngest
 | DB generate / migrate  | `bun run db:generate` / `bun run db:migrate` |
 | Move covers to storage | `bun run storage:migrate`                    |
 | Prune orphan avatars   | `bun run storage:prune-avatars`              |
+| Audit bucket ownership | `bun run storage:audit`                      |
 | Migrate test database  | `bun run db:migrate:test`                    |
 | Seed operator account  | `bun run seed:user`                          |
 | Regenerate route tree  | `bun run generate-routes`                    |
@@ -130,6 +131,28 @@ key that is not a whole `avatars/<userId>/<segment>` set, and re-reads the refer
 just before deleting so a set that an upload referenced while the listing was in flight is
 kept. Run it while the app is idle: an upload writes its objects before its row, so a sweep
 crossing that window cannot tell a fresh set from an abandoned one.
+
+Everything else the buckets accumulate belongs to the daily storage sweep, which answers two
+questions. A novel that is gone leaves sets no row owns, and the sweep prunes those by prefix. A
+novel that survives leaves sets its row stopped naming — the cover segment a replacement superseded,
+the cached export revision the content moved past, the staged archive a cleaned-up upload row left
+behind — which no row can ever name again, and those are reaped one set or one object at a time. Age
+is what makes the second rule safe to run unattended: every writer here puts its objects down before
+the row that names them, so the sweep only removes a set whose newest object is older than a day,
+which no cover replacement, export in flight, or presigned upload can be. A bucket that cannot be
+listed aborts the run rather than being read as empty, and one object that cannot be removed is
+reported rather than aborting the rest.
+
+What is left in the buckets is what `bun run storage:audit` reports. It lists the whole public and
+private buckets rather than the roots the sweeps scan, asks the same ownership rule they ask, and
+prints every set no row names — with why no row names it (the row is gone, or it survives and has
+moved on) and the sweep that removes it — plus a key whose shape the app never wrote and a key whose
+kind belongs in the other bucket. An export revision counts as named only when it is the key the
+route would compute right now, which is the same revision rule the sweep reaps by, so the report
+cannot disagree with the sweep about which revision is current. It is read-only by construction — a
+test holds it to never deleting — and exits 0 whether or not it finds anything, because it is a
+report rather than a gate. Point `DATABASE_URL` at the database the bucket belongs to: the rows and
+the revision rule are what decide ownership, so a mismatched database makes every set look unowned.
 
 The release audit fails on moderate, high, or critical advisories. Direct dependencies and
 tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `esbuild`,

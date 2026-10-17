@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { encodeMessage } from "@/lib/i18n/message-code";
+
 import { REPORT_DECISIONS, REPORT_REASONS, REPORT_TARGET_TYPES } from "./reasons";
 
 /** Long enough for a description of the problem, short enough to read in one look. */
@@ -42,9 +44,11 @@ function requiresDetails(value: { reason: string; details?: string }): boolean {
   return value.reason !== "other" || Boolean(value.details);
 }
 
+// The rule travels as a code: the same schema validates the dialog's input and the report a member
+// sends, and the field resolves the code in whichever language the page is in (i18n.md §3).
 const detailsMessage = {
   path: ["details"],
-  message: "Tell us what is wrong so an operator can act on it",
+  message: encodeMessage("reports.detailsError"),
 };
 
 /** What a member sends when reporting a novel. */
@@ -113,7 +117,7 @@ export const resolveReportCaseSchema = z
   })
   .refine((value) => value.decision !== "upheld" || Boolean(value.note), {
     path: ["note"],
-    message: "Say what was wrong with it, so the decision reads on its own",
+    message: encodeMessage("reports.noteRequired"),
   });
 
 export type ResolveReportCaseInput = z.infer<typeof resolveReportCaseSchema>;

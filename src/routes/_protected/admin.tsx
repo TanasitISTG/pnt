@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 
 import { NAV_LINK_ACTIVE_CLASS, NAV_LINK_CLASS } from "@/components/shell/nav-styles";
 import { Badge } from "@/components/ui/badge";
 import { hasAdminRole } from "@/lib/auth/roles";
+import { headTranslator } from "@/lib/i18n/route-head";
 import { reportQueueCountsQueryOptions } from "@/lib/reports/query";
 import { cn } from "@/lib/utils";
 
@@ -16,22 +18,26 @@ export const Route = createFileRoute("/_protected/admin")({
   beforeLoad: ({ context }) => {
     if (!hasAdminRole(context.user?.role)) throw redirect({ to: "/" });
   },
-  head: () => ({
-    meta: [
-      { title: "Admin | Pnt - Personal Novel Translator" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
-  }),
+  head: async () => {
+    const t = await headTranslator();
+    return {
+      meta: [
+        { title: `${t("meta.admin")} | ${t("meta.siteName")}` },
+        { name: "robots", content: "noindex, nofollow" },
+      ],
+    };
+  },
   component: AdminLayout,
 });
 
 /**
  * The queue tab carries its own backlog count, which is how an operator notices new
  * work without opening the tab. The badge is decorative to assistive technology (the
- * queue itself announces the same number), so the link keeps the plain name "Reports"
- * and a screen reader hears one label rather than a label and a stray digit.
+ * queue itself announces the same number), so the link keeps the plain tab name and a
+ * screen reader hears one label rather than a label and a stray digit.
  */
 function ReportsTab() {
+  const t = useTranslations("admin");
   const counts = useQuery(reportQueueCountsQueryOptions());
   const openCases = counts.data?.openCases ?? 0;
 
@@ -41,7 +47,7 @@ function ReportsTab() {
       className={cn(NAV_LINK_CLASS, "shrink-0")}
       activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
     >
-      Reports
+      {t("tabReports")}
       {openCases > 0 ? (
         <Badge variant="muted" size="count" aria-hidden="true" className="ml-1.5">
           {openCases}
@@ -58,10 +64,11 @@ function ReportsTab() {
  * did not belong to something floating.
  */
 function AdminLayout() {
+  const t = useTranslations("admin");
   return (
     <div className="flex flex-col gap-6">
       <nav
-        aria-label="Operator sections"
+        aria-label={t("sectionsLabel")}
         className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 [scrollbar-width:none]"
       >
         <Link
@@ -70,7 +77,7 @@ function AdminLayout() {
           className={cn(NAV_LINK_CLASS, "shrink-0")}
           activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
         >
-          Accounts
+          {t("tabAccounts")}
         </Link>
         <ReportsTab />
         <Link
@@ -78,7 +85,7 @@ function AdminLayout() {
           className={cn(NAV_LINK_CLASS, "shrink-0")}
           activeProps={{ className: NAV_LINK_ACTIVE_CLASS, "aria-current": "page" }}
         >
-          Activity
+          {t("tabActivity")}
         </Link>
       </nav>
       <Outlet />

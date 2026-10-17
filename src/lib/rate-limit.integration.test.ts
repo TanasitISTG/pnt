@@ -2,10 +2,16 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
-import postgres, { type Sql } from "postgres";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { type Sql } from "postgres";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import type * as RateLimit from "@/lib/rate-limit";
 import { RateLimitError } from "@/lib/server-fn-error";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 const { setResponseStatus } = vi.hoisted(() => ({ setResponseStatus: vi.fn() }));
 
@@ -22,25 +28,12 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
 let client: Sql;
 let limiter: typeof RateLimit;
 
-integrationDescribe("PostgreSQL rate limits", () => {
+describeIntegration("PostgreSQL rate limits", () => {
   beforeAll(async () => {
-    const url = new URL(testDatabaseUrl!);
-    const databaseName = url.pathname.slice(1);
-    if (
-      !/^[a-z0-9_]+$/.test(databaseName) ||
-      !/(^|_)(test|integration|e2e)(_|$)/.test(databaseName)
-    ) {
-      throw new Error(
-        "Rate-limit integration tests require a disposable test/integration/e2e database",
-      );
-    }
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    client = postgres(testDatabaseUrl!, { max: 4, onnotice: () => {} });
+    client = openIntegrationDatabase(import.meta.url, { connections: 4 }).sql;
     database.current = drizzle(client);
     // Load after redirecting DATABASE_URL: env is evaluated at module initialization.
     limiter = await import("@/lib/rate-limit");
@@ -55,8 +48,8 @@ integrationDescribe("PostgreSQL rate limits", () => {
   afterAll(async () => {
     if (client) {
       await client`DELETE FROM rate_limits`;
-      await client.end({ timeout: 1 });
     }
+    await closeIntegrationDatabase();
   });
 
   it("atomically accepts sixty concurrent requests and rejects only the sixty-first", async () => {
@@ -68,7 +61,7 @@ integrationDescribe("PostgreSQL rate limits", () => {
     const failures = results.filter((result) => result.status === "rejected");
     expect(failures).toHaveLength(1);
     expect(failures[0]?.reason).toBeInstanceOf(RateLimitError);
-    expect(failures[0]?.reason.message).toBe("Too many requests");
+    expect(failures[0]?.reason.message).toBe(encodeMessage("errors.rateLimited"));
     expect(setResponseStatus).toHaveBeenCalledWith(429);
     const [row] = await client`SELECT count FROM rate_limits WHERE key = ${`quota:${subject}`}`;
     expect(row?.count).toBe(61);
@@ -117,7 +110,7 @@ integrationDescribe("PostgreSQL rate limits", () => {
     `;
     expect(row).toEqual({ count: 60, renewed: true });
     await expect(limiter.checkRateLimitForSubject("reset", "subject", 60)).rejects.toMatchObject({
-      message: "Too many requests",
+      message: encodeMessage("errors.rateLimited"),
     });
   });
 
@@ -167,7 +160,7 @@ integrationDescribe("PostgreSQL rate limits", () => {
         const [waiter] = await client`
           SELECT EXISTS (
             SELECT 1 FROM pg_stat_activity
-            WHERE ${owner.pid}::int = ANY(pg_blocking_pids(pid))
+            WHERE datname = current_database() AND ${owner.pid}::int = ANY(pg_blocking_pids(pid))
           ) AS blocked
         `;
         if (waiter.blocked) {

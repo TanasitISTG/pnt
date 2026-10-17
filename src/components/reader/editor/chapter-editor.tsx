@@ -1,11 +1,13 @@
 import { useStore } from "@tanstack/react-form";
 import { Check, X } from "lucide-react";
+import { useLocale, useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { formatNumber } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
 import type { ChapterEditorFormApi } from "./use-chapter-editor";
 
@@ -33,6 +35,9 @@ export function ChapterEditor({
   onSave,
   onCancel,
 }: ChapterEditorProps) {
+  const t = useTranslations("reader");
+  const tCommon = useTranslations("common");
+  const locale = useLocale();
   const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
   const [title, rawContent] = useStore(
     form.store,
@@ -54,7 +59,7 @@ export function ChapterEditor({
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor={fieldIds.title}>Source Title</FieldLabel>
+                <FieldLabel htmlFor={fieldIds.title}>{t("sourceTitleLabel")}</FieldLabel>
                 <Input
                   id={fieldIds.title}
                   name={field.name}
@@ -75,7 +80,9 @@ export function ChapterEditor({
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor={fieldIds.translatedTitle}>Translated Title</FieldLabel>
+                <FieldLabel htmlFor={fieldIds.translatedTitle}>
+                  {t("translatedTitleLabel")}
+                </FieldLabel>
                 <Input
                   id={fieldIds.translatedTitle}
                   name={field.name}
@@ -100,9 +107,9 @@ export function ChapterEditor({
             return (
               <Field data-invalid={invalid || undefined} className="min-w-0">
                 <div className="flex items-baseline justify-between gap-3">
-                  <FieldLabel htmlFor={fieldIds.rawContent}>Source Content</FieldLabel>
+                  <FieldLabel htmlFor={fieldIds.rawContent}>{t("sourceContentLabel")}</FieldLabel>
                   <span className="text-caption text-muted-foreground">
-                    {field.state.value.length.toLocaleString()} characters
+                    {t("characterCount", { count: formatNumber(field.state.value.length, locale) })}
                   </span>
                 </div>
                 <Textarea
@@ -127,9 +134,11 @@ export function ChapterEditor({
             return (
               <Field data-invalid={invalid || undefined} className="min-w-0">
                 <div className="flex items-baseline justify-between gap-3">
-                  <FieldLabel htmlFor={fieldIds.translatedContent}>Translated Content</FieldLabel>
+                  <FieldLabel htmlFor={fieldIds.translatedContent}>
+                    {t("translatedContentLabel")}
+                  </FieldLabel>
                   <span className="text-caption text-muted-foreground">
-                    {field.state.value.length.toLocaleString()} characters
+                    {t("characterCount", { count: formatNumber(field.state.value.length, locale) })}
                   </span>
                 </div>
                 <Textarea
@@ -153,11 +162,11 @@ export function ChapterEditor({
       <div className="flex justify-end gap-3 border-t border-border pt-4">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           <X className="size-4" />
-          Cancel
+          {tCommon("cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitting || !title.trim() || !rawContent.trim()}>
           {isSubmitting ? <Spinner /> : <Check className="size-4" />}
-          {isSubmitting ? "Saving…" : "Save Chapter"}
+          {isSubmitting ? t("savingChapter") : t("saveChapter")}
         </Button>
       </div>
     </form>

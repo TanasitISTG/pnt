@@ -1,31 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const adminEmail = "e2e-admin@example.test";
-const adminPassword = "e2e-password-123";
+import { addChapter, createNovel, openChapter, studioSection } from "./novels";
+import { openReadingHome, takeSession } from "./sessions";
+
+test.use({ storageState: takeSession("admin", "read") });
+
 const novelTitle = "Chapter Editing Workflow";
-
-async function waitForReactHydration(page: Page) {
-  await page.waitForFunction(() => {
-    const submit = document.querySelector('button[type="submit"]');
-    return submit && Object.keys(submit).some((key) => key.startsWith("__reactProps$"));
-  });
-}
-
-async function rejectOptionalAnalytics(page: Page) {
-  const rejectButton = page.getByRole("button", { name: "Reject optional" });
-  if (await rejectButton.isVisible()) await rejectButton.click();
-}
-
-async function signIn(page: Page) {
-  await page.goto("/login");
-  await waitForReactHydration(page);
-  await rejectOptionalAnalytics(page);
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(adminPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  // A signed-in account lands on its reading home; the shelf itself is `/library`.
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
-}
 
 /**
  * The reader's way out is the novel itself, and the studio is a separate door from there:
@@ -38,49 +18,20 @@ async function returnToStudio(page: Page, expectedNovelTitle: string) {
   await expect(page.getByRole("heading", { name: "Chapters", exact: true })).toBeVisible();
 }
 
-/**
- * The studio's sub-nav. The progress card also links to the glossary (and only names it
- * "Glossary" until its counts load), so a section link is addressed through the nav.
- */
-function studioSection(page: Page, name: string) {
-  return page.getByRole("navigation", { name: "Novel studio" }).getByRole("link", { name });
-}
-
 /** The app theme is the header's appearance menu, whose trigger names the current state. */
 async function chooseAppTheme(page: Page, theme: "Light" | "Dark") {
   await page.getByRole("button", { name: /^Appearance: / }).click();
   await page.getByRole("menuitemradio", { name: theme, exact: true }).click();
 }
 
-async function addChapter(page: Page, number: string, title: string, content: string) {
-  await page.getByRole("link", { name: "Add chapters" }).click();
-  const numberInput = page.getByLabel("Chapter number *");
-  await expect(numberInput).toBeVisible();
-  await numberInput.fill(number);
-  await expect(numberInput).toHaveValue(number);
-  await page.getByLabel("Chapter title *").fill(title);
-  await page.getByLabel("Source text *").fill(content);
-  await page.getByRole("button", { name: "Add chapter", exact: true }).click();
-  await expect(page.getByText("Chapter added successfully", { exact: true }).last()).toBeVisible();
-  await expect(page.getByLabel("Chapter title *")).toHaveValue("");
-  await expect(page.getByLabel("Source text *")).toHaveValue("");
-}
-
 test("admin reorders and edits every chapter field", async ({ page }) => {
-  await signIn(page);
-  await page.getByRole("button", { name: "New novel" }).click();
-  await waitForReactHydration(page);
-  await page.getByLabel("Title *").fill(novelTitle);
-  await page.getByRole("button", { name: "Create Novel" }).click();
-  // Creating a novel opens its studio on the add-chapters section.
-  await expect(page.getByRole("heading", { name: "Add chapters" })).toBeVisible();
+  await openReadingHome(page);
+  await createNovel(page, { title: novelTitle });
 
-  await addChapter(page, "1", "Source one", "Raw content one.");
-  await addChapter(page, "1.5", "Source two", "Raw content two.");
-  await addChapter(page, "3", "Source three", "Raw content three.");
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
-  await page.getByRole("link", { name: "Source three", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Source three" })).toBeVisible();
+  await addChapter(page, { number: "1", title: "Source one", source: "Raw content one." });
+  await addChapter(page, { number: "1.5", title: "Source two", source: "Raw content two." });
+  await addChapter(page, { number: "3", title: "Source three", source: "Raw content three." });
+  await openChapter(page, "Source three");
   await returnToStudio(page, novelTitle);
 
   await page.getByRole("button", { name: "Chapter actions" }).click();
@@ -146,8 +97,7 @@ test("admin reorders and edits every chapter field", async ({ page }) => {
   await expect(page.getByText("Translated title updated", { exact: true })).toBeVisible();
   await expect(firstRow.getByRole("link", { name: "Source three", exact: true })).toBeVisible();
 
-  await page.getByRole("link", { name: "Source two", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Source two" })).toBeVisible();
+  await openChapter(page, "Source two");
   await page.getByRole("button", { name: "More reader actions" }).click();
   await page.getByRole("menuitem", { name: "Edit chapter" }).click();
   await expect(page.getByLabel("Source Title")).toHaveValue("Source two");
@@ -229,23 +179,23 @@ async function captureReview(page: Page, width: number, height: number, path: st
   await page.screenshot({ path });
 }
 
-test("admin reviews heuristic findings and rechecks corrected chapters", async ({ page }) => {
+test("admin reviews heuristic findings and rechecks corrected chapters", async ({
+  browser,
+  page,
+}) => {
   test.setTimeout(180_000);
   const reviewNovelTitle = "Translation Review Workflow";
 
-  await signIn(page);
-  await page.getByRole("button", { name: "New novel" }).click();
-  await waitForReactHydration(page);
-  await page.getByLabel("Title *").fill(reviewNovelTitle);
-  await page.getByRole("button", { name: "Create Novel" }).click();
-  await expect(page.getByRole("heading", { name: "Add chapters" })).toBeVisible();
+  await openReadingHome(page);
+  const reviewNovelId = await createNovel(page, { title: reviewNovelTitle });
 
-  await addChapter(page, "1", "Alpha arrives", "Alpha arrived.\n\nBeta waited.");
-  await addChapter(page, "2", "Beta waits", "Beta waited.");
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
-  const chapterOneRow = page.getByRole("row").filter({ hasText: "Alpha arrives" });
-  await chapterOneRow.getByRole("link", { name: "Alpha arrives", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Alpha arrives" })).toBeVisible();
+  await addChapter(page, {
+    number: "1",
+    title: "Alpha arrives",
+    source: "Alpha arrived.\n\nBeta waited.",
+  });
+  await addChapter(page, { number: "2", title: "Beta waits", source: "Beta waited." });
+  await openChapter(page, "Alpha arrives");
   await page.getByRole("button", { name: "More reader actions" }).click();
   await page.getByRole("menuitem", { name: "Edit chapter" }).click();
   await page.getByLabel("Translated Content").fill("Alpha มาแล้ว");
@@ -339,7 +289,7 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
   await expect(page.getByRole("heading", { name: "Quality check" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(viewFindings).toBeFocused();
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
+  await studioSection(page, "Chapters").click();
   // The publish menus animate out, so a just-closed menu keeps its items in the DOM for a
   // frame or two: address an item through the menu it belongs to, because the novel chip and
   // a chapter row both offer "Publish now".
@@ -361,18 +311,40 @@ test("admin reviews heuristic findings and rechecks corrected chapters", async (
     "Live",
   );
 
-  await page.getByRole("button", { name: /E2E Admin/ }).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  // The rest of this test is the guest's view, which needs a signed-out browser - and signing out
+  // ends the session it is given. This is the run's second test, so it cannot be the shared one:
+  // every spec after this file still has to be signed in. So it signs out on a session declared
+  // as this spec's to end (`SESSIONS` in `e2e/sessions.ts`), and the shared one is left alone.
+  const guestContext = await browser.newContext({
+    storageState: takeSession("chapter-editing", "sign-out"),
+  });
+  try {
+    const guest = await guestContext.newPage();
+    await guest.goto("/");
+    await expect(guest.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
-  // The reading page is public and carries none of the studio's quality affordances.
-  const novelId = new URL(correctedReviewUrl).pathname.split("/")[2];
-  await page.goto(`/novels/${novelId}`);
-  await expect(page.getByRole("heading", { name: reviewNovelTitle })).toBeVisible();
-  await expect(page.getByText("Translation quality", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Quality check" })).toHaveCount(0);
+    // A document load renders the account menu's button a moment before React attaches its
+    // handlers - a click that lands first only focuses it, and the menu never opens. So the
+    // click is retried until the menu answers.
+    await expect(async () => {
+      await guest.getByRole("button", { name: /E2E Admin/ }).click();
+      await expect(guest.getByRole("menuitem", { name: "Sign out" })).toBeVisible({
+        timeout: 1_000,
+      });
+    }).toPass({ timeout: 20_000 });
+    await guest.getByRole("menuitem", { name: "Sign out" }).click();
+    await expect(guest.getByRole("button", { name: "Sign in" })).toBeVisible();
 
-  // The studio section the review link points at is the owner's, so a guest is sent to sign in.
-  await page.goto(correctedReviewUrl);
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+    // The reading page is public and carries none of the studio's quality affordances.
+    await guest.goto(`/novels/${reviewNovelId}`);
+    await expect(guest.getByRole("heading", { name: reviewNovelTitle })).toBeVisible();
+    await expect(guest.getByText("Translation quality", { exact: true })).toHaveCount(0);
+    await expect(guest.getByRole("heading", { name: "Quality check" })).toHaveCount(0);
+
+    // The studio section the review link points at is the owner's, so a guest is sent to sign in.
+    await guest.goto(correctedReviewUrl);
+    await expect(guest.getByRole("button", { name: "Sign in" })).toBeVisible();
+  } finally {
+    await guestContext.close();
+  }
 });

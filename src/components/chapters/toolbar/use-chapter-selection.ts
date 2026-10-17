@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
+
 import type { ChapterRow } from "@/components/chapters/types";
 import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 import type { ActiveJobState } from "@/lib/translation/types/api";
@@ -12,6 +14,7 @@ export function useChapterSelection(
     chapterIds: string[],
   ) => Promise<{ cancelledChapterIds: string[]; skippedChapterIds: string[] } | null>,
 ) {
+  const t = useTranslations("studio");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchStarting, setBatchStarting] = useState(false);
   const [batchStopping, setBatchStopping] = useState(false);
@@ -80,7 +83,7 @@ export function useChapterSelection(
         return number >= from && number <= to;
       });
       if (inRange.length === 0) {
-        toast.info("No chapters in that range");
+        toast.info(t("rangeEmpty"));
         return;
       }
       setSelectedIds((previous) => {
@@ -88,9 +91,9 @@ export function useChapterSelection(
         for (const chapter of inRange) next.add(chapter.id);
         return next;
       });
-      toast.info(`Selected ${inRange.length} chapter(s) in range ${from}–${to}`);
+      toast.info(t("rangeSelected", { count: inRange.length, from, to }));
     },
-    [chapters],
+    [chapters, t],
   );
 
   const handleBatchTranslate = useCallback(async () => {

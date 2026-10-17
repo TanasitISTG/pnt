@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,7 @@ function SheetContent({
   side?: keyof typeof SIDE_CLASSES;
   showCloseButton?: boolean;
 }) {
+  const t = useTranslations("common");
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop className="overlay-fade fixed inset-0 z-50 isolate bg-charcoal/30 supports-backdrop-filter:backdrop-blur-xs dark:bg-black/60" />
@@ -65,7 +67,7 @@ function SheetContent({
             render={<Button variant="ghost" size="icon-sm" className="absolute top-3 right-3" />}
           >
             <XIcon />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{t("close")}</span>
           </DialogPrimitive.Close>
         ) : null}
       </DialogPrimitive.Popup>

@@ -19,6 +19,7 @@ vi.mock("@/lib/scrape/network-policy.server", () => ({
 }));
 
 import { firecrawlFetch, scraperFetch } from "./server";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 const sourceUrl = "https://twkan.com/txt/93984/52204812";
 
@@ -42,7 +43,7 @@ describe("scrape proxy error boundaries", () => {
     );
 
     await expect(scraperFetch(sourceUrl)).rejects.toThrow(
-      "ZenRows attempted a redirect (HTTP 302) - blocked",
+      encodeMessage("errors.scrapeHttpRedirect", { context: "ZenRows", status: 302 }),
     );
 
     expect(loggedText()).not.toContain("secret+/=key");
@@ -73,7 +74,13 @@ describe("scrape proxy error boundaries", () => {
     );
 
     const error = await scraperFetch(sourceUrl).catch((caught: unknown) => caught);
-    expect(error).toMatchObject({ message: "ZenRows returned HTTP 401", cause: 401 });
+    expect(error).toMatchObject({
+      message: encodeMessage("errors.scrapeProviderHttpError", {
+        provider: "ZenRows",
+        status: 401,
+      }),
+      cause: 401,
+    });
     expect(String(error)).not.toContain("sentinel-secret");
     expect(loggedText()).not.toContain("sentinel-secret");
   });
@@ -106,7 +113,7 @@ describe("scrape proxy error boundaries", () => {
     );
 
     await expect(firecrawlFetch(sourceUrl)).rejects.toThrow(
-      "Firecrawl returned an invalid response",
+      encodeMessage("errors.scrapeFirecrawlInvalid"),
     );
     expect(loggedText()).not.toContain("sentinel-secret");
   });
@@ -118,7 +125,7 @@ describe("scrape proxy error boundaries", () => {
     );
 
     const error = await firecrawlFetch(sourceUrl).catch((caught: unknown) => caught);
-    expect(error).toMatchObject({ message: "Firecrawl returned an invalid response" });
+    expect(error).toMatchObject({ message: encodeMessage("errors.scrapeFirecrawlInvalid") });
     expect(String(error)).not.toContain("sentinel-secret");
     expect(loggedText()).not.toContain("sentinel-secret");
   });

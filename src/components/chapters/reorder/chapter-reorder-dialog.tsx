@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { GripVertical } from "lucide-react";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/ui/sortable";
 import { Spinner } from "@/components/ui/spinner";
 import type { ChapterRow } from "@/components/chapters/types";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 export interface ChapterReorderDialogProps {
   chapters: ChapterRow[];
@@ -27,7 +29,7 @@ const chapterOrderSchema = z
     chapterIds: z.array(z.string().min(1)).min(1),
   })
   .refine((value) => new Set(value.chapterIds).size === value.chapterIds.length, {
-    message: "Chapter IDs must be unique",
+    message: encodeMessage("validation.chapterIdsUnique"),
     path: ["chapterIds"],
   });
 
@@ -54,6 +56,8 @@ export function ChapterReorderDialog({
   onOpenChange,
   onSave,
 }: ChapterReorderDialogProps) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
   const initialOrder = useMemo(() => chapters.map((chapter) => chapter.id), [chapters]);
   const chapterLookup = useMemo(
     () => new Map(chapters.map((chapter) => [chapter.id, chapter])),
@@ -115,10 +119,8 @@ export function ChapterReorderDialog({
           className="flex min-h-0 flex-col gap-4"
         >
           <DialogHeader>
-            <DialogTitle>Reorder chapters</DialogTitle>
-            <DialogDescription>
-              Drag chapters into the order they should appear in the reader.
-            </DialogDescription>
+            <DialogTitle>{t("reorderChapters")}</DialogTitle>
+            <DialogDescription>{t("reorderDescription")}</DialogDescription>
           </DialogHeader>
 
           <form.Field name="chapterIds" mode="array">
@@ -156,8 +158,11 @@ export function ChapterReorderDialog({
                             >
                               <SortableItemHandle
                                 render={<Button variant="ghost" size="icon-sm" />}
-                                aria-label={`Reorder chapter ${Number(slotNumber)}: ${displayTitle}`}
-                                title="Reorder chapter"
+                                aria-label={t("reorderSlot", {
+                                  number: Number(slotNumber),
+                                  title: displayTitle,
+                                })}
+                                title={t("reorderHandle")}
                               >
                                 <GripVertical className="size-4 text-muted-foreground" />
                               </SortableItemHandle>
@@ -178,7 +183,7 @@ export function ChapterReorderDialog({
                       aria-live="polite"
                       className="flex min-h-32 items-center justify-center rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground"
                     >
-                      Preparing {chapters.length} chapters…
+                      {t("reorderPreparing", { count: chapters.length })}
                     </div>
                   )}
 
@@ -189,11 +194,11 @@ export function ChapterReorderDialog({
                       onClick={() => onOpenChange(false)}
                       disabled={isSubmitting}
                     >
-                      Cancel
+                      {tCommon("cancel")}
                     </Button>
                     <Button type="submit" disabled={!orderChanged || isSubmitting}>
                       {isSubmitting && <Spinner />}
-                      {isSubmitting ? "Saving…" : "Save order"}
+                      {isSubmitting ? tCommon("saving") : t("saveOrder")}
                     </Button>
                   </DialogFooter>
                 </>

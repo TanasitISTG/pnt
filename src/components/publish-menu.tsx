@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { ChevronDown, Globe } from "lucide-react";
+import { useLocale, useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,8 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { publishState } from "@/lib/content/publish/publish";
-import { formatLocalDateTime } from "@/lib/date-time";
+import { formatDateTime } from "@/lib/i18n/format";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { useHydrated } from "@/lib/use-hydrated";
 
 interface PublishMenuProps {
@@ -37,8 +39,11 @@ interface PublishMenuProps {
 const scheduleFormSchema = z.object({
   publishAt: z
     .string()
-    .min(1, "Publish time is required")
-    .refine((value) => !Number.isNaN(new Date(value).getTime()), "Enter a valid publish time"),
+    .min(1, encodeMessage("validation.publishTimeRequired"))
+    .refine(
+      (value) => !Number.isNaN(new Date(value).getTime()),
+      encodeMessage("validation.publishTimeInvalid"),
+    ),
 });
 
 // datetime-local values are local time with no timezone suffix.
@@ -54,8 +59,15 @@ export function PublishMenu({
   publishedAt,
   onChange,
   pending = false,
-  ariaLabel = "Publishing options",
+  ariaLabel,
 }: PublishMenuProps) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
+  // Draft, Scheduled and Live are the library's words for these states as well, so the menu
+  // reads the same three the shelf card and its filter use.
+  const tCatalog = useTranslations("catalog");
+  const locale = useLocale();
+  const triggerLabel = ariaLabel ?? t("publishingOptions");
   const state = publishState(publishedAt);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   // Locale-dependent formatting waits for hydration so server and client snapshots agree.
@@ -87,20 +99,20 @@ export function PublishMenu({
 
   const label =
     state === "draft"
-      ? "Draft"
+      ? tCatalog("stateDraft")
       : state === "live"
-        ? "Live"
+        ? tCatalog("stateLive")
         : mounted
-          ? `Scheduled ${formatLocalDateTime(publishedAt as string)}`
-          : "Scheduled";
+          ? tCatalog("stateScheduledAt", { date: formatDateTime(publishedAt as string, locale) })
+          : tCatalog("stateScheduled");
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={<Button variant="outline" size="sm" disabled={pending} />}
-          aria-label={ariaLabel}
-          title={ariaLabel}
+          aria-label={triggerLabel}
+          title={triggerLabel}
         >
           {pending ? <Spinner /> : <Globe className="size-4" />}
           <span className="max-w-64 truncate">{label}</span>
@@ -108,10 +120,14 @@ export function PublishMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => onChange(new Date())}>Publish now</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setScheduleOpen(true)}>Schedule…</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onChange(new Date())}>
+              {t("publishNow")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setScheduleOpen(true)}>
+              {t("schedule")}
+            </DropdownMenuItem>
             {state !== "draft" && (
-              <DropdownMenuItem onClick={() => onChange(null)}>Unpublish</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onChange(null)}>{t("unpublish")}</DropdownMenuItem>
             )}
           </DropdownMenuGroup>
         </DropdownMenuContent>
@@ -134,10 +150,8 @@ export function PublishMenu({
           >
             <div className="flex flex-col gap-5">
               <DialogHeader>
-                <DialogTitle>Schedule publish</DialogTitle>
-                <DialogDescription>
-                  Guests can see it once this time passes. Leave as-is to keep the current schedule.
-                </DialogDescription>
+                <DialogTitle>{t("scheduleTitle")}</DialogTitle>
+                <DialogDescription>{t("scheduleDescription")}</DialogDescription>
               </DialogHeader>
 
               <form.Field name="publishAt">
@@ -145,7 +159,7 @@ export function PublishMenu({
                   const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
                   return (
                     <Field data-invalid={invalid || undefined}>
-                      <FieldLabel htmlFor="publish-at">Publish at</FieldLabel>
+                      <FieldLabel htmlFor="publish-at">{t("publishAt")}</FieldLabel>
                       <Input
                         id="publish-at"
                         name={field.name}
@@ -164,11 +178,11 @@ export function PublishMenu({
 
               <DialogFooter>
                 <DialogClose render={<Button variant="outline" disabled={pending} />}>
-                  Cancel
+                  {tCommon("cancel")}
                 </DialogClose>
                 <Button type="submit" disabled={!canSubmit || isSubmitting || pending}>
                   {(isSubmitting || pending) && <Spinner />}
-                  Schedule
+                  {t("scheduleSubmit")}
                 </Button>
               </DialogFooter>
             </div>

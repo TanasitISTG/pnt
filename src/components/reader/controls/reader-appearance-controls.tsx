@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import type {
   ReaderFontSize,
@@ -34,22 +36,25 @@ export function ReaderAppearanceControls({
   hasTranslation,
   editing,
 }: ReaderAppearanceControlsProps) {
+  const t = useTranslations("reader");
+  const tShell = useTranslations("shell");
+
   return (
     <div className="flex flex-col gap-3.5">
       {hasTranslation && !editing ? (
         <AppearanceRow<ReaderViewMode>
-          label="View"
+          label={t("view")}
           value={settings.viewMode}
           options={[
-            { value: "side", label: "Compare" },
-            { value: "translated", label: "Translation" },
-            { value: "raw", label: "Original" },
+            { value: "side", label: t("viewCompare") },
+            { value: "translated", label: t("viewTranslation") },
+            { value: "raw", label: t("viewOriginal") },
           ]}
           onChange={(viewMode) => update({ viewMode })}
         />
       ) : null}
       <AppearanceRow<ReaderFontSize>
-        label="Font size"
+        label={t("fontSize")}
         value={settings.fontSize}
         options={[
           { value: "S", label: "S", srLabel: "· 14px" },
@@ -60,27 +65,27 @@ export function ReaderAppearanceControls({
         onChange={(fontSize) => update({ fontSize })}
       />
       <AppearanceRow<ReaderLineHeight>
-        label="Line height"
+        label={t("lineHeight")}
         value={settings.lineHeight}
         options={[
-          { value: "compact", label: "Compact", srLabel: "· 1.5" },
-          { value: "normal", label: "Normal", srLabel: "· 1.75" },
-          { value: "relaxed", label: "Relaxed", srLabel: "· 2.0" },
+          { value: "compact", label: t("lineHeightCompact"), srLabel: "· 1.5" },
+          { value: "normal", label: t("lineHeightNormal"), srLabel: "· 1.75" },
+          { value: "relaxed", label: t("lineHeightRelaxed"), srLabel: "· 2.0" },
         ]}
         onChange={(lineHeight) => update({ lineHeight })}
       />
       <AppearanceRow<ReaderMeasure>
-        label="Text width"
+        label={t("textWidth")}
         value={settings.measure}
         options={[
-          { value: "narrow", label: "Narrow" },
-          { value: "medium", label: "Medium" },
-          { value: "wide", label: "Wide" },
+          { value: "narrow", label: t("widthNarrow") },
+          { value: "medium", label: t("widthMedium") },
+          { value: "wide", label: t("widthWide") },
         ]}
         onChange={(measure) => update({ measure })}
       />
       <AppearanceRow<ReaderTypeface>
-        label="Typeface"
+        label={t("typeface")}
         value={settings.typeface}
         options={[
           { value: "default", label: "Sofia Sans" },
@@ -89,22 +94,22 @@ export function ReaderAppearanceControls({
         onChange={(typeface) => update({ typeface })}
       />
       <AppearanceRow<ReaderPageTheme>
-        label="Page"
+        label={t("pageTheme")}
         value={settings.pageTheme}
         options={[
-          { value: "app", label: "Default" },
-          { value: "sepia", label: "Sepia" },
-          { value: "paper", label: "Paper" },
+          { value: "app", label: t("pageDefault") },
+          { value: "sepia", label: t("pageSepia") },
+          { value: "paper", label: t("pagePaper") },
         ]}
         onChange={(pageTheme) => update({ pageTheme })}
       />
       <AppearanceRow
-        label="App theme"
+        label={t("appTheme")}
         value={theme ?? "system"}
         options={[
-          { value: "light", label: "Light" },
-          { value: "dark", label: "Dark" },
-          { value: "system", label: "System" },
+          { value: "light", label: tShell("themeLight") },
+          { value: "dark", label: tShell("themeDark") },
+          { value: "system", label: tShell("themeSystem") },
         ]}
         onChange={setTheme}
       />

@@ -1,6 +1,8 @@
 import "@tanstack/react-start/server-only";
 
 import { env, transactionalEmailConfigured } from "@/lib/env";
+import { isLocale, type Locale } from "@/lib/i18n/locales";
+import { localeFromCurrentRequest } from "@/lib/i18n/request-locale.server";
 import { log } from "@/lib/log";
 import { bumpRateLimit } from "@/lib/rate-limit";
 import {
@@ -72,6 +74,22 @@ function verificationLandingUrl(url: string): string {
 interface MailUser {
   name?: string | null;
   email: string;
+  /** The account's remembered language. Absent on anything created before the switch existed. */
+  locale?: string | null;
+}
+
+/**
+ * The language one message is written in.
+ *
+ * The account's own choice comes first: a reader who switched the app to English should not
+ * get a Thai verification link because they happened to open the page from a shared link.
+ * Failing that - a sign-up from a browser that had not chosen yet, an account created before
+ * the column existed - the request itself answers, which is the language of the page that
+ * asked for the mail. That is the only place the request is read: `templates.ts` takes the
+ * language as an argument, so nothing below can disagree about which one it is.
+ */
+function mailLocale(user: MailUser): Locale {
+  return isLocale(user.locale) ? user.locale : localeFromCurrentRequest();
 }
 
 async function deliver(to: string, message: EmailMessage, actionUrl: string): Promise<void> {
@@ -145,6 +163,7 @@ export async function sendVerificationEmail({
   await deliver(
     user.email,
     verificationEmail({
+      locale: mailLocale(user),
       name: user.name ?? null,
       url: landing,
       expiresInMinutes: VERIFICATION_TOKEN_TTL_SECONDS / 60,
@@ -164,6 +183,7 @@ export async function sendResetPassword({
   await deliver(
     user.email,
     resetPasswordEmail({
+      locale: mailLocale(user),
       name: user.name ?? null,
       url,
       expiresInMinutes: RESET_TOKEN_TTL_SECONDS / 60,
@@ -184,7 +204,11 @@ export async function sendChangeEmailConfirmation({
 }): Promise<void> {
   // NOTE: deliberately sent to the *current* address so a hijacked session cannot
   // silently move the account to an address the attacker owns.
-  await deliver(user.email, changeEmailEmail({ name: user.name ?? null, newEmail, url }), url);
+  await deliver(
+    user.email,
+    changeEmailEmail({ locale: mailLocale(user), name: user.name ?? null, newEmail, url }),
+    url,
+  );
 }
 
 export async function sendDeleteAccountVerification({
@@ -195,7 +219,11 @@ export async function sendDeleteAccountVerification({
   url: string;
   token: string;
 }): Promise<void> {
-  await deliver(user.email, deleteAccountEmail({ name: user.name ?? null, url }), url);
+  await deliver(
+    user.email,
+    deleteAccountEmail({ locale: mailLocale(user), name: user.name ?? null, url }),
+    url,
+  );
 }
 
 /**
@@ -205,5 +233,9 @@ export async function sendDeleteAccountVerification({
  */
 export async function notifyExistingUserSignUp({ user }: { user: MailUser }): Promise<void> {
   const url = signInUrl();
-  await deliver(user.email, existingUserSignUpEmail({ name: user.name ?? null, url }), url);
+  await deliver(
+    user.email,
+    existingUserSignUpEmail({ locale: mailLocale(user), name: user.name ?? null, url }),
+    url,
+  );
 }

@@ -9,6 +9,7 @@ import {
   serializeRelationshipMap,
 } from "./map";
 import { relationshipAnalysisSchema, relationshipMapSchema } from "./schemas";
+import { englishWords } from "@/test/messages";
 
 const updatedAt = "2026-01-01T00:00:00.000Z";
 
@@ -143,6 +144,46 @@ describe("relationship map", () => {
     );
     expect(result.map.relationships[0]?.listenerId).toBe(
       result.map.characters.find((item) => item.sourceName === "父亲")?.id,
+    );
+  });
+
+  it("reports a refused automatic alias as one stored code, not a sentence", () => {
+    const saturated = relationshipMapSchema.parse({
+      version: 1,
+      characters: [
+        character("c-1", "父亲", {
+          aliases: ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"],
+        }),
+      ],
+      relationships: [],
+    });
+    const result = mergeAutomaticRelationshipAnalysis(
+      saturated,
+      relationshipAnalysisSchema.parse({
+        characters: [
+          {
+            sourceName: "父亲",
+            targetName: "พ่อ",
+            aliases: ["a9"],
+            gender: "male",
+            role: "father",
+            notes: null,
+            evidence: "父亲",
+          },
+        ],
+        relationships: [],
+        activePairs: [],
+      }),
+      [],
+      1,
+      updatedAt,
+    );
+
+    // One warning per refusal, and the refusal is the code: the log drawer resolves it in
+    // whichever language its reader reads, which a row holding a sentence never could.
+    expect(result.warnings).toHaveLength(1);
+    expect(englishWords(result.warnings[0] ?? "")).toBe(
+      "Alias cap reached for automatic character “父亲”; discarded “a9”.",
     );
   });
   it("scrubs unlocked speech fields while preserving locked rows", () => {

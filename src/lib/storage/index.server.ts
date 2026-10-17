@@ -3,8 +3,9 @@ import "@tanstack/react-start/server-only";
 import { env } from "@/lib/env";
 
 import { createLocalObjectStorage } from "./local.server";
+import { createObjectStorage } from "./port";
 import { createR2ObjectStorage } from "./r2.server";
-import type { ObjectStorage } from "./types";
+import type { ObjectStorage, ObjectStorageBackend } from "./types";
 
 /**
  * Two buckets: `public` is served from the CDN origin and holds only published
@@ -18,7 +19,10 @@ export interface StorageBuckets {
 
 let cached: StorageBuckets | null = null;
 
-function createStorage(): StorageBuckets {
+/** The configured backends, before the port is built on them. */
+type StorageBackends = Record<keyof StorageBuckets, ObjectStorageBackend>;
+
+function createStorage(): StorageBackends {
   const {
     R2_ACCOUNT_ID,
     R2_ACCESS_KEY_ID,
@@ -64,7 +68,16 @@ function createStorage(): StorageBuckets {
 }
 
 export function getStorage(): StorageBuckets {
-  cached ??= createStorage();
+  if (cached === null) {
+    // Built into the port here rather than inside each adapter: this is the only place one is
+    // chosen, so the key rule and the one reading of a prefix cover every bucket the app can
+    // reach and cannot drift between them.
+    const buckets = createStorage();
+    cached = {
+      public: createObjectStorage(buckets.public),
+      private: createObjectStorage(buckets.private),
+    };
+  }
   return cached;
 }
 

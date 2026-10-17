@@ -1,6 +1,7 @@
 import * as fflate from "fflate";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { decodeEntities, BOILERPLATE_RE } from "@/lib/scrape/parsers";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 export interface ParsedEpubChapter {
   number: string | null;
@@ -44,7 +45,7 @@ function decodeEpubPath(path: string): string {
   try {
     return decodeURIComponent(path.replace(/\\/g, "/"));
   } catch {
-    throw new SafeServerError("Invalid EPUB path encoding");
+    throw new SafeServerError(encodeMessage("errors.epubInvalidPathEncoding"));
   }
 }
 
@@ -66,7 +67,7 @@ function isDangerousPath(path: string): boolean {
 function normalizePath(baseDir: string, relativePath: string): string {
   const decoded = decodeEpubPath(relativePath);
   if (decoded.startsWith("/") || /^[a-zA-Z]:/.test(decoded)) {
-    throw new SafeServerError("EPUB contains an absolute package path");
+    throw new SafeServerError(encodeMessage("errors.epubAbsolutePackagePath"));
   }
 
   const resolved = baseDir.split("/").filter((part) => part.length > 0 && part !== ".");
@@ -74,7 +75,7 @@ function normalizePath(baseDir: string, relativePath: string): string {
     if (!part || part === ".") continue;
     if (part === "..") {
       if (resolved.length === 0) {
-        throw new SafeServerError("EPUB package path escapes its root");
+        throw new SafeServerError(encodeMessage("errors.epubPackagePathEscapes"));
       }
       resolved.pop();
     } else {
@@ -361,7 +362,7 @@ function parseXhtmlDocument(
 
   const content = paragraphs.join("\n\n");
   if (UTF8_ENCODER.encode(content).byteLength > MAX_CHAPTER_SIZE) {
-    throw new SafeServerError(`Chapter content exceeds maximum limit of 2 MiB`);
+    throw new SafeServerError(encodeMessage("errors.epubChapterTooLarge"));
   }
 
   return { heading, content };
@@ -369,10 +370,10 @@ function parseXhtmlDocument(
 
 export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
   if (!bytes || bytes.length === 0) {
-    throw new SafeServerError("EPUB file is empty");
+    throw new SafeServerError(encodeMessage("errors.epubEmpty"));
   }
   if (bytes.length > MAX_COMPRESSED_SIZE) {
-    throw new SafeServerError("EPUB file exceeds maximum allowed size of 50 MiB");
+    throw new SafeServerError(encodeMessage("errors.epubTooLarge"));
   }
 
   let totalUncompressedSize = 0;
@@ -385,10 +386,12 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
       filter(file) {
         entryCount++;
         if (entryCount > MAX_ZIP_ENTRIES) {
-          throw new SafeServerError("EPUB contains too many entries (exceeds 10,000)");
+          throw new SafeServerError(encodeMessage("errors.epubTooManyEntries"));
         }
         if (isDangerousPath(file.name)) {
-          throw new SafeServerError(`EPUB contains invalid file path: ${file.name}`);
+          throw new SafeServerError(
+            encodeMessage("errors.epubInvalidFilePath", { path: file.name }),
+          );
         }
 
         const nameLower = file.name.toLowerCase();
@@ -403,14 +406,14 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
 
         totalUncompressedSize += file.originalSize || 0;
         if (totalUncompressedSize > MAX_UNCOMPRESSED_SIZE) {
-          throw new SafeServerError("EPUB uncompressed content exceeds 200 MiB limit");
+          throw new SafeServerError(encodeMessage("errors.epubUncompressedTooLarge"));
         }
         return true;
       },
     });
   } catch (err) {
     if (err instanceof SafeServerError) throw err;
-    throw new SafeServerError("Invalid or corrupted EPUB file");
+    throw new SafeServerError(encodeMessage("errors.epubCorrupted"));
   }
 
   // Find container.xml
@@ -418,19 +421,19 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
     (k) => k.toLowerCase() === "meta-inf/container.xml",
   );
   if (!containerKey) {
-    throw new SafeServerError("Invalid EPUB: missing META-INF/container.xml");
+    throw new SafeServerError(encodeMessage("errors.epubMissingContainer"));
   }
 
   const containerXml = fflate.strFromU8(unzipped[containerKey]);
   const rootfileMatch = containerXml.match(/<rootfile\b[^>]*\bfull-path=["']([^"']+)["'][^>]*>/i);
   if (!rootfileMatch) {
-    throw new SafeServerError("Invalid EPUB: missing rootfile in container.xml");
+    throw new SafeServerError(encodeMessage("errors.epubMissingRootfile"));
   }
 
   const opfPath = normalizePath("", rootfileMatch[1]);
   const opfKey = Object.keys(unzipped).find((k) => k.toLowerCase() === opfPath.toLowerCase());
   if (!opfKey) {
-    throw new SafeServerError(`Invalid EPUB: OPF package file not found at ${opfPath}`);
+    throw new SafeServerError(encodeMessage("errors.epubOpfMissing", { path: opfPath }));
   }
 
   const opfDir = opfPath.includes("/") ? opfPath.slice(0, opfPath.lastIndexOf("/")) : "";
@@ -439,7 +442,7 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
   // Parse required package metadata
   const metadataMatch = opfXml.match(/<metadata\b[^>]*>([\s\S]*?)<\/metadata>/i);
   if (!metadataMatch) {
-    throw new SafeServerError("Invalid EPUB: missing package metadata");
+    throw new SafeServerError(encodeMessage("errors.epubMissingPackageMetadata"));
   }
   const metadataXml = metadataMatch[1];
   const metadata: ParsedEpubMetadata = {
@@ -464,7 +467,7 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
   // Parse Manifest
   const manifestMatch = opfXml.match(/<manifest\b[^>]*>([\s\S]*?)<\/manifest>/i);
   if (!manifestMatch) {
-    throw new SafeServerError("Invalid EPUB: missing manifest in OPF");
+    throw new SafeServerError(encodeMessage("errors.epubMissingManifest"));
   }
 
   const manifestMap = new Map<string, ManifestItem>();
@@ -489,7 +492,7 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
   // Parse Spine
   const spineMatch = opfXml.match(/<spine\b([^>]*)>([\s\S]*?)<\/spine>/i);
   if (!spineMatch) {
-    throw new SafeServerError("Invalid EPUB: missing spine in OPF");
+    throw new SafeServerError(encodeMessage("errors.epubMissingSpine"));
   }
 
   const spineAttrs = parseAttributes(spineMatch[1]);
@@ -615,7 +618,7 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
     const multipart = parseMultipart(title);
 
     if (candidateChapters.length >= MAX_CHAPTERS) {
-      throw new SafeServerError(`EPUB contains too many chapters (exceeds ${MAX_CHAPTERS})`);
+      throw new SafeServerError(encodeMessage("errors.epubTooManyChapters", { max: MAX_CHAPTERS }));
     }
     candidateChapters.push({
       number,
@@ -651,7 +654,7 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
       last.content += `\n\n${candidate.content}`;
       last.multipart = mp;
       if (UTF8_ENCODER.encode(last.content).byteLength > MAX_CHAPTER_SIZE) {
-        throw new SafeServerError(`Merged chapter content exceeds maximum limit of 2 MiB`);
+        throw new SafeServerError(encodeMessage("errors.epubMergedChapterTooLarge"));
       }
     } else {
       const finalTitle = mp ? mp.baseTitle : candidate.title;
@@ -670,11 +673,11 @@ export function parseEpubArchive(bytes: Uint8Array): ParsedEpub {
   );
 
   if (parsedChapters.length === 0) {
-    throw new SafeServerError("EPUB contains no usable chapters");
+    throw new SafeServerError(encodeMessage("errors.epubNoUsableChapters"));
   }
 
   if (parsedChapters.length > MAX_CHAPTERS) {
-    throw new SafeServerError(`EPUB contains too many chapters (exceeds ${MAX_CHAPTERS})`);
+    throw new SafeServerError(encodeMessage("errors.epubTooManyChapters", { max: MAX_CHAPTERS }));
   }
 
   return {

@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { Button } from "@/components/ui/button";
 import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -9,20 +11,22 @@ interface ProviderSelectionSectionProps {
   onApplyPreset: (provider: ProviderType, baseUrl: string, model: string) => void;
 }
 
-const PROVIDER_OPTIONS: Array<{
+interface ProviderOption {
   value: ProviderType;
-  label: string;
-  description: string;
-}> = [
+  labelKey: "providerOpenAiLabel" | "providerGeminiLabel";
+  descriptionKey: "providerOpenAiDescription" | "providerGeminiDescription";
+}
+
+const PROVIDER_OPTIONS: readonly ProviderOption[] = [
   {
     value: "openai",
-    label: "OpenAI-Compatible",
-    description: "OpenRouter, DeepSeek, etc",
+    labelKey: "providerOpenAiLabel",
+    descriptionKey: "providerOpenAiDescription",
   },
   {
     value: "gemini",
-    label: "Google AI Studio",
-    description: "Gemini 2.5 Flash / Pro, 1.5 Flash",
+    labelKey: "providerGeminiLabel",
+    descriptionKey: "providerGeminiDescription",
   },
 ];
 
@@ -63,10 +67,11 @@ export function ProviderSelectionSection({
   onProviderChange,
   onApplyPreset,
 }: ProviderSelectionSectionProps) {
+  const t = useTranslations("settings");
   return (
     <>
       <FieldSet>
-        <FieldLegend variant="label">Provider Type</FieldLegend>
+        <FieldLegend variant="label">{t("providerTypeLabel")}</FieldLegend>
         <ToggleGroup
           value={[provider]}
           spacing={3}
@@ -85,9 +90,9 @@ export function ProviderSelectionSection({
               // one-line one otherwise made the two cards different heights.
               className="h-auto min-w-0 flex-1 basis-0 flex-col self-stretch whitespace-normal"
             >
-              <span className="w-full font-medium text-foreground">{option.label}</span>
+              <span className="w-full font-medium text-foreground">{t(option.labelKey)}</span>
               <span className="w-full text-caption text-muted-foreground">
-                {option.description}
+                {t(option.descriptionKey)}
               </span>
             </ToggleGroupItem>
           ))}
@@ -95,7 +100,7 @@ export function ProviderSelectionSection({
       </FieldSet>
 
       <FieldSet>
-        <FieldLegend variant="mutedCaption">Quick Presets</FieldLegend>
+        <FieldLegend variant="mutedCaption">{t("quickPresets")}</FieldLegend>
         <div className="flex flex-wrap gap-2">
           {PROVIDER_PRESETS[provider].map((preset) => (
             <Button

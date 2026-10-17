@@ -11,7 +11,13 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { immutablePublicCacheControl } from "@/lib/cache-control";
 import { log } from "@/lib/log";
 import { getPublicStorage } from "@/lib/storage/index.server";
-import { COVER_WIDTHS, coverVariantKey, defaultCoverWidth } from "@/lib/storage/keys";
+import {
+  COVER_WIDTHS,
+  coverPrefix,
+  coverVariantKey,
+  defaultCoverWidth,
+  parseCoverPrefix,
+} from "@/lib/storage/keys";
 
 const coverWidthSchema = z.enum(
   COVER_WIDTHS.map((width) => String(width)) as [string, ...string[]],
@@ -59,7 +65,10 @@ export const Route = createFileRoute("/api/covers/$")({
             .where(and(eq(novels.id, novelId), novelReadable(session?.user.id ?? null)))
             .limit(1);
 
-          if (!novel || !novel.coverKey) {
+          // The stored key is read back rather than trusted: a value that names no cover set is a
+          // novel whose cover is not there, which is what this route answers for either case.
+          const parsed = novel?.coverKey ? parseCoverPrefix(novel.coverKey) : null;
+          if (!novel || !parsed) {
             return new Response("Not Found", { status: 404 });
           }
 
@@ -67,7 +76,10 @@ export const Route = createFileRoute("/api/covers/$")({
 
           const storage = getPublicStorage();
           const object = await storage.get(
-            coverVariantKey(novel.coverKey, requestedWidth ?? defaultCoverWidth()),
+            coverVariantKey(
+              coverPrefix(parsed.novelId, parsed.segment),
+              requestedWidth ?? defaultCoverWidth(),
+            ),
           );
           if (!object) {
             return new Response("Not Found", { status: 404 });

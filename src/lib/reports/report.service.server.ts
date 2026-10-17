@@ -195,7 +195,7 @@ export async function createNovelReportForUser(
       reason: input.reason,
       details: input.details ?? null,
     },
-    "You already have an open report for this novel.",
+    encodeMessage("errors.reportDuplicateNovel"),
   );
 
   return { id, novelId: novel.id, createdAt: new Date() };
@@ -255,7 +255,7 @@ export async function createCommentReportForUser(
       reason: input.reason,
       details: input.details ?? null,
     },
-    "You already have an open report for this comment.",
+    encodeMessage("errors.reportDuplicateComment"),
   );
 
   return { id, commentId: comment.id, createdAt: new Date() };
@@ -308,7 +308,7 @@ export async function createReviewReportForUser(
       reason: input.reason,
       details: input.details ?? null,
     },
-    "You already have an open report for this review.",
+    encodeMessage("errors.reportDuplicateReview"),
   );
 
   return { id, reviewId: review.id, createdAt: new Date() };
@@ -765,7 +765,7 @@ export async function resolveReportCaseForOperator(
     });
 
   if (resolved.length === 0) {
-    throw new SafeServerError("That case has already been decided.");
+    throw new SafeServerError(encodeMessage("errors.reportCaseDecided"));
   }
 
   const first = resolved[0]!;
@@ -826,13 +826,13 @@ export async function removeReportedTargetForOperator(
     .orderBy(desc(reports.createdAt))
     .limit(1);
 
-  if (!report) throw new SafeServerError("That case no longer exists.");
+  if (!report) throw new SafeServerError(encodeMessage("errors.reportCaseMissing"));
 
   if (report.targetType === "comment") {
-    if (!report.commentId) throw new SafeServerError("That comment has already been deleted.");
+    if (!report.commentId) throw new SafeServerError(encodeMessage("errors.commentAlreadyDeleted"));
     const author = await getCommentAuthor(report.commentId);
     const removed = await removeCommentForOperator(actor, report.commentId, input.reason);
-    if (!removed) throw new SafeServerError("That comment was already removed.");
+    if (!removed) throw new SafeServerError(encodeMessage("errors.commentAlreadyRemoved"));
     await recordAdminAction({
       actorId: actor.id,
       actorEmail: actor.email,
@@ -849,10 +849,10 @@ export async function removeReportedTargetForOperator(
   }
 
   if (report.targetType === "review") {
-    if (!report.reviewId) throw new SafeServerError("That review has already been deleted.");
+    if (!report.reviewId) throw new SafeServerError(encodeMessage("errors.reviewAlreadyDeleted"));
     const author = await getReviewAuthor(report.reviewId);
     const removed = await removeReviewForOperator(actor, report.reviewId, input.reason);
-    if (!removed) throw new SafeServerError("That review was already removed.");
+    if (!removed) throw new SafeServerError(encodeMessage("errors.reviewAlreadyRemoved"));
     await recordAdminAction({
       actorId: actor.id,
       actorEmail: actor.email,
@@ -868,5 +868,5 @@ export async function removeReportedTargetForOperator(
     return { removed: true, targetType: "review" };
   }
 
-  throw new SafeServerError("Only comments and reviews can be removed from the queue.");
+  throw new SafeServerError(encodeMessage("errors.reportTargetNotRemovable"));
 }

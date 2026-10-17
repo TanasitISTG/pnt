@@ -1,7 +1,17 @@
 import { expect, test } from "@playwright/test";
 
-const adminEmail = "e2e-admin@example.test";
-const adminPassword = "e2e-password-123";
+import {
+  addChapter,
+  appearanceGroup,
+  closeReaderAppearance,
+  createNovel,
+  openChapter,
+  openReaderAppearance,
+} from "./novels";
+import { openReadingHome, takeSession } from "./sessions";
+
+test.use({ storageState: takeSession("admin", "read") });
+
 const novelTitle = "Reader Upgrade Smoke";
 const chapterTitle = "Reader Chapter";
 const sourceText = [
@@ -13,37 +23,6 @@ const sourceText = [
   ),
 ].join("\n");
 
-async function waitForReactHydration(page: import("@playwright/test").Page) {
-  await page.waitForFunction(() => {
-    const submit = document.querySelector('button[type="submit"]');
-    return submit && Object.keys(submit).some((key) => key.startsWith("__reactProps$"));
-  });
-}
-
-async function rejectOptionalAnalytics(page: import("@playwright/test").Page) {
-  const rejectButton = page.getByRole("button", { name: "Reject optional" });
-  if (await rejectButton.isVisible()) await rejectButton.click();
-}
-
-/**
- * Reading appearance opens from the toolbar's settings button: a popover on a pointer
- * screen, a sheet under a thumb. The panel has no close button, so the same trigger that
- * opened it toggles it shut.
- */
-async function openAppearance(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "Reading settings" }).click();
-}
-
-async function closeAppearance(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "Reading settings" }).click();
-  await expect(page.getByRole("group", { name: "Page" })).toHaveCount(0);
-}
-
-/** Each preference is a pressed button inside a labelled group, not a radio. */
-function appearanceGroup(page: import("@playwright/test").Page, label: string) {
-  return page.getByRole("group", { name: label });
-}
-
 /** Bookmarks live in the reader's actions menu and open in a dialog of their own. */
 async function openBookmarks(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "More reader actions" }).click();
@@ -54,33 +33,11 @@ async function openBookmarks(page: import("@playwright/test").Page) {
 test("reader upgrades: progress, find, bookmarks, typography and page themes", async ({ page }) => {
   test.setTimeout(180_000);
 
-  await page.goto("/login");
-  await waitForReactHydration(page);
-  await rejectOptionalAnalytics(page);
-  await page.getByLabel("Email").fill(adminEmail);
-  await page.getByLabel("Password").fill(adminPassword);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await openReadingHome(page);
+  await createNovel(page, { title: novelTitle });
 
-  await page.getByRole("button", { name: "New novel" }).click();
-  await waitForReactHydration(page);
-  await page.getByLabel("Title *").fill(novelTitle);
-  await page.getByRole("button", { name: "Create Novel" }).click();
-  // Creating a novel opens its studio on the add-chapters section: a brand-new novel has
-  // nothing to read yet, and importing is the next step.
-  await expect(page.getByRole("heading", { name: "Add chapters" })).toBeVisible();
-
-  await page.getByLabel("Chapter number *").fill("1");
-  await page.getByLabel("Chapter title *").fill(chapterTitle);
-  await page.getByLabel("Source text *").fill(sourceText);
-  await page.getByRole("button", { name: "Add chapter" }).click();
-  await page.getByRole("link", { name: "Chapters", exact: true }).click();
-  await expect(page.getByRole("link", { name: chapterTitle, exact: true })).toBeVisible({
-    timeout: 30_000,
-  });
-
-  await page.getByRole("link", { name: chapterTitle, exact: true }).click();
-  await expect(page.getByRole("heading", { name: chapterTitle })).toBeVisible();
+  await addChapter(page, { number: "1", title: chapterTitle, source: sourceText });
+  await openChapter(page, chapterTitle);
 
   // The toolbar progress hairline tracks the reading position, and reaching the end marks
   // the chapter read. Off-screen paragraphs only have estimated heights, so keep scrolling
@@ -99,12 +56,12 @@ test("reader upgrades: progress, find, bookmarks, typography and page themes", a
   // Typography and page theme travel from the settings panel to the rendered prose.
   // The page theme must beat an app dark theme, including the browser color-scheme that
   // next-themes writes inline on <html>.
-  await openAppearance(page);
+  await openReaderAppearance(page);
   await appearanceGroup(page, "Line height").getByRole("button", { name: "Relaxed · 2.0" }).click();
   await appearanceGroup(page, "Text width").getByRole("button", { name: "Narrow" }).click();
   await appearanceGroup(page, "App theme").getByRole("button", { name: "Dark" }).click();
   await appearanceGroup(page, "Page").getByRole("button", { name: "Sepia" }).click();
-  await closeAppearance(page);
+  await closeReaderAppearance(page);
 
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.locator("html")).toHaveAttribute("data-reader-theme", "sepia");
@@ -202,9 +159,9 @@ test("reader upgrades: progress, find, bookmarks, typography and page themes", a
   await page.getByRole("button", { name: "Close" }).click();
 
   // Back to the app theme, and the novel detail reports reading progress.
-  await openAppearance(page);
+  await openReaderAppearance(page);
   await appearanceGroup(page, "Page").getByRole("button", { name: "Default" }).click();
-  await closeAppearance(page);
+  await closeReaderAppearance(page);
   await expect(page.locator("html")).not.toHaveAttribute("data-reader-theme", "sepia");
   // The page theme override is scoped: the app dark theme resumes with its own color-scheme.
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(
@@ -212,5 +169,7 @@ test("reader upgrades: progress, find, bookmarks, typography and page themes", a
   );
 
   await page.getByRole("button", { name: "Back to novel" }).click();
-  await expect(page.getByText(/1 of 1 chapters read/)).toBeVisible({ timeout: 15_000 });
+  // The line is a plural key and follows the count: one chapter of one reads "chapter", so
+  // the assertion spells the singular rather than the `chapter(s)` the copy used to print.
+  await expect(page.getByText(/1 of 1 chapter read/)).toBeVisible({ timeout: 15_000 });
 });

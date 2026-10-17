@@ -1,4 +1,5 @@
 import { Settings2 } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
@@ -20,17 +21,19 @@ export function ReaderAppearancePanel({
   onOpenChange,
   ...controls
 }: ReaderAppearancePanelProps) {
+  const t = useTranslations("reader");
+
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
         render={<Button variant="ghost" size="icon" className="size-11 shrink-0" />}
-        aria-label="Reading settings"
-        title="Reading settings"
+        aria-label={t("readingSettings")}
+        title={t("readingSettings")}
       >
         <Settings2 className="size-4" aria-hidden="true" />
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="w-[min(23rem,calc(100vw-2rem))]">
-        <PopoverTitle className="mb-3">Reading settings</PopoverTitle>
+        <PopoverTitle className="mb-3">{t("readingSettings")}</PopoverTitle>
         <ReaderAppearanceControls {...controls} />
       </PopoverContent>
     </Popover>

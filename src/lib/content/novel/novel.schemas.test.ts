@@ -6,6 +6,7 @@ import {
   createNovelSchema,
   editChapterSchema,
 } from "@/lib/content/novel/novel.schemas";
+import { encodeMessage } from "@/lib/i18n/message-code";
 
 describe("createNovelSchema", () => {
   it("rejects an unsupported EN→EN language pair", () => {
@@ -40,7 +41,7 @@ describe("createNovelSchema", () => {
     if (!result.success) {
       expect(result.error.issues[0]).toMatchObject({
         path: ["title"],
-        message: "Title is required",
+        message: encodeMessage("validation.titleRequired"),
       });
     }
   });
@@ -65,8 +66,8 @@ describe("createChapterSchema", () => {
   };
 
   it.each([
-    ["title", " \t ", "Title is required"],
-    ["rawContent", "\n ", "Content is required"],
+    ["title", " \t ", encodeMessage("validation.titleRequired")],
+    ["rawContent", "\n ", encodeMessage("validation.sourceContentRequired")],
   ])("rejects whitespace-only %s", (field, value, message) => {
     const result = createChapterSchema.safeParse({ ...validChapter, [field]: value });
 
@@ -77,8 +78,8 @@ describe("createChapterSchema", () => {
   });
 
   it.each([
-    ["title", "Title is required"],
-    ["rawContent", "Content is required"],
+    ["title", encodeMessage("validation.titleRequired")],
+    ["rawContent", encodeMessage("validation.sourceContentRequired")],
   ])("preserves the empty %s message", (field, message) => {
     const result = createChapterSchema.safeParse({ ...validChapter, [field]: "" });
 

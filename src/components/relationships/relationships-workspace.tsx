@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Network, Plus, Users } from "lucide-react";
+import { useTranslations } from "use-intl";
 
 import { QueryErrorState } from "@/components/query-error-state";
 import {
@@ -52,6 +53,7 @@ export function RelationshipsWorkspace({
   onCharacterAdd,
   onRelationshipAdd,
 }: RelationshipsWorkspaceProps) {
+  const t = useTranslations("relationships");
   const relationshipAddDisabled = map.characters.length < 2;
 
   return (
@@ -62,14 +64,14 @@ export function RelationshipsWorkspace({
             variant="ghost"
             size="icon"
             render={<Link to="/{-$locale}/novels/$novelId" params={{ novelId }} />}
-            aria-label="Back to novel"
+            aria-label={t("backToNovel")}
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
           </Button>
           <div className="min-w-0">
             <p className="text-caption text-muted-foreground">{novel.title}</p>
             <h1 className="text-section font-semibold tracking-tight text-foreground">
-              Character &amp; Relationships
+              {t("title")}
             </h1>
           </div>
           <Badge variant="outline" className="ml-auto uppercase">
@@ -77,17 +79,16 @@ export function RelationshipsWorkspace({
           </Badge>
         </div>
         <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-          Keep directed speaker and listener choices consistent across {languageLabels.source}-to-
-          {languageLabels.target} dialogue. Automatic analysis runs during the next translation or
-          retranslation; you can also populate critical facts manually. Manual changes affect
-          not-yet-started chunks and future retranslations, but never cancel a chunk already at the
-          provider.
+          {t("description", {
+            source: languageLabels.source,
+            target: languageLabels.target,
+          })}
         </p>
       </header>
 
       {refreshError ? (
         <QueryErrorState
-          title="Unable to refresh relationship map"
+          title={t("refreshFailed")}
           error={refreshError}
           onRetry={onRefresh}
           className="my-0 min-h-0"
@@ -97,14 +98,14 @@ export function RelationshipsWorkspace({
       <Tabs value={search.view} onValueChange={onViewChange}>
         {/* The icons step aside on a phone: two tab labels and two glyphs do not fit on
             one line at 390px, and the labels are what carry the meaning. */}
-        <TabsList aria-label="Relationship map views">
+        <TabsList aria-label={t("viewsAria")}>
           <TabsTrigger value="characters">
             <Users className="size-4 max-sm:hidden" aria-hidden="true" />
-            Characters ({map.characters.length})
+            {t("tabCharacters", { count: map.characters.length })}
           </TabsTrigger>
           <TabsTrigger value="relationships">
             <Network className="size-4 max-sm:hidden" aria-hidden="true" />
-            Directed relationships ({map.relationships.length})
+            {t("tabRelationships", { count: map.relationships.length })}
           </TabsTrigger>
         </TabsList>
 
@@ -119,17 +120,16 @@ export function RelationshipsWorkspace({
                       id="characters-heading"
                       className="text-card-title font-semibold text-foreground"
                     >
-                      Characters
+                      {t("charactersTitle")}
                     </h2>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Approved glossary mappings win for {languageLabels.target} names. Automatic
-                    profiles remain editable until you lock them.
+                    {t("charactersDescription", { target: languageLabels.target })}
                   </p>
                 </div>
-                <Button size="sm" onClick={onCharacterAdd} aria-label="Add character profile">
+                <Button size="sm" onClick={onCharacterAdd} aria-label={t("addCharacterProfile")}>
                   <Plus className="size-4" aria-hidden="true" />
-                  Add character
+                  {t("addCharacter")}
                 </Button>
               </div>
               <CharacterProfilesTable
@@ -154,28 +154,25 @@ export function RelationshipsWorkspace({
                       id="relationships-heading"
                       className="text-card-title font-semibold text-foreground"
                     >
-                      Directed relationships
+                      {t("relationshipsTitle")}
                     </h2>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Speech fields belong to the speaker → listener direction. Reverse pairs are
-                    separate facts.
+                    {t("relationshipsDescription")}
                   </p>
                 </div>
                 <div className="flex flex-col items-start gap-1 sm:items-end">
                   <Button
                     size="sm"
                     onClick={onRelationshipAdd}
-                    aria-label="Add directed relationship"
+                    aria-label={t("addDirectedRelationship")}
                     disabled={relationshipAddDisabled}
                   >
                     <Plus className="size-4" aria-hidden="true" />
-                    Add relationship
+                    {t("addRelationship")}
                   </Button>
                   {relationshipAddDisabled ? (
-                    <p className="text-caption text-muted-foreground">
-                      Add at least 2 character profiles first.
-                    </p>
+                    <p className="text-caption text-muted-foreground">{t("needsCharacters")}</p>
                   ) : null}
                 </div>
               </div>

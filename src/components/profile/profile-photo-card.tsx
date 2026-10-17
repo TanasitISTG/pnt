@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +37,8 @@ export interface ProfilePhotoCardProps {
 type PendingStep = "reading" | "saving" | "removing" | null;
 
 export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePhotoCardProps) {
+  const t = useTranslations("settings");
+  const tc = useTranslations("common");
   const fileInputRef = useRef<HTMLInputElement>(null);
   // A chosen photo waits here until it is confirmed. Until then the server has not seen
   // it and the shell still shows the stored photo, so cancelling costs nothing.
@@ -51,11 +54,11 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
     if (!file) return;
 
     if (!ACCEPTED_PHOTO_TYPES.includes(file.type)) {
-      toast.error("Profile photo must be a JPG, PNG or WebP image");
+      toast.error(t("photoMustBeImage"));
       return;
     }
     if (file.size > MAX_PROFILE_PHOTO_BYTES) {
-      toast.error("Profile photo must be smaller than 2MB");
+      toast.error(t("photoTooLarge"));
       return;
     }
 
@@ -65,7 +68,7 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
       // Every new file starts centered; an earlier adjustment does not carry over.
       setCrop(CENTERED_AVATAR_CROP);
     } catch {
-      toast.error("Could not read that image file");
+      toast.error(t("photoReadFailed"));
     } finally {
       setPending(null);
     }
@@ -79,7 +82,7 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
     try {
       upload = await encodeAvatarCrop(staged, crop);
     } catch {
-      toast.error("Could not prepare that photo");
+      toast.error(t("photoPrepareFailed"));
       setPending(null);
       return;
     }
@@ -111,9 +114,9 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
       <CardHeader>
         <div className="flex items-center gap-2">
           <Camera className="size-5 text-muted-foreground" />
-          <CardTitle>Profile Photo</CardTitle>
+          <CardTitle>{t("photoTitle")}</CardTitle>
         </div>
-        <CardDescription>Shown next to your name in the app.</CardDescription>
+        <CardDescription>{t("photoDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className={cn("flex flex-wrap gap-6", staged ? "items-start" : "items-center")}>
@@ -136,17 +139,17 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
               type="file"
               accept={ACCEPTED_PHOTO_TYPES.join(",")}
               className="hidden"
-              aria-label="Profile photo file"
+              aria-label={t("photoFileLabel")}
               onChange={handleFileChange}
             />
 
             {staged ? (
               <>
                 <Field className="max-w-xs">
-                  <FieldLabel htmlFor="avatarZoom">Zoom</FieldLabel>
+                  <FieldLabel htmlFor="avatarZoom">{t("photoZoomLabel")}</FieldLabel>
                   <Slider
                     id="avatarZoom"
-                    aria-label="Zoom"
+                    aria-label={t("photoZoomLabel")}
                     min={MIN_AVATAR_ZOOM}
                     max={MAX_AVATAR_ZOOM}
                     step={0.05}
@@ -163,10 +166,10 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
                 <div className="flex flex-wrap items-center gap-2">
                   <Button type="button" onClick={() => void handleSave()} disabled={busy}>
                     {pending === "saving" && <Spinner />}
-                    {pending === "saving" ? "Saving…" : "Save photo"}
+                    {pending === "saving" ? tc("saving") : t("photoSave")}
                   </Button>
                   <Button type="button" variant="outline" onClick={handleCancel} disabled={busy}>
-                    Cancel
+                    {tc("cancel")}
                   </Button>
                   <Button
                     type="button"
@@ -174,13 +177,10 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
                     onClick={() => fileInputRef.current?.click()}
                     disabled={busy}
                   >
-                    Choose another
+                    {t("photoChooseAnother")}
                   </Button>
                 </div>
-                <p className="text-caption text-muted-foreground">
-                  Drag the photo, or nudge it with the arrow keys. Nothing is uploaded until you
-                  save.
-                </p>
+                <p className="text-caption text-muted-foreground">{t("photoNudgeHint")}</p>
               </>
             ) : (
               <>
@@ -192,7 +192,11 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
                     disabled={busy}
                   >
                     {pending === "reading" ? <Spinner /> : <Camera className="size-4" />}
-                    {pending === "reading" ? "Reading…" : avatar ? "Change photo" : "Upload photo"}
+                    {pending === "reading"
+                      ? t("photoReading")
+                      : avatar
+                        ? t("photoChange")
+                        : t("photoUpload")}
                   </Button>
                   {avatar && (
                     <Button
@@ -202,14 +206,11 @@ export function ProfilePhotoCard({ name, avatar, onUpload, onRemove }: ProfilePh
                       disabled={busy}
                     >
                       {pending === "removing" && <Spinner />}
-                      Remove
+                      {t("photoRemove")}
                     </Button>
                   )}
                 </div>
-                <p className="text-caption text-muted-foreground">
-                  JPG, PNG or WebP up to 2MB. You choose the crop and confirm it before it is
-                  uploaded.
-                </p>
+                <p className="text-caption text-muted-foreground">{t("photoHint")}</p>
               </>
             )}
           </div>

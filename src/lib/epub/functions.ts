@@ -3,6 +3,7 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { novels, epubUploads, user } from "@/lib/db/schema";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { ensureSession } from "@/lib/auth/functions";
@@ -11,7 +12,7 @@ import { withSafeHandler, SafeServerError } from "@/lib/server-fn-error";
 import { completeEpubImportForUser } from "@/lib/import/commands";
 import { checkRateLimitForSubject } from "@/lib/rate-limit";
 import { getPrivateStorage } from "@/lib/storage/index.server";
-import { epubUploadKey } from "@/lib/storage/keys";
+import { epubUploadKey, parseObjectKey } from "@/lib/storage/keys";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MiB
 const MAX_RETAINED_UPLOADS = 2;
@@ -39,7 +40,7 @@ export const createEpubUpload = createServerFn({ method: "POST" })
       await checkRateLimitForSubject("epub-upload-create", session.user.id, 6);
 
       if (!data.fileName.toLowerCase().endsWith(".epub")) {
-        throw new SafeServerError("Only .epub files are supported");
+        throw new SafeServerError(encodeMessage("errors.epubOnlySupported"));
       }
 
       const uploadId = nanoid();
@@ -53,9 +54,9 @@ export const createEpubUpload = createServerFn({ method: "POST" })
           .where(eq(user.id, session.user.id))
           .limit(1)
           .for("update", { of: user });
-        if (!owner) throw new SafeServerError("Novel not found or unauthorized");
+        if (!owner) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
         if (!(await lockNovelForMutation(tx, data.novelId, session.user.id))) {
-          throw new SafeServerError("Novel not found or unauthorized");
+          throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
         }
 
         const [retained] = await tx
@@ -84,10 +85,10 @@ export const createEpubUpload = createServerFn({ method: "POST" })
           throw new Error("Could not determine upload admission capacity");
         }
         if (slots >= MAX_RETAINED_UPLOADS) {
-          throw new SafeServerError("Too many active EPUB uploads");
+          throw new SafeServerError(encodeMessage("errors.tooManyEpubUploads"));
         }
         if (reservedBytes + data.fileSize > MAX_RESERVED_BYTES) {
-          throw new SafeServerError("EPUB upload storage limit reached");
+          throw new SafeServerError(encodeMessage("errors.epubStorageLimitReached"));
         }
 
         await tx.insert(epubUploads).values({
@@ -163,11 +164,14 @@ export const abortEpubUpload = createServerFn({ method: "POST" })
         return deleted.length > 0 ? upload.objectKey : null;
       });
 
-      // The staged archive is unreachable once its row is gone.
+      // The staged archive is unreachable once its row is gone. The value comes from the row this
+      // transaction just deleted, so it is read back before it reaches the bucket.
       if (objectKey) {
-        await getPrivateStorage()
-          .delete(objectKey)
-          .catch(() => {});
+        const stored = parseObjectKey(objectKey);
+        if (stored)
+          await getPrivateStorage()
+            .delete(stored.key)
+            .catch(() => {});
       }
       return { success: true };
     }),

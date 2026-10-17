@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, readerProgress, translationJobs } from "@/lib/db/schema";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
@@ -23,7 +24,7 @@ export async function deleteChapterForUser(
       .where(eq(chapters.id, chapterId))
       .limit(1);
     if (!parent || !(await lockNovelForMutation(tx, parent.novelId, userId))) {
-      throw new SafeServerError("Chapter not found or unauthorized");
+      throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
     }
     const chapterScope = and(eq(chapters.id, chapterId), eq(chapters.novelId, parent.novelId));
     const [snapshot] = await tx
@@ -31,7 +32,7 @@ export async function deleteChapterForUser(
       .from(chapters)
       .where(chapterScope)
       .limit(1);
-    if (!snapshot) throw new SafeServerError("Chapter not found or unauthorized");
+    if (!snapshot) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
 
     // Preserve pointed-job-before-chapter locking inside the novel gate.
     const [activeJob] = snapshot.activeTranslationJobId
@@ -54,12 +55,12 @@ export async function deleteChapterForUser(
       .where(chapterScope)
       .limit(1)
       .for("update", { of: chapters });
-    if (!existing) throw new SafeServerError("Chapter not found or unauthorized");
+    if (!existing) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
     if (
       existing.activeTranslationJobId !== snapshot.activeTranslationJobId ||
       (activeJob && activeJob.chapterId !== existing.id)
     ) {
-      throw new SafeServerError("Chapter changed while it was being deleted; try again");
+      throw new SafeServerError(encodeMessage("errors.chapterDeleteConflict"));
     }
 
     let cancellationOutboxIds: string[] = [];
@@ -69,7 +70,7 @@ export async function deleteChapterForUser(
           jobId: activeJob.id,
           generation: activeJob.generation,
           logsJson: activeJob.logsJson,
-          message: "Translation cancelled because the chapter was deleted.",
+          message: encodeMessage("log.cancelledChapterDeleted"),
         },
       ]);
       cancellationOutboxIds = cancellation.outboxIds;

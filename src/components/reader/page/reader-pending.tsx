@@ -1,9 +1,14 @@
+import { useTranslations } from "use-intl";
+
 const READER_SKELETON_ROWS = ["one", "two", "three", "four", "five", "six", "seven", "eight"];
 
 export function ReaderPending() {
+  const t = useTranslations("reader");
+  const label = t("loadingChapter");
+
   return (
-    <div className="flex flex-col gap-6" role="status" aria-label="Loading chapter…">
-      <span className="sr-only">Loading chapter…</span>
+    <div className="flex flex-col gap-6" role="status" aria-label={label}>
+      <span className="sr-only">{label}</span>
       <div
         className="h-14 motion-safe:animate-pulse rounded-xl border border-border bg-card"
         aria-hidden="true"

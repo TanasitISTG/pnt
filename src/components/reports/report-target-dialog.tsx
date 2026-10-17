@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { REPORT_REASONS, isReportReason } from "@/lib/reports/reasons";
+import { REPORT_REASON_KEYS, REPORT_REASONS, isReportReason } from "@/lib/reports/reasons";
 import type { ReportReason } from "@/lib/reports/reasons";
 import { REPORT_DETAILS_MAX_LENGTH } from "@/lib/reports/schemas";
 
@@ -29,20 +29,6 @@ export interface ReportSubmission {
   reason: ReportReason;
   details?: string;
 }
-
-/**
- * The select reads the same vocabulary the operator queue filters on - the values are the
- * shared ones - while the words come from the catalog, so the reason a reader picks is the
- * same reason an operator reads, in each of their own languages.
- */
-const REASON_KEYS = {
-  copyright: "reasonCopyright",
-  sexual_content: "reasonSexualContent",
-  sexual_cover: "reasonSexualCover",
-  hate_or_harassment: "reasonHateOrHarassment",
-  spam_or_scam: "reasonSpamOrScam",
-  other: "reasonOther",
-} as const satisfies Record<ReportReason, string>;
 
 const DETAILS_ERROR_ID = "report-details-error";
 
@@ -81,7 +67,7 @@ export function ReportTargetDialog({
   const t = useTranslations("reports");
   const tCommon = useTranslations("common");
   const reasonItems: Record<string, string> = Object.fromEntries(
-    REPORT_REASONS.map((entry) => [entry, t(REASON_KEYS[entry])]),
+    REPORT_REASONS.map((entry) => [entry, t(REPORT_REASON_KEYS[entry])]),
   );
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");

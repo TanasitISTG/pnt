@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLocale, useTranslations } from "use-intl";
 import { previewTranslationBatch } from "@/lib/translation/api/mutations";
 import { formatCost } from "@/lib/utils";
 import { ChapterReorderDialog } from "@/components/chapters/reorder/chapter-reorder-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { JobLogDrawer } from "@/components/translation/job/job-log-drawer";
+import { formatNumber } from "@/lib/i18n/format";
 import type { ChapterRow } from "@/components/chapters/types";
 import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 
@@ -64,6 +66,8 @@ export interface NovelDetailDialogsProps {
 }
 
 export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
+  const t = useTranslations("studio");
+  const locale = useLocale();
   const { novelId, reorder, deleteNovel, deleteTranslations, deleteChapter } = detail;
   const { logs, retranslate, batchRetranslate, stopSelected } = detail;
   const selectedTranslatedIds = batchRetranslate.chapterIds;
@@ -82,22 +86,39 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
     enabled: batchRetranslate.open && selectedTranslatedIds.length > 0,
     staleTime: 30_000,
   });
+  // Each sentence of the preview is its own message; the paragraph is the sentences joined,
+  // so no sentence is ever half a key.
   const previewDescription = previewQuery.isPending
-    ? "Preparing a translation preview…"
+    ? t("previewPreparing")
     : previewQuery.isError
-      ? "Preview unavailable. You can retry the preview by closing and reopening this confirmation."
+      ? t("previewUnavailable")
       : previewQuery.data
         ? [
-            `Eligible: ${previewQuery.data.eligibleIds.length}.`,
-            `Skipped: ${previewQuery.data.skipped.length}.`,
-            `Raw text: ${previewQuery.data.rawCharacterTotal.toLocaleString()} characters.`,
-            `Already translated: ${previewQuery.data.existingTranslationCount}.`,
-            `Manual edits: ${previewQuery.data.manualEditCount}.`,
+            t("previewEligible", { count: previewQuery.data.eligibleIds.length }),
+            t("previewSkipped", { count: previewQuery.data.skipped.length }),
+            t("previewRawText", {
+              characters: formatNumber(previewQuery.data.rawCharacterTotal, locale),
+            }),
+            t("previewAlreadyTranslated", {
+              count: previewQuery.data.existingTranslationCount,
+            }),
+            t("previewManualEdits", { count: previewQuery.data.manualEditCount }),
             previewQuery.data.estimate
-              ? `Estimate from ${previewQuery.data.estimate.sampleSize} recent successful jobs: ${previewQuery.data.estimate.promptTokens.toLocaleString()} prompt + ${previewQuery.data.estimate.completionTokens.toLocaleString()} completion tokens${previewQuery.data.estimate.cost !== null ? `, ${formatCost(previewQuery.data.estimate.cost)}` : " (pricing unavailable)"}.`
-              : "No token estimate yet; at least three successful jobs with usage are required.",
+              ? previewQuery.data.estimate.cost !== null
+                ? t("previewEstimatePriced", {
+                    samples: previewQuery.data.estimate.sampleSize,
+                    prompt: formatNumber(previewQuery.data.estimate.promptTokens, locale),
+                    completion: formatNumber(previewQuery.data.estimate.completionTokens, locale),
+                    cost: formatCost(previewQuery.data.estimate.cost),
+                  })
+                : t("previewEstimateUnpriced", {
+                    samples: previewQuery.data.estimate.sampleSize,
+                    prompt: formatNumber(previewQuery.data.estimate.promptTokens, locale),
+                    completion: formatNumber(previewQuery.data.estimate.completionTokens, locale),
+                  })
+              : t("previewNoEstimate"),
           ].join(" ")
-        : "No chapters are selected for re-translation.";
+        : t("previewNoSelection");
 
   return (
     <>
@@ -110,30 +131,33 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
         />
       ) : null}
       <DeleteConfirmDialog
-        title="Delete Novel Project"
-        description="Are you absolutely sure you want to delete this novel? This action is permanent and will delete all chapters, glossaries, and translation jobs associated with it."
+        title={t("deleteNovelTitle")}
+        description={t("deleteNovelDescription")}
         open={deleteNovel.open}
         onOpenChange={deleteNovel.onOpenChange}
         onConfirm={deleteNovel.onConfirm}
         pending={deleteNovel.pending}
       />
       <DeleteConfirmDialog
-        title="Delete All Translations"
-        description="This permanently deletes translated titles, chapter text, chapter summaries, and the story summary for this novel. Active translation jobs will be cancelled. Raw chapters, publishing settings, and translation job history are kept."
+        title={t("deleteAllTranslationsTitle")}
+        description={t("deleteAllTranslationsDescription")}
         open={deleteTranslations.open}
         onOpenChange={deleteTranslations.onOpenChange}
         onConfirm={deleteTranslations.onConfirm}
         pending={deleteTranslations.pending}
       />
       <ConfirmDialog
-        title="Re-translate selected chapters?"
-        description={`This will overwrite the existing translations for ${selectedTranslatedCount} selected chapter${selectedTranslatedCount === 1 ? "" : "s"} with new machine translations. ${previewDescription}`}
+        title={t("batchRetranslateTitle")}
+        description={t("batchRetranslateDescription", {
+          count: selectedTranslatedCount,
+          preview: previewDescription,
+        })}
         confirmText={
           previewQuery.isPending
-            ? "Preparing preview…"
+            ? t("previewPreparingShort")
             : batchRetranslate.pending
-              ? "Re-translating…"
-              : "Re-translate chapters"
+              ? t("retranslatingChapters")
+              : t("retranslateChapters")
         }
         open={batchRetranslate.open}
         onOpenChange={batchRetranslate.onOpenChange}
@@ -143,9 +167,9 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
         pending={batchRetranslate.pending || previewQuery.isPending}
       />
       <ConfirmDialog
-        title="Stop selected translations?"
-        description={`This will cancel ${selectedActiveCount} queued or running translation${selectedActiveCount === 1 ? "" : "s"}. Existing completed translations will stay unchanged.`}
-        confirmText={stopSelected.pending ? "Stopping…" : "Stop translations"}
+        title={t("stopSelectedTitle")}
+        description={t("stopSelectedDescription", { count: selectedActiveCount })}
+        confirmText={stopSelected.pending ? t("stoppingTranslations") : t("stopTranslations")}
         variant="destructive"
         open={stopSelected.open}
         onOpenChange={stopSelected.onOpenChange}
@@ -153,8 +177,8 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
         pending={stopSelected.pending}
       />
       <DeleteConfirmDialog
-        title="Delete Chapter"
-        description="Are you sure you want to delete this chapter? This action is permanent and cannot be undone."
+        title={t("deleteChapterTitle")}
+        description={t("deleteChapterDescription")}
         open={deleteChapter.chapterId !== null}
         onOpenChange={(open) => !open && deleteChapter.setChapterId(null)}
         onConfirm={() => {
@@ -169,9 +193,9 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
         onOpenChange={(open) => !open && logs.setChapterId(null)}
       />
       <ConfirmDialog
-        title="Overwrite Existing Translation?"
-        description="This chapter already has a translation. Re-translating will replace it; any manual changes will be lost."
-        confirmText="Overwrite & Translate"
+        title={t("overwriteTitle")}
+        description={t("overwriteDescription")}
+        confirmText={t("overwriteConfirm")}
         open={retranslate.chapterId !== null}
         onOpenChange={(open) => !open && retranslate.setChapterId(null)}
         onConfirm={() => {

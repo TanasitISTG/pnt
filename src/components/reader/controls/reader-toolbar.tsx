@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslations } from "use-intl";
 import {
   ArrowLeft,
   Bookmark,
@@ -130,7 +131,9 @@ export function ReaderToolbar({
   proseNode,
   toolbarRef,
 }: ReaderToolbarProps) {
-  const chapterLabel = `Ch. ${Number(chapter.number)}`;
+  const t = useTranslations("reader");
+  const tCommon = useTranslations("common");
+  const chapterLabel = tCommon("chapterShort", { number: Number(chapter.number) });
   const appearanceControls = {
     settings,
     update,
@@ -150,24 +153,24 @@ export function ReaderToolbar({
             className={size === "icon" ? "size-11 shrink-0" : undefined}
           />
         }
-        aria-label="More reader actions"
-        title="More reader actions"
+        aria-label={t("moreActions")}
+        title={t("moreActions")}
       >
         <MoreHorizontal className={size === "icon" ? "size-4" : "size-5"} aria-hidden="true" />
-        {size === "readerBar" ? "More" : null}
+        {size === "readerBar" ? t("more") : null}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="z-[60] w-56">
         <DropdownMenuGroup>
           {canManage && !editing && !jobRunning ? (
             <DropdownMenuItem onClick={onEditRequest}>
               <Pencil className="size-4" aria-hidden="true" />
-              Edit chapter
+              {t("editChapter")}
             </DropdownMenuItem>
           ) : null}
           {canManage && !editing && !jobRunning ? (
             <DropdownMenuItem onClick={onTranslateRequest}>
               <RotateCw className="size-4" aria-hidden="true" />
-              {hasTranslation ? "Re-translate chapter" : "Translate chapter"}
+              {hasTranslation ? t("retranslateChapter") : t("translateChapter")}
             </DropdownMenuItem>
           ) : null}
           {hasTranslation && !editing && !jobRunning ? (
@@ -180,21 +183,21 @@ export function ReaderToolbar({
               }
             >
               <Download className="size-4" aria-hidden="true" />
-              Download chapter .txt
+              {t("downloadChapter")}
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuItem onClick={() => onOverlayChange("bookmarks")}>
             <Bookmark className="size-4" aria-hidden="true" />
-            Bookmarks
+            {t("bookmarks")}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onFocusModeChange(!focusMode)}>
             <Maximize2 className="size-4" aria-hidden="true" />
-            {focusMode ? "Exit focus mode" : "Focus mode"}
+            {focusMode ? t("exitFocusMode") : t("focusMode")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onShortcutsRequest}>
             <HelpCircle className="size-4" aria-hidden="true" />
-            Keyboard shortcuts
+            {t("keyboardShortcuts")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
@@ -215,8 +218,8 @@ export function ReaderToolbar({
                 size="icon"
                 className="size-11 shrink-0"
                 render={<Link to="/{-$locale}/novels/$novelId" params={{ novelId }} />}
-                aria-label="Back to novel"
-                title="Back to novel"
+                aria-label={t("backToNovel")}
+                title={t("backToNovel")}
               >
                 <ArrowLeft className="size-4" aria-hidden="true" />
               </Button>
@@ -234,9 +237,9 @@ export function ReaderToolbar({
                     size="icon"
                     className="size-11 shrink-0 md:hidden"
                     onClick={() => (search.open ? search.close() : search.openFind())}
-                    aria-label="Find in chapter"
+                    aria-label={t("findInChapter")}
                     aria-pressed={search.open}
-                    title="Find in chapter"
+                    title={t("findInChapter")}
                   >
                     <Search className="size-4" aria-hidden="true" />
                   </Button>
@@ -248,8 +251,8 @@ export function ReaderToolbar({
                     className="size-11 shrink-0"
                     disabled={!prevChapter}
                     onClick={() => prevChapter && onGoToChapter(prevChapter.id)}
-                    aria-label="Previous chapter"
-                    title="Previous chapter (←)"
+                    aria-label={t("previousChapter")}
+                    title={t("previousChapterShortcut")}
                   >
                     <ChevronLeft className="size-4" aria-hidden="true" />
                   </Button>
@@ -259,8 +262,8 @@ export function ReaderToolbar({
                     className="size-11 shrink-0"
                     disabled={!nextChapter}
                     onClick={() => nextChapter && onGoToChapter(nextChapter.id)}
-                    aria-label="Next chapter"
-                    title="Next chapter (→)"
+                    aria-label={t("nextChapter")}
+                    title={t("nextChapterShortcut")}
                   >
                     <ChevronRight className="size-4" aria-hidden="true" />
                   </Button>
@@ -277,8 +280,8 @@ export function ReaderToolbar({
                         variant="ghost"
                         size="icon"
                         className="size-11 shrink-0"
-                        aria-label="Chapters"
-                        title="Chapters"
+                        aria-label={t("chapters")}
+                        title={t("chapters")}
                       >
                         <List className="size-4" aria-hidden="true" />
                       </Button>
@@ -290,9 +293,9 @@ export function ReaderToolbar({
                       size="icon"
                       className="size-11 shrink-0"
                       onClick={() => (search.open ? search.close() : search.openFind())}
-                      aria-label="Find in chapter"
+                      aria-label={t("findInChapter")}
                       aria-pressed={search.open}
-                      title="Find in chapter (Ctrl/⌘+F)"
+                      title={t("findInChapterShortcut")}
                     >
                       <Search className="size-4" aria-hidden="true" />
                     </Button>
@@ -307,8 +310,8 @@ export function ReaderToolbar({
                     size="icon"
                     className="size-11 shrink-0"
                     onClick={() => onFocusModeChange(true)}
-                    aria-label="Focus mode"
-                    title="Focus mode (F)"
+                    aria-label={t("focusMode")}
+                    title={t("focusModeShortcut")}
                   >
                     <Maximize2 className="size-4" aria-hidden="true" />
                   </Button>
@@ -329,7 +332,7 @@ export function ReaderToolbar({
 
       {focusMode ? null : (
         <nav
-          aria-label="Reader"
+          aria-label={t("toolbarLabel")}
           className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 pb-safe-bottom supports-backdrop-filter:backdrop-blur-sm md:hidden"
         >
           <div className="grid grid-cols-5 gap-0.5 px-1.5 py-1">
@@ -342,9 +345,9 @@ export function ReaderToolbar({
               onGoToChapter={onGoToChapter}
               side="bottom"
               trigger={
-                <Button variant="ghost" size="readerBar" aria-label="Chapters">
+                <Button variant="ghost" size="readerBar" aria-label={t("chapters")}>
                   <List className="size-5" aria-hidden="true" />
-                  Chapters
+                  {t("chapters")}
                 </Button>
               }
             />
@@ -353,20 +356,20 @@ export function ReaderToolbar({
               size="readerBar"
               disabled={!prevChapter}
               onClick={() => prevChapter && onGoToChapter(prevChapter.id)}
-              aria-label="Previous chapter"
+              aria-label={t("previousChapter")}
             >
               <ChevronLeft className="size-5" aria-hidden="true" />
-              Previous
+              {t("previous")}
             </Button>
             <Button
               variant="ghost"
               size="readerBar"
               disabled={!nextChapter}
               onClick={() => nextChapter && onGoToChapter(nextChapter.id)}
-              aria-label="Next chapter"
+              aria-label={t("nextChapter")}
             >
               <ChevronRight className="size-5" aria-hidden="true" />
-              Next
+              {t("next")}
             </Button>
             <ReaderAppearanceSheet
               {...appearanceControls}
@@ -383,10 +386,11 @@ export function ReaderToolbar({
 }
 
 function ReaderJobStatus({ activeJob }: { activeJob: ActiveJobState | undefined }) {
+  const t = useTranslations("reader");
   if (!activeJob) {
     return (
       <div className="min-w-0 pb-2 text-caption text-muted-foreground" role="status">
-        Translation in progress
+        {t("translationPending")}
       </div>
     );
   }
@@ -397,11 +401,11 @@ function ReaderJobStatus({ activeJob }: { activeJob: ActiveJobState | undefined 
       : 0;
   return (
     <div className="flex min-w-0 items-center gap-2 pb-2" role="status">
-      <span className="shrink-0 text-caption text-muted-foreground">Translating…</span>
+      <span className="shrink-0 text-caption text-muted-foreground">{t("translating")}</span>
       <Progress
         value={percent}
         className="h-1.5 min-w-0 max-w-48 flex-1"
-        aria-label="Translation progress"
+        aria-label={t("translationProgress")}
       />
       <span className="shrink-0 text-caption text-muted-foreground">
         {activeJob.doneChunks}/{activeJob.totalChunks}

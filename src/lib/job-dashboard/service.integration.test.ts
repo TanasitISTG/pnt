@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { type Sql } from "postgres";
 
 import type { ServerTiming } from "@/lib/server-timing";
 import type { JobHistorySearch } from "@/lib/job-dashboard/contracts";
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 let sql: Sql;
 let loadJobActivity: typeof import("./service").loadJobActivity;
@@ -37,21 +39,13 @@ function search(overrides: Partial<JobHistorySearch> = {}): JobHistorySearch {
   return { ...defaultSearch, ...overrides };
 }
 
-integrationDescribe("job observability PostgreSQL contracts", () => {
+describeIntegration("job observability PostgreSQL contracts", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-
-    sql = postgres(testDatabaseUrl!, { max: 10, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
     ({ loadJobActivity, loadJobHistory, loadJobStats } = await import("./service"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   it("returns every owned job across pages and exact lifetime statistics", async () => {
     const ownerUserId = `user-${randomUUID()}`;

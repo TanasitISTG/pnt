@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { TablePager } from "@/components/admin/table-pager";
 import { DataTableSection } from "@/components/ui/data-table-parts";
 import {
@@ -31,16 +33,17 @@ export function ReportHistoryTable({
   searching,
   onPageChange,
 }: ReportHistoryTableProps) {
+  const t = useTranslations("admin");
   return (
-    <DataTableSection ariaLabel="Decided reports" busy={isPending}>
+    <DataTableSection ariaLabel={t("historyAria")} busy={isPending}>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Novel</TableHead>
-            <TableHead>Report</TableHead>
-            <TableHead>Decision</TableHead>
-            <TableHead className="hidden sm:table-cell">Note</TableHead>
-            <TableHead className="hidden md:table-cell">Decided</TableHead>
+            <TableHead>{t("columnNovel")}</TableHead>
+            <TableHead>{t("columnReport")}</TableHead>
+            <TableHead>{t("columnDecision")}</TableHead>
+            <TableHead className="hidden sm:table-cell">{t("columnNote")}</TableHead>
+            <TableHead className="hidden md:table-cell">{t("columnDecided")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -50,9 +53,7 @@ export function ReportHistoryTable({
           {!isPending && rows.length === 0 && (
             <TableRow>
               <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
-                {searching
-                  ? "No decided reports match that search."
-                  : "No reports have been decided yet."}
+                {searching ? t("historyEmptySearch") : t("historyEmpty")}
               </TableCell>
             </TableRow>
           )}
@@ -62,7 +63,7 @@ export function ReportHistoryTable({
         page={page}
         pageSize={pageSize}
         rowCount={rowCount}
-        noun="reports"
+        noun={t("nounReports")}
         isPending={isPending}
         onPageChange={onPageChange}
       />

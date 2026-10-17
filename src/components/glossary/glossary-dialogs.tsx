@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { HelpCircle, Upload } from "lucide-react";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -51,6 +52,8 @@ export function GlossaryDialogs({
   onImport,
   importing,
 }: GlossaryDialogsProps) {
+  const t = useTranslations("studio");
+  const tCommon = useTranslations("common");
   const form = useForm({
     defaultValues: { tsv: "" },
     validators: { onSubmit: tsvImportFormSchema },
@@ -78,8 +81,8 @@ export function GlossaryDialogs({
   return (
     <>
       <DeleteConfirmDialog
-        title="Delete Glossary Term"
-        description="Are you sure you want to delete this term? This action cannot be undone."
+        title={t("glossaryDeleteTermTitle")}
+        description={t("glossaryDeleteTermDescription")}
         open={deleteOpen}
         onOpenChange={onDeleteOpenChange}
         onConfirm={onDeleteConfirm}
@@ -87,8 +90,8 @@ export function GlossaryDialogs({
       />
 
       <DeleteConfirmDialog
-        title="Delete All Glossary Terms"
-        description="This permanently deletes every approved, pending, and rejected glossary term for this novel. Existing translated chapter text will not be changed."
+        title={t("glossaryDeleteAllTitle")}
+        description={t("glossaryDeleteAllDescription")}
         open={deleteAllOpen}
         onOpenChange={onDeleteAllOpenChange}
         onConfirm={onDeleteAllConfirm}
@@ -113,9 +116,11 @@ export function GlossaryDialogs({
             className="flex flex-col gap-5"
           >
             <DialogHeader>
-              <DialogTitle>Bulk Import Glossary Terms (TSV)</DialogTitle>
+              <DialogTitle>{t("glossaryImportTitle")}</DialogTitle>
               <DialogDescription>
-                Paste tab-separated text containing one term per line. Format: <br />
+                {t("glossaryImportLead")} <br />
+                {/* The column order is a format spec the parser reads, not copy, so it stays
+                    literal here while the sentence that introduces it is a key. */}
                 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
                   source &lt;tab&gt; target &lt;tab&gt; category &lt;tab&gt; note
                 </code>
@@ -125,7 +130,7 @@ export function GlossaryDialogs({
             <div className="flex flex-col gap-3 py-2">
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <HelpCircle className="size-3.5" />
-                <span>Example TSV format:</span>
+                <span>{t("glossaryImportExample")}</span>
               </div>
               <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs text-muted-foreground select-all">
                 {`Lin Fan\tหลินฟาน\tcharacter\tProtagonist
@@ -138,12 +143,12 @@ Solar Slash\tเพลงดาบสุริยะ\tskill`}
                   const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
                   return (
                     <Field data-invalid={invalid || undefined}>
-                      <FieldLabel htmlFor="tsv-input">TSV Content</FieldLabel>
+                      <FieldLabel htmlFor="tsv-input">{t("glossaryImportFieldLabel")}</FieldLabel>
                       <Textarea
                         id="tsv-input"
                         name={field.name}
                         rows={8}
-                        placeholder="Paste TSV data here..."
+                        placeholder={t("glossaryImportPlaceholder")}
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(event) => field.handleChange(event.target.value)}
@@ -167,11 +172,11 @@ Solar Slash\tเพลงดาบสุริยะ\tskill`}
                 }}
                 disabled={importing || isSubmitting}
               >
-                Cancel
+                {tCommon("cancel")}
               </Button>
               <Button type="submit" disabled={importing || isSubmitting || !tsv.trim()}>
                 {importing || isSubmitting ? <Spinner /> : <Upload className="size-4" />}
-                {importing || isSubmitting ? "Importing..." : "Import Terms"}
+                {importing || isSubmitting ? t("glossaryImporting") : t("glossaryImportSubmit")}
               </Button>
             </DialogFooter>
           </form>

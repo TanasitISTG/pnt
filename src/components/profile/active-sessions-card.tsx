@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Monitor, ShieldOff } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useLocale } from "use-intl";
+import { useLocale, useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,10 +13,12 @@ import {
   revokeOtherSessions,
   revokeSession,
 } from "@/lib/auth/auth-client";
+import { formatDateTime } from "@/lib/i18n/format";
 import { localizedPath } from "@/lib/i18n/locales";
 import { describeUserAgent } from "./session-label";
 
 export function ActiveSessionsCard() {
+  const t = useTranslations("settings");
   const locale = useLocale();
   const queryClient = useQueryClient();
   const [busyToken, setBusyToken] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export function ActiveSessionsCard() {
     queryKey: ["activeSessions"] as const,
     queryFn: async () => {
       const { data, error } = await listSessions();
-      if (error) throw new Error(error.message || "Could not load active sessions");
+      if (error) throw new Error(error.message || t("sessionsLoadFailed"));
       return data ?? [];
     },
   });
@@ -40,10 +42,10 @@ export function ActiveSessionsCard() {
     try {
       const { error } = await revokeSession({ token });
       if (error) {
-        toast.error(error.message || "Could not end that session");
+        toast.error(error.message || t("sessionEndFailed"));
         return;
       }
-      toast.success(isCurrent ? "Signed out on this device" : "Session ended");
+      toast.success(isCurrent ? t("signedOutThisDevice") : t("sessionEnded"));
       // Revoking the session in use clears the cookie, so the shell has to re-read it.
       // This is a whole-document navigation rather than a router one, so the language is
       // spelled into the address: a signed-out reader would otherwise land on the Thai
@@ -51,7 +53,7 @@ export function ActiveSessionsCard() {
       if (isCurrent) window.location.assign(localizedPath("/login", locale));
       else await refresh();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Could not end that session");
+      toast.error(error instanceof Error ? error.message : t("sessionEndFailed"));
     } finally {
       setBusyToken(null);
     }
@@ -64,13 +66,13 @@ export function ActiveSessionsCard() {
       // out of the page they are standing on.
       const { error } = await revokeOtherSessions();
       if (error) {
-        toast.error(error.message || "Could not end the other sessions");
+        toast.error(error.message || t("othersEndFailed"));
         return;
       }
-      toast.success("Signed out everywhere else");
+      toast.success(t("signedOutEverywhereElse"));
       await refresh();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Could not end the other sessions");
+      toast.error(error instanceof Error ? error.message : t("othersEndFailed"));
     } finally {
       setBusyToken(null);
     }
@@ -81,18 +83,16 @@ export function ActiveSessionsCard() {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Monitor className="size-5 text-muted-foreground" />
-          <CardTitle>Active Sessions</CardTitle>
+          <CardTitle>{t("sessionsTitle")}</CardTitle>
         </div>
-        <CardDescription>
-          Signing in on another device adds a session here, and ending one takes effect immediately.
-        </CardDescription>
+        <CardDescription>{t("sessionsDescription")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {sessionsQuery.isError ? (
           <p role="alert" className="text-caption text-destructive-text">
             {sessionsQuery.error instanceof Error
               ? sessionsQuery.error.message
-              : "Could not load active sessions"}
+              : t("sessionsLoadFailed")}
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -107,12 +107,14 @@ export function ActiveSessionsCard() {
                     <span className="text-body text-foreground">
                       {describeUserAgent(session.userAgent)}
                       {isCurrent && (
-                        <span className="ml-2 text-caption text-muted-foreground">This device</span>
+                        <span className="ml-2 text-caption text-muted-foreground">
+                          {t("thisDevice")}
+                        </span>
                       )}
                     </span>
                     <span className="text-caption text-muted-foreground">
                       {session.ipAddress ? `${session.ipAddress} · ` : ""}
-                      Started {new Date(session.createdAt).toLocaleString()}
+                      {t("startedAt", { when: formatDateTime(session.createdAt, locale) })}
                     </span>
                   </div>
                   <Button
@@ -122,13 +124,13 @@ export function ActiveSessionsCard() {
                     onClick={() => void handleRevoke(session.token, isCurrent)}
                   >
                     {busyToken === session.token ? <Spinner /> : null}
-                    {isCurrent ? "Sign out" : "End session"}
+                    {isCurrent ? t("signOut") : t("endSession")}
                   </Button>
                 </li>
               );
             })}
             {!sessionsQuery.isPending && sessions.length === 0 && (
-              <li className="py-3 text-caption text-muted-foreground">No other sessions.</li>
+              <li className="py-3 text-caption text-muted-foreground">{t("noOtherSessions")}</li>
             )}
           </ul>
         )}
@@ -145,7 +147,7 @@ export function ActiveSessionsCard() {
             ) : (
               <ShieldOff className="size-4" aria-hidden="true" />
             )}
-            Sign out everywhere else
+            {t("signOutEverywhereElse")}
           </Button>
         )}
       </CardContent>

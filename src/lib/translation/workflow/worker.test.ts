@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { failJob, finalizeJob, initJob, translateChunk } from "./worker";
+import { logMessage, parseLogEntries } from "./log-entry";
 import * as finalizeGlossaryModule from "./finalize-glossary";
 import * as finalizeSummaryModule from "./finalize-summary";
 import * as jobStore from "./job-store";
 import * as providerClientModule from "../providers/provider-client";
 import type { TranslationRunContext } from "./run-context";
 
+import { englishWords } from "@/test/messages";
 import { buildRelationshipPromptContextForText } from "@/lib/relationships/map";
 import { relationshipMapSchema } from "@/lib/relationships/schemas";
 import * as analyzerModule from "@/lib/relationships/analyzer";
@@ -31,7 +33,7 @@ vi.mock("./job-store", () => ({
 vi.mock("@/lib/relationships/analyzer", () => ({
   analyzeChunkRelationshipsForChunk: vi.fn().mockResolvedValue({
     context: null,
-    warning: null,
+    warnings: [],
     promptTokens: 0,
     completionTokens: 0,
   }),
@@ -46,7 +48,7 @@ function runContext(overrides: Partial<TranslationRunContext> = {}): Translation
 }
 
 function emptyAnalysis(overrides: Record<string, unknown> = {}) {
-  return { context: null, warning: null, promptTokens: 0, completionTokens: 0, ...overrides };
+  return { context: null, warnings: [], promptTokens: 0, completionTokens: 0, ...overrides };
 }
 
 describe("translation worker guarded state transitions", () => {
@@ -718,7 +720,9 @@ describe("translation worker guarded state transitions", () => {
       previousChunk: null,
     } as never);
     vi.mocked(analyzerModule.analyzeChunkRelationshipsForChunk).mockResolvedValue(
-      emptyAnalysis({ warning: "Relationship analysis failed: boom." }) as never,
+      emptyAnalysis({
+        warnings: [logMessage("relationshipAnalysisFailed", { reason: "boom." })],
+      }) as never,
     );
     provider.generateChatCompletion.mockResolvedValueOnce({
       content: "แปลแล้ว",
@@ -728,8 +732,44 @@ describe("translation worker guarded state transitions", () => {
     await translateChunk("job-1", 0, generation, runContext());
 
     const chunkResult = vi.mocked(jobStore.completeChunk).mock.calls[0]?.[3];
-    expect(chunkResult?.logsJson).toContain("Relationship analysis failed: boom.");
+    // The stored row is the code, and it resolves to the sentence the drawer shows: a warning
+    // written today reads in whichever language whoever opens the job reads it in.
+    const warning = parseLogEntries(chunkResult?.logsJson).find((entry) => entry.level === "warn");
+    expect(englishWords(warning?.message ?? "")).toBe("Relationship analysis failed: boom.");
     expect(chunkResult?.translation).toBe("แปลแล้ว");
+  });
+
+  it("writes one log row per analysis warning", async () => {
+    vi.mocked(jobStore.loadJobChunk).mockResolvedValue({
+      ...row,
+      chunk: chunks[0],
+      previousChunk: null,
+    } as never);
+    // A chunk that hit a cap and then failed its analysis says both, as two rows rather than
+    // two sentences fused into one that no codec could resolve.
+    vi.mocked(analyzerModule.analyzeChunkRelationshipsForChunk).mockResolvedValue(
+      emptyAnalysis({
+        warnings: [
+          logMessage("relationshipAliasCapReached", { name: "甲", alias: "阿甲" }),
+          logMessage("relationshipAnalysisFailed", { reason: "boom." }),
+        ],
+      }) as never,
+    );
+    provider.generateChatCompletion.mockResolvedValueOnce({
+      content: "แปลแล้ว",
+      usage: { promptTokens: 10, completionTokens: 20 },
+    });
+
+    await translateChunk("job-1", 0, generation, runContext());
+
+    const chunkResult = vi.mocked(jobStore.completeChunk).mock.calls[0]?.[3];
+    const warnings = parseLogEntries(chunkResult?.logsJson).filter(
+      (entry) => entry.level === "warn",
+    );
+    expect(warnings.map((entry) => englishWords(entry.message))).toEqual([
+      "Alias cap reached for automatic character “甲”; discarded “阿甲”.",
+      "Relationship analysis failed: boom.",
+    ]);
   });
 
   it("uses the provider created on the fourth attempt", async () => {
@@ -871,12 +911,16 @@ describe("translation worker guarded state transitions", () => {
 
     await finalizeJob("job-1", generation);
 
+    // The failure is stored as a code, because the jobs table renders it long after this worker is
+    // gone and in a language it could not know; this is the sentence that code resolves to.
+    const failure = "errors.translationEmptyOutput";
     expect(jobStore.failActiveJob).toHaveBeenCalledWith(
       "job-1",
       generation,
-      "Translation produced no content; nothing was saved",
-      expect.stringContaining("Translation produced no content"),
+      failure,
+      expect.stringContaining(failure),
     );
+    expect(englishWords(failure)).toBe("Translation produced no content; nothing was saved");
     expect(finalizeSummaryModule.generateSummaryArtifacts).not.toHaveBeenCalled();
     expect(finalizeGlossaryModule.suggestAndReviewTerms).not.toHaveBeenCalled();
     expect(jobStore.completeJob).not.toHaveBeenCalled();

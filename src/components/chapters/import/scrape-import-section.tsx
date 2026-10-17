@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { ChapterImportStatus } from "@/components/chapters/import/chapter-import-status";
@@ -17,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { SCRAPE_PROVIDERS, SUPPORTED_SITES_LABEL } from "@/lib/scrape";
 import { importChapter, scrapeChapter } from "@/lib/scrape/functions";
 import type { ScrapeProvider } from "@/lib/scrape/types";
@@ -35,13 +37,14 @@ interface ScrapeImportSectionProps {
   otherImportActive: boolean;
 }
 
-const INVALID_RANGE_MESSAGE =
-  "Enter a valid range: first chapter must be at least 1, last chapter cannot be earlier, and the range can contain at most 500 chapters.";
-
 const scrapeProviderSchema = z.enum(["auto", "direct", "zenrows", "scrapingbee", "firecrawl"]);
 const scrapeImportFormSchema = z
   .object({
-    sourceUrl: z.string().trim().min(1, "Chapter source URL is required").url("Enter a valid URL"),
+    sourceUrl: z
+      .string()
+      .trim()
+      .min(1, encodeMessage("validation.scrapeUrlRequired"))
+      .url(encodeMessage("validation.scrapeUrlInvalid")),
     provider: scrapeProviderSchema,
     rangeFrom: z.string(),
     rangeTo: z.string(),
@@ -60,7 +63,7 @@ const scrapeImportFormSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        message: INVALID_RANGE_MESSAGE,
+        message: encodeMessage("validation.scrapeRangeInvalid"),
         path: ["rangeTo"],
       });
     }
@@ -74,6 +77,7 @@ export function ScrapeImportSection({
   onChapterFetched,
   otherImportActive,
 }: ScrapeImportSectionProps) {
+  const t = useTranslations("studio");
   const [actionError, setActionError] = useState<string | null>(null);
 
   const form = useForm({
@@ -123,8 +127,8 @@ export function ScrapeImportSection({
           if (result.nextUrl) form.setFieldValue("sourceUrl", result.nextUrl);
           toast.success(
             result.number === null
-              ? `Fetched chapter: ${result.title}`
-              : `Fetched chapter ${result.number}: ${result.title}`,
+              ? t("fetchedChapter", { title: result.title })
+              : t("fetchedChapterNumber", { number: result.number, title: result.title }),
           );
           return;
         }
@@ -134,13 +138,13 @@ export function ScrapeImportSection({
         });
         if (result.created) {
           invalidateChapters();
-          toast.success(`Added chapter ${result.number}: ${result.title}`);
+          toast.success(t("addedChapterNumber", { number: result.number, title: result.title }));
         } else {
-          toast.info(`Chapter ${result.number} already exists, skipped`);
+          toast.info(t("chapterAlreadyExists", { number: result.number }));
         }
         if (result.nextUrl) form.setFieldValue("sourceUrl", result.nextUrl);
       } catch (error: unknown) {
-        const fallback = parsed.action === "preview" ? "Fetch failed" : "Import failed";
+        const fallback = parsed.action === "preview" ? t("fetchFailed") : t("importFailed");
         setActionError(error instanceof Error ? error.message : fallback);
       }
     },
@@ -155,10 +159,8 @@ export function ScrapeImportSection({
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h3 className="text-xl font-semibold tracking-tight text-foreground">Import from URL</h3>
-        <p className="text-sm text-muted-foreground">
-          Use a supported chapter URL to review one chapter or queue a range.
-        </p>
+        <h3 className="text-xl font-semibold tracking-tight text-foreground">{t("urlHeading")}</h3>
+        <p className="text-sm text-muted-foreground">{t("urlLead")}</p>
       </header>
 
       <form
@@ -185,7 +187,7 @@ export function ScrapeImportSection({
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
                 <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="scrapeUrl">Chapter source URL</FieldLabel>
+                  <FieldLabel htmlFor="scrapeUrl">{t("urlLabel")}</FieldLabel>
                   <Input
                     id="scrapeUrl"
                     name={field.name}
@@ -219,7 +221,7 @@ export function ScrapeImportSection({
                   SCRAPE_PROVIDERS[0];
                 return (
                   <Field data-invalid={invalid || undefined}>
-                    <FieldLabel htmlFor="scrapeProviderSelect">Fetch method</FieldLabel>
+                    <FieldLabel htmlFor="scrapeProviderSelect">{t("fetchMethodLabel")}</FieldLabel>
                     <Select
                       name={field.name}
                       value={field.state.value}
@@ -235,20 +237,22 @@ export function ScrapeImportSection({
                         onBlur={field.handleBlur}
                         aria-invalid={invalid}
                       >
-                        <SelectValue>{selectedProvider?.label ?? "Automatic"}</SelectValue>
+                        <SelectValue>{t(selectedProvider.labelKey)}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
                           {SCRAPE_PROVIDERS.map((provider) => (
                             <SelectItem key={provider.id} value={provider.id}>
-                              {provider.label}
+                              {t(provider.labelKey)}
                             </SelectItem>
                           ))}
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <FieldDescription>{selectedProvider?.description}</FieldDescription>
-                    <FieldDescription>Supported sites: {SUPPORTED_SITES_LABEL}</FieldDescription>
+                    <FieldDescription>{t(selectedProvider.descriptionKey)}</FieldDescription>
+                    <FieldDescription>
+                      {t("supportedSites", { sites: SUPPORTED_SITES_LABEL })}
+                    </FieldDescription>
                     {invalid && <FieldError errors={field.state.meta.errors} />}
                   </Field>
                 );
@@ -263,16 +267,14 @@ export function ScrapeImportSection({
         >
           <div className="flex flex-col gap-1">
             <h4 id="single-chapter-heading" className="text-base font-semibold text-foreground">
-              Single chapter
+              {t("singleChapterHeading")}
             </h4>
-            <p className="text-sm text-muted-foreground">
-              Preview the source before adding it, or add it directly.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("singleChapterLead")}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button type="submit" data-action="preview" disabled={!sourceUrl || isSubmitting}>
               {isSubmitting && action === "preview" && <Spinner />}
-              {isSubmitting && action === "preview" ? "Fetching chapter…" : "Preview chapter"}
+              {isSubmitting && action === "preview" ? t("fetchingChapter") : t("previewChapter")}
             </Button>
             <Button
               type="submit"
@@ -281,7 +283,7 @@ export function ScrapeImportSection({
               disabled={!sourceUrl || isSubmitting}
             >
               {isSubmitting && action === "add" && <Spinner />}
-              {isSubmitting && action === "add" ? "Adding chapter…" : "Add without preview"}
+              {isSubmitting && action === "add" ? t("addingChapter") : t("addWithoutPreview")}
             </Button>
           </div>
           {actionError ? (
@@ -300,11 +302,9 @@ export function ScrapeImportSection({
         >
           <div className="flex flex-col gap-1">
             <h4 id="chapter-range-heading" className="text-base font-semibold text-foreground">
-              Chapter range
+              {t("rangeHeading")}
             </h4>
-            <p className="text-sm text-muted-foreground">
-              Runs on the server; you can leave this page after it starts.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("rangeLead")}</p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_auto] sm:items-end">
@@ -313,14 +313,14 @@ export function ScrapeImportSection({
                 const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={invalid || undefined}>
-                    <FieldLabel htmlFor="importRangeFrom">First chapter</FieldLabel>
+                    <FieldLabel htmlFor="importRangeFrom">{t("rangeFromLabel")}</FieldLabel>
                     <Input
                       type="number"
                       min="1"
                       id="importRangeFrom"
                       name={field.name}
                       autoComplete="off"
-                      placeholder="e.g. 1"
+                      placeholder={t("rangeFromPlaceholder")}
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
@@ -336,14 +336,14 @@ export function ScrapeImportSection({
                 const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={invalid || undefined}>
-                    <FieldLabel htmlFor="importRangeTo">Last chapter</FieldLabel>
+                    <FieldLabel htmlFor="importRangeTo">{t("rangeToLabel")}</FieldLabel>
                     <Input
                       type="number"
                       min="1"
                       id="importRangeTo"
                       name={field.name}
                       autoComplete="off"
-                      placeholder="e.g. 5"
+                      placeholder={t("rangeToPlaceholder")}
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
@@ -374,19 +374,19 @@ export function ScrapeImportSection({
                 <Spinner />
               )}
               {importController.importActive || (isSubmitting && action === "range")
-                ? "Importing…"
-                : "Start range import"}
+                ? t("importingChapters")
+                : t("startRangeImport")}
             </Button>
           </div>
 
           {otherImportActive ? (
             <p className="text-sm text-muted-foreground" role="status">
-              Finish or cancel the EPUB import before starting another bulk import.
+              {t("finishEpubImport")}
             </p>
           ) : null}
 
           <ChapterImportStatus
-            label="URL range import"
+            label={t("importLabelUrlRange")}
             job={importController.importJob}
             active={importController.importActive}
             statusError={importController.importStatusError}
@@ -400,7 +400,7 @@ export function ScrapeImportSection({
               className="self-start"
               onClick={importController.cancelImport}
             >
-              Cancel import
+              {t("cancelImport")}
             </Button>
           ) : null}
 
@@ -411,8 +411,8 @@ export function ScrapeImportSection({
             <div className="flex flex-col gap-3 rounded-xl border border-border bg-background p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
               <span className="text-muted-foreground">
                 {importController.importJob.status === "error"
-                  ? "This import stopped. Already imported chapters remain saved."
-                  : "This import was cancelled. You can resume the same range."}
+                  ? t("importStopped")
+                  : t("importCancelled")}
               </span>
               <Button
                 type="button"
@@ -421,7 +421,7 @@ export function ScrapeImportSection({
                 onClick={() => void importController.retryImport()}
                 disabled={bulkStartDisabled || otherImportActive || importController.startPending}
               >
-                Retry range import
+                {t("retryRangeImport")}
               </Button>
             </div>
           ) : null}

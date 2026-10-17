@@ -1,10 +1,12 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
 
 import type { ChapterRow } from "@/components/chapters/types";
 import { updateChapter } from "@/lib/content/chapter/chapter.functions";
 import { editChapterSchema, type EditChapterInput } from "@/lib/content/novel/novel.schemas";
+import { translateServerError } from "@/lib/i18n/server-error";
 
 export interface TitleEditState {
   chapterId: string;
@@ -12,6 +14,8 @@ export interface TitleEditState {
 }
 
 export function useChapterTitleEdit(novelId: string) {
+  const t = useTranslations("studio");
+  const tRoot = useTranslations();
   const queryClient = useQueryClient();
   const [editState, setEditState] = useState<TitleEditState | null>(null);
   const { mutateAsync: saveTitle } = useMutation({
@@ -22,11 +26,11 @@ export function useChapterTitleEdit(novelId: string) {
         queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] }),
         queryClient.invalidateQueries({ queryKey: ["chapter", variables.chapterId] }),
       ]);
-      toast.success("Translated title updated");
+      toast.success(t("translatedTitleSaved"));
       setEditState(null);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to update translated title");
+      toast.error(translateServerError(error, tRoot, t("translatedTitleSaveFailed")));
     },
   });
 

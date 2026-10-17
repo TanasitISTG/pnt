@@ -1,3 +1,5 @@
+import { useTranslations } from "use-intl";
+
 import { cn } from "@/lib/utils";
 
 interface LangPairProps {
@@ -21,6 +23,7 @@ export function LangPair({
   size = "sm",
   className,
 }: LangPairProps) {
+  const t = useTranslations("common");
   const from = source.toUpperCase();
   const to = target.toUpperCase();
 
@@ -32,7 +35,7 @@ export function LangPair({
         className,
       )}
     >
-      <span className="sr-only">{`${from} to ${to}`}</span>
+      <span className="sr-only">{t("langPairLabel", { source: from, target: to })}</span>
       <span
         aria-hidden="true"
         className={cn(

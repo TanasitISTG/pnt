@@ -1,40 +1,25 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { useLocale, useTranslations } from "use-intl";
 
+import { formatNumber } from "@/lib/i18n/format";
 import type { EvalFinding, EvalReviewRow } from "@/lib/translation/evaluation/eval.schemas";
 
-function warningLabels(row: EvalReviewRow): string[] {
-  const warnings: string[] = [];
-  if (row.residualScriptLetters > 0) {
-    warnings.push(`Residual script: ${row.residualScriptLetters.toLocaleString()} letters`);
-  }
-  if (row.markerMismatches > 0) {
-    warnings.push(
-      row.rawParagraphCount !== null && row.translatedParagraphCount !== null
-        ? `Paragraph counts differ: ${row.rawParagraphCount} source, ${row.translatedParagraphCount} translated`
-        : `Paragraph count difference: ${row.markerMismatches}`,
-    );
-  }
-  if (row.matchedGlossaryTerms > row.adheredGlossaryTerms) {
-    warnings.push(
-      `Approved glossary adherence: ${row.adheredGlossaryTerms}/${row.matchedGlossaryTerms}`,
-    );
-  }
-  return warnings;
-}
-
-function findingTitle(finding: EvalFinding): string {
-  if (finding.type === "residual-script") return "Residual source script";
-  if (finding.type === "glossary-miss") return "Missing approved glossary term";
-  return "Paragraph alignment mismatch";
+/** The key a finding is named by: a title is copy, so no reader sees a type identifier. */
+function findingKey(finding: EvalFinding) {
+  if (finding.type === "residual-script") return "findingResidualScript" as const;
+  if (finding.type === "glossary-miss") return "findingGlossaryMiss" as const;
+  return "findingParagraphMismatch" as const;
 }
 
 function FindingList({ novelId, row }: { novelId: string; row: EvalReviewRow }) {
+  const t = useTranslations("evaluation");
+  const locale = useLocale();
   if (!row.findings || row.findings.length === 0) return null;
 
   return (
     <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3 text-sm">
-      <p className="font-medium text-foreground">Correction points</p>
+      <p className="font-medium text-foreground">{t("correctionPoints")}</p>
       <ol className="mt-2 flex flex-col gap-3">
         {row.findings.map((finding, index) => {
           const anchor =
@@ -43,10 +28,12 @@ function FindingList({ novelId, row }: { novelId: string; row: EvalReviewRow }) 
             <li key={`${finding.type}-${finding.paragraphIndex ?? "chapter"}-${index}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="font-medium text-foreground">
-                  {findingTitle(finding)}
+                  {t(findingKey(finding))}{" "}
                   {finding.paragraphIndex !== null
-                    ? ` · paragraph ${finding.paragraphIndex}`
-                    : " · chapter-level"}
+                    ? t("findingLocationParagraph", {
+                        index: formatNumber(finding.paragraphIndex, locale),
+                      })
+                    : t("findingLocationChapter")}
                 </p>
                 {anchor ? (
                   <Link
@@ -55,7 +42,7 @@ function FindingList({ novelId, row }: { novelId: string; row: EvalReviewRow }) 
                     hash={anchor}
                     className="inline-flex min-h-11 shrink-0 items-center rounded-md px-2 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    Open paragraph
+                    {t("openParagraph")}
                   </Link>
                 ) : null}
               </div>
@@ -68,13 +55,13 @@ function FindingList({ novelId, row }: { novelId: string; row: EvalReviewRow }) 
                 <dl className="mt-2 grid gap-2 text-muted-foreground sm:grid-cols-2">
                   {finding.sourceExcerpt ? (
                     <div className="min-w-0">
-                      <dt className="font-medium text-foreground">Source</dt>
+                      <dt className="font-medium text-foreground">{t("source")}</dt>
                       <dd className="break-words">{finding.sourceExcerpt}</dd>
                     </div>
                   ) : null}
                   {finding.translationExcerpt ? (
                     <div className="min-w-0">
-                      <dt className="font-medium text-foreground">Translation</dt>
+                      <dt className="font-medium text-foreground">{t("translation")}</dt>
                       <dd className="break-words">{finding.translationExcerpt}</dd>
                     </div>
                   ) : null}
@@ -95,11 +82,12 @@ function ReviewFindingStatus({
   untranslated: boolean;
   warnings: string[];
 }) {
+  const t = useTranslations("evaluation");
   if (untranslated) {
     return (
       <p className="mt-3 flex items-start gap-2 text-sm text-muted-foreground">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <span>Not translated: no quality checks performed</span>
+        <span>{t("notTranslatedNotice")}</span>
       </p>
     );
   }
@@ -107,12 +95,15 @@ function ReviewFindingStatus({
     return (
       <p className="mt-3 flex items-start gap-2 text-sm text-muted-foreground">
         <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-        <span>No heuristic issues found in this check</span>
+        <span>{t("noIssues")}</span>
       </p>
     );
   }
   return (
-    <ul className="mt-3 flex flex-col gap-1 text-sm text-foreground" aria-label="Findings">
+    <ul
+      className="mt-3 flex flex-col gap-1 text-sm text-foreground"
+      aria-label={t("findingsLabel")}
+    >
       {warnings.map((warning) => (
         <li key={warning} className="flex items-start gap-2">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -124,18 +115,27 @@ function ReviewFindingStatus({
 }
 
 function ReviewMetricSummary({ row, untranslated }: { row: EvalReviewRow; untranslated: boolean }) {
+  const t = useTranslations("evaluation");
   if (untranslated) return null;
   return (
     <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-caption text-muted-foreground">
       {row.rawParagraphCount !== null && row.translatedParagraphCount !== null ? (
         <span>
-          Paragraphs {row.rawParagraphCount} source / {row.translatedParagraphCount} translated
+          {t("summaryParagraphs", {
+            source: row.rawParagraphCount,
+            translated: row.translatedParagraphCount,
+          })}
         </span>
       ) : null}
       <span>
-        Glossary {row.adheredGlossaryTerms}/{row.matchedGlossaryTerms} adhered
+        {t("summaryGlossary", {
+          adhered: row.adheredGlossaryTerms,
+          matched: row.matchedGlossaryTerms,
+        })}
       </span>
-      {row.evaluated !== null ? <span>{row.evaluated ? "Evaluated" : "Skipped"}</span> : null}
+      {row.evaluated !== null ? (
+        <span>{row.evaluated ? t("metricEvaluated") : t("skipped")}</span>
+      ) : null}
     </div>
   );
 }
@@ -151,11 +151,12 @@ function ReviewEvidenceDetails({
   residualExamples: string[];
   omittedResidualCount: number;
 }) {
+  const t = useTranslations("evaluation");
   return (
     <>
       {missingTerms.length > 0 ? (
         <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3 text-sm">
-          <p className="font-medium text-foreground">Missing approved terms</p>
+          <p className="font-medium text-foreground">{t("missingTermsTitle")}</p>
           <ul className="mt-1 flex flex-col gap-1 text-muted-foreground">
             {missingTerms.map((term) => (
               <li key={term} className="break-words">
@@ -164,14 +165,16 @@ function ReviewEvidenceDetails({
             ))}
           </ul>
           {omittedMissingCount > 0 ? (
-            <p className="mt-1 text-muted-foreground">and {omittedMissingCount} more</p>
+            <p className="mt-1 text-muted-foreground">
+              {t("andMore", { count: omittedMissingCount })}
+            </p>
           ) : null}
         </div>
       ) : null}
 
       {residualExamples.length > 0 ? (
         <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3 text-sm">
-          <p className="font-medium text-foreground">Residual examples</p>
+          <p className="font-medium text-foreground">{t("residualExamplesTitle")}</p>
           <ul className="mt-1 flex flex-col gap-1 text-muted-foreground">
             {residualExamples.map((example, index) => (
               <li key={`${example}-${index}`} className="break-words">
@@ -180,7 +183,9 @@ function ReviewEvidenceDetails({
             ))}
           </ul>
           {omittedResidualCount > 0 ? (
-            <p className="mt-1 text-muted-foreground">and {omittedResidualCount} more</p>
+            <p className="mt-1 text-muted-foreground">
+              {t("andMore", { count: omittedResidualCount })}
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -189,7 +194,33 @@ function ReviewEvidenceDetails({
 }
 
 export function ReviewRowDetails({ novelId, row }: { novelId: string; row: EvalReviewRow }) {
-  const warnings = warningLabels(row);
+  const t = useTranslations("evaluation");
+  const locale = useLocale();
+  // Each warning is a sentence of its own, so the row never assembles one out of labels.
+  const warnings: string[] = [];
+  if (row.residualScriptLetters > 0) {
+    warnings.push(
+      t("warningResidualScript", { count: formatNumber(row.residualScriptLetters, locale) }),
+    );
+  }
+  if (row.markerMismatches > 0) {
+    warnings.push(
+      row.rawParagraphCount !== null && row.translatedParagraphCount !== null
+        ? t("warningParagraphCounts", {
+            source: formatNumber(row.rawParagraphCount, locale),
+            translated: formatNumber(row.translatedParagraphCount, locale),
+          })
+        : t("warningParagraphCount", { count: formatNumber(row.markerMismatches, locale) }),
+    );
+  }
+  if (row.matchedGlossaryTerms > row.adheredGlossaryTerms) {
+    warnings.push(
+      t("warningGlossary", {
+        adhered: row.adheredGlossaryTerms,
+        matched: row.matchedGlossaryTerms,
+      }),
+    );
+  }
   const missingTerms =
     row.missingGlossaryTerms?.map((term) => `${term.source} → ${term.target}`) ?? [];
   const missingCount = Math.max(0, row.matchedGlossaryTerms - row.adheredGlossaryTerms);

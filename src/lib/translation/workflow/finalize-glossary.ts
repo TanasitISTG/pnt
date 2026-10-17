@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import type { novels, glossaryTerms } from "@/lib/db/schema";
 import { nanoid } from "@/lib/utils";
-import { createLog } from "./log-entry";
+import { createLogMessage } from "./log-entry";
 import { generateJsonCompletion } from "@/lib/providers/json-completion";
 import { retryOperation } from "@/lib/retry";
 import {
@@ -56,7 +56,7 @@ export async function suggestAndReviewTerms({
   let conflictCount = 0;
   let rowsToInsert: (typeof glossaryTerms.$inferInsert)[] = [];
 
-  logs.push(createLog("info", "Extracting new glossary term suggestions..."));
+  logs.push(createLogMessage("info", "termsExtracting"));
 
   try {
     const { approvedTerms, existingSources } = await loadTermSourcesForExclusion(novel.id);
@@ -101,9 +101,7 @@ export async function suggestAndReviewTerms({
     let reviewResults: GlossaryReviewResult[] = [];
 
     if (reviewCandidates.length > 0) {
-      logs.push(
-        createLog("info", `Reviewing ${reviewCandidates.length} suggested term(s) with AI...`),
-      );
+      logs.push(createLogMessage("info", "termsReviewing", { count: reviewCandidates.length }));
 
       try {
         const reviewPrompt = buildGlossaryReviewPrompt(
@@ -132,10 +130,9 @@ export async function suggestAndReviewTerms({
         });
       } catch (reviewErr) {
         logs.push(
-          createLog(
-            "warn",
-            `AI review failed (${reviewErr instanceof Error ? reviewErr.message : "error"}): no suggestions saved.`,
-          ),
+          createLogMessage("warn", "reviewFailed", {
+            error: reviewErr instanceof Error ? reviewErr.message : "error",
+          }),
         );
       }
     }
@@ -162,23 +159,28 @@ export async function suggestAndReviewTerms({
     rejectedCount = policyResult.discardedCount;
     conflictCount = policyResult.conflictCount;
 
-    const summary: string[] = [];
-    if (approvedCount > 0) summary.push(`${approvedCount} approved`);
-    if (pendingCount > 0) summary.push(`${pendingCount} pending`);
-    if (rejectedCount > 0) summary.push(`${rejectedCount} discarded`);
-    if (conflictCount > 0) summary.push(`${conflictCount} conflicts`);
-
-    if (summary.length > 0) {
-      logs.push(createLog("success", `Glossary review: ${summary.join(", ")}.`));
+    // The four counts travel as numbers and the sentence lives in the catalog, because a
+    // reader may open this run in either language. A run that reviewed nothing is its own
+    // sentence rather than a line of zeroes.
+    const reviewedSomething =
+      approvedCount > 0 || pendingCount > 0 || rejectedCount > 0 || conflictCount > 0;
+    if (reviewedSomething) {
+      logs.push(
+        createLogMessage("success", "reviewSummary", {
+          approved: approvedCount,
+          pending: pendingCount,
+          discarded: rejectedCount,
+          conflicts: conflictCount,
+        }),
+      );
     } else {
-      logs.push(createLog("info", "No new term suggestions extracted."));
+      logs.push(createLogMessage("info", "termsNoneExtracted"));
     }
   } catch (sugErr) {
     logs.push(
-      createLog(
-        "warn",
-        `Term auto-suggest skipped: ${sugErr instanceof Error ? sugErr.message : "Failed"}`,
-      ),
+      createLogMessage("warn", "termSuggestSkipped", {
+        error: sugErr instanceof Error ? sugErr.message : "Failed",
+      }),
     );
   }
 

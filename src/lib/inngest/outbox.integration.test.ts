@@ -1,36 +1,31 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { type Sql } from "postgres";
 import type * as Outbox from "@/lib/inngest/outbox";
+import {
+  closeIntegrationDatabase,
+  describeIntegration,
+  openIntegrationDatabase,
+} from "@/test/integration";
 
 const { sendOutbox } = vi.hoisted(() => ({
   sendOutbox: vi.fn(async () => ({ ids: [] })),
 }));
 vi.mock("@/lib/inngest/client", () => ({ inngest: { send: sendOutbox } }));
 
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integrationDescribe = testDatabaseUrl ? describe : describe.skip;
-
 let sql: Sql;
 let dispatchWorkflowOutboxEvent: typeof Outbox.dispatchWorkflowOutboxEvent;
 let dispatchPendingWorkflowOutbox: typeof Outbox.dispatchPendingWorkflowOutbox;
 
-integrationDescribe("workflow outbox PostgreSQL recovery", () => {
+describeIntegration("workflow outbox PostgreSQL recovery", () => {
   beforeAll(async () => {
-    process.env.DATABASE_URL = testDatabaseUrl!;
-    process.env.BETTER_AUTH_SECRET ||= "test-secret-at-least-thirty-two-bytes";
-    process.env.BETTER_AUTH_URL ||= "http://localhost:3000";
-    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtbG9uZy1lbm91Z2g=";
-    process.env.INNGEST_DEV ||= "1";
-    sql = postgres(testDatabaseUrl!, { max: 2, onnotice: () => {} });
+    ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 2 }));
     // The database module must load only after DATABASE_URL points to the disposable test DB.
     ({ dispatchWorkflowOutboxEvent, dispatchPendingWorkflowOutbox } =
       await import("@/lib/inngest/outbox"));
   });
 
-  afterAll(async () => {
-    if (sql) await sql.end({ timeout: 1 });
-  });
+  afterAll(closeIntegrationDatabase);
 
   beforeEach(async () => {
     // The dispatch sweep is intentionally global; each test needs an empty outbox.

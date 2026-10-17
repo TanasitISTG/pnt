@@ -2,6 +2,8 @@ import { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { useTranslations } from "use-intl";
+
 import { deleteNovel, setNovelPublished } from "@/lib/content/novel/novel.functions";
 import {
   deleteChapter,
@@ -14,12 +16,18 @@ import {
   translateMissingTitles,
 } from "@/lib/content/chapter/chapter-ops.functions";
 import { invalidateNovelChapterDetails } from "@/lib/content/chapter/chapter.query";
+import { translateServerError } from "@/lib/i18n/server-error";
+
 type ChapterPublishInput = {
   chapterId: string;
   publishedAt: Date | null;
 };
 
 export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: () => void) {
+  const t = useTranslations("studio");
+  // A failure from the server is a code, and the codec is what turns it into the reader's words;
+  // anything else keeps its own message.
+  const tRoot = useTranslations();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [deleteChapterId, setDeleteChapterId] = useState<string | null>(null);
@@ -29,11 +37,11 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     mutationFn: () => deleteNovel({ data: { novelId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["novels"] });
-      toast.success("Novel deleted successfully");
+      toast.success(t("novelDeleted"));
       navigate({ to: "/" });
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to delete novel");
+      toast.error(translateServerError(error, tRoot, t("novelDeleteFailed")));
     },
   });
 
@@ -43,10 +51,10 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       queryClient.invalidateQueries({ queryKey: ["novel", novelId] });
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novels"] });
-      toast.success("Novel publish state updated");
+      toast.success(t("novelPublishStateUpdated"));
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to update novel publish state");
+      toast.error(translateServerError(error, tRoot, t("novelPublishStateFailed")));
     },
   });
 
@@ -57,11 +65,11 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
       queryClient.invalidateQueries({ queryKey: ["novels"] });
-      toast.success("Chapter deleted successfully");
+      toast.success(t("chapterDeleted"));
       setDeleteChapterId(null);
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to delete chapter");
+      toast.error(translateServerError(error, tRoot, t("chapterDeleteFailed")));
     },
   });
 
@@ -74,10 +82,10 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
-      toast.success("Publish state updated");
+      toast.success(t("chapterPublishStateUpdated"));
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to update publish state");
+      toast.error(translateServerError(error, tRoot, t("chapterPublishStateFailed")));
     },
     onSettled: () => {
       publishChapterInFlightRef.current = false;
@@ -86,13 +94,13 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
   const publishChapter = useCallback(
     (vars: ChapterPublishInput) => {
       if (publishChapterInFlightRef.current) {
-        toast.info("Wait for the current publish update to finish");
+        toast.info(t("publishInFlight"));
         return;
       }
       publishChapterInFlightRef.current = true;
       runPublishChapter(vars);
     },
-    [runPublishChapter],
+    [runPublishChapter, t],
   );
   const publishingChapterId = publishChapterPending
     ? (publishChapterVariables?.chapterId ?? null)
@@ -104,19 +112,20 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       if ("unpublished" in result) {
-        toast.success(
-          `Unpublished ${result.unpublished} chapter${result.unpublished === 1 ? "" : "s"}`,
-        );
+        toast.success(t("chaptersUnpublished", { count: result.unpublished }));
       } else {
         toast.success(
           result.skipped > 0
-            ? `Published ${result.published} chapter${result.published === 1 ? "" : "s"}; skipped ${result.skipped} not-ready`
-            : `Published ${result.published} chapter${result.published === 1 ? "" : "s"}`,
+            ? t("chaptersPublishedSkipped", {
+                count: result.published,
+                skipped: result.skipped,
+              })
+            : t("chaptersPublished", { count: result.published }),
         );
       }
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to update chapter publish state");
+      toast.error(translateServerError(error, tRoot, t("chapterPublishStateFailed")));
     },
   });
 
@@ -126,11 +135,11 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
       toast.success(
-        translated > 0 ? `Translated ${translated} chapter title(s)` : "No titles translated",
+        translated > 0 ? t("titlesTranslated", { count: translated }) : t("noTitlesTranslated"),
       );
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to translate titles");
+      toast.error(translateServerError(error, tRoot, t("titlesTranslateFailed")));
     },
   });
 
@@ -145,12 +154,12 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
       onTranslationsDeleted();
       toast.success(
         chaptersCleared > 0
-          ? `Deleted translations from ${chaptersCleared} chapter(s)`
-          : "No translations to delete",
+          ? t("translationsDeleted", { count: chaptersCleared })
+          : t("noTranslationsToDelete"),
       );
     },
-    onError: () => {
-      toast.error("Failed to delete translations");
+    onError: (error) => {
+      toast.error(translateServerError(error, tRoot, t("translationsDeleteFailed")));
     },
   });
   const { mutateAsync: saveChapterOrder, isPending: reorderingChapters } = useMutation({
@@ -162,10 +171,10 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
         queryClient.invalidateQueries({ queryKey: ["novel", novelId] }),
         invalidateNovelChapterDetails(queryClient, novelId),
       ]);
-      toast.success("Chapter order saved");
+      toast.success(t("chapterOrderSaved"));
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to save chapter order");
+      toast.error(translateServerError(error, tRoot, t("chapterOrderFailed")));
     },
   });
 
