@@ -24,7 +24,7 @@ export interface CommentItemProps {
   onReport?: () => void;
   /** Rendered in place of the body while the comment is being edited. */
   editor?: ReactNode;
-  /** The reply composer, under this comment. */
+  /** The reply composer, after the reply list, so a new reply lands above it. */
   footer?: ReactNode;
   /** Replies, indented under their parent. */
   children?: ReactNode;
@@ -138,10 +138,10 @@ export function CommentItem({
           </p>
         )}
 
-        {footer ? <div className="mt-2">{footer}</div> : null}
         {children ? (
           <div className="mt-3 flex flex-col gap-4 border-l border-border pl-3">{children}</div>
         ) : null}
+        {footer ? <div className="mt-3">{footer}</div> : null}
       </div>
     </article>
   );
