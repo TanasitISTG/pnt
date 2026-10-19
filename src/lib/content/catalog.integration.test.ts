@@ -63,11 +63,11 @@ async function seed(): Promise<Fixture> {
     liveIds.push(id);
     await sql`
       INSERT INTO "novels" (
-        "id", "user_id", "title", "author", "source_lang", "target_lang",
+        "id", "user_id", "title", "author", "description", "source_lang", "target_lang",
         "published_at", "created_at", "updated_at"
       ) VALUES (
         ${id}, ${ownerId}, ${`Novel ${token} ${String(index).padStart(2, "0")}`},
-        ${`Author ${token}`}, 'en', 'th',
+        ${`Author ${token}`}, ${index === 0 ? "d".repeat(500) : null}, 'en', 'th',
         ${PAST}, ${new Date(PAST.getTime() + index * 60_000)}, now()
       )
     `;
@@ -137,6 +137,13 @@ describeIntegration("catalog directory PostgreSQL contracts", () => {
       expect(first.hasMore).toBe(true);
       expect(second.novels).toHaveLength(5);
       expect(second.hasMore).toBe(false);
+
+      // A card clamps to two lines, so the directory sends a preview rather than the
+      // stored 5,000-character field. The detail read still returns the whole text.
+      // The previewed novel is the oldest, so it lands on the second page.
+      const preview = second.novels.find((novel) => novel.id === fixture.liveIds[0])?.description;
+      expect(preview).toHaveLength(280);
+      expect(preview?.endsWith("…")).toBe(true);
 
       const ids = [...first.novels, ...second.novels].map((novel) => novel.id);
       expect(new Set(ids).size).toBe(ids.length);

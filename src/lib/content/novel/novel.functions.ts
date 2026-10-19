@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
@@ -77,6 +77,7 @@ export const getNovel = createServerFn({ method: "GET" })
     return withSafeHandler(async () => {
       const session = await getSession();
       if (!session) await checkRateLimit("read", GUEST_READ_LIMIT);
+      const viewerId = session?.user.id ?? null;
 
       const [novel] = await db
         .select({
@@ -88,7 +89,13 @@ export const getNovel = createServerFn({ method: "GET" })
           description: novels.description,
           sourceLang: novels.sourceLang,
           targetLang: novels.targetLang,
-          customPrompt: novels.customPrompt,
+          // Owner-only, and evaluated in the database so a reader of someone else's
+          // novel never transfers the prompt at all. Nulling it after the fetch left
+          // the bytes on the wire.
+          customPrompt: sql<string | null>`case
+            when ${novels.userId} = ${viewerId} then ${novels.customPrompt}
+            else null
+          end`,
           chunkSize: novels.chunkSize,
           contextTailLength: novels.contextTailLength,
           publishedAt: novels.publishedAt,
@@ -98,7 +105,7 @@ export const getNovel = createServerFn({ method: "GET" })
           updatedAt: novels.updatedAt,
         })
         .from(novels)
-        .where(and(eq(novels.id, data.novelId), novelReadable(session?.user.id ?? null)))
+        .where(and(eq(novels.id, data.novelId), novelReadable(viewerId)))
         .limit(1);
 
       if (!novel) return null;
@@ -117,10 +124,8 @@ export const getNovel = createServerFn({ method: "GET" })
         hasCover: coverKey !== null,
         coverUrl: cover?.url ?? null,
         coverSrcSet: cover?.srcSet ?? null,
-        // The custom prompt is owner-only. A signed-in reader of someone else's novel
-        // is a reader, and every consumer gates its controls on this flag rather than
-        // on "is there a session".
-        customPrompt: canManage ? novel.customPrompt : null,
+        // Every consumer gates its controls on this flag rather than on "is there a
+        // session", so an owner-only field can never leak through a control.
         canManage,
       };
     });
@@ -137,6 +142,8 @@ export const getReaderNovel = createServerFn({ method: "GET" })
         .select({
           id: novels.id,
           title: novels.title,
+          // The reader route's document head reads this for its description meta; it is
+          // not rendered in the reader body.
           description: novels.description,
           sourceLang: novels.sourceLang,
           targetLang: novels.targetLang,

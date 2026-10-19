@@ -22,6 +22,13 @@ import { CATALOG_PAGE_SIZE, type CatalogInput } from "./catalog.schemas";
 import type { CatalogNovel, CatalogPage, CatalogTagRef } from "./catalog.types";
 
 /**
+ * A card clamps its description to two lines. Sending the stored 5,000-character field
+ * so the browser could throw most of it away was the catalog's largest avoidable
+ * transfer; the novel page still reads the full text.
+ */
+export const CATALOG_DESCRIPTION_PREVIEW_LENGTH = 280;
+
+/**
  * The catalog directory's one read path.
  *
  * Three properties are the reason this module exists rather than a `.limit()` on the old
@@ -156,7 +163,11 @@ export async function listCatalogForViewer(
       originalTitle: novels.originalTitle,
       author: novels.author,
       authorId: novels.authorId,
-      description: novels.description,
+      description: sql<string | null>`case
+        when length(${novels.description}) > ${CATALOG_DESCRIPTION_PREVIEW_LENGTH}
+          then left(${novels.description}, ${CATALOG_DESCRIPTION_PREVIEW_LENGTH - 1}) || '…'
+        else ${novels.description}
+      end`,
       sourceLang: novels.sourceLang,
       targetLang: novels.targetLang,
       publishedAt: novels.publishedAt,
