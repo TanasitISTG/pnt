@@ -1,9 +1,18 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpen, MessageCircle, ShieldCheck, Star } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  BookOpen,
+  CornerDownRight,
+  MessageSquare,
+  ShieldCheck,
+  Star,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "use-intl";
 
@@ -14,7 +23,11 @@ import type { Locale } from "@/lib/i18n/locales";
 import { useLocalizedParams } from "@/lib/i18n/use-localized-params";
 import { markNotificationsRead } from "@/lib/notifications/functions";
 import { notificationKeys, notificationsQueryOptions } from "@/lib/notifications/query";
-import type { NotificationItem, NotificationPage } from "@/lib/notifications/types";
+import type {
+  NotificationItem,
+  NotificationKind,
+  NotificationPage,
+} from "@/lib/notifications/types";
 import type { NotificationMessage } from "@/lib/notifications/channels";
 import { cn } from "@/lib/utils";
 import { useNotificationStream } from "./use-notification-stream";
@@ -26,6 +39,11 @@ import { useNotificationStream } from "./use-notification-stream";
  * channel, which usually answers sooner. Both paths end in the same refetch, so the socket is
  * an accelerator and the poll is the guarantee — a deployment without an Ably key renders and
  * behaves exactly the same, only later.
+ *
+ * The row is deliberately typed before it is read: a small kind label, then the thing the
+ * event is about, then the comment or review as a quoted excerpt. A sentence that embeds the
+ * novel title reads like the words underneath it, which is the one thing this surface must
+ * never do.
  */
 export function NotificationBell({ userId }: { userId: string }) {
   const t = useTranslations("notifications");
@@ -35,6 +53,7 @@ export function NotificationBell({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
   const query = useQuery(notificationsQueryOptions());
   const unreadCount = query.data?.unreadCount ?? 0;
+  const groups = useMemo(() => groupByDay(query.data?.items ?? []), [query.data?.items]);
 
   const markRead = useMutation({
     mutationFn: (ids?: string[]) => markNotificationsRead({ data: { ids } }),
@@ -79,15 +98,10 @@ export function NotificationBell({ userId }: { userId: string }) {
   // replay) still shows one. The row it names is already invalidated above.
   const onArrival = useCallback(
     (message: NotificationMessage) => {
-      const title = toastTitleFor(t, message.kind);
-      const description = sentenceFor(t, message.kind, {
-        novelTitle: message.novelTitle,
-        outcome: message.outcome,
-      });
-
-      toast(title, {
+      const view = describeNotification(message, t);
+      toast(view.label, {
         id: `notification:${message.id}`,
-        description,
+        description: toastDescription(view),
         action:
           message.novelId && message.chapterId
             ? { label: t("toastOpen"), onClick: () => openTarget(message) }
@@ -116,41 +130,63 @@ export function NotificationBell({ userId }: { userId: string }) {
           </span>
         ) : null}
       </PopoverTrigger>
-      <PopoverContent side="bottom" align="end" className="w-[min(22rem,calc(100vw-2rem))]">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <PopoverTitle>{t("title")}</PopoverTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-h-9"
-            onClick={() => markRead.mutate(undefined)}
-            disabled={unreadCount === 0 || markRead.isPending}
-          >
-            {t("markAllRead")}
-          </Button>
-        </div>
-
-        {query.isPending ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">{t("loading")}</p>
-        ) : !query.data || query.data.items.length === 0 ? (
-          <div className="px-2 py-8 text-center">
-            <p className="text-body font-medium text-foreground">{t("emptyTitle")}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{t("emptyDescription")}</p>
+      <PopoverContent side="bottom" align="end" className="w-[min(26rem,calc(100vw-2rem))]">
+        <div className="-m-3">
+          <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-popover/95 px-4 py-3 backdrop-blur">
+            <div className="min-w-0">
+              <PopoverTitle>{t("title")}</PopoverTitle>
+              <p className="mt-0.5 text-caption text-muted-foreground">
+                {t("bellLabel", { count: unreadCount })}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-9 shrink-0"
+              onClick={() => markRead.mutate(undefined)}
+              disabled={unreadCount === 0 || markRead.isPending}
+            >
+              {t("markAllRead")}
+            </Button>
           </div>
-        ) : (
-          <ul className="-mx-1 flex flex-col">
-            {query.data.items.map((item) => (
-              <NotificationRow
-                key={item.id}
-                item={item}
-                locale={locale}
-                onRead={() => {
-                  if (!item.readAt) markRead.mutate([item.id]);
-                }}
-              />
-            ))}
-          </ul>
-        )}
+
+          {query.isPending ? (
+            <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
+          ) : groups.length === 0 ? (
+            <div className="flex flex-col items-center px-6 py-10 text-center">
+              <span className="flex size-10 items-center justify-center rounded-full bg-surface-inset text-muted-foreground">
+                <BellOff className="size-4" aria-hidden="true" />
+              </span>
+              <p className="mt-3 text-body font-medium text-foreground">{t("emptyTitle")}</p>
+              <p className="mt-1 max-w-64 text-sm text-muted-foreground">{t("emptyDescription")}</p>
+            </div>
+          ) : (
+            <div className="px-2.5 py-2">
+              {groups.map((group) => (
+                <section key={group.key} aria-labelledby={`notification-day-${group.key}`}>
+                  <h3
+                    id={`notification-day-${group.key}`}
+                    className="px-2 pt-2 pb-1.5 text-micro font-medium text-muted-foreground"
+                  >
+                    {t(group.key)}
+                  </h3>
+                  <ul className="flex flex-col gap-0.5">
+                    {group.items.map((item) => (
+                      <NotificationRow
+                        key={item.id}
+                        item={item}
+                        locale={locale}
+                        onRead={() => {
+                          if (!item.readAt) markRead.mutate([item.id]);
+                        }}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -167,53 +203,61 @@ function NotificationRow({
 }) {
   const t = useTranslations("notifications");
   const localized = useLocalizedParams();
+  const view = describeNotification(item, t);
+  const Icon = KIND_ICON[item.kind];
 
-  const sentence = sentenceFor(t, item.kind, {
-    novelTitle: item.novelTitle,
-    outcome: item.outcome,
-  });
-
-  const Icon =
-    item.kind === "chapter_published"
-      ? BookOpen
-      : item.kind === "novel_review"
-        ? Star
-        : item.kind === "report_decided"
-          ? ShieldCheck
-          : MessageCircle;
-
+  const className = cn(
+    "flex w-full items-start gap-3 rounded-xl px-2.5 py-3 text-left no-underline outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+    item.readAt ? "hover:bg-surface-inset" : "bg-surface-inset hover:bg-border/30",
+  );
   const body = (
     <>
-      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-inset text-muted-foreground">
-        <Icon className="size-3.5" aria-hidden="true" />
+      <span
+        className={cn(
+          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg",
+          item.readAt ? "bg-surface-inset text-muted-foreground" : "bg-background text-foreground",
+        )}
+      >
+        <Icon className="size-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span
+            className={cn(
+              "text-micro font-medium",
+              item.readAt ? "text-muted-foreground" : "text-foreground",
+            )}
+          >
+            {view.label}
+          </span>
+          {!item.readAt ? (
+            <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+          ) : null}
+        </span>
         <span
           className={cn(
-            "block text-sm leading-snug",
+            "mt-0.5 block text-sm leading-snug",
+            view.excerpt ? "line-clamp-2" : "line-clamp-3",
             item.readAt ? "text-muted-foreground" : "font-medium text-foreground",
           )}
         >
-          {sentence}
+          {view.headline}
         </span>
-        {item.detail ? (
+        {view.context ? (
           <span className="mt-0.5 block truncate text-caption text-muted-foreground">
-            {item.detail}
+            {view.context}
           </span>
         ) : null}
-        <span className="mt-1 block text-micro text-muted-foreground">
+        {view.excerpt ? (
+          <span className="mt-2 block line-clamp-2 rounded-md border-l-2 border-border bg-background/60 px-2.5 py-1.5 text-caption leading-relaxed text-foreground/80">
+            {view.excerpt}
+          </span>
+        ) : null}
+        <span className="mt-1.5 block text-micro text-muted-foreground">
           {formatRelativeTime(item.createdAt, locale)}
         </span>
       </span>
-      {!item.readAt ? (
-        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-      ) : null}
     </>
-  );
-
-  const className = cn(
-    "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left no-underline transition-colors hover:bg-surface-2",
-    !item.readAt && "bg-surface-inset",
   );
 
   if (item.novelId && item.chapterId) {
@@ -231,77 +275,140 @@ function NotificationRow({
     );
   }
 
+  // A report has no chapter to open, so the row itself is the action that clears it. Without
+  // this the only way to mark one read is the header's mark-all.
   return (
     <li>
-      <div className={className}>{body}</div>
+      <button type="button" className={className} onClick={onRead}>
+        {body}
+      </button>
     </li>
   );
 }
 
-/**
- * The one sentence each kind prints, shared by the list row and the arrival toast so the two
- * cannot word the same event differently. A report whose target was a comment or a review has
- * no title to name, so its sentence drops the novel rather than printing an empty one.
- */
-type SentenceTranslator = (
+type NotificationCopy = Pick<
+  NotificationItem,
+  "kind" | "novelTitle" | "chapterTitle" | "detail" | "outcome"
+>;
+
+interface NotificationView {
+  kind: NotificationKind;
+  label: string;
+  headline: string;
+  context: string | null;
+  excerpt: string | null;
+}
+
+type NotificationTranslator = (
   key:
-    | "chapterPublished"
-    | "commentReply"
-    | "novelComment"
-    | "novelReview"
-    | "reportUpheld"
-    | "reportDismissed"
-    | "reportUpheldNoNovel"
-    | "reportDismissedNoNovel",
-  values?: { novel: string },
+    | "kindChapter"
+    | "kindComment"
+    | "kindReply"
+    | "kindReview"
+    | "kindReport"
+    | "chapterFallback"
+    | "reportUpheldHeadline"
+    | "reportDismissedHeadline",
 ) => string;
 
-function sentenceFor(
-  t: SentenceTranslator,
-  kind: NotificationItem["kind"],
-  copy: { novelTitle: string; outcome: NotificationItem["outcome"] },
-): string {
-  switch (kind) {
+/**
+ * What every kind prints, in the one place both the row and the arrival toast read it.
+ *
+ * The excerpt only exists for the kinds that carry somebody's words; a new chapter already
+ * names itself in `detail`. A report whose target was a comment or a review has no title to
+ * name, so its context is simply absent rather than an empty line.
+ */
+function describeNotification(item: NotificationCopy, t: NotificationTranslator): NotificationView {
+  switch (item.kind) {
     case "chapter_published":
-      return t("chapterPublished", { novel: copy.novelTitle });
-    case "comment_reply":
-      return t("commentReply", { novel: copy.novelTitle });
+      return {
+        kind: item.kind,
+        label: t("kindChapter"),
+        headline: item.detail || t("chapterFallback"),
+        context: item.novelTitle || null,
+        excerpt: null,
+      };
     case "novel_comment":
-      return t("novelComment", { novel: copy.novelTitle });
+      return {
+        kind: item.kind,
+        label: t("kindComment"),
+        headline: item.novelTitle,
+        context: item.chapterTitle,
+        excerpt: item.detail,
+      };
+    case "comment_reply":
+      return {
+        kind: item.kind,
+        label: t("kindReply"),
+        headline: item.novelTitle,
+        context: item.chapterTitle,
+        excerpt: item.detail,
+      };
     case "novel_review":
-      return t("novelReview", { novel: copy.novelTitle });
+      return {
+        kind: item.kind,
+        label: t("kindReview"),
+        headline: item.novelTitle,
+        context: null,
+        excerpt: item.detail,
+      };
     case "report_decided":
-      if (copy.outcome === "upheld") {
-        return copy.novelTitle
-          ? t("reportUpheld", { novel: copy.novelTitle })
-          : t("reportUpheldNoNovel");
-      }
-      return copy.novelTitle
-        ? t("reportDismissed", { novel: copy.novelTitle })
-        : t("reportDismissedNoNovel");
+      return {
+        kind: item.kind,
+        label: t("kindReport"),
+        headline:
+          item.outcome === "upheld" ? t("reportUpheldHeadline") : t("reportDismissedHeadline"),
+        context: item.novelTitle || null,
+        excerpt: null,
+      };
   }
 }
 
-type ToastTitleTranslator = (
-  key:
-    | "toastChapterTitle"
-    | "toastReplyTitle"
-    | "toastCommentTitle"
-    | "toastReviewTitle"
-    | "toastReportTitle",
-) => string;
-
-function toastTitleFor(t: ToastTitleTranslator, kind: NotificationItem["kind"]): string {
-  switch (kind) {
-    case "chapter_published":
-      return t("toastChapterTitle");
-    case "comment_reply":
-      return t("toastReplyTitle");
-    case "novel_comment":
-      return t("toastCommentTitle");
-    case "novel_review":
-      return t("toastReviewTitle");
-    case "report_decided":
-      return t("toastReportTitle");
+/** The toast is a notification, not a second copy of the row: one line of context, at most. */
+function toastDescription(view: NotificationView): string {
+  if (view.kind === "chapter_published" || view.kind === "report_decided") {
+    return [view.headline, view.context].filter(Boolean).join(" · ");
   }
+  return [view.headline, view.excerpt].filter(Boolean).join(" · ");
+}
+
+const KIND_ICON: Record<NotificationKind, LucideIcon> = {
+  chapter_published: BookOpen,
+  comment_reply: CornerDownRight,
+  novel_comment: MessageSquare,
+  novel_review: Star,
+  report_decided: ShieldCheck,
+};
+
+type DayGroupKey = "today" | "yesterday" | "earlier";
+
+const DAY_MS = 86_400_000;
+const DAY_ORDER: DayGroupKey[] = ["today", "yesterday", "earlier"];
+
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function dayGroupFor(iso: string, now: Date): DayGroupKey {
+  const days = Math.round((startOfDay(now) - startOfDay(new Date(iso))) / DAY_MS);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return "earlier";
+}
+
+function groupByDay(
+  items: NotificationItem[],
+  now: Date = new Date(),
+): Array<{ key: DayGroupKey; items: NotificationItem[] }> {
+  const buckets = new Map<DayGroupKey, NotificationItem[]>();
+  for (const item of items) {
+    const key = dayGroupFor(item.createdAt, now);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(item);
+    else buckets.set(key, [item]);
+  }
+  return DAY_ORDER.flatMap((key) => {
+    const group = buckets.get(key);
+    return group ? [{ key, items: group }] : [];
+  });
 }

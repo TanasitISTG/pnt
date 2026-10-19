@@ -25,6 +25,7 @@ export interface NotificationMessage {
   commentId: string | null;
   reportId: string | null;
   novelTitle: string;
+  chapterTitle: string | null;
   detail: string | null;
   outcome: "upheld" | "dismissed" | null;
   /** ISO text, because the socket carries JSON and not a Date. */

@@ -82,7 +82,7 @@ function toOutcome(value: string | null): ReportOutcome | null {
   return value === "upheld" || value === "dismissed" ? value : null;
 }
 
-function toItem(row: NotificationRow): NotificationItem {
+function toItem(row: NotificationRow & { chapterTitle?: string | null }): NotificationItem {
   return {
     id: row.id,
     kind: row.kind,
@@ -91,6 +91,7 @@ function toItem(row: NotificationRow): NotificationItem {
     commentId: row.commentId,
     reportId: row.reportId,
     novelTitle: row.novelTitle,
+    chapterTitle: row.chapterTitle ?? null,
     detail: row.detail,
     outcome: toOutcome(row.outcome),
     createdAt: row.createdAt.toISOString(),
@@ -183,12 +184,14 @@ export async function listNotificationsForUser(userId: string): Promise<Notifica
         commentId: notifications.commentId,
         reportId: notifications.reportId,
         novelTitle: notifications.novelTitle,
+        chapterTitle: sql<string | null>`coalesce(${chapters.translatedTitle}, ${chapters.title})`,
         detail: notifications.detail,
         outcome: notifications.outcome,
         createdAt: notifications.createdAt,
         readAt: notifications.readAt,
       })
       .from(notifications)
+      .leftJoin(chapters, eq(notifications.chapterId, chapters.id))
       .where(eq(notifications.userId, userId))
       .orderBy(desc(notifications.createdAt), desc(notifications.id))
       .limit(NOTIFICATION_LIST_SIZE),

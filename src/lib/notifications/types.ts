@@ -22,6 +22,8 @@ export interface NotificationItem {
   commentId: string | null;
   reportId: string | null;
   novelTitle: string;
+  /** The chapter the notification points at, read live so a renamed chapter stays current. */
+  chapterTitle: string | null;
   /** Chapter title for a published chapter, the reply's words for a reply, null otherwise. */
   detail: string | null;
   outcome: ReportOutcome | null;

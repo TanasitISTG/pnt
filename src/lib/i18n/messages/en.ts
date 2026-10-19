@@ -338,19 +338,17 @@ const en = {
     emptyTitle: "Nothing new",
     emptyDescription:
       "Follow a novel and its new chapters, replies, and report updates appear here.",
-    chapterPublished: "New chapter in {novel}",
-    commentReply: "New reply to your comment in {novel}",
-    novelComment: "New comment on {novel}",
-    novelReview: "New review on {novel}",
-    reportUpheld: "Your report on {novel} was upheld",
-    reportDismissed: "Your report on {novel} was dismissed",
-    reportUpheldNoNovel: "Your report was upheld",
-    reportDismissedNoNovel: "Your report was dismissed",
-    toastChapterTitle: "New chapter",
-    toastReplyTitle: "New reply",
-    toastCommentTitle: "New comment",
-    toastReviewTitle: "New review",
-    toastReportTitle: "Report update",
+    kindChapter: "New chapter",
+    kindComment: "New comment",
+    kindReply: "Reply",
+    kindReview: "New review",
+    kindReport: "Report update",
+    today: "Today",
+    yesterday: "Yesterday",
+    earlier: "Earlier",
+    chapterFallback: "Untitled chapter",
+    reportUpheldHeadline: "Report upheld",
+    reportDismissedHeadline: "Report dismissed",
     toastOpen: "Open",
   },
   novel: {
@@ -517,6 +515,12 @@ const en = {
     contextTailHint: "Length of previous chunk tail passed as context (default: 500)",
     settingsTitle: "Novel settings",
     settingsDescription: "Details, language pair and translation instructions for this novel.",
+    detailsSection: "Novel details",
+    detailsHint: "How this novel appears in the catalog.",
+    translationSection: "Translation",
+    translationHint: "The language pair and how chapters are split for the model.",
+    publishingState: "Current state",
+    viewNovel: "View novel",
     notFoundDescription:
       "The novel you are trying to edit does not exist or you do not have access.",
     backToLibrary: "Back to your library",
@@ -662,14 +666,10 @@ const en = {
     stopTranslations: "Stop translations",
     stoppingTranslations: "Stopping…",
     // Adding chapters: the three ways in, and the job panel that reports on two of them.
-    addLead: "Paste source text, fetch from a supported site, or import an EPUB.",
+    addLead: "Paste a chapter's source text, or bring in a whole book from an EPUB file.",
     loadingChapterTools: "Loading chapter tools…",
     modePaste: "Paste text",
-    modePasteDescription: "Create one chapter from source text.",
-    modeUrl: "From URL",
-    modeUrlDescription: "Preview one chapter or import a range.",
     modeEpub: "EPUB file",
-    modeEpubDescription: "Import chapters from an EPUB.",
     running: "Running",
     importPreparing: "Preparing…",
     importProgress: "{processed} of {total} chapters",
@@ -682,12 +682,7 @@ const en = {
     retryStatus: "Retry status",
     importStatusLine: "{label}: {status}. {progress}.",
     // The manual editor: one chapter, typed or pasted.
-    manualHeading: "Create one chapter",
     manualLead: "Paste source text, review the details, then add it to the novel.",
-    fetchedFromUrl: "Fetched from URL.",
-    fetchedReview: "Review the draft before adding it.",
-    fetchedSource: "Source:",
-    startFresh: "Start fresh",
     chapterNumberLabel: "Chapter number *",
     chapterNumberPlaceholder: "e.g. 1",
     chapterTitleLabel: "Chapter title *",
@@ -700,61 +695,18 @@ const en = {
     chapterAdded: "Chapter added successfully",
     chapterAddFailed: "Failed to add chapter",
     // The URL section: one chapter now, or a range handed to the server.
-    urlHeading: "Import from URL",
-    urlLead: "Use a supported chapter URL to review one chapter or queue a range.",
-    urlLabel: "Chapter source URL",
-    fetchMethodLabel: "Fetch method",
-    // The fetch methods: two describe behavior, three are service names — which is why the
-    // last three read the same in both catalogs and are named in the check's allowlist.
-    scrapeProviderAuto: "Automatic",
-    scrapeProviderAutoDescription: "Default per-site proxy behavior",
-    scrapeProviderDirect: "Direct",
-    scrapeProviderDirectDescription: "Direct HTTP fetch without proxy",
-    scrapeProviderZenRows: "ZenRows",
-    scrapeProviderZenRowsDescription: "ZenRows scraping API",
-    scrapeProviderScrapingBee: "ScrapingBee",
-    scrapeProviderScrapingBeeDescription: "ScrapingBee HTML API",
-    scrapeProviderFirecrawl: "Firecrawl",
-    scrapeProviderFirecrawlDescription: "Firecrawl scrape endpoint",
-    supportedSites: "Supported sites: {sites}",
-    singleChapterHeading: "Single chapter",
-    singleChapterLead: "Preview the source before adding it, or add it directly.",
-    previewChapter: "Preview chapter",
-    fetchingChapter: "Fetching chapter…",
-    addWithoutPreview: "Add without preview",
-    rangeHeading: "Chapter range",
-    rangeLead: "Runs on the server; you can leave this page after it starts.",
-    rangeFromLabel: "First chapter",
-    rangeFromPlaceholder: "e.g. 1",
-    rangeToLabel: "Last chapter",
-    rangeToPlaceholder: "e.g. 5",
-    startRangeImport: "Start range import",
-    importingChapters: "Importing…",
-    finishEpubImport: "Finish or cancel the EPUB import before starting another bulk import.",
-    finishUrlImport: "Finish or cancel the URL range import before starting an EPUB import.",
-    importLabelUrlRange: "URL range import",
     importLabelEpub: "EPUB import",
     cancelImport: "Cancel import",
-    retryRangeImport: "Retry range import",
     retryEpubImport: "Retry EPUB import",
-    importStopped: "This import stopped. Already imported chapters remain saved.",
-    importCancelled: "This import was cancelled. You can resume the same range.",
     importStoppedReupload: "This import stopped. Upload the selected EPUB again to retry.",
     importChooseEpubAgain: "Choose the EPUB file again before retrying this import.",
-    fetchedChapter: "Fetched chapter: {title}",
-    fetchedChapterNumber: "Fetched chapter {number}: {title}",
-    addedChapterNumber: "Added chapter {number}: {title}",
-    chapterAlreadyExists: "Chapter {number} already exists, skipped",
-    fetchFailed: "Fetch failed",
     importFailed: "Import failed",
     importFailedReason: "Import failed: {reason}",
     importDone: "Import done: added {added}, skipped {skipped}, failed {failed}",
     importCancelledToast: "Import cancelled",
-    importQueued: "Import of chapters {from}–{to} queued",
     importUnknownError: "Unknown error",
     importStatusLoadFailed: "Unable to load import status",
     importStatusRefreshFailed: "Unable to refresh import status",
-    importStartFailed: "Failed to start import",
     importCancelFailed: "Failed to cancel import",
     // The EPUB section: a file handed to object storage, then unpacked on the server.
     epubHeading: "Import an EPUB file",
@@ -1621,7 +1573,6 @@ const en = {
     progressPercent: "{percent}% complete",
     // What kind of run it is, and the one line under it that names its target.
     typeTranslation: "Translation",
-    typeScrape: "Scrape",
     typeEpub: "EPUB",
     secondaryChapter: "Ch. {number} · {title}",
     mobileChapter: "Chapter {number} · {title}",
@@ -1629,7 +1580,6 @@ const en = {
     // they name their destination instead; the row menu beside them says "Open novel".
     mobileOpenNovel: "Novel",
     mobileOpenChapter: "Chapter",
-    secondaryScrapeRange: "Chapters {from}–{to}",
     secondaryEpubFile: "EPUB · {fileName}",
     secondaryEpubImport: "EPUB import",
     rangeChunks: "{done}/{total} chunks",
@@ -1655,7 +1605,6 @@ const en = {
     columnActions: "Actions",
     filterAllTypes: "All types",
     filterTranslations: "Translations",
-    filterScrapes: "Scrapes",
     filterAllStatuses: "All statuses",
     filterByType: "Filter by type",
     filterByStatus: "Filter by status",
@@ -1689,7 +1638,6 @@ const en = {
     refreshFailed: "Some job dashboard data could not be refreshed",
     cancellationRequested: "Job cancellation requested",
     retryQueued: "Translation retry queued",
-    importQueued: "New scrape job queued",
     operationFailed: "Job operation failed",
     notRetryable: "This job cannot be retried",
     // The confirmation is built from the operation and the job it names, so the title and the
@@ -1715,7 +1663,6 @@ const en = {
     detailSource: "Source",
     detailChapterRange: "Chapter range",
     sourceEpubUpload: "EPUB upload",
-    sourceUnknownProvider: "Unknown provider",
     processing: "Processing",
     processingAria: "Import processing progress",
     counterAdded: "Added",
@@ -2155,10 +2102,6 @@ const en = {
     chapterNumberPositive: "Chapter number must be positive",
     chapterNumberMax: "Chapter number must be at most 999999.99",
     chapterNumberDecimals: "Chapter number must have at most two decimal places",
-    scrapeUrlRequired: "Chapter source URL is required",
-    scrapeUrlInvalid: "Enter a valid URL",
-    scrapeRangeInvalid:
-      "Enter a valid range: first chapter must be at least 1, last chapter cannot be earlier, and the range can contain at most 500 chapters.",
     epubFileRequired: "Please select an EPUB file",
     epubFileInvalid: "Please select a valid .epub file",
     epubFileEmpty: "Selected file is empty",
@@ -2351,24 +2294,6 @@ const en = {
 
     // Scraping. The parsers fail against a page that changed its shape, which is a thing the
     // author can act on, so each one names the part of the page that was not where it should be.
-    scrapeNoTextContainer: "Could not locate the chapter text on the page.",
-    scrapeNoTitle: "Could not find the chapter title on the page.",
-    scrapeEmptyText: "The chapter text extracted from the page is empty.",
-    scrapeChapterNumberMissing: "Could not determine a chapter number from the source page.",
-    scrapeChapterNumberInvalid: "Could not determine a valid chapter number from the source page.",
-    scrapeBiqugeTocFailed: "Could not parse chapters from the biquge table of contents.",
-    scrapeTwkanTocFailed: "Could not parse chapters from the twkan table of contents.",
-    scrapeUrlCredentials: "Source URLs cannot contain credentials.",
-    scrapeUrlFragment: "Source URLs cannot contain a fragment.",
-    scrapePageTooLarge: "The page is too large to import.",
-    scrapeFirecrawlInvalid: "Firecrawl returned an invalid response.",
-
-    // Bulk imports.
-    importRangeInvalid:
-      "Enter a valid range (from 1 or more, and from at most 500 chapters before to).",
-
-    // Rules that only the service layer knows: a state a form cannot see, or a resource that
-    // changed between the page rendering and the write arriving.
     translationClearRequiresSourceClear:
       "Translated content can only be cleared while the source translation is being cleared.",
     glossaryTermExists: "A term with source {source} already exists.",
@@ -2382,21 +2307,6 @@ const en = {
 
     // Scraping failures. An environment variable is data, not copy, so it stays literal in
     // both languages and only the sentence around it is written twice.
-    scrapeCloudflareBlocked:
-      "A Cloudflare challenge blocked access. Try setting SCRAPER_PREMIUM_PROXY=true in .env.local",
-    scrapeTwkanAdRedirect:
-      "twkan bot detection redirected to an ad page. Set SCRAPER_PREMIUM_PROXY=true in .env.local to use residential proxies.",
-    scrapeBiqugeAdRedirect:
-      "biquge bot detection redirected to an ad page. Set SCRAPER_PREMIUM_PROXY=true in .env.local to use residential proxies.",
-    scrapeInvalidHtml:
-      "The source page returned invalid HTML or was blocked. Try setting SCRAPER_PREMIUM_PROXY=true in .env.local",
-    scrapeQuanbenUrlRange:
-      "Quanben range imports require a chapter URL ending in a chapter number, such as /12.html",
-    scrapeProxyKeyRequired: "Scraping this site requires {envVar} to be set.",
-    scrapeForbidden:
-      "Source site {source} returned HTTP 403 Forbidden. Set SCRAPER_API_KEY in .env.local to enable the scraper proxy.",
-
-    // Reading an EPUB archive. A path inside the archive is data, so it travels as a value.
     epubChapterTooLarge: "Chapter content exceeds the 2 MiB limit.",
     epubMergedChapterTooLarge: "Merged chapter content exceeds the 2 MiB limit.",
     epubTooManyChapters: "The EPUB contains too many chapters (more than {max}).",
@@ -2417,10 +2327,6 @@ const en = {
     imageUnsupportedType: "Unsupported image type: {mime}",
 
     // Network failures while fetching a source page.
-    scrapeHttpRedirect: "{context} attempted a redirect (HTTP {status}). Blocked.",
-    scrapeHttpError: "The source site returned HTTP {status}.",
-    scrapeProviderHttpError: "{provider} returned HTTP {status}.",
-    scrapeUnknownProvider: "Unknown scrape provider: {provider}",
   },
   consent: {
     message:

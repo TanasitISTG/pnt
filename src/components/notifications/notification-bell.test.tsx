@@ -45,6 +45,14 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
 
+/** Noon on the day `daysAgo` days back, so a day heading does not depend on the hour of the run. */
+function dayAt(daysAgo: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  date.setHours(12, 0, 0, 0);
+  return date.toISOString();
+}
+
 const ITEM = {
   id: "notification-1",
   kind: "chapter_published" as const,
@@ -53,10 +61,34 @@ const ITEM = {
   commentId: null,
   reportId: null,
   novelTitle: "The Hidden Map",
+  chapterTitle: "Chapter 12",
   detail: "Chapter 12",
   outcome: null,
-  createdAt: new Date(Date.now() - 60_000).toISOString(),
+  createdAt: dayAt(0),
   readAt: null,
+};
+
+const COMMENT = {
+  ...ITEM,
+  id: "notification-2",
+  kind: "novel_comment" as const,
+  commentId: "comment-1",
+  chapterTitle: "The Long Road",
+  detail: "Loved the pacing here.",
+  createdAt: dayAt(1),
+};
+
+const REPORT = {
+  ...ITEM,
+  id: "notification-3",
+  kind: "report_decided" as const,
+  novelId: null,
+  chapterId: null,
+  reportId: "report-1",
+  novelTitle: "",
+  chapterTitle: null,
+  detail: null,
+  outcome: "upheld" as const,
 };
 
 function renderBell(): void {
@@ -89,14 +121,31 @@ describe("NotificationBell", () => {
     expect(await screen.findByRole("button", { name: "1 unread notification" })).toBeTruthy();
   });
 
-  it("lists the newest notification and links it to its chapter", async () => {
+  it("separates the kind, the chapter and the novel in one row", async () => {
     renderBell();
 
     fireEvent.click(await screen.findByRole("button", { name: /unread notification/ }));
 
-    expect(await screen.findByText("New chapter in The Hidden Map")).toBeTruthy();
+    expect(await screen.findByText("New chapter")).toBeTruthy();
     expect(screen.getByText("Chapter 12")).toBeTruthy();
+    expect(screen.getByText("The Hidden Map")).toBeTruthy();
+    expect(screen.getByText("Today")).toBeTruthy();
     expect(screen.getByRole("link").getAttribute("href")).toMatch(/novel-1\/chapter-1$/);
+  });
+
+  it("quotes a comment and groups it under its day", async () => {
+    serverFunctions.listNotifications.mockResolvedValue({
+      items: [ITEM, COMMENT],
+      unreadCount: 2,
+    });
+    renderBell();
+
+    fireEvent.click(await screen.findByRole("button", { name: /unread notifications/ }));
+
+    expect(await screen.findByText("New comment")).toBeTruthy();
+    expect(screen.getByText("The Long Road")).toBeTruthy();
+    expect(screen.getByText("Loved the pacing here.")).toBeTruthy();
+    expect(screen.getByText("Yesterday")).toBeTruthy();
   });
 
   it("marks one notification read when it is opened", async () => {
@@ -108,6 +157,20 @@ describe("NotificationBell", () => {
     await waitFor(() => {
       expect(serverFunctions.markNotificationsRead).toHaveBeenCalledWith({
         data: { ids: ["notification-1"] },
+      });
+    });
+  });
+
+  it("clears a report from its row, since it has no chapter to open", async () => {
+    serverFunctions.listNotifications.mockResolvedValue({ items: [REPORT], unreadCount: 1 });
+    renderBell();
+
+    fireEvent.click(await screen.findByRole("button", { name: /unread notification/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Report upheld/ }));
+
+    await waitFor(() => {
+      expect(serverFunctions.markNotificationsRead).toHaveBeenCalledWith({
+        data: { ids: ["notification-3"] },
       });
     });
   });
