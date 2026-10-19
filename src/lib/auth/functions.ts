@@ -70,10 +70,16 @@ export const getSession = createServerOnlyFn(() =>
   }),
 );
 
+// Mutations and operator gates read the authoritative session rather than the signed
+// cookie cache. A suspension, logout, or revoked session must stop a write immediately;
+// allowing reads to use the cache is the whole point of enabling it.
 export const ensureSession = createServerOnlyFn(() =>
   withSafeHandler(async () => {
     const headers = getRequestHeaders();
-    const session = await auth.api.getSession({ headers });
+    const session = await auth.api.getSession({
+      headers,
+      query: { disableCookieCache: true },
+    });
     return requireSession(session);
   }),
 );
@@ -81,7 +87,10 @@ export const ensureSession = createServerOnlyFn(() =>
 export const ensureAdminSession = createServerOnlyFn(() =>
   withSafeHandler(async () => {
     const headers = getRequestHeaders();
-    const session = await auth.api.getSession({ headers });
+    const session = await auth.api.getSession({
+      headers,
+      query: { disableCookieCache: true },
+    });
     return requireAdminSession(session);
   }),
 );

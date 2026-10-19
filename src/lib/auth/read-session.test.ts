@@ -72,4 +72,19 @@ describe("ensureSessionForRead", () => {
     await expect(ensureSessionForRead()).resolves.toBe(ordinary);
     await expect(ensureSession()).resolves.toBe(ordinary);
   });
+
+  it("reads the cookie cache but checks writes against the authoritative session", async () => {
+    mocks.getSession.mockResolvedValue(sessionWith({}));
+
+    await ensureSessionForRead();
+    expect(mocks.getSession).toHaveBeenLastCalledWith({
+      headers: expect.any(Headers),
+    });
+
+    await ensureSession();
+    expect(mocks.getSession).toHaveBeenLastCalledWith({
+      headers: expect.any(Headers),
+      query: { disableCookieCache: true },
+    });
+  });
 });

@@ -66,6 +66,16 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
+  session: {
+    // Every page load and server function resolves a session. The signed cookie cache
+    // keeps those reads off the database; mutations and operator gates deliberately
+    // bypass it (`disableCookieCache`) so a ban or logout still takes effect immediately
+    // where it matters. Reads may therefore lag a revocation by at most this window.
+    cookieCache: {
+      enabled: true,
+      maxAge: 60,
+    },
+  },
   emailAndPassword: {
     enabled: true,
     // Public signup. Email verification is offered on signup but not required to
