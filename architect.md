@@ -44,6 +44,7 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 23. A server function is callable only while the browser graph imports its module. The compiler registers server functions the client build reaches, and every server-side call site resolves through that manifest, so a `createServerFn` that only server code references fails at runtime with `Server function info not found`. Server-only work called from server code — session lookups above all — is `createServerOnlyFn`, which is invoked directly and never consults the manifest.
 24. Database rows hold storage keys, never object bytes. Cover keys embed an immutable unguessable segment, so replacing a cover writes a new URL instead of purging a CDN object; private-bucket objects are reachable only through signed URLs or authenticated app routes. Storage failures degrade a feature (a missing cache entry rebuilds, a deleted row's archive is reaped) but never fail open into a public read.
 25. A notification row is the record and a realtime message is only a hint to refetch. Fan-out is idempotent through `unique(user_id, dedupe_key)`, a `chapter_published` row exists only while its chapter is live, and every notification write is best-effort: it may be lost, but it never fails the publish, comment, or decision that caused it.
+26. Session reads may use Better Auth's signed 60-second cookie cache; mutations and operator gates never do. `ensureSession` and `ensureAdminSession` pass `disableCookieCache`, so a suspension, logout, or revocation stops a write or operator action immediately even though a page read can lag by that bounded window.
 
 ## Novel-first mutation protocol
 
@@ -137,22 +138,23 @@ Unlocked exact speech fields are scrubbed and never reach the translator as auth
 
 ## Reader state
 
-Signed-in reading position, read chapters, and bookmarks live in `reader_progress`, `reader_chapter_reads`, and `reader_bookmarks`, one row set per user and novel, and are read through `getReaderNovelState`. The route loader prefetches `["readerState", novelId]` for signed-in readers so the restore path reads it synchronously; guests read the `pnt-reader-progress` and `pnt-reader-bookmarks` browser stores instead and never issue the request. The two sources are intentionally not merged.
+Signed-in reading position, read chapters, and bookmarks live in `reader_progress`, `reader_chapter_reads`, and `reader_bookmarks`, one row set per user and novel. Reading position and read marks are read through `getReaderNovelState`; the bookmark list is not part of that read and is fetched on demand through `getReaderBookmarks` when the bookmark dialog opens. The route loader prefetches `["readerState", novelId]` for signed-in readers so the restore path reads it synchronously; guests read the `pnt-reader-progress` and `pnt-reader-bookmarks` browser stores instead and never issue the request. The two sources are intentionally not merged.
 
-Client writes go through one store per `(novel, user)`: writes are serialized in order, and throttled scroll samples flush at most every 4 s or 2% of the chapter, with an immediate flush on chapter change and unmount; an unload-time flush is skipped because the browser aborts that request. The SQL guards above make out-of-order arrivals harmless. Scroll samples never enter the React snapshot, so reading does not re-render the chapter. Bookmarks store a paragraph index plus an excerpt; navigation re-locates the excerpt in the target chapter (falling back to the stored index) so re-translation and edits do not break them. One bookmark exists per paragraph and column: re-bookmarking a spot returns the existing row rather than inserting a twin, and the client drops its optimistic entry when the server reports the duplicate. In-chapter search, typography controls, and reader page themes are client-only and do not persist beyond `pnt-reader-settings`.
+Client writes go through one store per `(novel, user)`: writes are serialized in order, and throttled scroll samples flush at most every 8 s or 2% of the chapter, with an immediate flush on chapter change and unmount; an unload-time flush is skipped because the browser aborts that request. The SQL guards above make out-of-order arrivals harmless. Scroll samples never enter the React snapshot, so reading does not re-render the chapter. Bookmarks store a paragraph index plus an excerpt; navigation re-locates the excerpt in the target chapter (falling back to the stored index) so re-translation and edits do not break them. One bookmark exists per paragraph and column: re-bookmarking a spot returns the existing row rather than inserting a twin, and the client drops its optimistic entry when the server reports the duplicate. In-chapter search, typography controls, and reader page themes are client-only and do not persist beyond `pnt-reader-settings`.
 
 Account bookmarks use 200-row keyset pages ordered by `(created_at DESC, id DESC)` across
-the novel, not a 200-bookmark storage quota. `getReaderNovelState` returns the first page
-and `bookmarkNextCursor`; `getReaderBookmarks` returns subsequent pages. The opaque cursor
+the novel, not a 200-bookmark storage quota. `getReaderBookmarks` returns a page, and the
+dialog asks for the first one (no cursor) when it opens; `getReaderNovelState` carries
+neither bookmark rows nor a cursor. The opaque cursor
 retains exact database timestamp text plus ID, so ties and deletion of its original row do
 not break continuation. Creation is atomic under the novel/chapter locks and uniqueness
 constraint; duplicates return the existing ID without replacing its note or excerpt.
 The paging index includes `(user_id, novel_id, created_at, id)`, including the tie-breaker.
 Migration 0035 corrects that index forward-only; previously applied 0033/0034 are preserved.
 
-Loaded pages append into the existing reader-state Query cache, with stale responses
-discarded after an intervening cache update. An authoritative refetch resets the collection
-to the first page and its cursor. The dialog keeps loaded rows on paging failure and offers
+Loaded pages append into the bookmark-list Query cache, with stale responses discarded
+after an intervening cache update. A refetch of the first page resets the collection to
+that page and its cursor. The dialog keeps loaded rows on paging failure and offers
 retry; **Load more**, `N loaded`, and `N+` distinguish a partial list from a complete count.
 Continuation remains available after all loaded bookmarks are removed. Paging loading/error
 state is scoped to the current reader identity, so requests from an old novel/account cannot
@@ -237,11 +239,11 @@ only ones in the query are the ones the server looked up for that account.
 
 ## Notifications
 
-Following is a reader relation — an account plus a novel it may merely be reading, so the write gate is read visibility, not ownership — and the bell reads `notifications` newest-first with an unread count. The writers are: a live chapter fanning out to its novel's followers excluding the author; a top-level comment telling the novel's owner; a reply telling its parent's author; a new review telling the novel's owner; and a decided report telling each reporter whose claim was in the case. A comment and a reply on the same comment therefore reach different accounts, and a review's dedupe key is the review, so an edit notifies nobody. A single-chapter publish fans out inline after its transaction commits, because that is the one chapter an author is watching land; a bulk release and a scheduled chapter are left to a one-minute sweep, which makes the same idempotent write. Either path produces the row once.
+Following is a reader relation — an account plus a novel it may merely be reading, so the write gate is read visibility, not ownership — and the bell reads `notifications` newest-first with an unread count. The writers are: a live chapter fanning out to its novel's followers excluding the author; a top-level comment telling the novel's owner; a reply telling its parent's author; a new review telling the novel's owner; and a decided report telling each reporter whose claim was in the case. A comment and a reply on the same comment therefore reach different accounts, and a review's dedupe key is the review, so an edit notifies nobody. A single-chapter publish fans out inline after its transaction commits, because that is the one chapter an author is watching land; a bulk release and a scheduled chapter are left to a ten-minute maintenance sweep, which makes the same idempotent write. The sweep interval is deliberately longer than Neon's five-minute idle timeout: a one- or two-minute cron would keep the compute awake forever, while readability does not depend on the sweep because reads filter on `publishedAt`. Either path produces the row once. The sweep's outbox retry and notification fan-out are independent steps: both are started together, and a failure is surfaced only after both settle, so one failing job neither skips nor delays the other and the retry resumes at the unfinished step.
 
 Rows are snapshots: every target column is nullable and cleared on delete, while the title and excerpt stay, so the bell never depends on a join to content that may be gone. Unpublishing reconciles backward by deleting the chapter's rows, which keeps the invariant above true and lets a republished chapter notify again. Retention prunes read rows after 90 days and unread rows after 180.
 
-Ably publishes one message per recipient on `notifications:<userId>`, batched at 100 channels per request, and a browser token is minted per session for `subscribe` on that one channel only. Delivery is deliberately not on the correctness path: the client refetches the notification query on every message and polls every 30 seconds, so an unset `ABLY_API_KEY` disables the socket and nothing else.
+Ably publishes one message per recipient on `notifications:<userId>`, batched at 100 channels per request, and a browser token is minted per session for `subscribe` on that one channel only. Delivery is deliberately not on the correctness path: the client refetches the notification query on every message and polls every 60 seconds, so an unset `ABLY_API_KEY` disables the socket and nothing else.
 
 ## Catalog directory
 

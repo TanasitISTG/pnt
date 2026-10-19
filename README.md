@@ -355,8 +355,9 @@ serializes those requests client-side: Postgres then never sees the lock waiter 
   output and compact EPUB title metadata can exceed it. Cancellation closes iteration;
   producer failures remain stream errors, not successful truncated downloads.
 - Account bookmarks load in 200-row keyset pages with explicit **Load more** and a partial
-  count while more remain; 200 is not a storage quota. A reader-state refetch replaces
-  accumulated pages with the first page and its continuation. Guests retain local storage.
+  count while more remain; 200 is not a storage quota. The first page is fetched when the
+  bookmark dialog opens, not with the page's reader state. A first-page refetch replaces
+  accumulated pages and their continuation. Guests retain local storage.
 - `src/lib/storage/` is the object-storage port. `keys.ts` is pure key/revision derivation,
   `r2.server.ts` speaks the R2 S3 API, `local.server.ts` is the filesystem adapter used when
   R2 is unconfigured, and `index.server.ts` selects between them. Covers are uploaded to the
