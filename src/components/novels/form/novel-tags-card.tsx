@@ -65,7 +65,7 @@ export function NovelTagsCard({ novelId, tags }: { novelId: string; tags: Catalo
   };
 
   return (
-    <Card className="max-w-3xl">
+    <Card>
       <CardHeader>
         <CardTitle>{t("title")}</CardTitle>
         <CardDescription>{t("description", { max: MAX_NOVEL_TAGS })}</CardDescription>
@@ -95,7 +95,7 @@ export function NovelTagsCard({ novelId, tags }: { novelId: string; tags: Catalo
           </ul>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2">
           <Input
             value={draft}
             autoComplete="off"
@@ -113,6 +113,7 @@ export function NovelTagsCard({ novelId, tags }: { novelId: string; tags: Catalo
           <Button
             type="button"
             variant="outline"
+            className="w-full"
             disabled={save.isPending || draft.trim() === "" || local.length >= MAX_NOVEL_TAGS}
             onClick={add}
           >

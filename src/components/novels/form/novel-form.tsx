@@ -20,6 +20,7 @@ import { coverMimeSchema, createNovelSchema } from "@/lib/content/novel/novel.sc
 import { languageName } from "@/lib/i18n/language-name";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { isSupportedLanguagePair } from "@/lib/language-pair";
+import { cn } from "@/lib/utils";
 
 type NovelFormData = z.input<typeof createNovelSchema> & {
   removeCover?: boolean;
@@ -44,6 +45,7 @@ interface NovelFormProps {
   defaultValues?: Partial<NovelFormData> & { id?: string; hasCover?: boolean };
   onSubmit: (data: NovelFormData) => Promise<void>;
   submitLabel: string;
+  className?: string;
 }
 
 // A field message is a key (i18n.md §3), so the same sentence is written once and read
@@ -124,7 +126,7 @@ function createInitialNovelForm(defaultValues: NovelFormProps["defaultValues"]):
   };
 }
 
-export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormProps) {
+export function NovelForm({ defaultValues, onSubmit, submitLabel, className }: NovelFormProps) {
   const t = useTranslations("studio");
   const tCommon = useTranslations("common");
   const tRoot = useTranslations();
@@ -174,280 +176,296 @@ export function NovelForm({ defaultValues, onSubmit, submitLabel }: NovelFormPro
         event.preventDefault();
         void form.handleSubmit();
       }}
-      className="flex max-w-2xl flex-col gap-6 rounded-xl border border-border bg-card p-6"
+      className={cn("flex flex-col rounded-xl border border-border bg-card", className)}
     >
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_auto]">
-        <FieldGroup className="flex-1 gap-4">
-          <form.Field name="title">
+      <section className="flex flex-col gap-6 p-6">
+        <header className="flex flex-col gap-1">
+          <h2 className="text-card-title font-semibold text-foreground">{t("detailsSection")}</h2>
+          <p className="text-sm text-muted-foreground">{t("detailsHint")}</p>
+        </header>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_auto]">
+          <FieldGroup className="flex-1 gap-4">
+            <form.Field name="title">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                return (
+                  <Field data-invalid={invalid || undefined}>
+                    <FieldLabel htmlFor="title">{t("fieldTitle")}</FieldLabel>
+                    <Input
+                      id="title"
+                      name={field.name}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      placeholder={t("titlePlaceholder")}
+                      required
+                      maxLength={500}
+                      aria-invalid={invalid}
+                    />
+                    {invalid && <FieldError errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            </form.Field>
+
+            <form.Field name="originalTitle">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                return (
+                  <Field data-invalid={invalid || undefined}>
+                    <FieldLabel htmlFor="originalTitle">{t("fieldOriginalTitle")}</FieldLabel>
+                    <Input
+                      id="originalTitle"
+                      name={field.name}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      placeholder={t("originalTitlePlaceholder")}
+                      maxLength={500}
+                      aria-invalid={invalid}
+                    />
+                    {invalid && <FieldError errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            </form.Field>
+
+            <form.Field name="author">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+                return (
+                  <Field data-invalid={invalid || undefined}>
+                    <FieldLabel htmlFor="author">{t("fieldAuthor")}</FieldLabel>
+                    <Input
+                      id="author"
+                      name={field.name}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      placeholder={t("authorPlaceholder")}
+                      maxLength={200}
+                      aria-invalid={invalid}
+                    />
+                    {invalid && <FieldError errors={field.state.meta.errors} />}
+                  </Field>
+                );
+              }}
+            </form.Field>
+          </FieldGroup>
+
+          <form.Field name="cover">
             {(field) => {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
               return (
-                <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="title">{t("fieldTitle")}</FieldLabel>
-                  <Input
-                    id="title"
-                    name={field.name}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder={t("titlePlaceholder")}
-                    required
-                    maxLength={500}
-                    aria-invalid={invalid}
+                <Field data-invalid={invalid || undefined} className="shrink-0">
+                  <FieldLabel>{t("fieldCover")}</FieldLabel>
+                  <CoverUpload
+                    existingNovelId={defaultValues?.id}
+                    hasExistingCover={defaultValues?.hasCover}
+                    coverMime={coverMime}
+                    cover={field.state.value}
+                    onChange={(base64, mimeType) => {
+                      const validatedMime = coverMimeSchema.safeParse(mimeType);
+                      field.handleChange(base64);
+                      form.setFieldValue(
+                        "coverMime",
+                        validatedMime.success ? validatedMime.data : null,
+                      );
+                      form.setFieldValue("removeCover", false);
+                    }}
+                    onRemoveCover={() => {
+                      field.handleChange(null);
+                      form.setFieldValue("coverMime", null);
+                      form.setFieldValue("removeCover", true);
+                    }}
                   />
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
               );
             }}
           </form.Field>
+        </div>
 
-          <form.Field name="originalTitle">
-            {(field) => {
-              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
-              return (
-                <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="originalTitle">{t("fieldOriginalTitle")}</FieldLabel>
-                  <Input
-                    id="originalTitle"
-                    name={field.name}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder={t("originalTitlePlaceholder")}
-                    maxLength={500}
-                    aria-invalid={invalid}
-                  />
-                  {invalid && <FieldError errors={field.state.meta.errors} />}
-                </Field>
-              );
-            }}
-          </form.Field>
-
-          <form.Field name="author">
-            {(field) => {
-              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
-              return (
-                <Field data-invalid={invalid || undefined}>
-                  <FieldLabel htmlFor="author">{t("fieldAuthor")}</FieldLabel>
-                  <Input
-                    id="author"
-                    name={field.name}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder={t("authorPlaceholder")}
-                    maxLength={200}
-                    aria-invalid={invalid}
-                  />
-                  {invalid && <FieldError errors={field.state.meta.errors} />}
-                </Field>
-              );
-            }}
-          </form.Field>
-        </FieldGroup>
-
-        <form.Field name="cover">
-          {(field) => {
-            const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
-            return (
-              <Field data-invalid={invalid || undefined} className="shrink-0">
-                <FieldLabel>{t("fieldCover")}</FieldLabel>
-                <CoverUpload
-                  existingNovelId={defaultValues?.id}
-                  hasExistingCover={defaultValues?.hasCover}
-                  coverMime={coverMime}
-                  cover={field.state.value}
-                  onChange={(base64, mimeType) => {
-                    const validatedMime = coverMimeSchema.safeParse(mimeType);
-                    field.handleChange(base64);
-                    form.setFieldValue(
-                      "coverMime",
-                      validatedMime.success ? validatedMime.data : null,
-                    );
-                    form.setFieldValue("removeCover", false);
-                  }}
-                  onRemoveCover={() => {
-                    field.handleChange(null);
-                    form.setFieldValue("coverMime", null);
-                    form.setFieldValue("removeCover", true);
-                  }}
-                />
-                {invalid && <FieldError errors={field.state.meta.errors} />}
-              </Field>
-            );
-          }}
-        </form.Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <form.Field name="sourceLang">
+        <form.Field name="description">
           {(field) => {
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor="sourceLang">{t("fieldSourceLang")}</FieldLabel>
-                <Select
+                <FieldLabel htmlFor="description">{t("fieldDescription")}</FieldLabel>
+                <Textarea
+                  id="description"
                   name={field.name}
-                  value={field.state.value}
-                  onValueChange={(value) => value && field.handleChange(value)}
-                  items={sourceLangItems}
-                >
-                  <SelectTrigger
-                    id="sourceLang"
-                    className="h-10 w-full px-3"
-                    onBlur={field.handleBlur}
-                    aria-invalid={invalid}
-                  >
-                    <SelectValue placeholder={t("sourceLangPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent className="min-w-36">
-                    <SelectGroup>
-                      <SelectItem value="en">{sourceLangItems.en}</SelectItem>
-                      <SelectItem value="zh">{sourceLangItems.zh}</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                {invalid && <FieldError errors={field.state.meta.errors} />}
-              </Field>
-            );
-          }}
-        </form.Field>
-
-        <form.Field name="targetLang">
-          {(field) => {
-            const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
-            return (
-              <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor="targetLang">{t("fieldTargetLang")}</FieldLabel>
-                <Select
-                  name={field.name}
-                  value={field.state.value}
-                  onValueChange={(value) => value && field.handleChange(value)}
-                  items={targetLangItems}
-                >
-                  <SelectTrigger
-                    id="targetLang"
-                    className="h-10 w-full px-3"
-                    onBlur={field.handleBlur}
-                    aria-invalid={invalid}
-                  >
-                    <SelectValue placeholder={t("targetLangPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent className="min-w-36">
-                    <SelectGroup>
-                      <SelectItem value="th">{targetLangItems.th}</SelectItem>
-                      <SelectItem value="en" disabled={sourceLang === "en"}>
-                        {targetLangItems.en}
-                      </SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                {invalid && <FieldError errors={field.state.meta.errors} />}
-              </Field>
-            );
-          }}
-        </form.Field>
-      </div>
-
-      <form.Field name="description">
-        {(field) => {
-          const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
-          return (
-            <Field data-invalid={invalid || undefined}>
-              <FieldLabel htmlFor="description">{t("fieldDescription")}</FieldLabel>
-              <Textarea
-                id="description"
-                name={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                placeholder={t("descriptionPlaceholder")}
-                rows={4}
-                maxLength={5000}
-                aria-invalid={invalid}
-              />
-              {invalid && <FieldError errors={field.state.meta.errors} />}
-            </Field>
-          );
-        }}
-      </form.Field>
-
-      <form.Field name="customPrompt">
-        {(field) => {
-          const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
-          return (
-            <Field data-invalid={invalid || undefined}>
-              <FieldLabel htmlFor="customPrompt">{t("fieldCustomPrompt")}</FieldLabel>
-              <Textarea
-                id="customPrompt"
-                name={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                placeholder={t("customPromptPlaceholder")}
-                rows={4}
-                maxLength={10000}
-                aria-invalid={invalid}
-              />
-              {invalid && <FieldError errors={field.state.meta.errors} />}
-            </Field>
-          );
-        }}
-      </form.Field>
-
-      <div className="grid grid-cols-1 gap-4 border-t border-border/50 pt-2 sm:grid-cols-2">
-        <form.Field name="chunkSize">
-          {(field) => {
-            const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
-            return (
-              <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor="chunkSize">{t("fieldChunkSize")}</FieldLabel>
-                <Input
-                  id="chunkSize"
-                  name={field.name}
-                  type="number"
-                  min={500}
-                  max={10000}
-                  step={100}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder={t("descriptionPlaceholder")}
+                  rows={4}
+                  maxLength={5000}
                   aria-invalid={invalid}
                 />
-                <FieldDescription>{t("chunkSizeHint")}</FieldDescription>
                 {invalid && <FieldError errors={field.state.meta.errors} />}
               </Field>
             );
           }}
         </form.Field>
+      </section>
 
-        <form.Field name="contextTailLength">
+      <section className="flex flex-col gap-6 border-t border-border p-6">
+        <header className="flex flex-col gap-1">
+          <h2 className="text-card-title font-semibold text-foreground">
+            {t("translationSection")}
+          </h2>
+          <p className="text-sm text-muted-foreground">{t("translationHint")}</p>
+        </header>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <form.Field name="sourceLang">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+              return (
+                <Field data-invalid={invalid || undefined}>
+                  <FieldLabel htmlFor="sourceLang">{t("fieldSourceLang")}</FieldLabel>
+                  <Select
+                    name={field.name}
+                    value={field.state.value}
+                    onValueChange={(value) => value && field.handleChange(value)}
+                    items={sourceLangItems}
+                  >
+                    <SelectTrigger
+                      id="sourceLang"
+                      className="h-10 w-full px-3"
+                      onBlur={field.handleBlur}
+                      aria-invalid={invalid}
+                    >
+                      <SelectValue placeholder={t("sourceLangPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent className="min-w-36">
+                      <SelectGroup>
+                        <SelectItem value="en">{sourceLangItems.en}</SelectItem>
+                        <SelectItem value="zh">{sourceLangItems.zh}</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              );
+            }}
+          </form.Field>
+
+          <form.Field name="targetLang">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+              return (
+                <Field data-invalid={invalid || undefined}>
+                  <FieldLabel htmlFor="targetLang">{t("fieldTargetLang")}</FieldLabel>
+                  <Select
+                    name={field.name}
+                    value={field.state.value}
+                    onValueChange={(value) => value && field.handleChange(value)}
+                    items={targetLangItems}
+                  >
+                    <SelectTrigger
+                      id="targetLang"
+                      className="h-10 w-full px-3"
+                      onBlur={field.handleBlur}
+                      aria-invalid={invalid}
+                    >
+                      <SelectValue placeholder={t("targetLangPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent className="min-w-36">
+                      <SelectGroup>
+                        <SelectItem value="th">{targetLangItems.th}</SelectItem>
+                        <SelectItem value="en" disabled={sourceLang === "en"}>
+                          {targetLangItems.en}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              );
+            }}
+          </form.Field>
+        </div>
+
+        <form.Field name="customPrompt">
           {(field) => {
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
             return (
               <Field data-invalid={invalid || undefined}>
-                <FieldLabel htmlFor="contextTailLength">{t("fieldContextTail")}</FieldLabel>
-                <Input
-                  id="contextTailLength"
+                <FieldLabel htmlFor="customPrompt">{t("fieldCustomPrompt")}</FieldLabel>
+                <Textarea
+                  id="customPrompt"
                   name={field.name}
-                  type="number"
-                  min={100}
-                  max={2000}
-                  step={50}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder={t("customPromptPlaceholder")}
+                  rows={4}
+                  maxLength={10000}
                   aria-invalid={invalid}
                 />
-                <FieldDescription>{t("contextTailHint")}</FieldDescription>
                 {invalid && <FieldError errors={field.state.meta.errors} />}
               </Field>
             );
           }}
         </form.Field>
-      </div>
 
-      <div className="flex justify-end gap-3 border-t border-border pt-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <form.Field name="chunkSize">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+              return (
+                <Field data-invalid={invalid || undefined}>
+                  <FieldLabel htmlFor="chunkSize">{t("fieldChunkSize")}</FieldLabel>
+                  <Input
+                    id="chunkSize"
+                    name={field.name}
+                    type="number"
+                    min={500}
+                    max={10000}
+                    step={100}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    aria-invalid={invalid}
+                  />
+                  <FieldDescription>{t("chunkSizeHint")}</FieldDescription>
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              );
+            }}
+          </form.Field>
+
+          <form.Field name="contextTailLength">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid;
+              return (
+                <Field data-invalid={invalid || undefined}>
+                  <FieldLabel htmlFor="contextTailLength">{t("fieldContextTail")}</FieldLabel>
+                  <Input
+                    id="contextTailLength"
+                    name={field.name}
+                    type="number"
+                    min={100}
+                    max={2000}
+                    step={50}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    aria-invalid={invalid}
+                  />
+                  <FieldDescription>{t("contextTailHint")}</FieldDescription>
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              );
+            }}
+          </form.Field>
+        </div>
+      </section>
+
+      <div className="sticky bottom-0 flex justify-end gap-3 rounded-b-xl border-t border-border bg-card/95 px-6 py-4 backdrop-blur">
         <Button type="submit" disabled={!canSubmit || isSubmitting}>
           {isSubmitting && <Spinner />}
           {isSubmitting ? tCommon("saving") : submitLabel}
