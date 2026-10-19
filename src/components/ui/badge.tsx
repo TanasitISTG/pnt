@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
  *   neutral — hairline border, foreground text (the default "this is a label" chip)
  *   quiet   — recessed fill, muted text (statuses that are informational only)
  *   tone    — a muted tone tint; outline variants keep the tone and drop the fill
+ *   tag     — the one opaque fill, for a chip that must read over a filled button's edge
  * Badges are square-ish now: pill radius is reserved for icon toggles, and only the
  * counting badge (which lives inside a control) keeps a full radius.
  */
@@ -19,6 +20,21 @@ const INFO = "border-info/30 bg-info/10 text-info";
 const WARNING = "border-warning/30 bg-warning/10 text-warning";
 const SUCCESS = "border-success/30 bg-success/10 text-success";
 const DESTRUCTIVE = "border-destructive/30 bg-destructive/10 text-destructive-text";
+/*
+ * The one opaque chip: a marker that has to read while it straddles the edge of a filled
+ * primary button as well as a plain card. Every other treatment above is translucent or
+ * borderless, so on a primary fill it would either vanish into the button or paint dark text
+ * on a dark surface. `surface-2` is the nearest surface token to "a tag floating above the
+ * page", which is why this is a fill and not a shadow.
+ *
+ * A tag is pinned onto a control's corner rather than dropped into a page, so it carries its
+ * own arrival: `tag-settle` (globals.css) brings it in from just below that corner, small and
+ * transparent, and lets it land. It is a property of the treatment, not of one call site — the
+ * motion belongs to the primitive the same way the fill does — which is also why callers do
+ * not pass it and the entrance can never be forgotten on a new marker.
+ */
+const TAG = "tag-settle border-border-strong bg-surface-2 text-foreground";
+
 const WARNING_OUTLINE = "border-warning/40 text-warning";
 const SUCCESS_OUTLINE = "border-success/40 text-success";
 const DESTRUCTIVE_OUTLINE = "border-destructive/40 text-destructive-text";
@@ -32,6 +48,7 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-surface-inset text-foreground",
         outline: NEUTRAL,
         strongOutline: NEUTRAL,
+        tag: TAG,
         muted: QUIET,
         mutedOutline: QUIET,
         ghost: QUIET,

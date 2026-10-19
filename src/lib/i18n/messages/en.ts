@@ -119,6 +119,7 @@ const en = {
     displayNamePlaceholder: "The name readers will see",
     or: "or",
     continueWith: "Continue with {provider}",
+    lastUsed: "Last used",
     providerFailed: "Could not continue with {provider}. Try again.",
     challengePending: "Waiting for the verification check to finish.",
     requestFailed: "The request did not finish. Try again.",

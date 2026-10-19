@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TurnstileRenderOptions } from "@/lib/auth/captcha";
+import type { LastLoginMethod } from "@/lib/auth/last-login-method";
 
 const routerState = vi.hoisted(() => ({
   search: {} as { redirect?: string },
@@ -18,6 +19,7 @@ const authMethods = vi.hoisted(() => ({
     google: false,
     discord: false,
     turnstileSiteKey: null as string | null,
+    lastUsedMethod: null as LastLoginMethod | null,
   },
 }));
 
@@ -103,6 +105,7 @@ beforeEach(() => {
     google: false,
     discord: false,
     turnstileSiteKey: null,
+    lastUsedMethod: null,
   };
   installTurnstile();
 });
@@ -110,6 +113,38 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   delete window.turnstile;
+});
+
+describe("login page last-used marker", () => {
+  /**
+   * The marker is the page's only memory of the reader: it comes from the request's cookie, so
+   * the page can point a returning reader at the method they used without asking the server
+   * anything about the address they have not typed yet.
+   */
+  it("marks the password form when this browser last signed in with email", async () => {
+    authMethods.value.lastUsedMethod = "email";
+    await renderLogin();
+
+    // The password method's control is the submit button, so the tag hangs in that button's
+    // row, exactly as a provider's does.
+    const marker = screen.getByText("Last used");
+    expect(marker.parentElement).toBe(signInButton().parentElement);
+    // And the field keeps its own accessible name; the marker never becomes part of a label.
+    expect(screen.getByLabelText("Email", { exact: true })).toBeTruthy();
+  });
+
+  it("marks nothing in a browser that has never signed in", async () => {
+    await renderLogin();
+
+    expect(screen.queryByText("Last used")).toBeNull();
+  });
+
+  it("leaves the password form unmarked once a provider was used last", async () => {
+    authMethods.value.lastUsedMethod = "google";
+    await renderLogin();
+
+    expect(screen.queryByText("Last used")).toBeNull();
+  });
 });
 
 describe("login page captcha wiring", () => {

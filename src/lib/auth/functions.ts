@@ -3,6 +3,7 @@ import { getRequestHeaders } from "@tanstack/react-start/server";
 
 import { auth, type Session, type User } from "@/lib/auth/auth";
 import { impersonationOperatorId } from "@/lib/auth/impersonation";
+import { parseLastLoginMethod, type LastLoginMethod } from "@/lib/auth/last-login-method";
 import { ADMIN_ROLE, hasAdminRole } from "@/lib/auth/roles";
 import { env } from "@/lib/env";
 import {
@@ -125,6 +126,16 @@ export interface AuthMethods {
    * disagree about whether a challenge is required.
    */
   turnstileSiteKey: string | null;
+  /**
+   * The method this browser last completed a sign-in with, read from the cookie Better Auth's
+   * `lastLoginMethod` plugin writes. Null in a browser that has never signed in, after the
+   * cookie expires, and for a value this app no longer offers.
+   *
+   * It is a device-local hint for the page's own copy: nothing may gate, preselect, or redirect
+   * on it, and it is never derived from the address typed into the form - that would make the
+   * login page an account-enumeration oracle.
+   */
+  lastUsedMethod: LastLoginMethod | null;
 }
 
 /**
@@ -140,5 +151,6 @@ export const getAuthMethods = createServerFn({ method: "GET" }).handler(() =>
     google: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
     discord: Boolean(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET),
     turnstileSiteKey: env.TURNSTILE_SECRET_KEY ? (env.TURNSTILE_SITE_KEY ?? null) : null,
+    lastUsedMethod: parseLastLoginMethod(getRequestHeaders().get("cookie")),
   })),
 );

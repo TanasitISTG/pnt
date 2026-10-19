@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { LastUsedBadge } from "@/components/auth/last-used-badge";
 import { authErrorMessage, isInvalidCredentialsError } from "@/lib/auth/error-codes";
 import { ProviderButtons } from "@/components/auth/provider-buttons";
 import { TurnstileWidget } from "@/components/auth/turnstile-widget";
@@ -231,15 +232,22 @@ function LoginPage() {
             </div>
           )}
 
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={!canSubmit || isSubmitting || !challengeSatisfied}
-          >
-            {isSubmitting && <Spinner />}
-            {isSubmitting ? t("signInSubmitting") : t("signInSubmit")}
-          </Button>
-
+          {/* The password method's control is this button, so that is where its marker hangs -
+              the same corner the provider buttons use, rather than a second placement beside
+              the email label. */}
+          <div className="relative">
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!canSubmit || isSubmitting || !challengeSatisfied}
+            >
+              {isSubmitting && <Spinner />}
+              {isSubmitting ? t("signInSubmitting") : t("signInSubmit")}
+            </Button>
+            {methods.lastUsedMethod === "email" ? (
+              <LastUsedBadge className="pointer-events-none absolute -top-2 right-3 z-10" />
+            ) : null}
+          </div>
           {challengeRequired && !challengeSatisfied && (
             <p className="text-center text-caption text-muted-foreground">
               {t("challengePending")}
@@ -253,6 +261,7 @@ function LoginPage() {
         discord={methods.discord}
         callbackURL="/"
         disabled={isSubmitting}
+        lastUsedMethod={methods.lastUsedMethod}
         onError={setError}
       />
     </AuthCard>

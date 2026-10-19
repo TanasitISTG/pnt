@@ -1,7 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { admin, captcha } from "better-auth/plugins";
+import { admin, captcha, lastLoginMethod } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { eq } from "drizzle-orm";
 
@@ -19,6 +19,10 @@ import {
   sendVerificationEmail,
 } from "@/lib/email/send.server";
 import { fallbackDisplayName } from "@/lib/auth/display-name";
+import {
+  LAST_LOGIN_METHOD_COOKIE,
+  LAST_LOGIN_METHOD_MAX_AGE_SECONDS,
+} from "@/lib/auth/last-login-method";
 import { localeFromCurrentRequest } from "@/lib/i18n/request-locale.server";
 import { ADMIN_ROLE } from "@/lib/auth/roles";
 import { env } from "@/lib/env";
@@ -229,6 +233,16 @@ export const auth = betterAuth({
           }),
         ]
       : []),
+    // Records which method last completed a sign-in on this browser, so `/login` can point a
+    // returning reader at it. The plugin writes only on a response that already set the session
+    // token, and the value is the method name alone - no address, no account id. The cookie name
+    // is passed rather than defaulted so the page that reads it (`getAuthMethods`) can never
+    // drift from the library's own spelling. It is deliberately absent from a fresh browser:
+    // no cookie means no hint, never a guess.
+    lastLoginMethod({
+      cookieName: LAST_LOGIN_METHOD_COOKIE,
+      maxAge: LAST_LOGIN_METHOD_MAX_AGE_SECONDS,
+    }),
     admin({
       defaultRole: DEFAULT_USER_ROLE,
       adminRoles: [ADMIN_ROLE],

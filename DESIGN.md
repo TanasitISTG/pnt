@@ -306,7 +306,8 @@ padding, for a control that shares its line with the label naming it (§9, 320px
 
 Twenty legacy variant names, three treatments: **neutral** (hairline border, foreground text),
 **quiet** (recessed fill, muted text) and **tone** (info/warning/success/destructive tint, outline
-versions drop the fill). Sizes: `default`, `stat` (mono), `count` (the only full-radius pill,
+versions drop the fill), plus **tag** — the one opaque fill, for a chip that has to read while it
+straddles the edge of a filled button as well as a plain card. Sizes: `default`, `stat` (mono), `count` (the only full-radius pill,
 because it lives inside another control). Badges are informational; a badge never carries an action.
 
 ### 7.3 State primitives

@@ -155,4 +155,18 @@ async function signIn(page: Page, account: Account): Promise<void> {
 
   // Waiting for the reading home is what proves a session exists before it is written out.
   await page.getByRole("heading", { name: "Welcome back" }).waitFor({ timeout: 30_000 });
+
+  // This is the run's only real sign-in, so it is the only place the last-used marker can be
+  // seen being written by the server: `/login` reads that cookie to point a returning reader at
+  // the method they used, and a missing or unreadable one would leave the page with no hint.
+  const marker = (await page.context().cookies()).find(
+    (cookie) => cookie.name === "better-auth.last_used_login_method",
+  );
+  if (!marker || marker.value !== "email" || marker.httpOnly) {
+    throw new Error(
+      `Signing in as ${account.email} left no readable last-used marker for email (${
+        marker ? `saw value "${marker.value}", httpOnly ${marker.httpOnly}` : "saw no such cookie"
+      }). The sign-in page marks the method this browser used last from that cookie.`,
+    );
+  }
 }

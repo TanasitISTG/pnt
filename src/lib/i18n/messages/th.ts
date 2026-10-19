@@ -110,6 +110,7 @@ const th = {
     displayNamePlaceholder: "ชื่อที่ผู้อ่านจะเห็น",
     or: "หรือ",
     continueWith: "ดำเนินการต่อด้วย {provider}",
+    lastUsed: "ใช้ล่าสุด",
     providerFailed: "ดำเนินการต่อด้วย {provider} ไม่สำเร็จ ลองอีกครั้ง",
     challengePending: "กำลังรอผลการตรวจสอบความปลอดภัย",
     requestFailed: "คำขอไม่สำเร็จ ลองอีกครั้ง",

@@ -182,7 +182,20 @@ const cookiePolicyEn: LegalDocument = {
       ],
     },
     {
-      heading: "2. Optional analytics cookies",
+      heading: "2. Functional cookies",
+      paragraphs: [
+        "These remember a choice you made so the next visit is quicker. They are created only after you sign in, and they store no identifier beyond the option you chose.",
+      ],
+      cards: [
+        {
+          name: "better-auth.last_used_login_method",
+          detail:
+            "Purpose: Remembers which sign-in method worked last in this browser, so the sign-in page can point you at it. Duration: 30 days.",
+        },
+      ],
+    },
+    {
+      heading: "3. Optional analytics cookies",
       paragraphs: [
         "When you grant consent, we use PostHog for product analytics and error tracking to help improve service performance and stability.",
       ],
@@ -195,7 +208,7 @@ const cookiePolicyEn: LegalDocument = {
       ],
     },
     {
-      heading: "3. Browser local storage",
+      heading: "4. Browser local storage",
       paragraphs: [
         "We store functional preferences directly in your browser. This data never leaves your device:",
       ],
@@ -242,7 +255,20 @@ const cookiePolicyTh: LegalDocument = {
       ],
     },
     {
-      heading: "2. คุกกี้วิเคราะห์แบบเลือกได้",
+      heading: "2. คุกกี้เพื่อการทำงาน",
+      paragraphs: [
+        "คุกกี้กลุ่มนี้จดจำตัวเลือกที่คุณเคยทำไว้ เพื่อให้การเข้าชมครั้งถัดไปเร็วขึ้น ถูกสร้างขึ้นหลังคุณลงชื่อเข้าใช้เท่านั้น และเก็บเฉพาะตัวเลือกที่คุณใช้ ไม่เก็บข้อมูลระบุตัวตนอื่น",
+      ],
+      cards: [
+        {
+          name: "better-auth.last_used_login_method",
+          detail:
+            "วัตถุประสงค์: จดจำว่าวิธีลงชื่อเข้าใช้ใดได้ผลล่าสุดในเบราว์เซอร์นี้ เพื่อให้หน้าเข้าสู่ระบบชี้ไปที่วิธีนั้น อายุ: 30 วัน",
+        },
+      ],
+    },
+    {
+      heading: "3. คุกกี้วิเคราะห์แบบเลือกได้",
       paragraphs: [
         "เมื่อคุณให้ความยินยอม เราใช้ PostHog วิเคราะห์การใช้งานและติดตามข้อผิดพลาด เพื่อพัฒนาประสิทธิภาพและความเสถียรของบริการ",
       ],
@@ -255,7 +281,7 @@ const cookiePolicyTh: LegalDocument = {
       ],
     },
     {
-      heading: "3. ที่เก็บข้อมูลในเบราว์เซอร์",
+      heading: "4. ที่เก็บข้อมูลในเบราว์เซอร์",
       paragraphs: ["เราเก็บค่าการใช้งานไว้ในเบราว์เซอร์ของคุณโดยตรง ข้อมูลนี้ไม่ออกจากอุปกรณ์ของคุณ:"],
       bullets: [
         {

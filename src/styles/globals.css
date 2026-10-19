@@ -721,6 +721,38 @@
   }
 
   /*
+   * A tag is pinned onto a control's corner, so it arrives the way a sticker would: from just
+   * below that corner and a touch smaller, settling exactly where it will stay. The badge's
+   * `tag` variant carries this class, so a marker gets the arrival without a call site
+   * asking for it.
+   *
+   * `@starting-style` supplies the from-state for the first render, so the entrance needs no
+   * JS and no mount effect. The origin is the bottom-right corner, the point that touches the
+   * control, which is what makes it read as landing on the control instead of floating over
+   * it. One fixed entrance, not a toggle: nothing can retrigger it, so a transition is enough
+   * and a keyframe would only restart it on re-render. 160ms — a small chip is at the fast end
+   * of the popover band, and the strong ease-out curve does the work.
+   *
+   * Reduced motion keeps the tag and drops the travel: the global rule resolves the
+   * transition instantly, so it simply is there.
+   */
+  .tag-settle {
+    transform-origin: 100% 100%;
+    transition:
+      opacity var(--dur-micro) var(--ease-out-quint),
+      translate var(--dur-micro) var(--ease-out-quint),
+      scale var(--dur-micro) var(--ease-out-quint);
+  }
+
+  @starting-style {
+    .tag-settle {
+      opacity: 0;
+      translate: 0 3px;
+      scale: 0.92;
+    }
+  }
+
+  /*
    * A modal overlay locks the page it covers. Base UI already marks `body`, which Chromium
    * propagates to the viewport; declaring it on the root as well is what keeps the page
    * still in the engines that do not, and `:has()` releases it the moment the last popup

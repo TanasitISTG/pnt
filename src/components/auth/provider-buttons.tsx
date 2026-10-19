@@ -1,13 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
+import { LastUsedBadge } from "@/components/auth/last-used-badge";
 import { Button } from "@/components/ui/button";
 import { FieldSeparator } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { authErrorMessage } from "@/lib/auth/error-codes";
+import type { LastLoginMethod, SocialProvider } from "@/lib/auth/last-login-method";
 import { signIn } from "@/lib/auth/auth-client";
-
-type SocialProvider = "google" | "discord";
 
 interface ProviderButtonsProps {
   google: boolean;
@@ -15,6 +15,11 @@ interface ProviderButtonsProps {
   /** Where the provider should return the reader once the callback completes. */
   callbackURL: string;
   disabled?: boolean;
+  /**
+   * The method this browser last signed in with; only a provider it names is marked. A method
+   * this deployment does not offer simply matches no button, so no separate check is needed.
+   */
+  lastUsedMethod?: LastLoginMethod | null;
   onError: (message: string) => void;
 }
 
@@ -68,12 +73,19 @@ const PROVIDER_ICONS: Record<SocialProvider, ReactNode> = {
  * gap either side of it is not a field boundary: the rule and its label carry the
  * break on their own, and the extra 4px on both sides is 8px of card height an
  * already-tall sign-up form does not need.
+ *
+ * The last-used marker is pinned to the top-right corner of the provider it names, straddling
+ * that button's top border. It overlaps the border rather than sitting in the row above for
+ * two reasons: the row would push the whole stack down and open an uneven gap around the one
+ * marked button, and a chip inline with the label has no room left in Thai at 320px. The
+ * corner is padding in both languages, so the tag can hang there without touching the words.
  */
 export function ProviderButtons({
   google,
   discord,
   callbackURL,
   disabled,
+  lastUsedMethod,
   onError,
 }: ProviderButtonsProps) {
   const t = useTranslations("auth");
@@ -106,17 +118,21 @@ export function ProviderButtons({
       <FieldSeparator className="my-4">{t("or")}</FieldSeparator>
       <div className="flex flex-col gap-2">
         {providers.map((provider) => (
-          <Button
-            key={provider}
-            type="button"
-            variant="outline"
-            className="h-9 w-full"
-            onClick={() => void start(provider)}
-            disabled={disabled || pending !== null}
-          >
-            {pending === provider ? <Spinner /> : PROVIDER_ICONS[provider]}
-            {t("continueWith", { provider: PROVIDER_NAMES[provider] })}
-          </Button>
+          <div key={provider} className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-full"
+              onClick={() => void start(provider)}
+              disabled={disabled || pending !== null}
+            >
+              {pending === provider ? <Spinner /> : PROVIDER_ICONS[provider]}
+              {t("continueWith", { provider: PROVIDER_NAMES[provider] })}
+            </Button>
+            {provider === lastUsedMethod ? (
+              <LastUsedBadge className="pointer-events-none absolute -top-2 right-3 z-10" />
+            ) : null}
+          </div>
         ))}
       </div>
     </div>
