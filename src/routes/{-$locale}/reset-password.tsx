@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { authErrorMessage } from "@/lib/auth/error-codes";
 import { resetPassword } from "@/lib/auth/auth-client";
 import { resetPasswordSearchSchema } from "@/lib/auth/search.schemas";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { localeParam } from "@/lib/i18n/locales";
 import { headTranslator } from "@/lib/i18n/route-head";
+import { translateServerError } from "@/lib/i18n/server-error";
 
 const resetFormSchema = z
   .object({
@@ -50,6 +52,7 @@ export const Route = createFileRoute("/{-$locale}/reset-password")({
  */
 function ResetPasswordPage() {
   const t = useTranslations("auth");
+  const tRoot = useTranslations();
   const { token, error: linkError } = Route.useSearch();
   // The language this page is being read in, which the layout derives from the URL.
   const locale = useLocale();
@@ -69,7 +72,7 @@ function ResetPasswordPage() {
         });
 
         if (resetError) {
-          setError(resetError.message || t("linkInvalid"));
+          setError(authErrorMessage(resetError, "auth.linkInvalid"));
           return;
         }
 
@@ -179,7 +182,7 @@ function ResetPasswordPage() {
 
           {error && (
             <p role="alert" className="text-caption text-destructive-text">
-              {error}
+              {translateServerError(error, tRoot)}
             </p>
           )}
 

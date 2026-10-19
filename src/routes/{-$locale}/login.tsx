@@ -6,7 +6,7 @@ import { useLocale, useTranslations } from "use-intl";
 import { z } from "zod";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { isInvalidCredentialsError } from "@/lib/auth/error-codes";
+import { authErrorMessage, isInvalidCredentialsError } from "@/lib/auth/error-codes";
 import { ProviderButtons } from "@/components/auth/provider-buttons";
 import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { authRedirectSearchSchema } from "@/lib/auth/search.schemas";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { localeParam, localizedHref } from "@/lib/i18n/locales";
 import { headTranslator } from "@/lib/i18n/route-head";
+import { translateServerError } from "@/lib/i18n/server-error";
 
 // The messages are keys, not sentences: a field error is rendered through the catalog of the
 // page it appears on, which is the only place that knows the reader's language.
@@ -62,6 +63,7 @@ export const Route = createFileRoute("/{-$locale}/login")({
 
 function LoginPage() {
   const t = useTranslations("auth");
+  const tRoot = useTranslations();
   const { redirect: redirectPath } = Route.useSearch();
   const { methods } = Route.useLoaderData();
   // The language this page is being read in, which the layout derives from the URL.
@@ -106,7 +108,7 @@ function LoginPage() {
           // wrong password: the account's message stands alone, without the provider
           // hint that only helps someone who got their credentials wrong.
           setCredentialsRejected(isInvalidCredentialsError(signInError.code));
-          setError(signInError.message || t("signInFailed"));
+          setError(authErrorMessage(signInError, "auth.signInFailed"));
           return;
         }
 
@@ -219,7 +221,7 @@ function LoginPage() {
           {error && (
             <div className="space-y-1">
               <p role="alert" className="text-caption text-destructive-text">
-                {error}
+                {translateServerError(error, tRoot)}
               </p>
               {/* The most common dead end for a public launch: an account created with
                   Google or Discord has no password to enter here. */}

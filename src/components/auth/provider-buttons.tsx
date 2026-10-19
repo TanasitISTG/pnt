@@ -4,6 +4,7 @@ import { useTranslations } from "use-intl";
 import { Button } from "@/components/ui/button";
 import { FieldSeparator } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
+import { authErrorMessage } from "@/lib/auth/error-codes";
 import { signIn } from "@/lib/auth/auth-client";
 
 type SocialProvider = "google" | "discord";
@@ -89,7 +90,9 @@ export function ProviderButtons({
     try {
       const { error } = await signIn.social({ provider, callbackURL });
       if (error) {
-        onError(error.message || t("providerFailed", { provider: PROVIDER_NAMES[provider] }));
+        onError(
+          authErrorMessage(error, "auth.providerFailed", { provider: PROVIDER_NAMES[provider] }),
+        );
         setPending(null);
       }
     } catch {

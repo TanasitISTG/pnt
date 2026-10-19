@@ -11,11 +11,13 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { captchaFetchOptions } from "@/lib/auth/captcha";
+import { authErrorMessage } from "@/lib/auth/error-codes";
 import { requestPasswordReset } from "@/lib/auth/auth-client";
 import { getAuthMethods } from "@/lib/auth/functions";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { localeParam } from "@/lib/i18n/locales";
 import { headTranslator } from "@/lib/i18n/route-head";
+import { translateServerError } from "@/lib/i18n/server-error";
 
 const forgotPasswordFormSchema = z.object({
   email: z
@@ -49,6 +51,7 @@ export const Route = createFileRoute("/{-$locale}/forgot-password")({
 
 function ForgotPasswordPage() {
   const t = useTranslations("auth");
+  const tRoot = useTranslations();
   const { methods } = Route.useLoaderData();
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +74,7 @@ function ForgotPasswordPage() {
         // A challenge cannot be replayed, so every attempt needs a fresh one.
         setCaptchaToken(null);
         if (resetError) {
-          setError(resetError.message || t("sendResetFailed"));
+          setError(authErrorMessage(resetError, "auth.sendResetFailed"));
           return;
         }
         setSubmitted(true);
@@ -159,7 +162,7 @@ function ForgotPasswordPage() {
 
           {error && (
             <p role="alert" className="text-caption text-destructive-text">
-              {error}
+              {translateServerError(error, tRoot)}
             </p>
           )}
 

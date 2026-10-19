@@ -128,6 +128,11 @@ const en = {
     signInSubmit: "Sign in",
     signInSubmitting: "Signing in...",
     signInFailed: "Invalid credentials",
+    accountSuspended:
+      "This account has been suspended. Contact the site operator if you believe this is a mistake.",
+    emailNotVerified: "Confirm your email address before signing in.",
+    rateLimited: "Too many attempts. Wait a moment and try again.",
+    sessionExpired: "Your session has expired. Sign in again.",
     forgotPasswordLink: "Forgot password?",
     oauthPasswordHint:
       "Signed up with Google or Discord? Use that button below, or reset your password to set one.",

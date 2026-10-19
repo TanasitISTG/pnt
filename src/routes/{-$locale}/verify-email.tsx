@@ -9,10 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { authErrorMessage } from "@/lib/auth/error-codes";
 import { sendVerificationEmail } from "@/lib/auth/auth-client";
 import { verifyEmailSearchSchema } from "@/lib/auth/search.schemas";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { headTranslator } from "@/lib/i18n/route-head";
+import { translateServerError } from "@/lib/i18n/server-error";
 
 const resendFormSchema = z.object({
   email: z
@@ -42,6 +44,7 @@ export const Route = createFileRoute("/{-$locale}/verify-email")({
 
 function VerifyEmailPage() {
   const t = useTranslations("auth");
+  const tRoot = useTranslations();
   const { verified, error: linkError } = Route.useSearch();
   const { signedInEmail, alreadyVerified } = Route.useLoaderData();
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -59,7 +62,7 @@ function VerifyEmailPage() {
           callbackURL: "/verify-email?verified=1",
         });
         if (sendError) {
-          setError(sendError.message || t("sendEmailFailed"));
+          setError(authErrorMessage(sendError, "auth.sendEmailFailed"));
           return;
         }
         setSentTo(email);
@@ -155,7 +158,7 @@ function VerifyEmailPage() {
 
             {error && (
               <p role="alert" className="text-caption text-destructive-text">
-                {error}
+                {translateServerError(error, tRoot)}
               </p>
             )}
 

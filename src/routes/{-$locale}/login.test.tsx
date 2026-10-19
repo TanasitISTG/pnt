@@ -171,6 +171,26 @@ describe("login page captcha wiring", () => {
     );
   });
 
+  it("reads a suspension from the catalog instead of Better Auth's English", async () => {
+    authMethods.value.google = true;
+    signInEmail.mockResolvedValue({
+      error: {
+        message: "You have been banned from this application",
+        code: "BANNED_USER",
+      },
+    });
+    await renderLogin();
+
+    fillCredentials();
+    fireEvent.click(signInButton());
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain("This account has been suspended"),
+    );
+    // The provider hint belongs to a rejected password, not to a suspension.
+    expect(screen.queryByText(/Signed up with Google/i)).toBeNull();
+  });
+
   it("clears a consumed challenge so a rejected attempt asks for a fresh one", async () => {
     authMethods.value.turnstileSiteKey = "site-key";
     signInEmail.mockResolvedValue({ error: { message: "Invalid credentials", code: "x" } });

@@ -13,6 +13,7 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { captchaFetchOptions } from "@/lib/auth/captcha";
+import { authErrorMessage } from "@/lib/auth/error-codes";
 import { signUp } from "@/lib/auth/auth-client";
 import { getAuthMethods } from "@/lib/auth/functions";
 import { encodeMessage } from "@/lib/i18n/message-code";
@@ -137,7 +138,7 @@ function SignupPage() {
         );
 
         if (signUpError) {
-          setError(signUpErrorMessage(signUpError.message, signUpError.code));
+          setError(authErrorMessage(signUpError, "auth.createAccountFailed"));
           // A consumed challenge cannot be replayed, so a failed attempt needs a new one.
           setCaptchaToken(null);
           return;
@@ -356,16 +357,3 @@ function SignupPage() {
  * masked: the alternative (`autoSignIn: false`) hides it, but then nobody gets a
  * session on signup. The message points at the two real remedies instead.
  */
-function signUpErrorMessage(message: string | undefined, code: string | undefined): string {
-  const normalized = `${code ?? ""} ${message ?? ""}`.toLowerCase();
-  if (normalized.includes("exist")) {
-    return encodeMessage("auth.emailExists");
-  }
-  if (normalized.includes("password")) {
-    return encodeMessage("auth.passwordRejected");
-  }
-  if (normalized.includes("captcha") || normalized.includes("verification")) {
-    return encodeMessage("auth.challengeFailed");
-  }
-  return message || encodeMessage("auth.createAccountFailed");
-}
