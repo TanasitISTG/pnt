@@ -1,14 +1,21 @@
 import { useMemo } from "react";
 
-import type { ChapterRow } from "@/components/chapters/types";
 import type { ReaderStateApi } from "@/lib/reader/use-reader-state";
 
-export interface NovelReadingProgress {
+/** The only fields a reading-progress join needs from a chapter row. */
+export interface ReadingProgressChapter {
+  id: string;
+  number: string;
+  title: string;
+  translatedTitle: string | null;
+}
+
+export interface NovelReadingProgress<T extends ReadingProgressChapter = ReadingProgressChapter> {
   /** Chapter ids the viewer has finished, for read markers in a chapter list. */
   readChapterIdSet: ReadonlySet<string>;
   /** The chapter the viewer was last in, when it still exists in the list. */
-  lastReadChapter: ChapterRow | null;
-  firstChapter: ChapterRow | null;
+  lastReadChapter: T | null;
+  firstChapter: T | null;
   readCount: number;
   totalCount: number;
   percent: number;
@@ -24,10 +31,10 @@ export interface NovelReadingProgress {
  * the reading page and the studio share one definition while each keeps its own queries —
  * and so a guest (whose state is local storage) gets the same numbers as an account.
  */
-export function useNovelReadingProgress(
-  chapters: readonly ChapterRow[],
+export function useNovelReadingProgress<T extends ReadingProgressChapter>(
+  chapters: readonly T[],
   readerState: ReaderStateApi,
-): NovelReadingProgress {
+): NovelReadingProgress<T> {
   const readerProgress = readerState.progress;
   const readChapterIdSet = useMemo(
     () => new Set(readerProgress.readChapterIds),

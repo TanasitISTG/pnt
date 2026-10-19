@@ -11,9 +11,9 @@ import { FollowButton } from "@/components/novels/detail/follow-button";
 import { NovelCover } from "@/components/novels/novel-cover";
 import { ReportNovelButton } from "@/components/reports/report-novel-button";
 import { NovelRatingSummary } from "@/components/reviews/novel-rating-summary";
-import type { ChapterRow } from "@/components/chapters/types";
-import { cn } from "@/lib/utils";
 import type { getNovel } from "@/lib/content/novel/novel.functions";
+import type { ReaderChapterRow } from "@/lib/content/chapter/chapter.functions";
+import { cn } from "@/lib/utils";
 
 type Novel = NonNullable<Awaited<ReturnType<typeof getNovel>>>;
 
@@ -34,11 +34,11 @@ export interface NovelHeaderProps {
   isOwner: boolean;
   /** A member reading someone else's novel; the owner manages it in the studio instead. */
   canReport: boolean;
-  chapters: ChapterRow[];
+  chapters: readonly ReaderChapterRow[];
   chaptersPending: boolean;
   readingActionsPending: boolean;
-  lastReadChapter: ChapterRow | null;
-  firstChapter: ChapterRow | null;
+  lastReadChapter: ReaderChapterRow | null;
+  firstChapter: ReaderChapterRow | null;
   readingProgress: ReadingProgressSummary;
 }
 

@@ -2,7 +2,10 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 
 import { NovelPublicPage } from "@/components/novels/detail/novel-public-page";
 import { NovelPending } from "@/components/novels/detail/novel-detail-pending";
-import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
+import {
+  hydrateReaderChapterManifest,
+  readerChapterManifestQueryOptions,
+} from "@/lib/content/chapter/chapter.query";
 import { hydrateAdminNovelDetailCore, novelQueryOptions } from "@/lib/content/novel/novel.query";
 import { getAdminNovelDetailCore } from "@/lib/content/novel/novel.functions";
 import { headTranslator } from "@/lib/i18n/route-head";
@@ -37,14 +40,16 @@ export const Route = createFileRoute("/{-$locale}/_public/novels/$novelId/")({
       const core = await getAdminNovelDetailCore({ data: { novelId: params.novelId } });
       if (core) {
         hydrateAdminNovelDetailCore(context.queryClient, core);
+        hydrateReaderChapterManifest(context.queryClient, params.novelId, core.chapters);
         await context.queryClient.ensureQueryData(readerStateQueryOptions(params.novelId));
         return { novel: core.novel };
       }
     }
 
-    // The three reads start together, so a readable novel costs one round trip.
+    // The three reads start together, so a readable novel costs one round trip. The
+    // chapter read is the four-field reader manifest, not the studio's chapter table.
     const chaptersRead = settle(
-      context.queryClient.ensureQueryData(chaptersQueryOptions(params.novelId)),
+      context.queryClient.ensureQueryData(readerChapterManifestQueryOptions(params.novelId)),
     );
     // A signed-in reader of someone else's published novel still gets per-account
     // progress and bookmarks; a guest keeps the local-storage reader state.

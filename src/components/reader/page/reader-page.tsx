@@ -9,11 +9,11 @@ import { useReaderState } from "@/lib/reader/use-reader-state";
 import { QueryErrorState } from "@/components/query-error-state";
 import { useReaderScroll } from "@/components/reader/page/use-reader-scroll";
 import { useReaderThemeScope } from "@/components/reader/page/use-reader-theme-scope";
-import { chapterQueryOptions } from "@/lib/content/chapter/chapter.query";
 import {
+  chapterQueryOptions,
   readerChapterManifestQueryOptions,
-  readerNovelQueryOptions,
-} from "@/components/reader/page/reader-queries";
+} from "@/lib/content/chapter/chapter.query";
+import { readerNovelQueryOptions } from "@/components/reader/page/reader-queries";
 import { ReaderPageSurface } from "./reader-page-surface";
 
 export interface ReaderPageProps {

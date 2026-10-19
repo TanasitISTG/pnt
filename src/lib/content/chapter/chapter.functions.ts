@@ -121,6 +121,9 @@ export const getReaderChapterManifest = createServerFn({ method: "GET" })
     });
   });
 
+/** The four fields a reading list needs; the studio's `listChapters` carries the rest. */
+export type ReaderChapterRow = Awaited<ReturnType<typeof getReaderChapterManifest>>[number];
+
 export const getChapter = createServerFn({ method: "GET" })
   .validator(z.object({ chapterId: z.string() }))
   .handler(async ({ data }) => {
@@ -138,13 +141,7 @@ export const getChapter = createServerFn({ method: "GET" })
           rawContent: chapters.rawContent,
           translatedContent: chapters.translatedContent,
           status: chapters.status,
-          summary: chapters.summary,
-          rawCharCount: chapters.rawCharCount,
-          publishedAt: chapters.publishedAt,
-          translatedAt: chapters.translatedAt,
           editedAt: chapters.editedAt,
-          createdAt: chapters.createdAt,
-          updatedAt: chapters.updatedAt,
           userId: novels.userId,
         })
         .from(chapters)
@@ -158,9 +155,6 @@ export const getChapter = createServerFn({ method: "GET" })
       const canManage = session?.user.id === userId;
       return {
         ...chapterRest,
-        // The rolling summary is a consistency-engine input, not reader-facing content,
-        // so it stays with the owner even when the chapter itself is public.
-        summary: canManage ? chapter.summary : null,
         translatedContent: chapter.translatedContent
           ? normalizePunctuation(chapter.translatedContent)
           : chapter.translatedContent,

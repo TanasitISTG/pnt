@@ -21,6 +21,8 @@ vi.mock("@/lib/content/novel/novel.functions", () => ({
 }));
 vi.mock("@/lib/content/chapter/chapter.functions", () => ({
   listChapters: serverFunctions.listChapters,
+  // The public page now reads the four-field reader manifest, not the studio table.
+  getReaderChapterManifest: serverFunctions.listChapters,
 }));
 vi.mock("@/lib/reader/reader.functions", () => ({
   getReaderNovelState: serverFunctions.getReaderNovelState,

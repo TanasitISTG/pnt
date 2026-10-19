@@ -4,12 +4,12 @@ import sarabunThaiUrl from "@fontsource/sarabun/files/sarabun-thai-400-normal.wo
 import { ReaderPage } from "@/components/reader/page/reader-page";
 import { ReaderPending } from "@/components/reader/page/reader-pending";
 import { readerStateQueryOptions } from "@/lib/reader/query";
-import { chapterQueryOptions } from "@/lib/content/chapter/chapter.query";
-import { headTranslator } from "@/lib/i18n/route-head";
 import {
+  chapterQueryOptions,
   readerChapterManifestQueryOptions,
-  readerNovelQueryOptions,
-} from "@/components/reader/page/reader-queries";
+} from "@/lib/content/chapter/chapter.query";
+import { headTranslator } from "@/lib/i18n/route-head";
+import { readerNovelQueryOptions } from "@/components/reader/page/reader-queries";
 
 export const Route = createFileRoute("/{-$locale}/_public/novels/$novelId/chapters/$chapterId")({
   loader: async ({ params, context }) => {

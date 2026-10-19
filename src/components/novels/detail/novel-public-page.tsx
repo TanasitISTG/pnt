@@ -10,7 +10,7 @@ import { useNovelReadingProgress } from "@/components/novels/use-novel-reading-p
 import { NovelReviewsSection } from "@/components/reviews/novel-reviews-section";
 import { NovelChapterList } from "@/components/novels/detail/novel-chapter-list";
 import { NovelHeader } from "@/components/novels/detail/novel-header";
-import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
+import { readerChapterManifestQueryOptions } from "@/lib/content/chapter/chapter.query";
 import { novelQueryOptions } from "@/lib/content/novel/novel.query";
 import { publishState } from "@/lib/content/publish/publish";
 import { useReaderState } from "@/lib/reader/use-reader-state";
@@ -32,7 +32,7 @@ export interface NovelPublicPageProps {
 export function NovelPublicPage({ novelId, signedIn }: NovelPublicPageProps) {
   const t = useTranslations("novel");
   const novelQuery = useQuery(novelQueryOptions(novelId));
-  const chaptersQuery = useQuery(chaptersQueryOptions(novelId));
+  const chaptersQuery = useQuery(readerChapterManifestQueryOptions(novelId));
   const readerState = useReaderState(novelId, signedIn);
   const { publishing, setPublishedAt } = useNovelPublishState(novelId);
 

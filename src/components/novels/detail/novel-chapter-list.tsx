@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { ChapterRow } from "@/components/chapters/types";
+import type { ReaderChapterRow } from "@/lib/content/chapter/chapter.functions";
 import { filterChapters } from "@/lib/content/chapter/chapter-search";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,7 @@ const CHAPTER_GROUP_SIZE = 50;
 
 export interface NovelChapterListProps {
   novelId: string;
-  chapters: ChapterRow[];
+  chapters: readonly ReaderChapterRow[];
   /** Chapters the viewer has finished, for the read marker. */
   readChapterIdSet: ReadonlySet<string>;
   /** The chapter the viewer was last in, marked as the current one. */
@@ -36,7 +36,7 @@ function ChapterRowLink({
   current,
 }: {
   novelId: string;
-  chapter: ChapterRow;
+  chapter: ReaderChapterRow;
   read: boolean;
   current: boolean;
 }) {
@@ -95,7 +95,7 @@ export function NovelChapterList({
     [chapters, readChapterIdSet],
   );
   const groups = useMemo(() => {
-    const result: ChapterRow[][] = [];
+    const result: ReaderChapterRow[][] = [];
     for (let index = 0; index < filteredChapters.length; index += CHAPTER_GROUP_SIZE) {
       result.push(filteredChapters.slice(index, index + CHAPTER_GROUP_SIZE));
     }
