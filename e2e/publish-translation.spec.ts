@@ -69,11 +69,6 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     source: "儿子对父亲说：“我会回来的。”\n父亲点了点头。",
   });
 
-  await page.getByRole("tab", { name: /^From URL/ }).click();
-  await page.getByLabel("Chapter source URL").fill("https://www.quanben.io/n/test/1.html");
-  await page.getByRole("spinbutton", { name: "First chapter" }).fill("1");
-  await page.getByRole("spinbutton", { name: "Last chapter" }).fill("5");
-
   await page.getByRole("tab", { name: /^EPUB file/ }).click();
   await page.locator('input[type="file"][accept*=".epub"]').setInputFiles({
     name: "retained-draft.epub",
@@ -81,12 +76,6 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
     buffer: Buffer.from("draft"),
   });
 
-  await page.getByRole("tab", { name: /^From URL/ }).click();
-  await expect(page.getByLabel("Chapter source URL")).toHaveValue(
-    "https://www.quanben.io/n/test/1.html",
-  );
-  await expect(page.getByRole("spinbutton", { name: "Last chapter" })).toHaveValue("5");
-  await page.getByRole("tab", { name: /^EPUB file/ }).click();
   await expect(page.getByText(/retained-draft\.epub/)).toBeVisible();
   await page.getByRole("tab", { name: /^Paste text/ }).click();
   await expect(page.getByLabel("Chapter number *")).toHaveValue("1");

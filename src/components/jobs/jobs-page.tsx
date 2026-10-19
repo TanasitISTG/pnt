@@ -28,7 +28,7 @@ import type {
   JobStats,
 } from "@/lib/job-dashboard/contracts";
 import { cancelTranslationJob, retryTranslationJob } from "@/lib/translation/api/mutations";
-import { cancelImportJob, startImportJob } from "@/lib/scrape/functions";
+import { cancelImportJob } from "@/lib/import/functions";
 import { formatNumber } from "@/lib/i18n/format";
 import type { JobsTranslator } from "@/components/jobs/job-history-columns";
 import { useHydrated } from "@/lib/use-hydrated";
@@ -155,17 +155,6 @@ export function JobsPage() {
       } else if (job.type === "translation") {
         await retryTranslationJob({ data: { jobId: job.id } });
         toast.success(t("retryQueued"));
-      } else if (job.type === "scrape" && job.scrapeProvider) {
-        await startImportJob({
-          data: {
-            novelId: job.novelId,
-            baseUrl: job.baseUrl,
-            from: job.fromNumber,
-            to: job.toNumber,
-            provider: job.scrapeProvider,
-          },
-        });
-        toast.success(t("importQueued"));
       } else {
         throw new Error(t("notRetryable"));
       }

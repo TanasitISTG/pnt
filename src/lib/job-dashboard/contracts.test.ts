@@ -46,7 +46,7 @@ describe("jobHistorySearchSchema", () => {
 });
 
 const identities = (count: number) =>
-  Array.from({ length: count }, (_, index) => ({ id: `job-${index}`, type: "scrape" }));
+  Array.from({ length: count }, (_, index) => ({ id: `job-${index}`, type: "epub" }));
 
 describe("jobActivityInputSchema", () => {
   it("defaults to an empty request and trims requested identities", () => {
@@ -71,12 +71,12 @@ describe("normalizeJobActivityInput", () => {
     expect(
       normalizeJobActivityInput([
         { id: "job-b", type: "translation" },
-        { id: "job-a", type: "scrape" },
-        { id: "job-a", type: "scrape" },
+        { id: "job-a", type: "epub" },
+        { id: "job-a", type: "epub" },
         { id: "job-c", type: "translation" },
       ]),
     ).toEqual([
-      { id: "job-a", type: "scrape" },
+      { id: "job-a", type: "epub" },
       { id: "job-b", type: "translation" },
       { id: "job-c", type: "translation" },
     ]);

@@ -46,7 +46,7 @@ beforeEach(() => {
   mocks.fetch.mockReset().mockResolvedValue(Response.json({ ok: true }));
 });
 
-describe("direct scrape pinned transport", () => {
+describe("direct-fetch pinned transport", () => {
   it("pins DNS answers while preserving the original hostname and SNI", async () => {
     const opened = vi.fn((_options: unknown, callback: buildConnector.Callback) => {
       callback(null, { remoteAddress: "8.8.8.8", destroy: vi.fn() } as unknown as Socket);

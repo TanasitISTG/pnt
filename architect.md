@@ -28,7 +28,7 @@ Make translation, chapter editing, glossary propagation, and event dispatch safe
 8. Translation jobs for one novel execute one at a time. This preserves chapter-order context and prevents concurrent rolling-summary writers. Different novels may execute concurrently.
 9. Multi-record glossary propagation is atomic.
 10. Session replay and DOM autocapture are disabled; optional telemetry is limited to page views and exception events after consent.
-11. A novel has at most one active scrape or EPUB import job. Starting a new import cancels the previous active row in the same transaction; the partial unique index is the database backstop.
+11. A novel has at most one active EPUB import job. Starting a new import cancels the previous active row in the same transaction; the partial unique index is the database backstop.
 12. Relationship analysis is enabled for the canonical EN→TH, ZH→EN, and ZH→TH pairs and is non-fatal. It executes inside the memoized `chunk-N` step, immediately before that chunk's translation; provider or JSON validation failure logs a warning and falls back to matching enabled stored context. Run-stable context — approved glossary terms and the previous chapter's context tails — is loaded once per run in `init` and memoized for every chunk step.
 13. Locked admin character and directed-relationship entries are never changed or re-enabled by automatic analysis. Unlocked entries may receive only source-evidenced, non-empty automatic semantic values; exact speech fields are scrubbed; caps discard new suggestions rather than evicting existing facts.
 14. Relationship-map edits do not increment chapter source revision or cancel a translation job. They apply to subsequent not-yet-started `chunk-N` steps and future retranslations while preserving per-novel concurrency and finalization invariants.
@@ -457,7 +457,7 @@ hops (default zero); missing identity or limiter failure logs and allows. README
 - `inngest/outbox.ts`: workflow-wide durable event delivery; due rows compare against PostgreSQL `CURRENT_TIMESTAMP` so database visibility and eligibility use one clock.
 - `export/stream.ts` and `/api/exports/$`: authenticated cursor-backed TXT/EPUB response streaming with numeric chapter ordering and `HEAD` support.
 - `reader/reader-state.service.ts` owns reader position, read-mark, and bookmark persistence and their ownership scoping; `reader/use-reader-state.ts` selects the account or browser store and serializes client writes.
-- `scrape.ts` and `scrape/parsers.ts`: client-safe source metadata and pure HTML parsing; `scrape/network-policy.server.ts` exclusively owns DNS resolution and private-address rejection.
+- `epub/parser.ts` and `epub/text.ts`: archive parsing and text normalization; `net/network-policy.server.ts` exclusively owns DNS resolution and private-address rejection for every server-side fetch.
 - Route-facing server functions authenticate and delegate state transitions; they do not implement worker validity rules.
 - `auth/functions.ts`: `getSession`, `ensureSession`, and `ensureAdminSession` are server-only functions consumed by route handlers and other server functions, so they carry no RPC identity; `getAuthMethods` stays a server function because the sign-in pages fetch it from the browser.
 - Inngest orchestrates retries and per-novel concurrency but is not the source of truth for job validity.
@@ -472,7 +472,7 @@ The browser compatibility gate is `bun run test:e2e`. Its supervisor refuses dat
 
 ## Deferred cleanup
 
-The `translation_jobs.chunks_json` contract migration (0032) has been applied. `epub_uploads` carries a partial `(expires_at) WHERE status = 'uploading'` index for the hourly expired-upload cleanup, and `translation_job_chunks_metrics_idx` is deliberately kept as the covering index for the dashboard token/latency aggregate. Scrape responses remain bounded to 5 MB while streaming.
+The `translation_jobs.chunks_json` contract migration (0032) has been applied. `epub_uploads` carries a partial `(expires_at) WHERE status = 'uploading'` index for the hourly expired-upload cleanup, and `translation_job_chunks_metrics_idx` is deliberately kept as the covering index for the dashboard token/latency aggregate. Server-side fetches remain bounded while streaming through the shared transport.
 
 The object-storage move (0037 map fold plus 0038 contract) has also been applied: `novels.cover`
 and `epub_upload_chunks` are gone and `epub_uploads.object_key` is required. Re-run order for any

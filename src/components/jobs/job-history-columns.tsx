@@ -108,15 +108,11 @@ export function jobHistoryColumnCopy(t: JobsTranslator): JobHistoryColumnCopy {
   return {
     type: {
       translation: t("typeTranslation"),
-      scrape: t("typeScrape"),
       epub: t("typeEpub"),
     },
     secondaryLine: (job) => {
       if (job.type === "translation") {
         return t("secondaryChapter", { number: job.chapterNumber, title: job.chapterTitle });
-      }
-      if (job.type === "scrape") {
-        return t("secondaryScrapeRange", { from: job.fromNumber, to: job.toNumber });
       }
       return job.sourceFileName
         ? t("secondaryEpubFile", { fileName: job.sourceFileName })
@@ -133,11 +129,7 @@ export function jobHistoryColumnCopy(t: JobsTranslator): JobHistoryColumnCopy {
     },
     typeDetail: (job) => {
       if (job.type === "translation") return t("typeDetailTranslation");
-      // The provider's name sits beside the range the same way: `Firecrawl · 1–10` is two
-      // values, and the range is the only part of it the catalog has a word for.
-      return job.type === "scrape" && job.scrapeProvider
-        ? `${job.scrapeProvider} · ${range(job)}`
-        : range(job);
+      return range(job);
     },
     preparing: t("preparing"),
     details: t("details"),

@@ -8,7 +8,7 @@ import { ChapterImportStatus } from "./chapter-import-status";
 
 const runningJob: ImportJobState = {
   id: "job-1",
-  kind: "scrape",
+  kind: "epub",
   status: "running",
   sourceFileName: null,
   fromNumber: 1,

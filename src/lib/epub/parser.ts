@@ -1,6 +1,6 @@
 import * as fflate from "fflate";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { decodeEntities, BOILERPLATE_RE } from "@/lib/scrape/parsers";
+import { decodeEntities, BOILERPLATE_RE } from "./text";
 import { encodeMessage } from "@/lib/i18n/message-code";
 
 export interface ParsedEpubChapter {

@@ -21,7 +21,7 @@ import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { formatNumber } from "@/lib/i18n/format";
 import { useIsDesktop } from "@/lib/use-media-query";
-import { getImportJobStatus } from "@/lib/scrape/functions";
+import { getImportJobStatus } from "@/lib/import/functions";
 import type { JobHistoryStatus } from "@/lib/job-dashboard/contracts";
 
 export interface ImportJobDrawerProps {
@@ -33,11 +33,9 @@ export interface ImportJobDrawerProps {
 interface ImportJobDetails {
   id: string;
   novelTitle: string;
-  kind: "scrape" | "epub";
+  kind: "epub";
   status: string;
   sourceFileName?: string | null;
-  scrapeProvider?: string | null;
-  baseUrl?: string | null;
   fromNumber: number;
   toNumber: number;
   nextNumber: number;
@@ -54,7 +52,7 @@ function importProgress(job: ImportJobDetails, t: JobsTranslator) {
   if (job.toNumber === 0) {
     return { label: t("preparing"), percent: 0 };
   }
-  const total = job.kind === "epub" ? job.toNumber : Math.max(0, job.toNumber - job.fromNumber + 1);
+  const total = job.toNumber;
   return {
     label: `${processed} / ${total}`,
     percent: Math.min(100, Math.round((processed / Math.max(1, total)) * 100)),
@@ -64,12 +62,9 @@ function importProgress(job: ImportJobDetails, t: JobsTranslator) {
 function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; updating: boolean }) {
   const t = useTranslations("jobs");
   const progress = importProgress(job, t);
-  const source =
-    job.kind === "epub"
-      ? job.sourceFileName || t("sourceEpubUpload")
-      : `${job.scrapeProvider || t("sourceUnknownProvider")} · ${job.baseUrl}`;
+  const source = job.sourceFileName || t("sourceEpubUpload");
   const chapterRange =
-    job.kind === "epub" && job.toNumber === 0
+    job.toNumber === 0
       ? t("preparing")
       : t("rangeChapters", { from: job.fromNumber, to: job.toNumber });
   const showReupload =
@@ -79,7 +74,7 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={job.status as JobHistoryStatus} />
-        <Badge variant="outline">{job.kind === "epub" ? t("typeEpub") : t("typeScrape")}</Badge>
+        <Badge variant="outline">{t("typeEpub")}</Badge>
         {updating ? (
           <span
             className="ml-auto inline-flex items-center gap-1.5 text-caption text-muted-foreground"

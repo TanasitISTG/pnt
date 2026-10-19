@@ -3,12 +3,6 @@ import "@tanstack/react-start/server-only";
 import { inngest } from "./client";
 import { initJob, translateChunk, finalizeJob, failJob } from "@/lib/translation/workflow/worker";
 import {
-  initImportJob,
-  importOneChapter,
-  finishImportJob,
-  failImportJob,
-} from "@/lib/scrape/worker";
-import {
   prepareEpubImportJob,
   initEpubImportJob,
   importEpubChapterBatch,
@@ -89,42 +83,6 @@ export const dispatchWorkflowOutboxFn = inngest.createFunction(
   async ({ step }) => step.run("dispatch-pending", () => dispatchPendingWorkflowOutbox()),
 );
 
-// One run per bulk chapter import. Each chapter is a memoized step (own HTTP
-// invocation, fresh budget, auto-retry); cancel is honored between steps and
-// re-checked inside each step so a DB-cancel stops the run mid-range.
-export const importChaptersFn = inngest.createFunction(
-  {
-    id: "import-chapters",
-    triggers: { event: "scrape/import.requested" },
-    retries: 3,
-    concurrency: { limit: 1, key: "event.data.jobId" },
-    idempotency: "event.data.runKey",
-    cancelOn: [{ event: "scrape/import.cancelled", match: "data.jobId" }],
-    onFailure: async ({ event, error }) => {
-      const jobId = (event.data as FailedRunEventData).event?.data?.jobId;
-      if (!jobId) {
-        log("error", "Import onFailure fired without jobId", { event, error: error.message });
-        return;
-      }
-      log("error", "Import job failed", { jobId, error: error.message });
-      await failImportJob(jobId, error.message);
-    },
-  },
-  async ({ event, step }) => {
-    const { jobId } = event.data as { jobId: string };
-
-    const init = await step.run("init", () => initImportJob(jobId));
-    if (init.skip) return { skipped: true };
-
-    for (let n = init.next; n <= init.to; n++) {
-      const r = await step.run(`chapter-${n}`, () => importOneChapter(jobId, n, init.chapterUrls));
-      if (r.stop) return { stopped: true };
-    }
-
-    await step.run("finish", () => finishImportJob(jobId));
-    return { done: true };
-  },
-);
 export const importEpubChaptersFn = inngest.createFunction(
   {
     id: "import-epub-chapters",
@@ -283,7 +241,6 @@ export const functions = [
   notificationSweepFn,
   notificationRetentionFn,
   translateChapterFn,
-  importChaptersFn,
   importEpubChaptersFn,
   cleanupExpiredEpubUploadsFn,
   cleanupExpiredRateLimitsFn,

@@ -1,6 +1,6 @@
 # Personal Novel Translator
 
-A novel translation app (EN→TH default, ZH→EN, ZH→TH) with public accounts and guest read-only access. Paste or scrape chapters, translate with an OpenAI-compatible provider or Gemini, and read side-by-side with Thai font support. Every account owns an isolated workspace; an optional operator role unlocks account administration.
+A novel translation app (EN→TH default, ZH→EN, ZH→TH) with public accounts and guest read-only access. Paste chapters or import an EPUB, translate with an OpenAI-compatible provider or Gemini, and read side-by-side with Thai font support. Every account owns an isolated workspace; an optional operator role unlocks account administration.
 
 <details>
 <summary>Preview</summary>
@@ -186,12 +186,6 @@ tooling are exact-pinned; targeted overrides keep legacy tool paths on patched `
 | `INNGEST_DEV`                   | No       | Set to `1` for local dev (SDK v4 defaults to cloud mode)                                           |
 | `INNGEST_EVENT_KEY`             | No       | Inngest Cloud event key (production only)                                                          |
 | `INNGEST_SIGNING_KEY`           | No       | Inngest Cloud signing key (production only)                                                        |
-| `SCRAPER_API_KEY`               | No       | ZenRows API key for bypassing Cloudflare anti-bot                                                  |
-| `SCRAPER_BASE`                  | No       | ZenRows API base URL (default `https://api.zenrows.com/v1/`)                                       |
-| `SCRAPER_RENDER_JS`             | No       | Set `"true"`/`"false"` for headless browser rendering                                              |
-| `SCRAPER_PREMIUM_PROXY`         | No       | Set `"true"`/`"false"` for residential proxy routing                                               |
-| `SCRAPINGBEE_API_KEY`           | No       | ScrapingBee API key for HTML scraping provider                                                     |
-| `FIRECRAWL_API_KEY`             | No       | Firecrawl API key for scrape endpoint                                                              |
 | `VITE_PUBLIC_POSTHOG_KEY`       | No       | PostHog project API key for frontend analytics                                                     |
 | `ABLY_API_KEY`                  | No       | Ably server key for realtime notification delivery; without it the bell polls                      |
 | `VITE_PUBLIC_POSTHOG_HOST`      | No       | PostHog API host (default `https://us.i.posthog.com`)                                              |
@@ -372,8 +366,9 @@ serializes those requests client-side: Postgres then never sees the lock waiter 
   app's own routes. When R2 is absent the app boots against `.tura/storage/`, which keeps the
   upload code path identical (presigned PUTs point back at a dev-only receiver route) without
   a bucket. The `R2_*` variables are all-or-nothing, and Vercel requires all six.
-- `src/lib/scrape/index.ts` is a client-safe facade over pure parsers. DNS resolution and private-IP
-  rejection live in the server-only `src/lib/scrape/network-policy.server.ts` boundary.
+- `src/lib/epub/` owns archive parsing, staged imports, and the resumable import worker. DNS
+  resolution and private-IP rejection for every server-side fetch live in the server-only
+  `src/lib/net/network-policy.server.ts` boundary.
 - `reports` holds member claims, not verdicts: the open queue is grouped per target - a novel,
   a comment, or a review - in SQL and the decision is written across every open report of a case
   in one statement, so a retry cannot half-close a case and a second operator acting on the same

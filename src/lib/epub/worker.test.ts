@@ -49,7 +49,6 @@ describe("EPUB worker steps", () => {
     fromNumber: 1,
     toNumber: 0,
     nextNumber: 1,
-    scrapeProvider: "epub",
     added: 0,
     skipped: 0,
     failed: 0,

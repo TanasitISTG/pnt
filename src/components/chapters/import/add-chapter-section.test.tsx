@@ -35,70 +35,16 @@ function createImportController() {
     retryImport: vi.fn(),
   };
 }
-interface MockChapterFetched {
-  number: string;
-  title: string;
-  content: string;
-  sourceUrl: string;
-}
-
 interface MockImportController {
   importActive: boolean;
   startPending: boolean;
   initialStatusLoading: boolean;
 }
 
-interface MockScrapeImportSectionProps {
-  onChapterFetched: (chapter: MockChapterFetched) => void;
-  importController: MockImportController;
-  bulkStartDisabled: boolean;
-  otherImportActive: boolean;
-}
-
-function MockScrapeImportSection({
-  onChapterFetched,
-  importController,
-  bulkStartDisabled,
-  otherImportActive,
-}: MockScrapeImportSectionProps) {
-  const [url, setUrl] = useState("");
-
-  return (
-    <div>
-      <label htmlFor="mock-scrape-url">URL draft</label>
-      <input id="mock-scrape-url" value={url} onChange={(event) => setUrl(event.target.value)} />
-      <button
-        type="button"
-        onClick={() =>
-          onChapterFetched({
-            number: "7",
-            title: "Fetched chapter",
-            content: "Fetched content",
-            sourceUrl: "https://example.test/chapter-7",
-          })
-        }
-      >
-        Preview URL
-      </button>
-      <button
-        type="button"
-        disabled={
-          bulkStartDisabled ||
-          importController.importActive ||
-          importController.startPending ||
-          otherImportActive
-        }
-      >
-        Start URL range
-      </button>
-    </div>
-  );
-}
-
 interface MockEpubImportSectionProps {
   importController: MockImportController;
-  bulkStartDisabled: boolean;
-  otherImportActive: boolean;
+  bulkStartDisabled?: boolean;
+  otherImportActive?: boolean;
 }
 function MockEpubImportSection({
   importController,
@@ -134,9 +80,6 @@ function MockEpubImportSection({
   );
 }
 
-vi.mock("./scrape-import-section", () => ({
-  ScrapeImportSection: MockScrapeImportSection,
-}));
 vi.mock("./epub-import-section", () => ({
   EpubImportSection: MockEpubImportSection,
 }));
@@ -189,7 +132,7 @@ describe("AddChapterSection", () => {
     vi.mocked(createChapter).mockResolvedValue({ id: "chapter-new" });
   });
 
-  it("keeps manual, URL, and EPUB panel state mounted across mode switches", () => {
+  it("keeps manual and EPUB panel state mounted across mode switches", () => {
     renderAddChapter();
 
     fireEvent.change(screen.getByRole("spinbutton", { name: "Chapter number *" }), {
@@ -202,14 +145,11 @@ describe("AddChapterSection", () => {
       target: { value: "Manual content" },
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: /^From URL/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "URL draft" }), {
-      target: { value: "https://example.test/chapter-4" },
-    });
-
     fireEvent.click(screen.getByRole("tab", { name: /^EPUB file/ }));
     const file = new File(["epub"], "chapter-4.epub", { type: "application/epub+zip" });
-    fireEvent.change(screen.getByLabelText("EPUB file"), { target: { files: [file] } });
+    fireEvent.change(document.getElementById("mock-epub-file") as HTMLInputElement, {
+      target: { files: [file] },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Start upload" }));
 
     fireEvent.click(screen.getByRole("tab", { name: /^Paste text/ }));
@@ -223,64 +163,28 @@ describe("AddChapterSection", () => {
       "Manual content",
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: /^From URL/ }));
-    expect((screen.getByRole("textbox", { name: "URL draft" }) as HTMLInputElement).value).toBe(
-      "https://example.test/chapter-4",
-    );
-
     fireEvent.click(screen.getByRole("tab", { name: /^EPUB file/ }));
     expect(screen.getByText("Selected: chapter-4.epub")).toBeTruthy();
     expect(screen.getByText("Upload progress: 42%")).toBeTruthy();
   });
 
-  it("keeps every add mode mounted while inerting inactive panels", () => {
+  it("keeps both add modes mounted while inerting the inactive panel", () => {
     renderAddChapter();
 
     const panels = Array.from(document.querySelectorAll<HTMLElement>('[data-slot="tabs-content"]'));
     const manualPanel = panels.find((panel) => panel.textContent?.includes("Source text *"));
-    const urlPanel = panels.find((panel) => panel.textContent?.includes("URL draft"));
     const epubPanel = panels.find((panel) => panel.textContent?.includes("EPUB file"));
 
-    expect(panels).toHaveLength(3);
+    expect(panels).toHaveLength(2);
     expect(manualPanel).toBeTruthy();
-    expect(urlPanel).toBeTruthy();
     expect(epubPanel).toBeTruthy();
     expect(manualPanel?.getAttribute("inert")).toBeNull();
-    expect(urlPanel?.getAttribute("inert")).not.toBeNull();
     expect(epubPanel?.getAttribute("inert")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: /^From URL/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /^EPUB file/ }));
 
     expect(manualPanel?.getAttribute("inert")).not.toBeNull();
-    expect(urlPanel?.getAttribute("inert")).toBeNull();
-    expect(epubPanel?.getAttribute("inert")).not.toBeNull();
-  });
-
-  it("hands URL previews to the shared editor and can start a fresh draft", () => {
-    renderAddChapter();
-    fireEvent.click(screen.getByRole("tab", { name: /^From URL/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Preview URL" }));
-
-    expect(screen.getByRole("tab", { name: /^Paste text/ }).getAttribute("aria-selected")).toBe(
-      "true",
-    );
-    expect(screen.getByText("Fetched from URL.", { exact: true })).toBeTruthy();
-    expect(screen.getByText(/Review the draft before adding it\./)).toBeTruthy();
-    expect(screen.getByText("https://example.test/chapter-7")).toBeTruthy();
-    expect(getChapterNumberInput().value).toBe("7");
-    expect(
-      (screen.getByRole("textbox", { name: "Chapter title *" }) as HTMLInputElement).value,
-    ).toBe("Fetched chapter");
-
-    fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
-    expect(getChapterNumberInput().value).toBe("2");
-    expect(
-      (screen.getByRole("textbox", { name: "Chapter title *" }) as HTMLInputElement).value,
-    ).toBe("");
-    expect(
-      (screen.getByRole("textbox", { name: "Source text *" }) as HTMLTextAreaElement).value,
-    ).toBe("");
-    expect(screen.queryByText(/Fetched from URL/)).toBeNull();
+    expect(epubPanel?.getAttribute("inert")).toBeNull();
   });
 
   it("provides stable manual form names without autofill", () => {
@@ -339,7 +243,7 @@ describe("AddChapterSection", () => {
     expect(createChapter).not.toHaveBeenCalled();
   });
 
-  it("does not replace a manually edited or URL-preview chapter number after invalidation", () => {
+  it("does not replace a manually edited chapter number after invalidation", () => {
     const { rerender, queryClient } = renderAddChapter([{ number: "1" }]);
     expect(getChapterNumberInput().value).toBe("2");
     rerender(
@@ -356,17 +260,13 @@ describe("AddChapterSection", () => {
     );
     expect(getChapterNumberInput().value).toBe("42");
 
-    fireEvent.click(screen.getByRole("tab", { name: /^From URL/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Preview URL" }));
-    expect(getChapterNumberInput().value).toBe("7");
-
     rerender(
       <AddChapterHarness
         chapters={[{ number: "1" }, { number: "2" }, { number: "3" }, { number: "4" }]}
         queryClient={queryClient}
       />,
     );
-    expect(getChapterNumberInput().value).toBe("7");
+    expect(getChapterNumberInput().value).toBe("42");
   });
 
   it("resynchronizes generated numbering after a dirty draft succeeds", async () => {
@@ -414,31 +314,20 @@ describe("AddChapterSection", () => {
     expect(getChapterNumberInput().value).toBe("31");
   });
 
-  it("blocks both bulk starts during discovery and marks a hidden running import", () => {
-    const scrapeController = {
+  it("blocks the EPUB start while a hidden import is still being discovered", () => {
+    const epubController = {
       ...createImportController(),
       importActive: true,
       initialStatusLoading: true,
     };
-    const epubController = {
-      ...createImportController(),
-      initialStatusLoading: true,
-    };
-    importMocks.useImportJob
-      .mockReset()
-      .mockImplementation((_novelId: string, _invalidateChapters: () => void, kind: string) =>
-        kind === "scrape" ? scrapeController : epubController,
-      );
+    importMocks.useImportJob.mockReset().mockImplementation(() => epubController);
 
     renderAddChapter();
 
-    fireEvent.click(screen.getByRole("tab", { name: /From URL.*Running/ }));
-    expect(
-      screen.getByRole("button", { name: "Start URL range" }).getAttribute("disabled"),
-    ).not.toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: /^EPUB file/ }));
     expect(
       screen.getByRole("button", { name: "Start upload" }).getAttribute("disabled"),
     ).not.toBeNull();
+    expect(importMocks.useImportJob).toHaveBeenCalledWith("novel-1", expect.any(Function));
   });
 });

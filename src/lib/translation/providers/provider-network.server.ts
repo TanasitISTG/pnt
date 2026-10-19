@@ -10,7 +10,7 @@ import {
   isPrivateIp,
   normalizeIpAddress,
   resolveHostAddresses,
-} from "@/lib/scrape/network-policy.server";
+} from "@/lib/net/network-policy.server";
 import { normalizeOpenCodeBaseUrl } from "./provider-compatibility";
 import { providerFailureCodes } from "./provider-failures";
 const PROVIDER_RESPONSE_SIZE_LIMIT_BYTES = 8 * 1024 * 1024;

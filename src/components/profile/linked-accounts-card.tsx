@@ -13,9 +13,8 @@ import type { AuthMethods } from "@/lib/auth/functions";
 type SocialProvider = "google" | "discord";
 
 /**
- * The providers' own names, which are the same in both languages - the same reason the
- * scrape registry's service names are the same. The credential row is not a brand, so its
- * label is copy and comes from the catalog.
+ * The providers' own names, which are the same in both languages. The credential row is
+ * not a brand, so its label is copy and comes from the catalog.
  */
 const PROVIDER_NAMES: Record<string, string> = {
   google: "Google",

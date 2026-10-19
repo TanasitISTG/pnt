@@ -88,26 +88,6 @@ export function mergeJobActivityIntoHistory(
           canRetry: activity.status === "error" || activity.status === "cancelled",
         };
       }
-      if (row.type === "scrape") {
-        const added = activity.added ?? row.added;
-        const skipped = activity.skipped ?? row.skipped;
-        const failed = activity.failed ?? row.failed;
-        const completedWithFailures = activity.status === "done" && failed > 0;
-        return {
-          ...row,
-          ...common,
-          added,
-          skipped,
-          failed,
-          completedWithFailures,
-          canRetry:
-            (activity.status === "error" ||
-              activity.status === "cancelled" ||
-              completedWithFailures) &&
-            Boolean(row.baseUrl) &&
-            row.scrapeProvider !== null,
-        };
-      }
       return { ...row, ...common };
     }),
   };

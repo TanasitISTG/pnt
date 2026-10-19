@@ -3,12 +3,10 @@ import "@tanstack/react-start/server-only";
 import { eq, and, desc, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { lockNovelForMutation } from "@/lib/db/novel-lock";
 import { chapters, importJobs } from "@/lib/db/schema";
-import { nanoid } from "@/lib/utils";
 
-// DB boundary for import Inngest steps (both scrape and epub workers)
-// — tests mock this module instead of drizzle's fluent chains.
+// DB boundary for import Inngest steps — tests mock this module instead of
+// drizzle's fluent chains.
 
 export async function loadImportJob(jobId: string) {
   const [job] = await db.select().from(importJobs).where(eq(importJobs.id, jobId)).limit(1);
@@ -22,115 +20,6 @@ export async function markImportJobRunning(jobId: string): Promise<boolean> {
     .where(and(eq(importJobs.id, jobId), eq(importJobs.status, "pending")))
     .returning({ id: importJobs.id });
   return updated.length > 0;
-}
-
-export type ScrapeImportOutcome =
-  | {
-      kind: "added";
-      number: string;
-      title: string;
-      content: string;
-    }
-  | { kind: "skipped" }
-  | { kind: "failed"; error: string };
-
-export async function commitScrapeImportChapter(
-  jobId: string,
-  expectedNumber: number,
-  outcome: ScrapeImportOutcome,
-): Promise<{ stop: boolean; created: boolean; replayed?: boolean }> {
-  return db.transaction(async (tx) => {
-    const [parent] = await tx
-      .select({ novelId: importJobs.novelId })
-      .from(importJobs)
-      .where(eq(importJobs.id, jobId))
-      .limit(1);
-    if (!parent || !(await lockNovelForMutation(tx, parent.novelId))) {
-      return { stop: true, created: false };
-    }
-    const [job] = await tx
-      .select()
-      .from(importJobs)
-      .where(and(eq(importJobs.id, jobId), eq(importJobs.novelId, parent.novelId)))
-      .for("update", { of: importJobs });
-
-    if (!job || job.status !== "running") {
-      return { stop: true, created: false };
-    }
-    if (job.nextNumber > expectedNumber) {
-      return { stop: false, created: false, replayed: true };
-    }
-    if (job.nextNumber < expectedNumber) {
-      throw new Error(
-        `Import cursor out of order: expected ${job.nextNumber}, received ${expectedNumber}`,
-      );
-    }
-
-    let action: "added" | "skipped" | "failed" = outcome.kind;
-    if (outcome.kind === "added") {
-      const inserted = await tx
-        .insert(chapters)
-        .values({
-          id: nanoid(),
-          novelId: job.novelId,
-          number: outcome.number,
-          title: outcome.title,
-          rawContent: outcome.content,
-          rawCharCount: outcome.content.length,
-          status: "raw",
-        })
-        .onConflictDoNothing({ target: [chapters.novelId, chapters.number] })
-        .returning({ id: chapters.id });
-      if (inserted.length === 0) action = "skipped";
-    }
-
-    const now = new Date();
-    const cursorWhere = and(
-      eq(importJobs.id, jobId),
-      eq(importJobs.status, "running"),
-      eq(importJobs.nextNumber, expectedNumber),
-    );
-    if (action === "added") {
-      await tx
-        .update(importJobs)
-        .set({
-          added: sql`${importJobs.added} + 1`,
-          nextNumber: expectedNumber + 1,
-          updatedAt: now,
-        })
-        .where(cursorWhere);
-    } else if (action === "skipped") {
-      await tx
-        .update(importJobs)
-        .set({
-          skipped: sql`${importJobs.skipped} + 1`,
-          nextNumber: expectedNumber + 1,
-          updatedAt: now,
-        })
-        .where(cursorWhere);
-    } else {
-      await tx
-        .update(importJobs)
-        .set({
-          failed: sql`${importJobs.failed} + 1`,
-          error: outcome.kind === "failed" ? outcome.error.slice(0, 2000) : null,
-          nextNumber: expectedNumber + 1,
-          updatedAt: now,
-        })
-        .where(cursorWhere);
-    }
-
-    const [updated] = await tx
-      .select({ nextNumber: importJobs.nextNumber })
-      .from(importJobs)
-      .where(eq(importJobs.id, jobId))
-      .limit(1);
-    if (!updated || updated.nextNumber !== expectedNumber + 1) {
-      throw new Error("Import cursor changed while committing chapter");
-    }
-
-    return { stop: false, created: action === "added" };
-  });
 }
 
 export async function markImportJobDone(jobId: string): Promise<boolean> {

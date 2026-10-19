@@ -5,8 +5,8 @@ import type {
   JobActivity,
   JobActivitySnapshot,
   JobHistoryPage,
+  JobHistoryEpubRow,
   JobHistorySearch,
-  JobHistoryScrapeRow,
   JobHistoryTranslationRow,
 } from "@/lib/job-dashboard/contracts";
 
@@ -89,24 +89,22 @@ const runningTranslationRow: JobHistoryTranslationRow = {
   canRetry: false,
 };
 
-const runningScrapeRow: JobHistoryScrapeRow = {
-  id: "scrape-1",
-  type: "scrape",
+const runningEpubRow: JobHistoryEpubRow = {
+  id: "epub-1",
+  type: "epub",
   status: "running",
   novelId: "novel-1",
   novelTitle: "Novel",
   error: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:01:00.000Z",
-  baseUrl: "https://example.test/novel",
-  scrapeProvider: "direct",
+  sourceFileName: "novel.epub",
   fromNumber: 1,
   toNumber: 10,
   nextNumber: 5,
   added: 4,
   skipped: 0,
   failed: 0,
-  completedWithFailures: false,
   progress: { completed: 4, total: 10, percent: 40, preparing: false },
   canCancel: true,
   canRetry: false,
@@ -124,13 +122,13 @@ describe("Jobs query contracts", () => {
     expect(
       activityQueryOptions([
         { id: "b", type: "translation" },
-        { id: "a", type: "scrape" },
+        { id: "a", type: "epub" },
         { id: "b", type: "translation" },
       ]).queryKey,
     ).toEqual([
       ...JOB_ACTIVITY_QUERY_KEY,
       [
-        { id: "a", type: "scrape" },
+        { id: "a", type: "epub" },
         { id: "b", type: "translation" },
       ],
     ]);
@@ -176,7 +174,7 @@ describe("Jobs query contracts", () => {
 
 describe("mergeJobActivityIntoHistory", () => {
   const page: JobHistoryPage = {
-    rows: [runningTranslationRow, runningScrapeRow],
+    rows: [runningTranslationRow, runningEpubRow],
     rowCount: 2,
     page: 1,
     pageSize: 25,
@@ -194,9 +192,9 @@ describe("mergeJobActivityIntoHistory", () => {
       doneChunks: 4,
       totalChunks: 4,
     };
-    const failedScrape: JobActivity = {
-      id: "scrape-1",
-      type: "scrape",
+    const failedEpub: JobActivity = {
+      id: "epub-1",
+      type: "epub",
       status: "done",
       novelId: "novel-1",
       error: null,
@@ -207,7 +205,7 @@ describe("mergeJobActivityIntoHistory", () => {
       failed: 2,
     };
 
-    const merged = mergeJobActivityIntoHistory(page, [completedTranslation, failedScrape]);
+    const merged = mergeJobActivityIntoHistory(page, [completedTranslation, failedEpub]);
 
     expect(merged.rows[0]).toMatchObject({
       id: "translation-1",
@@ -218,12 +216,10 @@ describe("mergeJobActivityIntoHistory", () => {
       totalChunks: 4,
     });
     expect(merged.rows[1]).toMatchObject({
-      id: "scrape-1",
+      id: "epub-1",
       status: "done",
       canCancel: false,
-      canRetry: true,
-      failed: 2,
-      completedWithFailures: true,
+      canRetry: false,
     });
   });
 
@@ -239,9 +235,9 @@ describe("mergeJobActivityIntoHistory", () => {
       doneChunks: 1,
       totalChunks: 4,
     };
-    const stillRunningScrape: JobActivity = {
-      id: "scrape-1",
-      type: "scrape",
+    const stillRunningEpub: JobActivity = {
+      id: "epub-1",
+      type: "epub",
       status: "running",
       novelId: "novel-1",
       error: null,
@@ -252,7 +248,7 @@ describe("mergeJobActivityIntoHistory", () => {
       failed: 0,
     };
 
-    const merged = mergeJobActivityIntoHistory(page, [erroredTranslation, stillRunningScrape]);
+    const merged = mergeJobActivityIntoHistory(page, [erroredTranslation, stillRunningEpub]);
 
     expect(merged.rows[0]).toMatchObject({
       status: "error",
@@ -266,7 +262,7 @@ describe("mergeJobActivityIntoHistory", () => {
   it("leaves unknown or mismatched activity rows untouched", () => {
     const mismatched: JobActivity = {
       id: "translation-1",
-      type: "scrape",
+      type: "epub",
       status: "done",
       novelId: "novel-1",
       error: null,

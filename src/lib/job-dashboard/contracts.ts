@@ -1,9 +1,8 @@
 import { z } from "zod";
 
 import { encodeMessage } from "@/lib/i18n/message-code";
-import type { ScrapeProvider } from "@/lib/scrape/types";
 
-export const jobHistoryTypeSchema = z.enum(["all", "translation", "scrape", "epub"]);
+export const jobHistoryTypeSchema = z.enum(["all", "translation", "epub"]);
 export const jobHistoryStatusSchema = z.enum([
   "all",
   "pending",
@@ -78,19 +77,6 @@ export type JobHistoryTranslationRow = JobHistoryRowBase & {
   isLegacyProviderFallback: boolean;
 };
 
-export type JobHistoryScrapeRow = JobHistoryRowBase & {
-  type: "scrape";
-  baseUrl: string;
-  scrapeProvider: ScrapeProvider | null;
-  fromNumber: number;
-  toNumber: number;
-  nextNumber: number;
-  added: number;
-  skipped: number;
-  failed: number;
-  completedWithFailures: boolean;
-};
-
 export type JobHistoryEpubRow = JobHistoryRowBase & {
   type: "epub";
   sourceFileName: string | null;
@@ -102,7 +88,7 @@ export type JobHistoryEpubRow = JobHistoryRowBase & {
   failed: number;
 };
 
-export type JobHistoryRow = JobHistoryTranslationRow | JobHistoryScrapeRow | JobHistoryEpubRow;
+export type JobHistoryRow = JobHistoryTranslationRow | JobHistoryEpubRow;
 
 export type JobHistoryPage = {
   rows: JobHistoryRow[];
@@ -136,7 +122,7 @@ export type JobActivity = {
   failed?: number;
 };
 
-export const jobActivityTypeSchema = z.enum(["translation", "scrape", "epub"]);
+export const jobActivityTypeSchema = z.enum(["translation", "epub"]);
 
 export const jobActivityIdentitySchema = z.object({
   id: z.string().trim().min(1).max(200),

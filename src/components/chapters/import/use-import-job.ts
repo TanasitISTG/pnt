@@ -3,18 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
-import {
-  cancelImportJob,
-  getActiveImportJob,
-  getImportJobStatus,
-  getLatestImportJob,
-  startImportJob,
-} from "@/lib/scrape/functions";
+import { cancelImportJob, getImportJobStatus, getLatestImportJob } from "@/lib/import/functions";
 import { invalidateJobDashboard } from "@/lib/job-dashboard/query";
 import type { JobHistoryStatus } from "@/lib/job-dashboard/contracts";
-import type { ScrapeProvider } from "@/lib/scrape/types";
 
-export type ImportJobKind = "scrape" | "epub";
+export type ImportJobKind = "epub";
 
 export interface ImportJobState {
   id: string;
@@ -30,30 +23,14 @@ export interface ImportJobState {
   error: string | null;
 }
 
-type ScrapeImportRequest = {
-  baseUrl: string;
-  from: number;
-  to: number;
-  provider: ScrapeProvider;
-};
-
 export interface ImportJobController {
   importJob: ImportJobState | null;
   importActive: boolean;
   initialStatusLoading: boolean;
-  startPending: boolean;
-  startImport: (
-    baseUrl: string,
-    from: number,
-    to: number,
-    provider: ScrapeProvider,
-  ) => Promise<void>;
   cancelImport: () => Promise<void>;
   attachJob: (jobId: string, sourceFileName?: string) => void;
   importStatusError: Error | null;
   retryImportStatus: () => Promise<void>;
-  canRetryImport: boolean;
-  retryImport: () => Promise<void>;
 }
 
 const POLL_DELAY_MS = 2_000;
@@ -70,17 +47,9 @@ function normalizeError(error: unknown, fallback: string): Error {
   return error instanceof Error ? error : new Error(fallback);
 }
 
-function isRecoverableInitialJob(
-  job: ImportJobState | null,
-  kind: ImportJobKind,
-): ImportJobState | null {
+function isRecoverableInitialJob(job: ImportJobState | null): ImportJobState | null {
   if (!job) return null;
-  if (
-    kind === "epub" &&
-    !isActiveStatus(job.status) &&
-    job.status !== "error" &&
-    job.status !== "cancelled"
-  ) {
+  if (!isActiveStatus(job.status) && job.status !== "error" && job.status !== "cancelled") {
     return null;
   }
   return job;
@@ -98,11 +67,7 @@ function canApplyStatus(current: ImportJobState | null, next: ImportJobState | n
   return true;
 }
 
-export function useImportJob(
-  novelId: string,
-  invalidateChapters: () => void,
-  kind: ImportJobKind = "scrape",
-): ImportJobController {
+export function useImportJob(novelId: string, invalidateChapters: () => void): ImportJobController {
   const t = useTranslations("studio");
   // The discovery and poll effects read copy through a ref: neither may re-run because the
   // translator's identity changed, only because its own inputs did.
@@ -111,8 +76,6 @@ export function useImportJob(
   const [importJob, setImportJob] = useState<ImportJobState | null>(null);
   const [importStatusError, setImportStatusError] = useState<Error | null>(null);
   const [initialStatusLoading, setInitialStatusLoading] = useState(true);
-  const [startPending, setStartPending] = useState(false);
-  const [lastScrapeRequest, setLastScrapeRequest] = useState<ScrapeImportRequest | null>(null);
   const [jobVersion, setJobVersion] = useState(0);
 
   // Refs are the synchronous source of truth for event handlers and in-flight
@@ -124,11 +87,8 @@ export function useImportJob(
   const jobVersionRef = useRef(0);
   const initialRequestRef = useRef(0);
   const initialStatusLoadingRef = useRef(true);
-  const startPendingRef = useRef(false);
-  const startTokenRef = useRef<number | null>(null);
   const cancelPendingRef = useRef(false);
   const cancelTokenRef = useRef<number | null>(null);
-  const lastScrapeRequestRef = useRef<ScrapeImportRequest | null>(null);
   const statusRequestRef = useRef(0);
   const statusRequestInFlightRef = useRef(false);
   const pollRunRef = useRef(0);
@@ -178,18 +138,13 @@ export function useImportJob(
     setJobVersion(revision);
     importJobRef.current = null;
     setImportJob(null);
-    lastScrapeRequestRef.current = null;
-    setLastScrapeRequest(null);
     setImportStatusError(null);
     setInitialLoading(true);
 
     let cancelled = false;
     const expectedRevision = localRevisionRef.current;
 
-    const request =
-      kind === "epub"
-        ? getLatestImportJob({ data: { novelId, kind } })
-        : getActiveImportJob({ data: { novelId, kind } });
+    const request = getLatestImportJob({ data: { novelId } });
 
     request
       .then((job) => {
@@ -201,7 +156,7 @@ export function useImportJob(
         ) {
           return;
         }
-        applyRemoteJob(isRecoverableInitialJob(job, kind));
+        applyRemoteJob(isRecoverableInitialJob(job));
         setImportStatusError(null);
       })
       .catch((error: unknown) => {
@@ -232,7 +187,7 @@ export function useImportJob(
     return () => {
       cancelled = true;
     };
-  }, [applyRemoteJob, kind, novelId, setInitialLoading]);
+  }, [applyRemoteJob, novelId, setInitialLoading]);
 
   const polledJobId = importJob?.id;
   const polledJobStatus = importJob?.status;
@@ -330,74 +285,9 @@ export function useImportJob(
     };
   }, [applyRemoteJob, jobVersion, polledJobId, polledJobStatus, queryClient]);
 
-  const startImport = async (
-    baseUrl: string,
-    from: number,
-    to: number,
-    provider: ScrapeProvider,
-  ): Promise<void> => {
-    if (
-      kind !== "scrape" ||
-      startPendingRef.current ||
-      initialStatusLoadingRef.current ||
-      (importJobRef.current !== null && isActiveStatus(importJobRef.current.status))
-    ) {
-      return;
-    }
-
-    const revision = markLocalMutation();
-    startPendingRef.current = true;
-    startTokenRef.current = revision;
-    setStartPending(true);
-
-    try {
-      const { jobId } = await startImportJob({
-        data: { novelId, baseUrl, from, to, provider },
-      });
-      if (revision !== localRevisionRef.current) return;
-
-      const nextJob: ImportJobState = {
-        id: jobId,
-        kind,
-        status: "pending",
-        sourceFileName: null,
-        fromNumber: from,
-        toNumber: to,
-        nextNumber: from,
-        added: 0,
-        skipped: 0,
-        failed: 0,
-        error: null,
-      };
-      importJobRef.current = nextJob;
-      setImportJob(nextJob);
-      const request = { baseUrl, from, to, provider };
-      lastScrapeRequestRef.current = request;
-      setLastScrapeRequest(request);
-      setImportStatusError(null);
-      void invalidateJobDashboard(queryClient);
-      toast.info(t("importQueued", { from, to }));
-    } catch (error: unknown) {
-      if (revision === localRevisionRef.current) {
-        toast.error(normalizeError(error, t("importStartFailed")).message);
-      }
-    } finally {
-      if (startTokenRef.current === revision) {
-        startPendingRef.current = false;
-        startTokenRef.current = null;
-        setStartPending(false);
-      }
-    }
-  };
-
   const cancelImport = async (): Promise<void> => {
     const current = importJobRef.current;
-    if (
-      !current ||
-      !isActiveStatus(current.status) ||
-      cancelPendingRef.current ||
-      startPendingRef.current
-    ) {
+    if (!current || !isActiveStatus(current.status) || cancelPendingRef.current) {
       return;
     }
 
@@ -434,7 +324,7 @@ export function useImportJob(
     const revision = markLocalMutation();
     const nextJob: ImportJobState = {
       id: jobId,
-      kind,
+      kind: "epub",
       status: "pending",
       sourceFileName: sourceFileName ?? null,
       fromNumber: 1,
@@ -474,9 +364,7 @@ export function useImportJob(
     try {
       const result = currentJob
         ? await getImportJobStatus({ data: { jobId: currentJob.id } })
-        : await (kind === "epub"
-            ? getLatestImportJob({ data: { novelId, kind } })
-            : getActiveImportJob({ data: { novelId, kind } }));
+        : await getLatestImportJob({ data: { novelId } });
 
       if (
         requestId !== statusRequestRef.current ||
@@ -486,7 +374,7 @@ export function useImportJob(
         return;
       }
 
-      const nextJob = currentJob ? result : isRecoverableInitialJob(result, kind);
+      const nextJob = currentJob ? result : isRecoverableInitialJob(result);
       if (!canApplyStatus(importJobRef.current, nextJob)) return;
       importJobRef.current = nextJob;
       setImportJob(nextJob);
@@ -512,25 +400,15 @@ export function useImportJob(
     }
   };
 
-  const retryImport = async (): Promise<void> => {
-    const request = lastScrapeRequestRef.current;
-    if (kind !== "scrape" || !request) return;
-    await startImport(request.baseUrl, request.from, request.to, request.provider);
-  };
-
   const importActive = importJob ? isActiveStatus(importJob.status) : false;
 
   return {
     importJob,
     importActive,
     initialStatusLoading,
-    startPending,
-    startImport,
     cancelImport,
     attachJob,
     importStatusError,
     retryImportStatus,
-    canRetryImport: kind === "scrape" && lastScrapeRequest !== null,
-    retryImport,
   };
 }

@@ -21,9 +21,6 @@ import { encodeMessage } from "@/lib/i18n/message-code";
 interface EpubImportSectionProps {
   novelId: string;
   importController: ImportJobController;
-  bulkStartDisabled: boolean;
-  onUploadActivityChange: (active: boolean) => void;
-  otherImportActive: boolean;
 }
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MiB
@@ -89,13 +86,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function EpubImportSection({
-  novelId,
-  importController,
-  bulkStartDisabled,
-  onUploadActivityChange,
-  otherImportActive,
-}: EpubImportSectionProps) {
+export function EpubImportSection({ novelId, importController }: EpubImportSectionProps) {
   const t = useTranslations("studio");
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -150,7 +141,6 @@ export function EpubImportSection({
       } finally {
         uploadingRef.current = false;
         setUploadProgress(null);
-        onUploadActivityChange(false);
       }
     },
   });
@@ -184,13 +174,7 @@ export function EpubImportSection({
     clearFileInput();
   };
   const beginUploadAndImport = () => {
-    if (
-      uploadingRef.current ||
-      bulkStartDisabled ||
-      importController.importActive ||
-      importController.startPending ||
-      otherImportActive
-    ) {
+    if (uploadingRef.current || importController.importActive) {
       return;
     }
     const result = epubImportFormSchema.safeParse(form.state.values);
@@ -199,16 +183,10 @@ export function EpubImportSection({
       return;
     }
     uploadingRef.current = true;
-    onUploadActivityChange(true);
     void form.handleSubmit();
   };
 
-  const selectionDisabled =
-    bulkStartDisabled ||
-    isSubmitting ||
-    importController.importActive ||
-    importController.startPending ||
-    otherImportActive;
+  const selectionDisabled = isSubmitting || importController.importActive;
   const retryableJob =
     importController.importJob &&
     (importController.importJob.status === "error" ||
@@ -326,12 +304,6 @@ export function EpubImportSection({
           }}
         </form.Field>
 
-        {otherImportActive ? (
-          <p className="text-sm text-muted-foreground" role="status">
-            {t("finishUrlImport")}
-          </p>
-        ) : null}
-
         {uploadProgress ? (
           <div className="flex flex-col gap-3" role="status" aria-live="polite">
             <Progress
@@ -350,7 +322,7 @@ export function EpubImportSection({
         <div className="flex flex-col gap-3">
           <Button
             type="submit"
-            disabled={!selectedFile || selectionDisabled || bulkStartDisabled || isSubmitting}
+            disabled={!selectedFile || selectionDisabled || isSubmitting}
             className="self-start"
           >
             {isSubmitting && <Spinner />}
@@ -398,12 +370,7 @@ export function EpubImportSection({
             size="sm"
             variant="outline"
             onClick={beginUploadAndImport}
-            disabled={
-              !selectedFile ||
-              bulkStartDisabled ||
-              selectionDisabled ||
-              importController.startPending
-            }
+            disabled={!selectedFile || selectionDisabled}
           >
             {t("retryEpubImport")}
           </Button>

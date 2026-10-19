@@ -126,7 +126,7 @@ describe("DataTableToolbar", () => {
           {
             ariaLabel: "Filter by type",
             value: "all",
-            items: { all: "All types", scrape: "Scrapes" },
+            items: { all: "All types", epub: "EPUB" },
             onChange,
           },
         ]}
@@ -147,11 +147,11 @@ describe("DataTableToolbar", () => {
     );
 
     fireEvent.click(screen.getByRole("combobox", { name: "Filter by type" }));
-    fireEvent.pointerDown(screen.getByRole("option", { name: "Scrapes" }), {
+    fireEvent.pointerDown(screen.getByRole("option", { name: "EPUB" }), {
       pointerType: "mouse",
     });
-    fireEvent.click(screen.getByRole("option", { name: "Scrapes" }));
-    expect(onChange).toHaveBeenCalledWith("scrape");
+    fireEvent.click(screen.getByRole("option", { name: "EPUB" }));
+    expect(onChange).toHaveBeenCalledWith("epub");
 
     fireEvent.click(screen.getByRole("button", { name: "Columns" }));
     expect(screen.queryByRole("menuitemcheckbox", { name: "source" })).toBeNull();

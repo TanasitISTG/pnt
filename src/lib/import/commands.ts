@@ -9,34 +9,14 @@ import { getPrivateStorage } from "@/lib/storage/index.server";
 import { parseObjectKey } from "@/lib/storage/keys";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { SafeServerError } from "@/lib/server-fn-error";
-import { chapterUrlFor, findSource } from "@/lib/scrape";
-import type { ScrapeProvider } from "@/lib/scrape/types";
 import { nanoid } from "@/lib/utils";
-import { MAX_IMPORT_CHAPTER_NUMBER, MAX_IMPORT_RANGE_LENGTH } from "@/lib/import/range";
-
-function assertValidScrapeImportRange(from: number, to: number): void {
-  if (
-    !Number.isSafeInteger(from) ||
-    !Number.isSafeInteger(to) ||
-    from < 1 ||
-    to < 1 ||
-    from > MAX_IMPORT_CHAPTER_NUMBER ||
-    to > MAX_IMPORT_CHAPTER_NUMBER ||
-    from > to ||
-    to - from + 1 > MAX_IMPORT_RANGE_LENGTH
-  ) {
-    throw new SafeServerError(encodeMessage("errors.importRangeInvalid"));
-  }
-}
 
 export type ImportTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type ImportOutboxDispatch = (outboxId: string) => Promise<void>;
 
 const ACTIVE_IMPORT_STATUS = sql`${importJobs.status} IN ('pending', 'running')`;
 
-function cancellationEventName(kind: "scrape" | "epub") {
-  return kind === "epub" ? "epub/import.cancelled" : "scrape/import.cancelled";
-}
+const IMPORT_CANCELLED_EVENT = "epub/import.cancelled";
 
 async function dispatchAfterCommit(
   outboxIds: readonly string[],
@@ -103,67 +83,12 @@ export async function cancelActiveImportsInTransaction(
     const outboxId = nanoid();
     await tx.insert(workflowOutbox).values({
       id: outboxId,
-      eventName: cancellationEventName(job.kind),
+      eventName: IMPORT_CANCELLED_EVENT,
       payloadJson: JSON.stringify({ jobId: job.id }),
     });
     outboxIds.push(outboxId);
   }
   return outboxIds;
-}
-
-export async function startScrapeImportForUser(
-  userId: string,
-  input: {
-    novelId: string;
-    baseUrl: string;
-    from: number;
-    to: number;
-    provider: ScrapeProvider;
-  },
-  dispatch: ImportOutboxDispatch = dispatchWorkflowOutboxEventBestEffort,
-): Promise<{ jobId: string; outboxIds: string[] }> {
-  assertValidScrapeImportRange(input.from, input.to);
-  const source = findSource(input.baseUrl);
-  if (source.name === "quanben") chapterUrlFor(input.baseUrl, input.from);
-
-  const result = await db.transaction(async (tx) => {
-    const [novel] = await tx
-      .select({ id: novels.id })
-      .from(novels)
-      .where(and(eq(novels.id, input.novelId), eq(novels.userId, userId)))
-      .limit(1)
-      .for("update");
-    if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
-
-    const now = new Date();
-    const outboxIds = await cancelActiveImportsInTransaction(tx, input.novelId, now);
-    const jobId = nanoid();
-    const runKey = nanoid();
-
-    await tx.insert(importJobs).values({
-      id: jobId,
-      novelId: input.novelId,
-      kind: "scrape",
-      baseUrl: input.baseUrl,
-      fromNumber: input.from,
-      toNumber: input.to,
-      nextNumber: input.from,
-      scrapeProvider: input.provider,
-    });
-
-    const requestOutboxId = nanoid();
-    await tx.insert(workflowOutbox).values({
-      id: requestOutboxId,
-      eventName: "scrape/import.requested",
-      payloadJson: JSON.stringify({ jobId, runKey }),
-    });
-    outboxIds.push(requestOutboxId);
-
-    return { jobId, outboxIds };
-  });
-
-  await dispatchAfterCommit(result.outboxIds, dispatch);
-  return result;
 }
 
 export async function completeEpubImportForUser(
@@ -272,7 +197,6 @@ export async function completeEpubImportForUser(
       fromNumber: 1,
       toNumber: 0,
       nextNumber: 1,
-      scrapeProvider: "epub",
     });
     await tx
       .update(epubUploads)
@@ -347,7 +271,7 @@ export async function cancelImportJobForUser(
     const outboxId = nanoid();
     await tx.insert(workflowOutbox).values({
       id: outboxId,
-      eventName: cancellationEventName(job.kind),
+      eventName: IMPORT_CANCELLED_EVENT,
       payloadJson: JSON.stringify({ jobId: job.id }),
     });
     return { cancelled: true, outboxIds: [outboxId] };

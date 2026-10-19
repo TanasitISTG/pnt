@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { normalizeIpAddress } from "@/lib/scrape/network-policy.server";
+import { normalizeIpAddress } from "@/lib/net/network-policy.server";
 import { log } from "@/lib/log";
 import { RateLimitError } from "@/lib/server-fn-error";
 

@@ -47,7 +47,7 @@ const networkMock = vi.hoisted(() => ({
   handler: undefined as undefined | ((url: string) => Promise<unknown>),
 }));
 
-vi.mock("@/lib/scrape/network-policy.server", () => ({
+vi.mock("@/lib/net/network-policy.server", () => ({
   fetchFromPublicHost: (url: string) => {
     networkMock.calls.push(url);
     if (!networkMock.handler) throw new Error("no response configured");

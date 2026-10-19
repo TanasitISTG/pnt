@@ -555,36 +555,7 @@ function createTitleBackfillHandlers() {
   };
 }
 
-// Re-creates the scrape handlers from index.tsx
-function createScrapeHandlers(
-  scrapeChapterFn: (url: string) => Promise<{ number: number; title: string }>,
-  importChapterFn: (url: string) => Promise<{ created: boolean; number: number; title: string }>,
-) {
-  return {
-    handleFetch: async (url: string) => {
-      try {
-        const r = await scrapeChapterFn(url);
-        toast.success(`Fetched chapter ${r.number}: ${r.title}`);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Fetch failed");
-      }
-    },
-    handleAdd: async (url: string) => {
-      try {
-        const r = await importChapterFn(url);
-        if (r.created) {
-          toast.success(`Added chapter ${r.number}: ${r.title}`);
-        } else {
-          toast.info(`Chapter ${r.number} already exists, skipped`);
-        }
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Import failed");
-      }
-    },
-  };
-}
-
-describe("title backfill and scrape handler integration", () => {
+describe("title backfill integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -601,27 +572,5 @@ describe("title backfill and scrape handler integration", () => {
 
     handlers.onError(new Error("Provider rate limit"));
     expect(toast.error).toHaveBeenCalledWith("Provider rate limit");
-  });
-
-  it("exercises scrape fetch and add handler success and error paths", async () => {
-    const mockScrape = vi.fn().mockResolvedValue({ number: 5, title: "Fifth Chapter" });
-    const mockImport = vi
-      .fn()
-      .mockResolvedValue({ created: true, number: 5, title: "Fifth Chapter" });
-
-    const handlers = createScrapeHandlers(mockScrape, mockImport);
-
-    await handlers.handleFetch("https://example.com/ch5");
-    expect(toast.success).toHaveBeenCalledWith("Fetched chapter 5: Fifth Chapter");
-
-    await handlers.handleAdd("https://example.com/ch5");
-    expect(toast.success).toHaveBeenCalledWith("Added chapter 5: Fifth Chapter");
-
-    // Test error path
-    const mockScrapeErr = vi.fn().mockRejectedValue(new Error("Host not allowed"));
-    const errorHandlers = createScrapeHandlers(mockScrapeErr, mockImport);
-
-    await errorHandlers.handleFetch("https://disallowed.com/ch1");
-    expect(toast.error).toHaveBeenCalledWith("Host not allowed");
   });
 });

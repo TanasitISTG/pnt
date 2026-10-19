@@ -78,20 +78,6 @@ const optionalConfigured = z.preprocess(
   z.string().min(1).optional(),
 );
 
-export function parseScraperBase(value: string): string {
-  const url = new URL(value);
-  if (
-    url.origin !== "https://api.zenrows.com" ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
-    throw new Error("SCRAPER_BASE must use the canonical ZenRows origin");
-  }
-  return url.toString();
-}
-
 const baseEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   // Connection ceiling for the pooled client in `src/lib/db/index.ts`. One connection
@@ -129,30 +115,6 @@ const baseEnvSchema = z.object({
         return z.NEVER;
       }
     }),
-
-  // ZenRows scraper configuration (optional, app boots keyless).
-  SCRAPER_API_KEY: z.string().optional(),
-  SCRAPER_BASE: z
-    .string()
-    .optional()
-    .transform((value, ctx) => {
-      if (value === undefined) return undefined;
-      try {
-        return parseScraperBase(value);
-      } catch {
-        ctx.addIssue({
-          code: "custom",
-          message: "must use https://api.zenrows.com without credentials, query, hash, or port",
-        });
-        return z.NEVER;
-      }
-    }),
-  SCRAPER_RENDER_JS: z.string().optional(),
-  SCRAPER_PREMIUM_PROXY: z.string().optional(),
-
-  // ScrapingBee & Firecrawl scraper configuration (optional, app boots keyless).
-  SCRAPINGBEE_API_KEY: z.string().optional(),
-  FIRECRAWL_API_KEY: z.string().optional(),
 
   // Cloudflare R2 object storage. Optional off Vercel (local dev and CI fall back
   // to the filesystem adapter), required on Vercel, and never partially tolerated.

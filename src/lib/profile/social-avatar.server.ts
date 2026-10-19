@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { assertImageMagicBytes } from "@/lib/images/magic-bytes";
 import { log } from "@/lib/log";
-import { fetchFromPublicHost } from "@/lib/scrape/network-policy.server";
+import { fetchFromPublicHost } from "@/lib/net/network-policy.server";
 
 import { flattenToPng } from "./avatar-image.server";
 import { writeAvatarSet } from "./avatar.server";
@@ -19,7 +19,7 @@ import { writeAvatarSet } from "./avatar.server";
  * the bytes validated and re-encoded like any other upload.
  *
  * The fetch is deliberately narrow: only the two provider CDNs, HTTPS only, no
- * redirects, a bounded body, and the same DNS-pinned transport the scraper uses, so a
+ * redirects, a bounded body, and the same DNS-pinned transport provider calls use, so a
  * profile URL that points somewhere private cannot turn account creation into an SSRF
  * primitive.
  */

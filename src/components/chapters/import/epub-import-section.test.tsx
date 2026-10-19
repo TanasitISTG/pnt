@@ -77,33 +77,16 @@ function defaultController(): ImportJobController {
     importJob: null,
     importActive: false,
     initialStatusLoading: false,
-    startPending: false,
-    startImport: vi.fn(),
     cancelImport: mocks.cancelImport,
     attachJob: mocks.attachJob,
     importStatusError: null,
     retryImportStatus: mocks.retryImportStatus,
-    canRetryImport: false,
-    retryImport: vi.fn(),
   };
 }
 
-function renderEpub(
-  otherImportActive = false,
-  importController = defaultController(),
-  bulkStartDisabled = importController.initialStatusLoading,
-) {
-  const onUploadActivityChange = vi.fn();
-  const view = render(
-    <EpubImportSection
-      novelId="novel-1"
-      importController={importController}
-      bulkStartDisabled={bulkStartDisabled}
-      onUploadActivityChange={onUploadActivityChange}
-      otherImportActive={otherImportActive}
-    />,
-  );
-  return { ...view, onUploadActivityChange, importController };
+function renderEpub(importController = defaultController()) {
+  const view = render(<EpubImportSection novelId="novel-1" importController={importController} />);
+  return { ...view, importController };
 }
 
 describe("EpubImportSection", () => {
@@ -148,7 +131,7 @@ describe("EpubImportSection", () => {
       uploadUrl: "https://storage.test/epub-uploads/upload-1",
     });
     mocks.completeEpubUpload.mockResolvedValue({ jobId: "epub-job-1" });
-    const view = renderEpub();
+    renderEpub();
     const file = new File(["epub"], "chapter.epub", { type: "application/epub+zip" });
 
     fireEvent.drop(screen.getByRole("button", { name: /Drop an EPUB here or choose a file/ }), {
@@ -156,7 +139,6 @@ describe("EpubImportSection", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Upload and import" }));
 
-    expect(view.onUploadActivityChange).toHaveBeenNthCalledWith(1, true);
     await vi.waitFor(() => expect(mocks.completeEpubUpload).toHaveBeenCalledTimes(1));
 
     const request = FakeXMLHttpRequest.last;
@@ -164,7 +146,6 @@ describe("EpubImportSection", () => {
     expect(request?.setRequestHeader).toHaveBeenCalledWith("Content-Type", "application/epub+zip");
     expect(request?.send).toHaveBeenCalledWith(file);
     expect(mocks.completeEpubUpload).toHaveBeenCalledWith({ data: { uploadId: "upload-1" } });
-    expect(view.onUploadActivityChange).toHaveBeenLastCalledWith(false);
   });
 
   it("aborts the reserved upload when the transfer fails", async () => {
@@ -174,7 +155,7 @@ describe("EpubImportSection", () => {
     });
     mocks.abortEpubUpload.mockResolvedValue({ success: true });
     FakeXMLHttpRequest.nextStatus = 500;
-    const view = renderEpub();
+    renderEpub();
 
     fireEvent.drop(screen.getByRole("button", { name: /Drop an EPUB here or choose a file/ }), {
       dataTransfer: {
@@ -187,35 +168,6 @@ describe("EpubImportSection", () => {
       expect(mocks.abortEpubUpload).toHaveBeenCalledWith({ data: { uploadId: "upload-2" } }),
     );
     expect(mocks.completeEpubUpload).not.toHaveBeenCalled();
-    expect(view.onUploadActivityChange).toHaveBeenLastCalledWith(false);
-  });
-
-  it("blocks upload controls while another bulk import is active", () => {
-    const view = renderEpub();
-    const validFile = new File(["epub"], "chapter.epub", { type: "application/epub+zip" });
-    fireEvent.drop(screen.getByRole("button", { name: /Drop an EPUB here or choose a file/ }), {
-      dataTransfer: { files: [validFile] },
-    });
-
-    view.rerender(
-      <EpubImportSection
-        novelId="novel-1"
-        importController={view.importController}
-        bulkStartDisabled={false}
-        onUploadActivityChange={view.onUploadActivityChange}
-        otherImportActive
-      />,
-    );
-
-    expect(
-      screen.getByRole("button", { name: "Replace file" }).getAttribute("disabled"),
-    ).not.toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Upload and import" }).getAttribute("disabled"),
-    ).not.toBeNull();
-    expect(
-      screen.getByText("Finish or cancel the URL range import before starting an EPUB import."),
-    ).toBeTruthy();
   });
 
   it("renders EPUB progress counters and exposes cancel while importing", () => {
@@ -236,7 +188,7 @@ describe("EpubImportSection", () => {
       },
       importActive: true,
     };
-    renderEpub(false, importController);
+    renderEpub(importController);
 
     expect(screen.getByText("2 of 5 chapters")).toBeTruthy();
     expect(screen.getByText("novel.epub")).toBeTruthy();
@@ -263,7 +215,7 @@ describe("EpubImportSection", () => {
         error: null,
       },
     };
-    renderEpub(false, importController);
+    renderEpub(importController);
 
     expect(
       screen.getByText("Choose the EPUB file again before retrying this import."),
@@ -290,7 +242,7 @@ describe("EpubImportSection", () => {
         error: null,
       },
     };
-    renderEpub(false, importController);
+    renderEpub(importController);
     const retry = screen.getByRole("button", { name: "Retry EPUB import" });
     expect(retry.getAttribute("disabled")).not.toBeNull();
 

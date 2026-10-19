@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { novels } from "./novels";
 
-export const importJobKindEnum = pgEnum("import_job_kind", ["scrape", "epub"]);
+export const importJobKindEnum = pgEnum("import_job_kind", ["epub"]);
 
 export const importJobStatusEnum = pgEnum("import_job_status", [
   "pending",
@@ -40,7 +40,7 @@ export const importJobs = pgTable(
     novelId: text("novel_id")
       .notNull()
       .references(() => novels.id, { onDelete: "cascade" }),
-    kind: importJobKindEnum("kind").notNull().default("scrape"),
+    kind: importJobKindEnum("kind").notNull().default("epub"),
     status: importJobStatusEnum("status").notNull().default("pending"),
     baseUrl: text("base_url").notNull(),
     sourceFileName: text("source_file_name"),
@@ -48,7 +48,6 @@ export const importJobs = pgTable(
     fromNumber: integer("from_number").notNull(),
     toNumber: integer("to_number").notNull(),
     nextNumber: integer("next_number").notNull(),
-    scrapeProvider: text("scrape_provider").notNull().default("auto"),
     added: integer("added").notNull().default(0),
     skipped: integer("skipped").notNull().default(0),
     failed: integer("failed").notNull().default(0),

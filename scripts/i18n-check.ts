@@ -54,11 +54,6 @@ const IDENTICAL_ALLOWED = new Set([
   // `{language} ({code})`: the name is interpolated from `languages.*` and the code is data,
   // so the message itself has no word Thai could say differently.
   "studio.langOption",
-  // The three scraping services are companies, not words: only the fetch methods that
-  // describe behavior (Automatic, Direct) have a Thai side.
-  "studio.scrapeProviderZenRows",
-  "studio.scrapeProviderScrapingBee",
-  "studio.scrapeProviderFirecrawl",
   // A service and the model ids it serves: "Google AI Studio" and "Gemini 2.5 Flash" are
   // what they are called, in both languages.
   "settings.providerGeminiLabel",
@@ -121,9 +116,9 @@ const NON_COPY_MODULES: readonly { readonly pattern: RegExp; readonly reason: st
     reason: "text addressed to the model: English by construction, and never rendered",
   },
   {
-    pattern: /^src\/lib\/scrape\/parsers\.ts$/,
+    pattern: /^src\/lib\/epub\/text\.ts$/,
     reason:
-      "the byte sequences a source page is recognized by, matched against fetched HTML rather than shown",
+      "the byte sequences archive text is normalized and recognized by, matched against an archive rather than shown",
   },
   {
     pattern: /^src\/lib\/env\.ts$/,
@@ -214,10 +209,25 @@ const NON_COPY_TEXT: readonly {
       "a rule that validates a stored relationship map on the server: the reader sees the map's facts, not the JSON they arrived in",
   },
   {
-    file: "src/lib/scrape/worker.ts",
-    prefix: "Chapter URL missing in TOC",
+    file: "src/components/ui/overlay-scroll-lock.tsx",
+    prefix: "an untracked popup",
     reason:
-      "a per-chapter failure stored on an import item, which no surface renders — what the reader gets is the added/skipped/failed counter beside it",
+      "a developer diagnostic built for the console and the analytics event that reports a stuck overlay, never rendered to a reader",
+  },
+  {
+    file: "src/components/ui/overlay-scroll-lock.tsx",
+    prefix: "(",
+    reason: "the lag fragment of the same developer diagnostic",
+  },
+  {
+    file: "src/components/ui/overlay-scroll-lock.tsx",
+    prefix: "popup never finished the page —",
+    reason: "the stuck-popup branch of the same developer diagnostic",
+  },
+  {
+    file: "src/components/ui/overlay-scroll-lock.tsx",
+    prefix: "page left frozen by —",
+    reason: "the frozen-page branch of the same developer diagnostic",
   },
   {
     file: "src/lib/translation/evaluation/eval.schemas.ts",

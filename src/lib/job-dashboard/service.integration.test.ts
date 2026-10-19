@@ -85,7 +85,6 @@ describeIntegration("job observability PostgreSQL contracts", () => {
         const chapterTitle =
           index === 0 ? "100%_Literal" : index === 1 ? "100AXLiteral" : `Chapter ${index + 1}`;
         const importNovelId = index === 2 ? secondaryNovelId : novelId;
-        const scrapeProvider = index === 0 ? "toString" : "direct";
 
         await transaction`
           INSERT INTO "chapters" (
@@ -106,11 +105,12 @@ describeIntegration("job observability PostgreSQL contracts", () => {
         `;
         await transaction`
           INSERT INTO "import_jobs" (
-            "id", "novel_id", "kind", "status", "base_url", "from_number", "to_number", "next_number",
-            "scrape_provider", "created_at", "updated_at"
+            "id", "novel_id", "kind", "status", "base_url", "source_file_name",
+            "from_number", "to_number", "next_number", "created_at", "updated_at"
           ) VALUES (
-            ${importJobIds[index]}, ${importNovelId}, 'scrape', ${importStatus}, 'https://example.test/novel',
-            1, 1, 1, ${scrapeProvider}, ${updatedAt}, ${updatedAt}
+            ${importJobIds[index]}, ${importNovelId}, 'epub', ${importStatus},
+            ${`epub://fixture-${index}`}, ${`Book ${index}.epub`},
+            1, 1, 1, ${updatedAt}, ${updatedAt}
           )
         `;
       }
@@ -127,7 +127,6 @@ describeIntegration("job observability PostgreSQL contracts", () => {
           "source_file_name" = 'Observed Fixture.epub',
           "to_number" = 3,
           "next_number" = 4,
-          "scrape_provider" = 'auto',
           "added" = 2,
           "skipped" = 1
         WHERE "id" = ${importJobIds[1]}
@@ -160,11 +159,11 @@ describeIntegration("job observability PostgreSQL contracts", () => {
       `;
       await transaction`
         INSERT INTO "import_jobs" (
-          "id", "novel_id", "kind", "status", "base_url", "from_number", "to_number",
-          "next_number", "scrape_provider", "created_at", "updated_at"
+          "id", "novel_id", "kind", "status", "base_url", "source_file_name",
+          "from_number", "to_number", "next_number", "created_at", "updated_at"
         ) VALUES (
-          ${otherImportJobId}, ${otherNovelId}, 'scrape', 'done', 'https://example.test/other',
-          1, 1, 2, 'direct', now(), now()
+          ${otherImportJobId}, ${otherNovelId}, 'epub', 'done', 'epub://other', 'Other.epub',
+          1, 1, 2, now(), now()
         )
       `;
     });
@@ -212,30 +211,17 @@ describeIntegration("job observability PostgreSQL contracts", () => {
         model: null,
         isLegacyProviderFallback: true,
       });
-      const scrapeRows = await loadJobHistory(
-        ownerUserId,
-        search({ type: "scrape", pageSize: 50 }),
-        timing,
-      );
-      expect(scrapeRows.rowCount).toBe(25);
-      expect(scrapeRows.rows.every((row) => row.type === "scrape")).toBe(true);
-
       const epubRows = await loadJobHistory(
         ownerUserId,
         search({ type: "epub", pageSize: 50 }),
         timing,
       );
-      expect(epubRows).toMatchObject({
-        rowCount: 1,
-        rows: [
-          {
-            id: importJobIds[1],
-            type: "epub",
-            sourceFileName: "Observed Fixture.epub",
-            canRetry: false,
-            progress: { completed: 3, total: 3, percent: 100, preparing: false },
-          },
-        ],
+      expect(epubRows.rowCount).toBe(26);
+      expect(epubRows.rows.every((row) => row.type === "epub")).toBe(true);
+      expect(epubRows.rows.find((row) => row.id === importJobIds[1])).toMatchObject({
+        sourceFileName: "Observed Fixture.epub",
+        canRetry: false,
+        progress: { completed: 3, total: 3, percent: 100, preparing: false },
       });
 
       const failedRows = await loadJobHistory(
@@ -246,16 +232,16 @@ describeIntegration("job observability PostgreSQL contracts", () => {
       expect(failedRows.rowCount).toBe(4);
       expect(failedRows.rows.every((row) => row.status === "error")).toBe(true);
 
-      const invalidProviderRows = await loadJobHistory(
+      const importIdRows = await loadJobHistory(
         ownerUserId,
         search({ q: importJobIds[0], pageSize: 50 }),
         timing,
       );
-      expect(invalidProviderRows.rows).toEqual([
+      expect(importIdRows.rows).toEqual([
         expect.objectContaining({
           id: importJobIds[0],
-          type: "scrape",
-          scrapeProvider: null,
+          type: "epub",
+          sourceFileName: "Book 0.epub",
           canRetry: false,
         }),
       ]);
@@ -296,13 +282,13 @@ describeIntegration("job observability PostgreSQL contracts", () => {
       );
       expect(sourceFileRows.rows.map((row) => row.id)).toEqual([importJobIds[1]]);
 
-      const baseUrlRows = await loadJobHistory(
+      const stagedSourceRows = await loadJobHistory(
         ownerUserId,
-        search({ q: "example.test/novel", pageSize: 50 }),
+        search({ q: "epub://fixture-25", pageSize: 50 }),
         timing,
       );
-      expect(baseUrlRows.rowCount).toBe(25);
-      expect(baseUrlRows.rows.every((row) => row.type === "scrape")).toBe(true);
+      expect(stagedSourceRows.rows.map((row) => row.id)).toEqual([importJobIds[25]]);
+      expect(stagedSourceRows.rows[0]?.type).toBe("epub");
 
       const novelTitleRows = await loadJobHistory(
         ownerUserId,
@@ -316,7 +302,7 @@ describeIntegration("job observability PostgreSQL contracts", () => {
         search({ sort: "createdAt", dir: "asc", pageSize: 50 }),
         timing,
       );
-      expect(["scrape", "translation"]).toEqual(oldestRows.rows.slice(0, 2).map((row) => row.type));
+      expect(["epub", "translation"]).toEqual(oldestRows.rows.slice(0, 2).map((row) => row.type));
       expect(
         oldestRows.rows
           .slice(0, 2)
@@ -347,7 +333,7 @@ describeIntegration("job observability PostgreSQL contracts", () => {
         timing,
       );
       expect(typeRows.rows[0]?.type).toBe("epub");
-      expect(typeRows.rows[1]?.type).toBe("scrape");
+      expect(typeRows.rows[1]?.type).toBe("epub");
       expect(typeRows.rows.at(-1)?.type).toBe("translation");
 
       const clampedRows = await loadJobHistory(ownerUserId, search({ page: 999 }), timing);
@@ -387,7 +373,7 @@ describeIntegration("job observability PostgreSQL contracts", () => {
           { id: translationJobIds[0], type: "translation" },
           { id: translationJobIds[1], type: "translation" },
           { id: importJobIds[1], type: "epub" },
-          { id: importJobIds[25], type: "scrape" },
+          { id: importJobIds[25], type: "epub" },
           { id: otherJobId, type: "translation" },
         ],
       });
@@ -402,7 +388,7 @@ describeIntegration("job observability PostgreSQL contracts", () => {
       ).toMatchObject({ type: "translation", status: "done" });
       expect(
         requestedActivity.activities.find((activity) => activity.id === importJobIds[25]),
-      ).toMatchObject({ type: "scrape", status: "pending", novelId });
+      ).toMatchObject({ type: "epub", status: "pending", novelId });
       expect(
         requestedActivity.activities.find((activity) => activity.id === importJobIds[1]),
       ).toMatchObject({ type: "epub", status: "done", novelId });

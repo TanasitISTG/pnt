@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -20,13 +20,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { createChapter } from "@/lib/content/chapter/chapter.functions";
 import type { CreateChapterInput } from "@/lib/content/novel/novel.schemas";
 import { encodeMessage } from "@/lib/i18n/message-code";
-
-export interface FetchedChapterDraft {
-  number: string;
-  title: string;
-  content: string;
-  sourceUrl: string;
-}
 
 // The client's own copy of the three field rules, keyed rather than worded (i18n.md §3): the
 // shared schema still guards the same input on the server, and these bounds mirror it the way
@@ -83,13 +76,10 @@ type ManualChapterFormApi = ReactFormExtendedApi<
 
 export interface ManualChapterEditorController {
   form: ManualChapterFormApi;
-  sourceUrl: string | null;
   submitError: string | null;
   numberRef: RefObject<HTMLInputElement | null>;
   titleRef: RefObject<HTMLInputElement | null>;
   contentRef: RefObject<HTMLTextAreaElement | null>;
-  acceptFetchedChapter: (chapter: FetchedChapterDraft) => void;
-  resetManualDraft: () => void;
   markNumberEdited: () => void;
   clearSubmitError: () => void;
 }
@@ -111,7 +101,6 @@ export function useManualChapterEditor({
   }, [chapters]);
   const numberEditedRef = useRef(false);
   const [minimumNextNumber, setMinimumNextNumber] = useState(0);
-  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const numberRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -165,7 +154,6 @@ export function useManualChapterEditor({
         const minimum = Math.floor(input.number) + 1;
         setMinimumNextNumber(minimum);
         numberEditedRef.current = false;
-        setSourceUrl(null);
         form.reset(
           {
             number: String(Math.max(autoNextNumber, minimum)),
@@ -188,42 +176,12 @@ export function useManualChapterEditor({
     form.setFieldValue("number", String(nextNumber), { dontUpdateMeta: true });
   }, [form, nextNumber]);
 
-  const acceptFetchedChapter = useCallback(
-    (chapter: FetchedChapterDraft) => {
-      numberEditedRef.current = true;
-      setSourceUrl(chapter.sourceUrl);
-      setSubmitError(null);
-      form.reset(
-        {
-          number: chapter.number,
-          title: chapter.title,
-          rawContent: chapter.content,
-        },
-        { keepDefaultValues: true },
-      );
-    },
-    [form],
-  );
-
-  const resetManualDraft = useCallback(() => {
-    numberEditedRef.current = false;
-    setSourceUrl(null);
-    setSubmitError(null);
-    form.reset(
-      { number: String(nextNumber), title: "", rawContent: "" },
-      { keepDefaultValues: true },
-    );
-  }, [form, nextNumber]);
-
   return {
     form,
-    sourceUrl,
     submitError,
     numberRef,
     titleRef,
     contentRef,
-    acceptFetchedChapter,
-    resetManualDraft,
     markNumberEdited: () => {
       numberEditedRef.current = true;
     },
@@ -232,17 +190,8 @@ export function useManualChapterEditor({
 }
 
 export function ManualChapterEditor({ controller }: { controller: ManualChapterEditorController }) {
-  const {
-    form,
-    sourceUrl,
-    submitError,
-    numberRef,
-    titleRef,
-    contentRef,
-    resetManualDraft,
-    markNumberEdited,
-    clearSubmitError,
-  } = controller;
+  const { form, submitError, numberRef, titleRef, contentRef, markNumberEdited, clearSubmitError } =
+    controller;
   const t = useTranslations("studio");
   const [canSubmit, isSubmitting] = useStore(
     form.store,
@@ -252,27 +201,7 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h3 className="text-xl font-semibold tracking-tight text-foreground">
-          {t("manualHeading")}
-        </h3>
-        <p className="text-sm text-muted-foreground">{t("manualLead")}</p>
-      </header>
-
-      {sourceUrl ? (
-        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm">
-          <p className="min-w-0 text-foreground">
-            <span className="font-semibold">{t("fetchedFromUrl")}</span>{" "}
-            <span className="text-muted-foreground">
-              {t("fetchedReview")} {t("fetchedSource")}{" "}
-              <span title={sourceUrl}>{truncateUrl(sourceUrl)}</span>
-            </span>
-          </p>
-          <Button type="button" variant="outline" size="sm" onClick={resetManualDraft}>
-            {t("startFresh")}
-          </Button>
-        </div>
-      ) : null}
+      <p className="text-sm text-muted-foreground">{t("manualLead")}</p>
 
       <form
         noValidate
@@ -404,8 +333,4 @@ export function ManualChapterEditor({ controller }: { controller: ManualChapterE
       </form>
     </div>
   );
-}
-
-function truncateUrl(url: string): string {
-  return url.length > 64 ? `${url.slice(0, 61)}…` : url;
 }

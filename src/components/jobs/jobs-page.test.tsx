@@ -17,7 +17,6 @@ import type {
   JobActivitySnapshot,
   JobHistoryEpubRow,
   JobHistoryPage,
-  JobHistoryScrapeRow,
   JobHistorySearch,
   JobHistoryTranslationRow,
   JobStats,
@@ -63,9 +62,8 @@ const mutationFunctions = vi.hoisted(() => ({
   retryTranslationJob: vi.fn(),
 }));
 
-const scrapeFunctions = vi.hoisted(() => ({
+const importFunctions = vi.hoisted(() => ({
   cancelImportJob: vi.fn(),
-  startImportJob: vi.fn(),
 }));
 
 const detailMocks = vi.hoisted(() => ({
@@ -80,7 +78,7 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 vi.mock("@/lib/job-dashboard/functions", () => serverFunctions);
 vi.mock("@/lib/translation/api/mutations", () => mutationFunctions);
-vi.mock("@/lib/scrape/functions", () => scrapeFunctions);
+vi.mock("@/lib/import/functions", () => importFunctions);
 vi.mock("@/components/translation/job/job-log-drawer", () => detailMocks);
 vi.mock("@/components/jobs/import-job-drawer", () => detailMocks);
 
@@ -118,24 +116,22 @@ const translationRow: JobHistoryTranslationRow = {
   canRetry: true,
 };
 
-const scrapeRow: JobHistoryScrapeRow = {
-  id: "scrape-1",
-  type: "scrape",
+const cancellableEpubRow: JobHistoryEpubRow = {
+  id: "epub-running-1",
+  type: "epub",
   status: "running",
-  novelId: "novel-scrape",
-  novelTitle: "Scrape Novel",
+  novelId: "novel-epub-running",
+  novelTitle: "Running EPUB Novel",
   error: null,
   createdAt: "2026-01-01T00:02:00.000Z",
   updatedAt: "2026-01-01T00:03:00.000Z",
-  baseUrl: "https://example.test/novel",
-  scrapeProvider: "direct",
+  sourceFileName: "running.epub",
   fromNumber: 13,
   toNumber: 20,
   nextNumber: 17,
   added: 3,
   skipped: 1,
   failed: 0,
-  completedWithFailures: false,
   progress: { completed: 4, total: 8, percent: 50, preparing: false },
   canCancel: true,
   canRetry: false,
@@ -162,20 +158,9 @@ const epubRow: JobHistoryEpubRow = {
   canRetry: false,
 };
 
-const retryScrapeRow: JobHistoryScrapeRow = {
-  ...scrapeRow,
-  id: "scrape-retry",
-  novelId: "novel-scrape-retry",
-  novelTitle: "Retry Scrape Novel",
-  status: "error",
-  error: "Previous scrape failed",
-  canCancel: false,
-  canRetry: true,
-};
-
 const history: JobHistoryPage = {
-  rows: [translationRow, scrapeRow, epubRow, retryScrapeRow],
-  rowCount: 4,
+  rows: [translationRow, cancellableEpubRow, epubRow],
+  rowCount: 3,
   page: 1,
   pageSize: 25,
 };
@@ -257,11 +242,11 @@ describe("JobsPage dashboard", () => {
     expect(attention.getByText("Needs attention")).toBeTruthy();
     expect(attention.getByText("Translation 1 · Import 1")).toBeTruthy();
     // The running row and the failed rows are the bands' content, not just table rows.
-    expect(live.getByText("Scrape Novel")).toBeTruthy();
+    expect(live.getByText("Running EPUB Novel")).toBeTruthy();
     expect(attention.getByText("Provider timed out")).toBeTruthy();
-    // Retry is offered where the row's own rules allow it: the two failed jobs that can
-    // be retried carry it, the failed EPUB import does not.
-    expect(attention.getAllByRole("button", { name: "Retry job" })).toHaveLength(2);
+    // Retry is offered where the row's own rules allow it: the failed translation carries
+    // it, the failed EPUB import does not.
+    expect(attention.getAllByRole("button", { name: "Retry job" })).toHaveLength(1);
     expect(attention.getByText("Invalid chapter")).toBeTruthy();
 
     // The two whole-queue numbers stay a compact pair, not four detached cards.
@@ -271,8 +256,8 @@ describe("JobsPage dashboard", () => {
     expect(screen.getAllByText("Translation 1 · Import 1")).toHaveLength(2);
     const desktopHistory = within(screen.getByRole("table"));
     expect(desktopHistory.getByText("Translation Novel")).toBeTruthy();
-    expect(desktopHistory.getByText("Scrape Novel")).toBeTruthy();
-    expect(screen.getByText("1–4 of 4 jobs")).toBeTruthy();
+    expect(desktopHistory.getByText("Running EPUB Novel")).toBeTruthy();
+    expect(screen.getByText("1–3 of 3 jobs")).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Filter by type" }).textContent).toContain(
       "All types",
     );
@@ -289,7 +274,7 @@ describe("JobsPage dashboard", () => {
       error: code,
     };
     renderJobsPage({
-      rows: [codedFailure, scrapeRow],
+      rows: [codedFailure, cancellableEpubRow],
       rowCount: 2,
       page: 1,
       pageSize: 25,
@@ -314,15 +299,19 @@ describe("JobsPage dashboard", () => {
         .getAllByRole("article")
         .find((card) => card.textContent?.includes("Translation Novel"))!,
     );
-    const scrapeCard = within(
+    const runningEpubCard = within(
       mobileHistory
         .getAllByRole("article")
-        .find((card) => card.textContent?.includes("Scrape Novel"))!,
+        .find((card) => card.textContent?.includes("Running EPUB Novel"))!,
     );
     const epubCard = within(
       mobileHistory
         .getAllByRole("article")
-        .find((card) => card.textContent?.includes("EPUB Novel"))!,
+        .find(
+          (card) =>
+            card.textContent?.includes("EPUB Novel") &&
+            !card.textContent?.includes("Running EPUB Novel"),
+        )!,
     );
 
     for (const button of mobileHistory.getAllByRole("button", {
@@ -332,13 +321,13 @@ describe("JobsPage dashboard", () => {
       expect(button.className).toContain("h-11");
       expect(button.className).not.toContain("min-h");
     }
-    for (const card of [translationCard, scrapeCard, epubCard]) {
+    for (const card of [translationCard, runningEpubCard, epubCard]) {
       expect(card.getByRole("button", { name: "Copy job ID" })).toBeTruthy();
       expect(card.getByRole("button", { name: "Details" })).toBeTruthy();
       expect(card.getByRole("button", { name: "Novel" })).toBeTruthy();
     }
     expect(translationCard.getByRole("button", { name: "Chapter" })).toBeTruthy();
-    expect(scrapeCard.getByRole("button", { name: "Cancel job" })).toBeTruthy();
+    expect(runningEpubCard.getByRole("button", { name: "Cancel job" })).toBeTruthy();
     expect(epubCard.queryByRole("button", { name: "Chapter" })).toBeNull();
     expect(epubCard.queryByRole("button", { name: "Cancel job" })).toBeNull();
     expect(epubCard.queryByRole("button", { name: "Retry job" })).toBeNull();
@@ -369,7 +358,9 @@ describe("JobsPage dashboard", () => {
     expect(screen.getByRole("heading", { name: "Retry this job?" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    fireEvent.click(getMobileCard("Scrape Novel").getByRole("button", { name: "Cancel job" }));
+    fireEvent.click(
+      getMobileCard("Running EPUB Novel").getByRole("button", { name: "Cancel job" }),
+    );
     expect(screen.getByRole("heading", { name: "Cancel this job?" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   });
@@ -521,7 +512,7 @@ describe("JobsPage dashboard", () => {
     };
     serverFunctions.getJobHistory.mockResolvedValue({
       ...history,
-      rows: [completedRow, scrapeRow, epubRow, retryScrapeRow],
+      rows: [completedRow, cancellableEpubRow, epubRow],
     });
     serverFunctions.getJobStats.mockResolvedValue({
       ...stats,
@@ -656,12 +647,12 @@ describe("JobsPage dashboard", () => {
     expect(navigation.search(defaultSearch)).toMatchObject({ q: "older", page: 1 });
 
     fireEvent.click(screen.getByRole("combobox", { name: "Filter by type" }));
-    fireEvent.pointerDown(screen.getByRole("option", { name: "Scrapes" }), {
+    fireEvent.pointerDown(screen.getByRole("option", { name: "EPUB" }), {
       pointerType: "mouse",
     });
-    fireEvent.click(screen.getByRole("option", { name: "Scrapes" }));
+    fireEvent.click(screen.getByRole("option", { name: "EPUB" }));
     navigation = routerState.navigate.mock.calls.at(-1)?.[0];
-    expect(navigation.search(defaultSearch)).toMatchObject({ type: "scrape", page: 1 });
+    expect(navigation.search(defaultSearch)).toMatchObject({ type: "epub", page: 1 });
 
     fireEvent.click(screen.getByRole("button", { name: "Sort by Updated" }));
     navigation = routerState.navigate.mock.calls.at(-1)?.[0];
@@ -805,11 +796,11 @@ describe("JobsPage job actions", () => {
           onCancel: vi.fn(),
           onRetry: vi.fn(),
         }}
-        pendingJobId="scrape-1"
+        pendingJobId="epub-running-1"
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Actions for Scrape Novel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Running EPUB Novel" }));
     expect(
       screen.getByRole("menuitem", { name: "Working…" }).getAttribute("data-disabled"),
     ).not.toBe(null);
@@ -838,33 +829,17 @@ describe("JobsPage job actions", () => {
     });
   });
 
-  it("confirms import cancel and forwards scrape retry inputs", async () => {
+  it("confirms import cancel and invalidates affected caches", async () => {
     const queryClient = renderJobsPage();
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
-    scrapeFunctions.cancelImportJob.mockResolvedValueOnce({ success: true });
-    scrapeFunctions.startImportJob.mockResolvedValueOnce({ jobId: "scrape-2" });
+    importFunctions.cancelImportJob.mockResolvedValueOnce({ success: true });
 
-    fireEvent.click(screen.getByRole("button", { name: "Actions for Scrape Novel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Running EPUB Novel" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Cancel job" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel job" }));
     await waitFor(() =>
-      expect(scrapeFunctions.cancelImportJob).toHaveBeenCalledWith({
-        data: { jobId: "scrape-1" },
-      }),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Actions for Retry Scrape Novel" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Retry job" }));
-    fireEvent.click(screen.getByRole("button", { name: "Retry job" }));
-    await waitFor(() =>
-      expect(scrapeFunctions.startImportJob).toHaveBeenCalledWith({
-        data: {
-          novelId: "novel-scrape-retry",
-          baseUrl: "https://example.test/novel",
-          from: 13,
-          to: 20,
-          provider: "direct",
-        },
+      expect(importFunctions.cancelImportJob).toHaveBeenCalledWith({
+        data: { jobId: "epub-running-1" },
       }),
     );
     expect(invalidate).toHaveBeenCalledWith({ queryKey: JOB_HISTORY_QUERY_KEY });

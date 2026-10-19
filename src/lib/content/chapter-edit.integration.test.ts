@@ -999,21 +999,35 @@ describeIntegration("chapter edit PostgreSQL invariants", () => {
 
   it("rejects a stale reorder after a gated chapter insertion changes membership", async () => {
     const fixture = await seedChapterFixture();
-    // Use the existing import commit service as the equivalent gated insertion boundary.
-    const { commitScrapeImportChapter } = await import("@/lib/import/job-store");
-    const importJobId = `import-${randomUUID()}`;
+    const { db } = await import("@/lib/db");
+    const { lockNovelForMutation } = await import("@/lib/db/novel-lock");
+    const { chapters } = await import("@/lib/db/schema");
+    const insertedChapterId = `chapter-${randomUUID()}`;
     const gate = await pauseNextNovelGate();
-    let insertion: ReturnType<typeof commitScrapeImportChapter> | undefined;
+    // An import chapter is committed behind the novel gate, so it changes membership
+    // inside the same lock a reorder takes.
+    let insertion: Promise<{ stop: boolean; created: boolean }> | undefined;
     let reorder: Promise<PromiseSettledResult<{ reordered: number }>[]> | undefined;
     try {
       const before = await readChapters(fixture.novelId);
-      await sql`INSERT INTO import_jobs (id, novel_id, status, base_url, from_number, to_number, next_number)
-        VALUES (${importJobId}, ${fixture.novelId}, 'running', 'https://example.test/book', 2, 2, 2)`;
-      insertion = commitScrapeImportChapter(importJobId, 2, {
-        kind: "added",
-        number: "2",
-        title: "Inserted chapter",
-        content: "New source",
+      insertion = db.transaction(async (tx) => {
+        if (!(await lockNovelForMutation(tx, fixture.novelId))) {
+          return { stop: true, created: false };
+        }
+        const created = await tx
+          .insert(chapters)
+          .values({
+            id: insertedChapterId,
+            novelId: fixture.novelId,
+            number: "2",
+            title: "Inserted chapter",
+            rawContent: "New source",
+            rawCharCount: 10,
+            status: "raw",
+          })
+          .onConflictDoNothing({ target: [chapters.novelId, chapters.number] })
+          .returning({ id: chapters.id });
+        return { stop: false, created: created.length > 0 };
       });
       const blockerPid = await bounded(gate.locked);
       reorder = Promise.allSettled([
@@ -1038,15 +1052,13 @@ describeIntegration("chapter edit PostgreSQL invariants", () => {
       expect(after.filter((row) => fixture.chapterIds.includes(row.id))).toEqual(before);
       expect(after.filter((row) => !fixture.chapterIds.includes(row.id))).toEqual([
         expect.objectContaining({
+          id: insertedChapterId,
           number: "2.00",
           rawContent: "New source",
           sourceRevision: 1,
           activeJobId: null,
         }),
       ]);
-      const [importJob] =
-        await sql`SELECT added, next_number FROM import_jobs WHERE id = ${importJobId}`;
-      expect(importJob).toEqual({ added: 1, next_number: 3 });
     } finally {
       gate.release();
       await bounded(Promise.allSettled([insertion, reorder]));

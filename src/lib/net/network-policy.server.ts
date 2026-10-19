@@ -6,7 +6,6 @@ import type { LookupFunction } from "node:net";
 import { BlockList, isIP } from "node:net";
 import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 import type { RequestInit as UndiciRequestInit } from "undici";
-import { findSource } from "@/lib/scrape";
 
 export type HostAddress = { address: string; family: 4 | 6 };
 
@@ -132,7 +131,6 @@ export async function resolvePublicHost(hostname: string): Promise<readonly Host
 }
 
 export async function assertPublicHost(url: string): Promise<void> {
-  findSource(url);
   await resolvePublicHost(new URL(url).hostname);
 }
 

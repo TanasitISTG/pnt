@@ -193,11 +193,11 @@ describeIntegration("EPUB import PostgreSQL integration", () => {
     await sql`
       INSERT INTO "import_jobs" (
         "id", "novel_id", "kind", "status", "base_url", "source_file_name", "epub_upload_id",
-        "from_number", "to_number", "next_number", "scrape_provider", "added", "skipped", "failed",
+        "from_number", "to_number", "next_number", "added", "skipped", "failed",
         "created_at", "updated_at"
       ) VALUES (
         ${jobId}, ${novelId}, 'epub', 'pending', ${`epub://${uploadId}`}, 'test.epub', ${uploadId},
-        1, 0, 1, 'epub', 0, 0, 0,
+        1, 0, 1, 0, 0, 0,
         now(), now()
       )
     `;
@@ -295,10 +295,10 @@ describeIntegration("EPUB import PostgreSQL integration", () => {
     await sql`
       INSERT INTO "import_jobs" (
         "id", "novel_id", "kind", "status", "base_url", "source_file_name", "epub_upload_id",
-        "from_number", "to_number", "next_number", "scrape_provider", "created_at", "updated_at"
+        "from_number", "to_number", "next_number", "created_at", "updated_at"
       ) VALUES (
         ${canceledJobId}, ${novelId}, 'epub', 'running', ${`epub://${canceledUploadId}`}, 'canceled.epub',
-        ${canceledUploadId}, 1, 1, 1, 'epub', now(), now()
+        ${canceledUploadId}, 1, 1, 1, now(), now()
       )
     `;
     await sql`
@@ -323,23 +323,6 @@ describeIntegration("EPUB import PostgreSQL integration", () => {
     const uploads = await sql`SELECT * FROM "epub_uploads" WHERE "id" = ${canceledUploadId}`;
     expect(uploads).toHaveLength(0);
     await sql`DELETE FROM "workflow_outbox" WHERE "id" = ${cancellation.outboxIds[0]}`;
-  });
-
-  it("keeps legacy scrape jobs on the scrape kind default", async () => {
-    const scrapeJobId = `job-scrape-default-${randomUUID()}`;
-    await sql`
-      INSERT INTO "import_jobs" (
-        "id", "novel_id", "status", "base_url", "from_number", "to_number", "next_number",
-        "scrape_provider", "created_at", "updated_at"
-      ) VALUES (
-        ${scrapeJobId}, ${novelId}, 'pending', 'https://example.com/1.html', 1, 1, 1,
-        'auto', now(), now()
-      )
-    `;
-
-    const [job] = await sql`SELECT "kind" FROM "import_jobs" WHERE "id" = ${scrapeJobId}`;
-    expect(job.kind).toBe("scrape");
-    await sql`DELETE FROM "import_jobs" WHERE "id" = ${scrapeJobId}`;
   });
 
   it("cleans up expired uploads whose status is uploading, including their staged archive", async () => {
@@ -380,8 +363,8 @@ describeIntegration("EPUB import PostgreSQL integration", () => {
           VALUES (${id}, ${parent}, 'source.epub', 3, ${epubUploadKey(id)}, 'queued', now() + interval '1 day')`;
       }
       await sql`INSERT INTO "import_jobs"
-        ("id", "novel_id", "kind", "status", "base_url", "epub_upload_id", "from_number", "to_number", "next_number", "scrape_provider")
-        VALUES (${stagingJobId}, ${novelId}, 'epub', 'running', 'epub://source', ${ownUploadId}, 1, 0, 1, 'epub')`;
+        ("id", "novel_id", "kind", "status", "base_url", "epub_upload_id", "from_number", "to_number", "next_number")
+        VALUES (${stagingJobId}, ${novelId}, 'epub', 'running', 'epub://source', ${ownUploadId}, 1, 0, 1)`;
       await expect(
         stageImportJobItems(stagingJobId, foreignUploadId, [
           {
@@ -432,8 +415,8 @@ describeIntegration("EPUB import PostgreSQL integration", () => {
       ("id", "novel_id", "file_name", "file_size", "object_key", "status", "expires_at")
       VALUES (${resourceId}, ${parentId}, 'source.epub', 3, ${epubUploadKey(resourceId)}, ${operation === "stage" ? "queued" : "staged"}, now() + interval '1 day')`;
     await sql`INSERT INTO "import_jobs"
-      ("id", "novel_id", "kind", "status", "base_url", "epub_upload_id", "from_number", "to_number", "next_number", "scrape_provider")
-      VALUES (${activeJobId}, ${parentId}, 'epub', 'running', 'epub://source', ${resourceId}, 1, 1, 1, 'epub')`;
+      ("id", "novel_id", "kind", "status", "base_url", "epub_upload_id", "from_number", "to_number", "next_number")
+      VALUES (${activeJobId}, ${parentId}, 'epub', 'running', 'epub://source', ${resourceId}, 1, 1, 1)`;
     if (operation === "chapter") {
       await sql`INSERT INTO "import_job_items"
         ("id", "job_id", "sequence", "chapter_number", "title", "raw_content", "raw_char_count", "status")

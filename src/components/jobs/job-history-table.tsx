@@ -247,7 +247,6 @@ export function JobHistoryTable({
   const typeItems = {
     all: t("filterAllTypes"),
     translation: t("filterTranslations"),
-    scrape: t("filterScrapes"),
     epub: t("typeEpub"),
   };
   const statusItems = {

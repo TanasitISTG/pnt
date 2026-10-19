@@ -18,19 +18,17 @@ import type {
   JobHistoryEpubRow,
   JobHistoryPage,
   JobHistoryRow,
-  JobHistoryScrapeRow,
   JobHistorySearch,
   JobHistoryStatus,
   JobHistoryTranslationRow,
   JobHistoryType,
 } from "@/lib/job-dashboard/contracts";
 import { normalizeJobActivityInput, normalizeJobStats } from "@/lib/job-dashboard/contracts";
-import type { ScrapeProvider } from "@/lib/scrape/types";
 import type { ServerTiming } from "@/lib/server-timing";
 
 type RawJobHistoryRow = {
   id: string;
-  type: "translation" | "scrape" | "epub";
+  type: "translation" | "epub";
   status: JobHistoryStatus;
   novelId: string;
   novelTitle: string;
@@ -45,7 +43,6 @@ type RawJobHistoryRow = {
   provider: string | null;
   model: string | null;
   baseUrl: string | null;
-  scrapeProvider: string | null;
   sourceFileName: string | null;
   fromNumber: number | null;
   toNumber: number | null;
@@ -54,18 +51,6 @@ type RawJobHistoryRow = {
   skipped: number | null;
   failed: number | null;
 };
-const validScrapeProviders: Record<ScrapeProvider, true> = {
-  auto: true,
-  direct: true,
-  zenrows: true,
-  scrapingbee: true,
-  firecrawl: true,
-};
-
-function normalizeScrapeProvider(value: string | null): ScrapeProvider | null {
-  return value && Object.hasOwn(validScrapeProviders, value) ? (value as ScrapeProvider) : null;
-}
-
 function escapeIlikePattern(value: string) {
   return value.replace(/[\\%_]/g, "\\$&");
 }
@@ -100,10 +85,9 @@ function importWhere(
   userId: string,
   status: JobHistorySearch["status"],
   query: string,
-  kind: "scrape" | "epub",
   searchable: readonly SQL[],
 ) {
-  const predicates: SQL[] = [eq(novels.userId, userId), eq(importJobs.kind, kind)];
+  const predicates: SQL[] = [eq(novels.userId, userId), eq(importJobs.kind, "epub")];
   if (status !== "all") predicates.push(sql`${importJobs.status}::text = ${status}`);
   if (query) {
     const searchPredicate = or(...searchable);
@@ -117,7 +101,7 @@ function buildTranslationRows(userId: string, input: JobHistorySearch) {
   return db
     .select({
       id: sql<string>`${translationJobs.id}::text`.as("id"),
-      type: sql<"translation" | "scrape" | "epub">`'translation'::text`.as("type"),
+      type: sql<"translation" | "epub">`'translation'::text`.as("type"),
       status: sql<JobHistoryStatus>`${translationJobs.status}::text`.as("status"),
       novelId: sql<string>`${novels.id}::text`.as("novelId"),
       novelTitle: sql<string>`${novels.title}::text`.as("novelTitle"),
@@ -132,7 +116,6 @@ function buildTranslationRows(userId: string, input: JobHistorySearch) {
       provider: sql<string | null>`${translationJobs.provider}::text`.as("provider"),
       model: sql<string | null>`${translationJobs.model}::text`.as("model"),
       baseUrl: sql<string | null>`NULL::text`.as("baseUrl"),
-      scrapeProvider: sql<string | null>`NULL::text`.as("scrapeProvider"),
       sourceFileName: sql<string | null>`NULL::text`.as("sourceFileName"),
       fromNumber: sql<number | null>`NULL::int`.as("fromNumber"),
       toNumber: sql<number | null>`NULL::int`.as("toNumber"),
@@ -154,13 +137,9 @@ function buildTranslationRows(userId: string, input: JobHistorySearch) {
     );
 }
 
-function buildImportRows(userId: string, input: JobHistorySearch, kind: "scrape" | "epub") {
+function buildImportRows(userId: string, input: JobHistorySearch) {
   const query = `%${escapeIlikePattern(input.q)}%`;
-  const type = (
-    kind === "scrape"
-      ? sql<"translation" | "scrape" | "epub">`'scrape'::text`
-      : sql<"translation" | "scrape" | "epub">`'epub'::text`
-  ).as("type");
+  const type = sql<"translation" | "epub">`'epub'::text`.as("type");
   return db
     .select({
       id: sql<string>`${importJobs.id}::text`.as("id"),
@@ -179,10 +158,6 @@ function buildImportRows(userId: string, input: JobHistorySearch, kind: "scrape"
       provider: sql<string | null>`NULL::text`.as("provider"),
       model: sql<string | null>`NULL::text`.as("model"),
       baseUrl: sql<string | null>`${importJobs.baseUrl}::text`.as("baseUrl"),
-      scrapeProvider:
-        kind === "scrape"
-          ? sql<string | null>`${importJobs.scrapeProvider}::text`.as("scrapeProvider")
-          : sql<string | null>`NULL::text`.as("scrapeProvider"),
       sourceFileName: sql<string | null>`${importJobs.sourceFileName}::text`.as("sourceFileName"),
       fromNumber: sql<number | null>`${importJobs.fromNumber}::int`.as("fromNumber"),
       toNumber: sql<number | null>`${importJobs.toNumber}::int`.as("toNumber"),
@@ -194,7 +169,7 @@ function buildImportRows(userId: string, input: JobHistorySearch, kind: "scrape"
     .from(importJobs)
     .innerJoin(novels, eq(importJobs.novelId, novels.id))
     .where(
-      importWhere(userId, input.status, input.q, kind, [
+      importWhere(userId, input.status, input.q, [
         ilike(importJobs.id, query),
         ilike(novels.title, query),
         ilike(importJobs.sourceFileName, query),
@@ -207,13 +182,10 @@ function buildHistoryQuery(userId: string, input: JobHistorySearch) {
   const translationRows = buildTranslationRows(userId, input);
   if (input.type === "translation") return translationRows;
 
-  const scrapeRows = buildImportRows(userId, input, "scrape");
-  if (input.type === "scrape") return scrapeRows;
-
-  const epubRows = buildImportRows(userId, input, "epub");
+  const epubRows = buildImportRows(userId, input);
   if (input.type === "epub") return epubRows;
 
-  return unionAll(translationRows, scrapeRows, epubRows);
+  return unionAll(translationRows, epubRows);
 }
 
 function mapJobHistoryRow(row: RawJobHistoryRow): JobHistoryRow {
@@ -254,31 +226,7 @@ function mapJobHistoryRow(row: RawJobHistoryRow): JobHistoryRow {
   const added = Math.max(0, row.added ?? 0);
   const skipped = Math.max(0, row.skipped ?? 0);
   const failed = Math.max(0, row.failed ?? 0);
-  const provider = normalizeScrapeProvider(row.scrapeProvider);
   const processed = added + skipped + failed;
-
-  if (row.type === "scrape") {
-    const completedWithFailures = row.status === "done" && failed > 0;
-    const scrapeRow: JobHistoryScrapeRow = {
-      ...common,
-      type: "scrape",
-      baseUrl: row.baseUrl ?? "",
-      scrapeProvider: provider,
-      fromNumber,
-      toNumber,
-      nextNumber,
-      added,
-      skipped,
-      failed,
-      completedWithFailures,
-      progress: progress(processed, Math.max(0, toNumber - fromNumber + 1)),
-      canRetry:
-        (row.status === "error" || row.status === "cancelled" || completedWithFailures) &&
-        Boolean(row.baseUrl) &&
-        provider !== null,
-    };
-    return scrapeRow;
-  }
 
   const epubRow: JobHistoryEpubRow = {
     ...common,
