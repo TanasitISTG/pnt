@@ -18,6 +18,7 @@ import {
   sweepPendingChapterNotifications,
 } from "@/lib/notifications/service.server";
 import { dispatchPendingWorkflowOutbox } from "./outbox";
+import { runMaintenanceSweepSteps } from "./maintenance-sweep";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
 import { RETRY_COUNT } from "@/lib/retry";
 import { cleanupExpiredRateLimits } from "@/lib/rate-limit";
@@ -69,18 +70,6 @@ export const translateChapterFn = inngest.createFunction(
     await step.run("finalize", () => finalizeJob(jobId, generation));
     return { done: true };
   },
-);
-
-export const dispatchWorkflowOutboxFn = inngest.createFunction(
-  {
-    id: "dispatch-workflow-outbox",
-    // Eager dispatch on the request path already delivers promptly; this sweep
-    // is the retry path, so every two minutes is enough without 1,440 runs/day.
-    triggers: { cron: "*/2 * * * *" },
-    retries: 0,
-    concurrency: { limit: 1 },
-  },
-  async ({ step }) => step.run("dispatch-pending", () => dispatchPendingWorkflowOutbox()),
 );
 
 export const importEpubChaptersFn = inngest.createFunction(
@@ -137,7 +126,9 @@ export const importEpubChaptersFn = inngest.createFunction(
 export const cleanupExpiredEpubUploadsFn = inngest.createFunction(
   {
     id: "cleanup-expired-epub-uploads",
-    triggers: { cron: "0 * * * *" },
+    // Staged archives expire slowly and nothing else waits on this cleanup; six-hourly
+    // keeps the database from waking every hour just to look at an empty queue.
+    triggers: { cron: "0 */6 * * *" },
   },
   async ({ step }) => step.run("cleanup", () => cleanupExpiredEpubUploads()),
 );
@@ -145,7 +136,9 @@ export const cleanupExpiredEpubUploadsFn = inngest.createFunction(
 export const cleanupExpiredRateLimitsFn = inngest.createFunction(
   {
     id: "cleanup-expired-rate-limits",
-    triggers: { cron: "0 * * * *" },
+    // Expired counters are inert rows, not a correctness requirement, so one pass a day
+    // is enough. Hourly runs would reset Neon's idle timer around the clock.
+    triggers: { cron: "0 4 * * *" },
   },
   async ({ step }) => {
     let deleted = 0;
@@ -205,21 +198,35 @@ export const translationEvalFn = inngest.createFunction(
 );
 
 /**
- * The clock's half of publishing: a scheduled chapter has no request behind it, and a bulk
- * release deliberately leaves its fan-out off the request, so this sweep turns "the time has
- * passed" into the same idempotent write the single-chapter path makes. It also catches a
- * publish whose inline fan-out failed, and prunes the rows a bell will never show again.
+ * The clock's half of publishing, and the retry path for the outbox, in one cron.
  *
- * Every minute rather than the outbox's two: readers wait on this one.
+ * A scheduled chapter has no request behind it, and a bulk release deliberately leaves its
+ * fan-out off the request, so the notification step turns "the time has passed" into the
+ * same idempotent write the single-chapter path makes. It also catches a publish whose
+ * inline fan-out failed. The outbox step is only the retry path; eager dispatch already
+ * delivers promptly.
+ *
+ * The two steps are independent: one failing must not keep the other from running, so
+ * `runMaintenanceSweepSteps` starts both and fails the run only after both settle, leaving
+ * the successful step memoized for the retry.
+ *
+ * Ten minutes, not every minute: Neon suspends a compute after five minutes without a
+ * query, and a one- or two-minute cron resets that timer forever. A scheduled chapter is
+ * readable as soon as `publishedAt` passes because reads filter on it; only the bell and an
+ * outbox retry wait for this sweep.
  */
-export const notificationSweepFn = inngest.createFunction(
+export const maintenanceSweepFn = inngest.createFunction(
   {
-    id: "notification-sweep",
-    triggers: { cron: "* * * * *" },
+    id: "maintenance-sweep",
+    triggers: { cron: "*/10 * * * *" },
     retries: 1,
     concurrency: { limit: 1 },
   },
-  async ({ step }) => step.run("sweep-chapters", () => sweepPendingChapterNotifications()),
+  async ({ step }) =>
+    runMaintenanceSweepSteps({
+      outbox: () => step.run("dispatch-pending", () => dispatchPendingWorkflowOutbox()),
+      notifications: () => step.run("sweep-chapters", () => sweepPendingChapterNotifications()),
+    }),
 );
 
 /**
@@ -237,8 +244,7 @@ export const notificationRetentionFn = inngest.createFunction(
 );
 
 export const functions = [
-  dispatchWorkflowOutboxFn,
-  notificationSweepFn,
+  maintenanceSweepFn,
   notificationRetentionFn,
   translateChapterFn,
   importEpubChaptersFn,
