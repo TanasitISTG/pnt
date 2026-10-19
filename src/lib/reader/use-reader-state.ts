@@ -4,10 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type {
   ReaderBookmark,
   ReaderBookmarkInput,
+  ReaderBookmarkPage,
   ReaderNovelState,
   ReaderProgress,
 } from "./types";
 import {
+  readerBookmarkListQueryKey,
+  readerBookmarkListQueryOptions,
   readerBookmarkPageQueryOptions,
   readerBookmarkPagesQueryKey,
   readerStateQueryKey,
@@ -37,7 +40,11 @@ import {
 import { useHydrated } from "@/lib/use-hydrated";
 import { nanoid } from "@/lib/utils";
 
-const FLUSH_INTERVAL_MS = 4_000;
+// A scroll sample is a write transaction. Eight seconds keeps the resume point close
+// enough without turning a reading session into hundreds of writes an hour.
+const FLUSH_INTERVAL_MS = 8_000;
+
+const EMPTY_BOOKMARKS: ReaderBookmark[] = [];
 
 const EMPTY_STATE: ReaderNovelState = {
   lastChapterId: null,
@@ -69,10 +76,14 @@ export interface ReaderStateApi extends ReaderProgressStore {
   ready: boolean;
   progress: ReaderProgress;
   bookmarks: ReaderBookmark[];
+  /** False until the dialog asks for the list; guests load theirs from storage. */
+  bookmarksLoaded: boolean;
+  bookmarksLoading: boolean;
   // Bookmark list is paged; `hasMore` stays true until the server reports no next cursor.
   bookmarksHasMore: boolean;
   bookmarksLoadingMore: boolean;
   bookmarksLoadError: unknown;
+  loadBookmarks(): Promise<void>;
   loadMoreBookmarks(): Promise<void>;
   store: ReaderProgressStore;
   addBookmark(input: ReaderBookmarkInput): boolean;
@@ -118,6 +129,25 @@ function toProgress(state: ReaderNovelState): ReaderProgress {
     readChapterIds: state.readChapterIds,
     ...(state.scrollFraction !== null ? { scrollFraction: state.scrollFraction } : {}),
   };
+}
+
+function readBookmarkList(queryClient: QueryClient, novelId: string): ReaderBookmarkPage {
+  return (
+    queryClient.getQueryData<ReaderBookmarkPage>(readerBookmarkListQueryKey(novelId)) ?? {
+      bookmarks: [],
+      nextCursor: null,
+    }
+  );
+}
+
+function updateBookmarkList(
+  queryClient: QueryClient,
+  novelId: string,
+  updater: (page: ReaderBookmarkPage) => ReaderBookmarkPage,
+): void {
+  const current = queryClient.getQueryData<ReaderBookmarkPage>(readerBookmarkListQueryKey(novelId));
+  if (!current) return;
+  queryClient.setQueryData(readerBookmarkListQueryKey(novelId), updater(current));
 }
 
 function findBookmarkAtSpot(
@@ -343,13 +373,16 @@ export function createAccountReaderStore({
       else persistFraction(fraction);
     },
     addBookmark: (input) => {
-      if (findBookmarkAtSpot(readCachedState(queryClient, novelId).bookmarks, input)) return false;
+      if (findBookmarkAtSpot(readBookmarkList(queryClient, novelId).bookmarks, input)) {
+        return false;
+      }
 
       // A unique temp id keeps two in-flight adds for the same paragraph apart until both
-      // server ids arrive.
+      // server ids arrive. The optimistic row only exists when the list has been loaded;
+      // before that there is no cache entry to lie to.
       const tempId = `pending-${nanoid()}`;
-      updateCache((state) => ({
-        ...state,
+      updateBookmarkList(queryClient, novelId, (page) => ({
+        ...page,
         bookmarks: [
           {
             id: tempId,
@@ -360,30 +393,29 @@ export function createAccountReaderStore({
             note: input.note ?? null,
             createdAt: new Date().toISOString(),
           },
-          ...state.bookmarks,
+          ...page.bookmarks,
         ],
       }));
       enqueue(async () => {
         const created = await write.createBookmark({ ...input, novelId });
         if (created.duplicate) {
           // The server already had this spot: drop the optimistic twin and take its state.
-          queryClient.setQueryData<ReaderNovelState>(readerStateQueryKey(novelId), (state) =>
-            state ? { ...state, bookmarks: state.bookmarks.filter((b) => b.id !== tempId) } : state,
-          );
-          await queryClient.invalidateQueries({ queryKey: readerStateQueryKey(novelId) });
+          updateBookmarkList(queryClient, novelId, (page) => ({
+            ...page,
+            bookmarks: page.bookmarks.filter((bookmark) => bookmark.id !== tempId),
+          }));
           invalidateBookmarkPages();
           return;
         }
-        queryClient.setQueryData<ReaderNovelState>(readerStateQueryKey(novelId), (state) => {
-          if (!state) return state;
+        updateBookmarkList(queryClient, novelId, (page) => {
           // The stored row may already be inside a loaded continuation page; adopting its id
           // again would leave a second optimistic twin behind.
-          const alreadyLoaded = state.bookmarks.some((bookmark) => bookmark.id === created.id);
+          const alreadyLoaded = page.bookmarks.some((bookmark) => bookmark.id === created.id);
           return {
-            ...state,
+            ...page,
             bookmarks: alreadyLoaded
-              ? state.bookmarks.filter((bookmark) => bookmark.id !== tempId)
-              : state.bookmarks.map((bookmark) =>
+              ? page.bookmarks.filter((bookmark) => bookmark.id !== tempId)
+              : page.bookmarks.map((bookmark) =>
                   bookmark.id === tempId ? { ...bookmark, id: created.id } : bookmark,
                 ),
           };
@@ -393,9 +425,9 @@ export function createAccountReaderStore({
       return true;
     },
     updateBookmarkNote: (bookmarkId, note) => {
-      updateCache((state) => ({
-        ...state,
-        bookmarks: state.bookmarks.map((bookmark) =>
+      updateBookmarkList(queryClient, novelId, (page) => ({
+        ...page,
+        bookmarks: page.bookmarks.map((bookmark) =>
           bookmark.id === bookmarkId ? { ...bookmark, note } : bookmark,
         ),
       }));
@@ -405,9 +437,9 @@ export function createAccountReaderStore({
       });
     },
     removeBookmark: (bookmarkId) => {
-      updateCache((state) => ({
-        ...state,
-        bookmarks: state.bookmarks.filter((bookmark) => bookmark.id !== bookmarkId),
+      updateBookmarkList(queryClient, novelId, (page) => ({
+        ...page,
+        bookmarks: page.bookmarks.filter((bookmark) => bookmark.id !== bookmarkId),
       }));
       enqueue(async () => {
         await write.removeBookmark({ bookmarkId });
@@ -439,6 +471,26 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
   const state = isAdmin ? accountState : snapshot;
   const ready = isAdmin ? query.isSuccess || query.isError : hydrated;
 
+  const identity = `${novelId}\u0000${isAdmin ? "admin" : "local"}`;
+
+  // Bookmark rows are fetched on demand. The dialog sets this; nothing else in the reader
+  // needs the list, and the page loader should never pay for it. Keying the request to
+  // the identity makes a novel or mode change return to "not requested" without an
+  // effect that would reset state after render.
+  const [bookmarksRequestFor, setBookmarksRequestFor] = useState<string | null>(null);
+  const bookmarksRequested = bookmarksRequestFor === identity;
+  const bookmarksQuery = useQuery({
+    ...readerBookmarkListQueryOptions(novelId),
+    enabled: isAdmin && bookmarksRequested,
+  });
+  const accountBookmarks = bookmarksQuery.data?.bookmarks;
+  const bookmarks = useMemo(
+    () => (isAdmin ? (accountBookmarks ?? EMPTY_BOOKMARKS) : snapshot.bookmarks),
+    [accountBookmarks, isAdmin, snapshot.bookmarks],
+  );
+  const bookmarksLoaded = isAdmin ? bookmarksQuery.isSuccess : hydrated;
+  const bookmarksLoading = isAdmin && bookmarksRequested && bookmarksQuery.isPending;
+
   const [pagingState, setPagingState] = useState<{
     identity: string;
     loading: boolean;
@@ -446,7 +498,6 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
   } | null>(null);
   const pagingGenerationRef = useRef(0);
   const loadingMoreRef = useRef(false);
-  const identity = `${novelId}\u0000${isAdmin ? "admin" : "local"}`;
   const pagingIdentityRef = useRef(identity);
 
   if (pagingState && pagingState.identity !== identity) setPagingState(null);
@@ -464,27 +515,35 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
 
   const currentPagingState = pagingState?.identity === identity ? pagingState : null;
 
-  // Continuation stays in the authoritative reader-state cache. A response only lands while
-  // that cache still holds the cursor it was requested for and no refetch intervened, so a
-  // late page can never overwrite newer state; the caller keeps the rows it already has.
+  const loadBookmarks = useCallback(async () => {
+    if (!isAdmin) return;
+    setBookmarksRequestFor(identity);
+    try {
+      await queryClient.ensureQueryData(readerBookmarkListQueryOptions(novelId));
+    } catch {
+      // The query exposes its own error to the dialog; this call only starts the read.
+    }
+  }, [identity, isAdmin, novelId, queryClient]);
+
+  // Continuation stays in the first-page cache. A response only lands while that cache
+  // still holds the cursor it was requested for, so a late page can never overwrite newer
+  // rows; the caller keeps the rows it already has.
   const loadMoreBookmarks = useCallback(async () => {
     if (!isAdmin || loadingMoreRef.current) return;
-    const cursor =
-      queryClient.getQueryData<ReaderNovelState>(readerStateQueryKey(novelId))
-        ?.bookmarkNextCursor ?? null;
+    const listKey = readerBookmarkListQueryKey(novelId);
+    const cursor = queryClient.getQueryData<ReaderBookmarkPage>(listKey)?.nextCursor ?? null;
     if (!cursor) return;
 
-    const generation = queryClient.getQueryState(readerStateQueryKey(novelId))?.dataUpdatedAt ?? 0;
+    const generation = queryClient.getQueryState(listKey)?.dataUpdatedAt ?? 0;
     const pagingGeneration = pagingGenerationRef.current;
     loadingMoreRef.current = true;
     setPagingState({ identity, loading: true, error: null });
     try {
       const page = await queryClient.fetchQuery(readerBookmarkPageQueryOptions(novelId, cursor));
       if (pagingGenerationRef.current !== pagingGeneration) return;
-      const latest = queryClient.getQueryData<ReaderNovelState>(readerStateQueryKey(novelId));
-      const latestCursor = latest?.bookmarkNextCursor ?? null;
-      const latestGeneration =
-        queryClient.getQueryState(readerStateQueryKey(novelId))?.dataUpdatedAt ?? 0;
+      const latest = queryClient.getQueryData<ReaderBookmarkPage>(listKey);
+      const latestCursor = latest?.nextCursor ?? null;
+      const latestGeneration = queryClient.getQueryState(listKey)?.dataUpdatedAt ?? 0;
       const stillExpected =
         latestCursor !== null &&
         latestCursor.createdAt === cursor.createdAt &&
@@ -492,13 +551,12 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
       if (!latest || latestGeneration !== generation || !stillExpected) return;
 
       const loadedIds = new Set(latest.bookmarks.map((bookmark) => bookmark.id));
-      queryClient.setQueryData<ReaderNovelState>(readerStateQueryKey(novelId), {
-        ...latest,
+      queryClient.setQueryData<ReaderBookmarkPage>(listKey, {
         bookmarks: [
           ...latest.bookmarks,
           ...page.bookmarks.filter((bookmark) => !loadedIds.has(bookmark.id)),
         ],
-        bookmarkNextCursor: page.nextCursor,
+        nextCursor: page.nextCursor,
       });
     } catch (error) {
       if (pagingGenerationRef.current === pagingGeneration) {
@@ -521,10 +579,15 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
       store,
       ready,
       progress: toProgress(state),
-      bookmarks: state.bookmarks,
-      bookmarksHasMore: isAdmin && state.bookmarkNextCursor !== null,
+      bookmarks,
+      bookmarksLoaded,
+      bookmarksLoading,
+      bookmarksHasMore: isAdmin && (bookmarksQuery.data?.nextCursor ?? null) !== null,
       bookmarksLoadingMore: isAdmin && (currentPagingState?.loading ?? false),
-      bookmarksLoadError: isAdmin ? (currentPagingState?.error ?? null) : null,
+      bookmarksLoadError: isAdmin
+        ? (currentPagingState?.error ?? bookmarksQuery.error ?? null)
+        : null,
+      loadBookmarks,
       loadMoreBookmarks,
       getProgress: store.getProgress,
       markOpened: store.markOpened,
@@ -535,6 +598,20 @@ export function useReaderState(novelId: string, isAdmin: boolean): ReaderStateAp
       updateBookmarkNote: store.updateBookmarkNote,
       removeBookmark: store.removeBookmark,
     }),
-    [currentPagingState, isAdmin, loadMoreBookmarks, novelId, ready, state, store],
+    [
+      bookmarks,
+      bookmarksLoaded,
+      bookmarksLoading,
+      bookmarksQuery.data?.nextCursor,
+      bookmarksQuery.error,
+      currentPagingState,
+      isAdmin,
+      loadBookmarks,
+      loadMoreBookmarks,
+      novelId,
+      ready,
+      state,
+      store,
+    ],
   );
 }

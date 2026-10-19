@@ -42,21 +42,6 @@ export async function assertNovelReadableByUser(userId: string, novelId: string)
   if (!novel) throw new SafeServerError(encodeMessage("errors.novelNotFoundOrUnauthorized"));
 }
 
-export async function assertChapterReadableByUser(
-  userId: string,
-  novelId: string,
-  chapterId: string,
-): Promise<void> {
-  const [chapter] = await db
-    .select({ id: chapters.id })
-    .from(chapters)
-    .innerJoin(novels, eq(chapters.novelId, novels.id))
-    .where(and(eq(chapters.id, chapterId), eq(chapters.novelId, novelId), chapterReadable(userId)))
-    .limit(1);
-
-  if (!chapter) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
-}
-
 const READER_BOOKMARK_PAGE_SIZE = 200;
 
 function toReaderBookmark(row: {
@@ -130,7 +115,10 @@ export async function getReaderNovelStateForUser(
   userId: string,
   novelId: string,
 ): Promise<ReaderNovelState> {
-  const [progressRows, readRows, bookmarkPage] = await Promise.all([
+  // Bookmarks are a separate, on-demand read. The page loader needs progress and read
+  // marks, not up to two hundred excerpts and notes; the dialog asks for those when it
+  // opens. The empty fields keep the state shape stable for the local-storage store.
+  const [progressRows, readRows] = await Promise.all([
     db
       .select({
         lastChapterId: readerProgress.lastChapterId,
@@ -144,7 +132,6 @@ export async function getReaderNovelStateForUser(
       .from(readerChapterReads)
       .where(and(eq(readerChapterReads.userId, userId), eq(readerChapterReads.novelId, novelId)))
       .orderBy(asc(readerChapterReads.readAt)),
-    getReaderBookmarksForUser(userId, novelId, null),
   ]);
 
   const progress = progressRows[0];
@@ -153,8 +140,8 @@ export async function getReaderNovelStateForUser(
     lastChapterId: progress?.lastChapterId ?? null,
     scrollFraction: progress?.scrollFraction ?? null,
     readChapterIds: readRows.map((row) => row.chapterId),
-    bookmarks: bookmarkPage.bookmarks,
-    bookmarkNextCursor: bookmarkPage.nextCursor,
+    bookmarks: [],
+    bookmarkNextCursor: null,
   };
 }
 
@@ -168,17 +155,10 @@ async function lockReaderChapter(
   // Owners keep taking the novel-row gate: the ordering rule that gates novel
   // mutations against descendant locks is theirs to respect. A reader who does not own
   // the novel is not mutating it, and an exclusive row lock on a popular published
-  // novel would serialize every reader's scroll flush behind a single lock, so they
-  // instead prove read visibility and rely on the chapter key-share lock below.
-  const owned = await lockNovelForMutation(tx, novelId, userId);
-  if (!owned) {
-    const [readable] = await tx
-      .select({ id: novels.id })
-      .from(novels)
-      .where(and(eq(novels.id, novelId), novelReadable(userId)))
-      .limit(1);
-    if (!readable) throw new SafeServerError(encodeMessage("errors.chapterNotFoundOrUnauthorized"));
-  }
+  // novel would serialize every reader's scroll flush behind a single lock. They prove
+  // read visibility in the chapter query itself, which joins the novel and applies the
+  // same `chapterReadable` rule, so a second visibility read is pure round-trip cost.
+  await lockNovelForMutation(tx, novelId, userId);
 
   const [chapter] = await tx
     .select({ id: chapters.id })

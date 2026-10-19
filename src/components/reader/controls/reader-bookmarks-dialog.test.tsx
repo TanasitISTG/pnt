@@ -24,11 +24,13 @@ function DialogHarness({
   hasMore = true,
   error = null,
   loadMore = async () => undefined,
+  loadBookmarks = async () => undefined,
 }: {
   initialBookmarks?: ReaderBookmark[];
   hasMore?: boolean;
   error?: unknown;
   loadMore?: () => Promise<void>;
+  loadBookmarks?: () => Promise<void>;
 }) {
   const [bookmarks, setBookmarks] = useState(initialBookmarks);
   const progress = { lastChapterId: "chapter-1", readChapterIds: [] };
@@ -46,9 +48,12 @@ function DialogHarness({
     progress,
     store,
     bookmarks,
+    bookmarksLoaded: true,
+    bookmarksLoading: false,
     bookmarksHasMore: hasMore,
     bookmarksLoadingMore: false,
     bookmarksLoadError: error,
+    loadBookmarks,
     loadMoreBookmarks: loadMore,
     addBookmark: () => false,
     updateBookmarkNote: () => undefined,
@@ -80,6 +85,14 @@ function renderDialog(props: Parameters<typeof DialogHarness>[0] = {}) {
 afterEach(cleanup);
 
 describe("ReaderBookmarksDialog pagination", () => {
+  it("asks for the list when it opens, because the page read does not carry it", async () => {
+    const loadBookmarks = vi.fn(async () => undefined);
+    renderDialog({ loadBookmarks });
+    await screen.findByRole("dialog");
+
+    expect(loadBookmarks).toHaveBeenCalledOnce();
+  });
+
   it("keeps older bookmarks reachable after the last loaded bookmark is removed", async () => {
     const loadMore = vi.fn(async () => undefined);
     renderDialog({ loadMore });

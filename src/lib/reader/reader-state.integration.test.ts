@@ -362,6 +362,15 @@ describeIntegration("reader state service", () => {
       bookmarks: [],
       bookmarkNextCursor: null,
     });
+
+    // The page read carries progress only: the dialog asks for the list separately.
+    const ownState = await getReaderNovelStateForUser(fixture.userId, fixture.novelId);
+    expect(ownState.lastChapterId).toBe(fixture.chapterIds[0]);
+    expect(ownState.bookmarks).toEqual([]);
+    expect(ownState.bookmarkNextCursor).toBeNull();
+    expect(
+      (await getReaderBookmarksForUser(fixture.userId, fixture.novelId, null)).bookmarks,
+    ).toHaveLength(1);
   });
 
   it("returns the existing bookmark instead of duplicating the same spot", async () => {
@@ -384,7 +393,7 @@ describeIntegration("reader state service", () => {
     expect(first.duplicate).toBe(false);
     expect(second).toEqual({ id: first.id, duplicate: true });
 
-    const state = await getReaderNovelStateForUser(fixture.userId, fixture.novelId);
+    const state = await getReaderBookmarksForUser(fixture.userId, fixture.novelId, null);
     expect(state.bookmarks).toHaveLength(1);
     expect(state.bookmarks[0]).toMatchObject({ excerpt: "same spot", note: "original note" });
   });
@@ -407,7 +416,7 @@ describeIntegration("reader state service", () => {
     expect(results[0].id).toBe(results[1].id);
     expect(results.map(({ duplicate }) => duplicate).toSorted()).toEqual([false, true]);
     const winnerIndex = results.findIndex(({ duplicate }) => !duplicate);
-    const state = await getReaderNovelStateForUser(fixture.userId, fixture.novelId);
+    const state = await getReaderBookmarksForUser(fixture.userId, fixture.novelId, null);
     expect(state.bookmarks).toMatchObject([
       {
         id: results[winnerIndex].id,
@@ -448,7 +457,7 @@ describeIntegration("reader state service", () => {
     expect(raw.duplicate).toBe(false);
     expect(translatedAgain).toEqual({ id: translated.id, duplicate: true });
 
-    const state = await getReaderNovelStateForUser(fixture.userId, fixture.novelId);
+    const state = await getReaderBookmarksForUser(fixture.userId, fixture.novelId, null);
     expect(state.bookmarks).toHaveLength(3);
   });
 
@@ -471,7 +480,7 @@ describeIntegration("reader state service", () => {
       note: null,
     });
 
-    const state = await getReaderNovelStateForUser(fixture.userId, fixture.novelId);
+    const state = await getReaderBookmarksForUser(fixture.userId, fixture.novelId, null);
     expect(state.bookmarks.map((bookmark) => bookmark.excerpt)).toEqual(["newer", "older"]);
     expect(state.bookmarks[1]).toMatchObject({ id: first.id, note: "keep this", column: null });
     expect(state.bookmarks[0].column).toBe("raw");
@@ -575,14 +584,14 @@ describeIntegration("reader state service", () => {
     expect(await updateReaderBookmarkNoteForUser(fixture.otherUserId, id, "hijacked")).toBe(false);
     expect(await deleteReaderBookmarkForUser(fixture.otherUserId, id)).toBe(false);
 
-    const state = await getReaderNovelStateForUser(fixture.userId, fixture.novelId);
+    const state = await getReaderBookmarksForUser(fixture.userId, fixture.novelId, null);
     expect(state.bookmarks[0].note).toBeNull();
 
     expect(await updateReaderBookmarkNoteForUser(fixture.userId, id, "mine")).toBe(true);
     expect(await deleteReaderBookmarkForUser(fixture.userId, id)).toBe(true);
-    expect((await getReaderNovelStateForUser(fixture.userId, fixture.novelId)).bookmarks).toEqual(
-      [],
-    );
+    expect(
+      (await getReaderBookmarksForUser(fixture.userId, fixture.novelId, null)).bookmarks,
+    ).toEqual([]);
   });
   it.each(["save", "delete"] as const)(
     "keeps a deleted pointer cleared when %s wins the novel gate",
@@ -672,7 +681,9 @@ describeIntegration("reader state service", () => {
 
     const state = await getReaderNovelStateForUser(fixture.userId, fixture.novelId);
     expect(state.readChapterIds).toEqual([]);
-    expect(state.bookmarks).toEqual([]);
+    expect(
+      (await getReaderBookmarksForUser(fixture.userId, fixture.novelId, null)).bookmarks,
+    ).toEqual([]);
     expect(state.lastChapterId).toBeNull();
     expect(state.scrollFraction).toBe(0);
     await expect(

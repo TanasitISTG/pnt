@@ -6,7 +6,6 @@ import { encodeMessage } from "@/lib/i18n/message-code";
 import { ensureSession, ensureSessionForRead } from "@/lib/auth/functions";
 import { SafeServerError, withSafeHandler } from "@/lib/server-fn-error";
 import {
-  assertChapterReadableByUser,
   assertNovelReadableByUser,
   createReaderBookmarkForUser,
   deleteReaderBookmarkForUser,
@@ -52,7 +51,8 @@ export const setReaderChapter = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertChapterReadableByUser(session.user.id, data.novelId, data.chapterId);
+      // The service locks the chapter and proves read visibility in the same statement;
+      // a separate check here would authorize the same reader twice on every flush.
       await setReaderChapterForUser(session.user.id, data.novelId, data.chapterId);
       return { success: true };
     });
@@ -63,7 +63,6 @@ export const saveReaderPosition = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertChapterReadableByUser(session.user.id, data.novelId, data.chapterId);
       await saveReaderPositionForUser(
         session.user.id,
         data.novelId,
@@ -79,7 +78,6 @@ export const markReaderChapterRead = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertChapterReadableByUser(session.user.id, data.novelId, data.chapterId);
       await markReaderChapterReadForUser(session.user.id, data.novelId, data.chapterId);
       return { success: true };
     });
@@ -90,7 +88,6 @@ export const createBookmark = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return withSafeHandler(async () => {
       const session = await ensureSession();
-      await assertChapterReadableByUser(session.user.id, data.novelId, data.chapterId);
       return createReaderBookmarkForUser(session.user.id, data.novelId, data);
     });
   });

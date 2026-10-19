@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, queryOptions } from "@tanstack/react-
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { readerStateQueryKey } from "./query";
+import { readerBookmarkListQueryKey, readerStateQueryKey } from "./query";
 import type * as ReaderQuery from "./query";
 import type { ReaderBookmarkPage, ReaderNovelState } from "./types";
 import {
@@ -16,12 +16,23 @@ import { getReaderProgress } from "./progress";
 // Continuation pages resolve from this registry so the paging hook can be driven without a
 // server: the key is the cursor id the hook is continuing from.
 const bookmarkPages = vi.hoisted(() => new Map<string, () => Promise<ReaderBookmarkPage>>());
+const bookmarkLists = vi.hoisted(() => new Map<string, () => Promise<ReaderBookmarkPage>>());
 const noopSetChapter = async () => ({});
 
 vi.mock("./query", async (importOriginal) => {
   const actual = await importOriginal<typeof ReaderQuery>();
   return {
     ...actual,
+    readerBookmarkListQueryOptions: (novelId: string) =>
+      queryOptions({
+        queryKey: actual.readerBookmarkListQueryKey(novelId),
+        queryFn: async (): Promise<ReaderBookmarkPage> => {
+          const load = bookmarkLists.get(novelId);
+          if (!load) throw new Error(`unexpected bookmark list ${novelId}`);
+          return load();
+        },
+        staleTime: 0,
+      }),
     readerBookmarkPageQueryOptions: (novelId: string, cursor: { createdAt: string; id: string }) =>
       queryOptions({
         queryKey: [...actual.readerBookmarkPagesQueryKey(novelId), cursor.createdAt, cursor.id],
@@ -74,12 +85,26 @@ function setupAccountStore(
 ) {
   const queryClient = new QueryClient();
   queryClient.setQueryData(readerStateQueryKey("novel"), SERVER_STATE);
+  // The dialog has asked for the first page; bookmark writes update that cache.
+  queryClient.setQueryData(readerBookmarkListQueryKey("novel"), {
+    bookmarks: [],
+    nextCursor: null,
+  });
   const store = createAccountReaderStore({ novelId: "novel", queryClient, persist });
   return { queryClient, store };
 }
 
 function cachedState(queryClient: QueryClient): ReaderNovelState {
   return queryClient.getQueryData(readerStateQueryKey("novel")) ?? SERVER_STATE;
+}
+
+function cachedBookmarks(queryClient: QueryClient, novelId = "novel") {
+  return (
+    queryClient.getQueryData<ReaderBookmarkPage>(readerBookmarkListQueryKey(novelId)) ?? {
+      bookmarks: [],
+      nextCursor: null,
+    }
+  );
 }
 
 beforeEach(() => {
@@ -208,7 +233,7 @@ describe("createAccountReaderStore", () => {
     store.saveScrollFraction(0.6);
     expect(savePosition).toHaveBeenCalledTimes(1);
 
-    clock = 5_000;
+    clock = 9_000;
     await vi.runOnlyPendingTimersAsync();
     expect(savePosition).toHaveBeenCalledTimes(2);
     expect(savePosition).toHaveBeenLastCalledWith({
@@ -218,7 +243,7 @@ describe("createAccountReaderStore", () => {
     });
   });
 
-  it("persists a final tiny movement at the original four-second deadline", async () => {
+  it("persists a final tiny movement at the original eight-second deadline", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
     let durableFraction = 0.2;
@@ -234,7 +259,7 @@ describe("createAccountReaderStore", () => {
 
     await vi.advanceTimersByTimeAsync(500);
     store.saveScrollFraction(0.61);
-    await vi.advanceTimersByTimeAsync(3_499);
+    await vi.advanceTimersByTimeAsync(7_499);
     expect(durableFraction).toBe(0.6);
     expect(savePosition).toHaveBeenCalledTimes(1);
 
@@ -260,12 +285,12 @@ describe("createAccountReaderStore", () => {
     store.saveScrollFraction(0.66);
     await vi.advanceTimersByTimeAsync(2_000);
     store.saveScrollFraction(0.69);
-    await vi.advanceTimersByTimeAsync(499);
+    await vi.advanceTimersByTimeAsync(4_499);
     expect(durableFractions).toEqual([0.6]);
 
     await vi.advanceTimersByTimeAsync(1);
     expect(durableFractions).toEqual([0.6, 0.69]);
-    await vi.advanceTimersByTimeAsync(4_000);
+    await vi.advanceTimersByTimeAsync(8_000);
     expect(durableFractions).toEqual([0.6, 0.69]);
   });
 
@@ -507,7 +532,7 @@ describe("createAccountReaderStore", () => {
       }),
     ).toBe(true);
 
-    const optimistic = cachedState(queryClient).bookmarks;
+    const optimistic = cachedBookmarks(queryClient).bookmarks;
     expect(optimistic).toHaveLength(1);
     expect(optimistic[0].excerpt).toBe("excerpt");
 
@@ -519,7 +544,7 @@ describe("createAccountReaderStore", () => {
       column: "translated",
       excerpt: "excerpt",
     });
-    expect(cachedState(queryClient).bookmarks[0].id).toBe("stored-id");
+    expect(cachedBookmarks(queryClient).bookmarks[0].id).toBe("stored-id");
   });
 
   it("keeps two in-flight bookmarks for different spots apart", async () => {
@@ -533,7 +558,7 @@ describe("createAccountReaderStore", () => {
     store.addBookmark({ ...base, paragraphIndex: 4, excerpt: "first" });
     store.addBookmark({ ...base, paragraphIndex: 5, excerpt: "second" });
 
-    const optimistic = cachedState(queryClient).bookmarks;
+    const optimistic = cachedBookmarks(queryClient).bookmarks;
     expect(optimistic).toHaveLength(2);
     expect(new Set(optimistic.map((entry) => entry.id)).size).toBe(2);
 
@@ -541,7 +566,7 @@ describe("createAccountReaderStore", () => {
     await flushPromises();
 
     expect(
-      cachedState(queryClient)
+      cachedBookmarks(queryClient)
         .bookmarks.map((entry) => entry.id)
         .toSorted(),
     ).toEqual(["first-id", "second-id"]);
@@ -561,7 +586,7 @@ describe("createAccountReaderStore", () => {
     await flushPromises();
     expect(store.addBookmark(input)).toBe(false);
 
-    expect(cachedState(queryClient).bookmarks).toHaveLength(1);
+    expect(cachedBookmarks(queryClient).bookmarks).toHaveLength(1);
     expect(createBookmark).toHaveBeenCalledTimes(1);
   });
 
@@ -576,21 +601,21 @@ describe("createAccountReaderStore", () => {
       column: null,
       excerpt: "excerpt",
     });
-    expect(cachedState(queryClient).bookmarks).toHaveLength(1);
+    expect(cachedBookmarks(queryClient).bookmarks).toHaveLength(1);
 
     await flushPromises();
     await flushPromises();
 
-    expect(cachedState(queryClient).bookmarks).toEqual([]);
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: readerStateQueryKey("novel") });
+    expect(cachedBookmarks(queryClient).bookmarks).toEqual([]);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["readerBookmarks", "novel"] });
   });
 
   it("updates and removes bookmarks optimistically while persisting both", async () => {
     const updateBookmarkNote = vi.fn(async () => ({}));
     const removeBookmark = vi.fn(async () => ({}));
     const queryClient = new QueryClient();
-    queryClient.setQueryData(readerStateQueryKey("novel"), {
-      ...SERVER_STATE,
+    queryClient.setQueryData(readerStateQueryKey("novel"), SERVER_STATE);
+    queryClient.setQueryData(readerBookmarkListQueryKey("novel"), {
       bookmarks: [
         {
           id: "bookmark-1",
@@ -602,6 +627,7 @@ describe("createAccountReaderStore", () => {
           createdAt: "2026-01-01T00:00:00.000Z",
         },
       ],
+      nextCursor: null,
     });
     const store = createAccountReaderStore({
       novelId: "novel",
@@ -610,10 +636,10 @@ describe("createAccountReaderStore", () => {
     });
 
     store.updateBookmarkNote("bookmark-1", "a note");
-    expect(cachedState(queryClient).bookmarks[0].note).toBe("a note");
+    expect(cachedBookmarks(queryClient).bookmarks[0].note).toBe("a note");
 
     store.removeBookmark("bookmark-1");
-    expect(cachedState(queryClient).bookmarks).toHaveLength(0);
+    expect(cachedBookmarks(queryClient).bookmarks).toHaveLength(0);
 
     await flushPromises();
     expect(updateBookmarkNote).toHaveBeenCalledWith({ bookmarkId: "bookmark-1", note: "a note" });
@@ -750,15 +776,22 @@ describe("useReaderState", () => {
     expect(result.current.progress.readChapterIds).toEqual([]);
   });
 
-  it("reads progress and bookmarks from the cached account state", () => {
+  it("does not request bookmarks until the dialog asks for them", async () => {
+    bookmarkLists.set("novel", async () => ({
+      bookmarks: [bookmark("bookmark-1")],
+      nextCursor: null,
+    }));
     const { result } = renderReaderState("novel", true);
 
-    expect(result.current.progress).toEqual({
-      lastChapterId: "chapter-1",
-      readChapterIds: ["chapter-1"],
-      scrollFraction: 0.4,
-    });
     expect(result.current.bookmarks).toEqual([]);
+    expect(result.current.bookmarksLoaded).toBe(false);
+
+    await act(async () => {
+      await result.current.loadBookmarks();
+    });
+
+    expect(result.current.bookmarks.map((entry) => entry.id)).toEqual(["bookmark-1"]);
+    expect(result.current.bookmarksLoaded).toBe(true);
   });
 });
 
@@ -780,10 +813,9 @@ describe("useReaderState bookmark paging", () => {
   function renderPagingReader(admin = true) {
     // Retries stay off so a failed page surfaces once, the way a user-visible retry behaves.
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    queryClient.setQueryData(readerStateQueryKey("novel"), {
-      ...SERVER_STATE,
+    queryClient.setQueryData(readerBookmarkListQueryKey("novel"), {
       bookmarks: [bookmark("bookmark-1")],
-      bookmarkNextCursor: FIRST_CURSOR,
+      nextCursor: FIRST_CURSOR,
     });
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -799,6 +831,7 @@ describe("useReaderState bookmark paging", () => {
 
   afterEach(() => {
     bookmarkPages.clear();
+    bookmarkLists.clear();
   });
 
   it("appends the next page by id and advances the cursor", async () => {
@@ -813,12 +846,12 @@ describe("useReaderState bookmark paging", () => {
       await result.current.loadMoreBookmarks();
     });
 
-    expect(cachedState(queryClient).bookmarks.map((entry) => entry.id)).toEqual([
+    expect(cachedBookmarks(queryClient).bookmarks.map((entry) => entry.id)).toEqual([
       "bookmark-1",
       "bookmark-2",
       "bookmark-3",
     ]);
-    expect(cachedState(queryClient).bookmarkNextCursor).toEqual({
+    expect(cachedBookmarks(queryClient).nextCursor).toEqual({
       createdAt: "2025-12-31 00:00:00",
       id: "bookmark-3",
     });
@@ -836,8 +869,8 @@ describe("useReaderState bookmark paging", () => {
       await result.current.loadMoreBookmarks();
     });
 
-    expect(cachedState(queryClient).bookmarks.map((entry) => entry.id)).toEqual(["bookmark-1"]);
-    expect(cachedState(queryClient).bookmarkNextCursor).toEqual(FIRST_CURSOR);
+    expect(cachedBookmarks(queryClient).bookmarks.map((entry) => entry.id)).toEqual(["bookmark-1"]);
+    expect(cachedBookmarks(queryClient).nextCursor).toEqual(FIRST_CURSOR);
     expect(result.current.bookmarksLoadError).toBeInstanceOf(Error);
     expect(result.current.bookmarksHasMore).toBe(true);
     expect(result.current.bookmarksLoadingMore).toBe(false);
@@ -878,11 +911,10 @@ describe("useReaderState bookmark paging", () => {
       pending = result.current.loadMoreBookmarks();
     });
 
-    // An authoritative refetch replaces accumulated pages with a fresh first page.
-    queryClient.setQueryData(readerStateQueryKey("novel"), {
-      ...SERVER_STATE,
+    // A refetch of the first page replaces accumulated pages with a fresh list.
+    queryClient.setQueryData(readerBookmarkListQueryKey("novel"), {
       bookmarks: [bookmark("bookmark-9")],
-      bookmarkNextCursor: null,
+      nextCursor: null,
     });
 
     await act(async () => {
@@ -890,8 +922,8 @@ describe("useReaderState bookmark paging", () => {
       await pending;
     });
 
-    expect(cachedState(queryClient).bookmarks.map((entry) => entry.id)).toEqual(["bookmark-9"]);
-    expect(cachedState(queryClient).bookmarkNextCursor).toBeNull();
+    expect(cachedBookmarks(queryClient).bookmarks.map((entry) => entry.id)).toEqual(["bookmark-9"]);
+    expect(cachedBookmarks(queryClient).nextCursor).toBeNull();
   });
 
   it("retains continuation after every loaded bookmark is removed", async () => {
@@ -916,7 +948,9 @@ describe("useReaderState bookmark paging", () => {
     await act(async () => {
       await result.current.loadMoreBookmarks();
     });
-    expect(cachedState(queryClient).bookmarks.map((entry) => entry.id)).toEqual(["older-bookmark"]);
+    expect(cachedBookmarks(queryClient).bookmarks.map((entry) => entry.id)).toEqual([
+      "older-bookmark",
+    ]);
   });
 
   it("clears a page error when switching novels or leaving account mode", async () => {
@@ -924,9 +958,9 @@ describe("useReaderState bookmark paging", () => {
       throw new Error("offline");
     });
     const { queryClient, result, rerender } = renderPagingReader();
-    queryClient.setQueryData(readerStateQueryKey("other-novel"), {
-      ...SERVER_STATE,
-      bookmarkNextCursor: FIRST_CURSOR,
+    queryClient.setQueryData(readerBookmarkListQueryKey("other-novel"), {
+      bookmarks: [],
+      nextCursor: FIRST_CURSOR,
     });
 
     await act(async () => {
@@ -954,9 +988,9 @@ describe("useReaderState bookmark paging", () => {
     const loadCurrent = vi.fn(() => current.promise);
     bookmarkPages.set("other-cursor", loadCurrent);
     const { queryClient, result, rerender } = renderPagingReader();
-    queryClient.setQueryData(readerStateQueryKey("other-novel"), {
-      ...SERVER_STATE,
-      bookmarkNextCursor: { ...FIRST_CURSOR, id: "other-cursor" },
+    queryClient.setQueryData(readerBookmarkListQueryKey("other-novel"), {
+      bookmarks: [],
+      nextCursor: { ...FIRST_CURSOR, id: "other-cursor" },
     });
     let previousRequest!: Promise<void>;
     act(() => {

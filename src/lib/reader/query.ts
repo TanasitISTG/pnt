@@ -18,6 +18,18 @@ export const readerStateQueryKey = (novelId: string) => ["readerState", novelId]
 export const readerBookmarkPagesQueryKey = (novelId: string) =>
   ["readerBookmarks", novelId] as const;
 
+export const readerBookmarkListQueryKey = (novelId: string) =>
+  [...readerBookmarkPagesQueryKey(novelId), "first"] as const;
+
+// The first page is requested only when the bookmark dialog opens, so a novel or chapter
+// page never transfers a reader's whole bookmark list just to render progress.
+export const readerBookmarkListQueryOptions = (novelId: string) =>
+  queryOptions({
+    queryKey: readerBookmarkListQueryKey(novelId),
+    queryFn: () => getReaderBookmarks({ data: { novelId, cursor: null } }),
+    staleTime: 30_000,
+  });
+
 export const readerBookmarkPageQueryOptions = (novelId: string, cursor: ReaderBookmarkCursor) =>
   queryOptions({
     queryKey: [...readerBookmarkPagesQueryKey(novelId), cursor.createdAt, cursor.id],

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Bookmark, Check, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
@@ -76,6 +76,13 @@ export function ReaderBookmarksDialog({
   const { bookmarks } = readerState;
   const sortedBookmarks = useMemo(() => sortBookmarks(bookmarks, chapters), [bookmarks, chapters]);
 
+  // The list is not part of the page's reader-state read; opening the dialog is the point
+  // at which a reader has asked to see it.
+  const loadBookmarks = readerState.loadBookmarks;
+  useEffect(() => {
+    if (open && signedIn) void loadBookmarks();
+  }, [loadBookmarks, open, signedIn]);
+
   const goToBookmark = async (bookmark: ReaderBookmark) => {
     const paragraphIndex = await resolveBookmarkParagraphIndex(
       (targetChapterId) =>
@@ -140,8 +147,14 @@ export function ReaderBookmarksDialog({
           {t("bookmarkThisSpot")}
         </Button>
 
-        {sortedBookmarks.length === 0 ? (
-          !readerState.bookmarksHasMore && !readerState.bookmarksLoadError ? (
+        {readerState.bookmarksLoading ? (
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {t("loading")}
+          </p>
+        ) : sortedBookmarks.length === 0 ? (
+          readerState.bookmarksLoaded &&
+          !readerState.bookmarksHasMore &&
+          !readerState.bookmarksLoadError ? (
             <p className="text-sm text-muted-foreground">{t("bookmarksEmpty")}</p>
           ) : null
         ) : (
@@ -237,7 +250,11 @@ export function ReaderBookmarksDialog({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void readerState.loadMoreBookmarks()}
+              onClick={() =>
+                void (readerState.bookmarksLoaded
+                  ? readerState.loadMoreBookmarks()
+                  : readerState.loadBookmarks())
+              }
             >
               {t("retry")}
             </Button>
