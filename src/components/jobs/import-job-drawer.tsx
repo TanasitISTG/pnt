@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "use-intl";
 
 import type { JobsTranslator } from "@/components/jobs/job-history-columns";
 import { DateCell } from "@/components/jobs/date-cell";
+import { JobErrorText } from "@/components/jobs/job-error-text";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { QueryErrorState } from "@/components/query-error-state";
 import { Badge } from "@/components/ui/badge";
@@ -116,7 +117,7 @@ function ImportJobDetailsContent({ job, updating }: { job: ImportJobDetails; upd
           role="alert"
         >
           <p className="font-semibold">{t("workerError")}</p>
-          <p className="mt-1 break-words whitespace-pre-wrap">{job.error}</p>
+          <JobErrorText message={job.error} className="mt-1 whitespace-pre-wrap break-words" />
         </div>
       ) : null}
       {showReupload ? (

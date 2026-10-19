@@ -20,9 +20,16 @@ interface MobileNavProps {
 }
 
 interface MobileNavLink {
-  to: "/{-$locale}/catalog" | "/library" | "/jobs" | "/settings" | "/settings/account" | "/admin";
+  to:
+    | "/{-$locale}/catalog"
+    | "/library"
+    | "/jobs"
+    | "/audience"
+    | "/settings"
+    | "/settings/account"
+    | "/admin";
   /** A key in the `shell` catalog, so the drawer names each destination in the reader's language. */
-  labelKey: "catalog" | "library" | "activity" | "account" | "settings" | "admin";
+  labelKey: "catalog" | "library" | "activity" | "audience" | "account" | "settings" | "admin";
   /** Only rendered for a signed-in session. */
   requiresSession?: boolean;
   /** Rendered for operators only, after the account destinations. */
@@ -33,6 +40,7 @@ const MOBILE_LINKS: readonly MobileNavLink[] = [
   { to: "/{-$locale}/catalog", labelKey: "catalog" },
   { to: "/library", labelKey: "library", requiresSession: true },
   { to: "/jobs", labelKey: "activity", requiresSession: true },
+  { to: "/audience", labelKey: "audience", requiresSession: true },
   { to: "/settings/account", labelKey: "account", requiresSession: true },
   { to: "/settings", labelKey: "settings", requiresSession: true },
   { to: "/admin", labelKey: "admin", requiresSession: true, requiresAdmin: true },

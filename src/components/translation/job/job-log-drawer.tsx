@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "use-intl";
 
 import { ChapterStatusBadge } from "@/components/chapters/table/chapter-status-badge";
 import type { ChapterStatus } from "@/components/chapters/types";
+import { JobErrorText } from "@/components/jobs/job-error-text";
 import { QueryErrorState } from "@/components/query-error-state";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -407,7 +408,7 @@ export function JobLogDrawer({ jobId, chapterId, open, onOpenChange }: JobLogDra
                     role="alert"
                   >
                     <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                    <span className="break-all">{jobData.error}</span>
+                    <JobErrorText message={jobData.error} className="break-all" />
                   </div>
                 ) : null}
                 <LogConsole logs={logs} mounted={mounted} />

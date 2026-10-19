@@ -28,6 +28,7 @@ export interface ChapterTableProps {
   onStartTranslate: (chapterId: string, mode: TranslationStartMode) => void;
   onRequestRetranslate: (chapterId: string) => void;
   onViewLogs: (chapterId: string) => void;
+  onViewHistory: (chapterId: string) => void;
   titleEdit: TitleEditState | null;
   onSaveTitle: (value: string) => Promise<void>;
   onStartEdit: (chapter: ChapterRow) => void;
@@ -54,6 +55,7 @@ export const ChapterTable = memo(function ChapterTable({
   onStartTranslate,
   onRequestRetranslate,
   onViewLogs,
+  onViewHistory,
   titleEdit,
   onSaveTitle,
   onStartEdit,
@@ -90,6 +92,7 @@ export const ChapterTable = memo(function ChapterTable({
         onStartTranslate={onStartTranslate}
         onRequestRetranslate={onRequestRetranslate}
         onViewLogs={onViewLogs}
+        onViewHistory={onViewHistory}
         onSaveTitle={titleEditForRow ? onSaveTitle : undefined}
         onStartEdit={onStartEdit}
         onCancelEdit={onCancelEdit}

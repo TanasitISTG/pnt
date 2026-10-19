@@ -85,3 +85,23 @@ export function captureException(error: unknown) {
     }
   });
 }
+
+/**
+ * Captures a diagnostic that is not an error the browser threw.
+ *
+ * Some defects never surface as an exception — a page that stops scrolling because a frame
+ * never ran, for instance — so there is nothing to attach a stack to. This sends the name
+ * and its flat properties under the same consent and production rules as everything else,
+ * which is the only way such a report reaches us from a real reader.
+ */
+export function captureEvent(
+  name: string,
+  properties: Record<string, string | number | boolean | null>,
+) {
+  if (getConsent() !== "granted") return;
+  void getPostHogClient().then((posthog) => {
+    if (getConsent() === "granted") {
+      posthog?.capture(name, properties);
+    }
+  });
+}

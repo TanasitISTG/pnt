@@ -26,6 +26,7 @@ function createChapters(count: number): ChapterRow[] {
     title: `Chapter ${index + 1}`,
     translatedTitle: null,
     hasTranslation: true,
+    hasHistory: true,
     status: "translated",
     rawCharCount: 1000,
     publishedAt: null,

@@ -5,6 +5,7 @@ import { formatCost } from "@/lib/utils";
 import { ChapterReorderDialog } from "@/components/chapters/reorder/chapter-reorder-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ChapterHistoryDialog } from "@/components/chapters/history/chapter-history-dialog";
 import { JobLogDrawer } from "@/components/translation/job/job-log-drawer";
 import { formatNumber } from "@/lib/i18n/format";
 import type { ChapterRow } from "@/components/chapters/types";
@@ -40,6 +41,10 @@ export interface NovelDetailDialogData {
     chapterId: string | null;
     setChapterId: (chapterId: string | null) => void;
   };
+  history: {
+    chapter: ChapterRow | null;
+    setChapterId: (chapterId: string | null) => void;
+  };
   retranslate: {
     chapterId: string | null;
     setChapterId: (chapterId: string | null) => void;
@@ -69,7 +74,7 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
   const t = useTranslations("studio");
   const locale = useLocale();
   const { novelId, reorder, deleteNovel, deleteTranslations, deleteChapter } = detail;
-  const { logs, retranslate, batchRetranslate, stopSelected } = detail;
+  const { logs, history, retranslate, batchRetranslate, stopSelected } = detail;
   const selectedTranslatedIds = batchRetranslate.chapterIds;
   const selectedTranslatedCount = selectedTranslatedIds.length;
   const selectedActiveCount = stopSelected.count;
@@ -191,6 +196,11 @@ export function NovelDetailDialogs({ detail }: NovelDetailDialogsProps) {
         chapterId={logs.chapterId}
         open={logs.chapterId !== null}
         onOpenChange={(open) => !open && logs.setChapterId(null)}
+      />
+      <ChapterHistoryDialog
+        chapter={history.chapter}
+        novelId={novelId}
+        onOpenChange={(open) => !open && history.setChapterId(null)}
       />
       <ConfirmDialog
         title={t("overwriteTitle")}

@@ -2,6 +2,7 @@ import * as React from "react";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 
 import { cn } from "@/lib/utils";
+import { OverlayScrollLockProbe } from "@/components/ui/overlay-scroll-lock";
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react";
 
 const Select = SelectPrimitive.Root;
@@ -89,6 +90,7 @@ function SelectContent({
           )}
           {...props}
         >
+          <OverlayScrollLockProbe slot="select-content" />
           <SelectScrollUpButton />
           <SelectPrimitive.List>{children}</SelectPrimitive.List>
           <SelectScrollDownButton />

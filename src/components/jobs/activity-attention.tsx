@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslations } from "use-intl";
 
 import { ActivityBand } from "@/components/jobs/activity-band";
+import { JobErrorText } from "@/components/jobs/job-error-text";
 import { jobHistoryColumnCopy } from "@/components/jobs/job-history-columns";
 import { Button } from "@/components/ui/button";
 import type { JobHistoryRow } from "@/lib/job-dashboard/contracts";
@@ -68,13 +69,10 @@ export function ActivityAttention({
                 <p className="mt-0.5 truncate text-caption text-muted-foreground">
                   {copy.secondaryLine(job)} · {copy.type[job.type]}
                 </p>
+                {/* The stored error is a message code, so it is resolved here like anywhere
+                    else the same column is read, rather than printed as the code. */}
                 {job.error ? (
-                  <p
-                    className="mt-1 line-clamp-2 text-caption text-destructive-text"
-                    title={job.error}
-                  >
-                    {job.error}
-                  </p>
+                  <JobErrorText message={job.error} className="mt-1 line-clamp-2" />
                 ) : null}
               </div>
               <div className="flex shrink-0 gap-2">

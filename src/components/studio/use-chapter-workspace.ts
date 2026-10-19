@@ -132,6 +132,7 @@ export function useChapterWorkspace(novelId: string): ChapterWorkspace {
   const [retranslateChapterId, setRetranslateChapterId] = useState<string | null>(null);
   const [deleteAllTranslationsOpen, setDeleteAllTranslationsOpen] = useState(false);
   const [logChapterId, setLogChapterId] = useState<string | null>(null);
+  const [historyChapterId, setHistoryChapterId] = useState<string | null>(null);
   const [reorderOpen, setReorderOpen] = useState(false);
   const [stopSelectedOpen, setStopSelectedOpen] = useState(false);
   const [batchRetranslateOpen, setBatchRetranslateOpen] = useState(false);
@@ -275,6 +276,7 @@ export function useChapterWorkspace(novelId: string): ChapterWorkspace {
     onStartTranslate: startTranslate,
     onRequestRetranslate: setRetranslateChapterId,
     onViewLogs: setLogChapterId,
+    onViewHistory: setHistoryChapterId,
     titleEdit: editState,
     onSaveTitle: handleSaveTitle,
     onStartEdit: handleStartEdit,
@@ -347,6 +349,10 @@ export function useChapterWorkspace(novelId: string): ChapterWorkspace {
       logs: {
         chapterId: logChapterId,
         setChapterId: setLogChapterId,
+      },
+      history: {
+        chapter: chapters.find((chapter) => chapter.id === historyChapterId) ?? null,
+        setChapterId: setHistoryChapterId,
       },
       retranslate: {
         chapterId: retranslateChapterId,

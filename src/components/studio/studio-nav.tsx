@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 interface StudioLink {
   to:
     | "/novels/$novelId/manage/chapters"
+    | "/novels/$novelId/manage/analytics"
     | "/novels/$novelId/manage/add"
     | "/novels/$novelId/manage/quality"
     | "/novels/$novelId/manage/glossary"
@@ -14,6 +15,7 @@ interface StudioLink {
     | "/novels/$novelId/manage/settings";
   labelKey:
     | "sectionChapters"
+    | "sectionAnalytics"
     | "sectionAdd"
     | "sectionQuality"
     | "sectionGlossary"
@@ -24,6 +26,7 @@ interface StudioLink {
 /** Ordered by how often an owner visits each, which is why Settings sits last. */
 const STUDIO_LINKS: readonly StudioLink[] = [
   { to: "/novels/$novelId/manage/chapters", labelKey: "sectionChapters" },
+  { to: "/novels/$novelId/manage/analytics", labelKey: "sectionAnalytics" },
   { to: "/novels/$novelId/manage/add", labelKey: "sectionAdd" },
   { to: "/novels/$novelId/manage/quality", labelKey: "sectionQuality" },
   { to: "/novels/$novelId/manage/glossary", labelKey: "sectionGlossary" },

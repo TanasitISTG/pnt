@@ -5,6 +5,7 @@ export * from "./novels";
 export * from "./tags";
 export * from "./provider-settings";
 export * from "./translation-jobs";
+export * from "./chapter-history";
 export * from "./workflow-outbox";
 export * from "./import-jobs";
 export * from "./glossary-terms";

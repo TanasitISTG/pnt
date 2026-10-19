@@ -7,6 +7,7 @@ import { useTranslations } from "use-intl";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { OverlayScrollLockProbe } from "@/components/ui/overlay-scroll-lock";
 import { XIcon } from "lucide-react";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -59,6 +60,7 @@ function DialogContent({
         )}
         {...props}
       >
+        <OverlayScrollLockProbe slot="dialog-content" />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close

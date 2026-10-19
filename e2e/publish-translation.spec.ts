@@ -133,6 +133,37 @@ test("admin translates and publishes a chapter that a signed-out guest can read"
   await expect(translatedTitle).toBeVisible({ timeout: 60_000 });
   const completionToast = page.getByText(/Translation: \d+ completed/);
   await expect(completionToast).toBeVisible({ timeout: 15_000 });
+
+  // The finished run is a version the owner can look back at: the dialog's newest row is the
+  // text the chapter now holds, which is why restoring it is the one action it refuses.
+  const historyChapterRow = translatedTitle.locator("xpath=ancestor::tr");
+  await historyChapterRow.getByRole("button", { name: "Translation history" }).click();
+  const historyDialog = page.getByRole("dialog");
+  await expect(
+    historyDialog.getByRole("heading", { name: "Translation history — Chapter 1" }),
+  ).toBeVisible();
+  await expect(historyDialog.getByText("Current", { exact: true })).toBeVisible();
+  await expect(historyDialog.getByRole("button", { name: "Restore this version" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(historyDialog).toBeHidden();
+
+  // The audience report is a read of the reader rows this run has not written yet, so its
+  // first honest answer is that nobody has finished a chapter.
+  await studioSection(page, "Audience").click();
+  await expect(page.getByRole("heading", { name: "Audience" })).toBeVisible();
+  await expect(page.getByText("No readers yet", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Counts signed-in readers only; guests are not tracked.", { exact: true }),
+  ).toBeVisible();
+
+  // The account-wide rollup lists every novel the session owns, this one included, with the
+  // same zeros the per-novel tab showed.
+  await page.getByRole("button", { name: /E2E Admin/ }).click();
+  await page.getByRole("menuitem", { name: "Audience" }).click();
+  await expect(page.getByRole("heading", { name: "Audience across your novels" })).toBeVisible();
+  await expect(page.getByText("By novel", { exact: true })).toBeVisible();
+  await expect(page.getByRole("row", { name: new RegExp(novelTitle) })).toBeVisible();
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/jobs");
   await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();

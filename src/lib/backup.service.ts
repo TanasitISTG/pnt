@@ -17,6 +17,7 @@ import {
   serializeRelationshipMap,
 } from "@/lib/relationships/map";
 import { SafeServerError } from "@/lib/server-fn-error";
+import { recordChapterVersions } from "@/lib/content/chapter/chapter-history.service";
 import {
   assertExportableBackup,
   backupChapterSchema,
@@ -364,31 +365,46 @@ export async function importBackupForUser(userId: string, value: unknown) {
         importedNovelIds.push(newNovelId);
 
         for (let offset = 0; offset < sourceNovel.chapters.length; offset += BATCH_SIZE) {
-          await tx.insert(chapters).values(
-            sourceNovel.chapters.slice(offset, offset + BATCH_SIZE).map((chapter) => ({
-              id: nanoid(),
-              novelId: newNovelId,
-              number: chapter.number,
-              title: chapter.title,
-              translatedTitle: chapter.translatedTitle,
-              rawContent: chapter.rawContent,
-              translatedContent: chapter.translatedContent,
-              status:
-                chapter.status === "queued" || chapter.status === "translating"
-                  ? chapter.translatedContent !== null
-                    ? "translated"
-                    : "raw"
-                  : chapter.status,
-              summary: chapter.summary,
-              rawCharCount: chapter.rawCharCount,
-              sourceRevision: chapter.sourceRevision,
-              translationGeneration: chapter.translationGeneration,
-              activeTranslationJobId: null,
-              publishedAt: null,
-              translatedAt: dateOrNull(chapter.translatedAt),
-              editedAt: dateOrNull(chapter.editedAt),
-              createdAt: now,
-              updatedAt: now,
+          // The ids are made before the insert so the translations the batch carries can be
+          // recorded as this chapter's first version in the same transaction.
+          const rows = sourceNovel.chapters.slice(offset, offset + BATCH_SIZE).map((chapter) => ({
+            id: nanoid(),
+            novelId: newNovelId,
+            number: chapter.number,
+            title: chapter.title,
+            translatedTitle: chapter.translatedTitle,
+            rawContent: chapter.rawContent,
+            translatedContent: chapter.translatedContent,
+            status:
+              chapter.status === "queued" || chapter.status === "translating"
+                ? chapter.translatedContent !== null
+                  ? "translated"
+                  : "raw"
+                : chapter.status,
+            summary: chapter.summary,
+            rawCharCount: chapter.rawCharCount,
+            sourceRevision: chapter.sourceRevision,
+            translationGeneration: chapter.translationGeneration,
+            activeTranslationJobId: null,
+            publishedAt: null,
+            translatedAt: dateOrNull(chapter.translatedAt),
+            editedAt: dateOrNull(chapter.editedAt),
+            createdAt: now,
+            updatedAt: now,
+          }));
+          await tx.insert(chapters).values(rows);
+          // The archive is a snapshot of translations somebody already had, so it enters the
+          // history as one `import` generation rather than as text with no trail behind it.
+          await recordChapterVersions(
+            tx,
+            rows.map((row) => ({
+              chapterId: row.id,
+              generation: row.translationGeneration,
+              sourceRevision: row.sourceRevision,
+              origin: "import" as const,
+              translatedTitle: row.translatedTitle,
+              content: row.translatedContent ?? "",
+              summary: row.summary,
             })),
           );
         }

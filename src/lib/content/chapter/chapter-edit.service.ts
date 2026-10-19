@@ -9,6 +9,7 @@ import { chapters, novels, translationJobs } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { cancelActiveTranslationJobsInTransaction } from "@/lib/translation/workflow/cancel";
+import { recordChapterVersion } from "@/lib/content/chapter/chapter-history.service";
 import type { ReorderChaptersInput } from "@/lib/content/novel/novel.schemas";
 
 type OutboxDispatch = (outboxId: string) => Promise<void>;
@@ -189,6 +190,23 @@ export async function updateChapterForUser(
         .update(novels)
         .set({ storySummary: null, updatedAt: now })
         .where(eq(novels.id, chapter.novelId));
+    }
+
+    // A manual edit is a generation too, and it is the one history matters most for: this is
+    // the write an owner wants back after a mistaken save. The title alone counts, because
+    // the snapshot is what the reader was shown, heading included.
+    if (nextTranslatedContent !== null && (translatedContentChanged || translatedTitleChanged)) {
+      await recordChapterVersion(tx, {
+        chapterId: chapter.id,
+        generation: chapter.translationGeneration,
+        // The update above already advanced the revision when the source changed; the version
+        // has to name the revision the text belongs to, not the one it replaced.
+        sourceRevision: chapter.sourceRevision + (sourceChanged ? 1 : 0),
+        origin: "manual",
+        translatedTitle: nextTranslatedTitle,
+        content: nextTranslatedContent,
+        summary: clearDerivedArtifacts ? null : chapter.summary,
+      });
     }
 
     return cancellationOutboxId;

@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => {
       opt_in_capturing: vi.fn(),
       opt_out_capturing: vi.fn(),
       captureException: vi.fn(),
+      capture: vi.fn(),
     },
   };
 });
@@ -47,7 +48,7 @@ vi.mock("posthog-js", async () => {
 });
 
 import { setConsent } from "./consent";
-import { captureException, updatePostHogConsent } from "./posthog";
+import { captureEvent, captureException, updatePostHogConsent } from "./posthog";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -85,6 +86,30 @@ describe("PostHog consent", () => {
     captureException(error);
     await vi.waitFor(() => {
       expect(mocks.posthog.captureException).toHaveBeenCalledWith(error);
+    });
+  });
+
+  it("sends a diagnostic event only while consent is granted", async () => {
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_PUBLIC_POSTHOG_KEY", "test-project-key");
+    const storage = new MemoryStorage();
+    Object.defineProperty(window, "localStorage", { value: storage, configurable: true });
+    Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
+
+    setConsent("denied");
+    captureEvent("overlay_scroll_lock_leak", { kind: "stray-lock" });
+    await Promise.resolve();
+    expect(mocks.posthog.capture).not.toHaveBeenCalled();
+
+    setConsent("granted");
+    await updatePostHogConsent("granted");
+    captureEvent("overlay_scroll_lock_leak", { kind: "stray-lock", pageLocked: true });
+
+    await vi.waitFor(() => {
+      expect(mocks.posthog.capture).toHaveBeenCalledWith("overlay_scroll_lock_leak", {
+        kind: "stray-lock",
+        pageLocked: true,
+      });
     });
   });
 });

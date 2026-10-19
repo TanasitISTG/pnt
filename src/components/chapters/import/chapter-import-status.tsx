@@ -1,5 +1,6 @@
 import { useTranslations } from "use-intl";
 
+import { JobErrorText } from "@/components/jobs/job-error-text";
 import { Button } from "@/components/ui/button";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/jobs/status-badge";
@@ -85,7 +86,7 @@ export function ChapterImportStatus({
         </dl>
       ) : null}
 
-      {job?.error ? <p className="text-sm text-destructive-text">{job.error}</p> : null}
+      {job?.error ? <JobErrorText message={job.error} className="text-sm" /> : null}
 
       {statusError ? (
         <div

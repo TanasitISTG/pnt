@@ -51,6 +51,14 @@ export const readerChapterReads = pgTable(
     index("reader_chapter_reads_novel_idx").on(table.userId, table.novelId),
     index("reader_chapter_reads_chapter_id_idx").on(table.chapterId),
     index("reader_chapter_reads_novel_id_idx").on(table.novelId),
+    // The owner's audience report reads one novel by chapter inside a time window (per-chapter
+    // counts, the last thirty days, and whether a follower reached the newest chapter), so the
+    // three columns that filter and group it are the index rather than a heap read per count.
+    index("reader_chapter_reads_novel_chapter_read_at_idx").on(
+      table.novelId,
+      table.chapterId,
+      table.readAt,
+    ),
   ],
 );
 

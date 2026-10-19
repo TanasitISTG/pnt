@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, exists, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { encodeMessage } from "@/lib/i18n/message-code";
 import { lockNovelForMutation } from "@/lib/db/novel-lock";
-import { novels, chapters } from "@/lib/db/schema";
+import { novels, chapters, chapterTranslationVersions } from "@/lib/db/schema";
 import { ensureSession, getSession } from "@/lib/auth/functions";
 import { checkRateLimit, GUEST_READ_LIMIT } from "@/lib/rate-limit";
 import { nanoid } from "@/lib/utils";
@@ -62,6 +62,14 @@ export const listChapters = createServerFn({ method: "GET" })
           title: chapters.title,
           translatedTitle: chapters.translatedTitle,
           hasTranslation: chapterHasTranslation(),
+          // The trail outlives the text: a cleared chapter still has versions to restore,
+          // and the row needs to say so without a second request for every chapter.
+          hasHistory: sql<boolean>`${exists(
+            db
+              .select({ id: chapterTranslationVersions.id })
+              .from(chapterTranslationVersions)
+              .where(eq(chapterTranslationVersions.chapterId, chapters.id)),
+          )}`,
           rawCharCount: chapters.rawCharCount,
           status: chapters.status,
           publishedAt: chapters.publishedAt,

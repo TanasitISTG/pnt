@@ -6,6 +6,7 @@ import { XIcon } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { Button } from "@/components/ui/button";
+import { OverlayScrollLockProbe } from "@/components/ui/overlay-scroll-lock";
 import { cn } from "@/lib/utils";
 
 /**
@@ -61,6 +62,7 @@ function SheetContent({
         )}
         {...props}
       >
+        <OverlayScrollLockProbe slot="sheet-content" />
         {children}
         {showCloseButton ? (
           <DialogPrimitive.Close

@@ -22,6 +22,7 @@ const CHAPTER: ChapterRow = {
   title: "Chapter One",
   translatedTitle: "บทที่หนึ่ง",
   hasTranslation: true,
+  hasHistory: true,
   status: "translated",
   rawCharCount: 1200,
 
@@ -73,6 +74,7 @@ function createProps(overrides: Partial<ChapterTableProps> = {}): ChapterTablePr
     onStartTranslate: vi.fn(),
     onRequestRetranslate: vi.fn(),
     onViewLogs: vi.fn(),
+    onViewHistory: vi.fn(),
     titleEdit: null,
     onSaveTitle: vi.fn().mockResolvedValue(undefined),
     onStartEdit: vi.fn(),
@@ -142,6 +144,38 @@ describe("ChapterTable browsing behavior", () => {
     expect(onRequestRetranslate).toHaveBeenCalledWith(CHAPTER.id);
     expect(onStartTranslate).not.toHaveBeenCalled();
   });
+  it("keeps the history trail reachable after the translations were cleared", () => {
+    const onViewHistory = vi.fn();
+    // What a bulk delete leaves behind: no text, no translated status, and a row that would
+    // otherwise offer nothing at all — while the trail is exactly the way back.
+    const cleared: ChapterRow = {
+      ...CHAPTER,
+      translatedTitle: null,
+      hasTranslation: false,
+      hasHistory: true,
+      status: "raw",
+    };
+
+    render(<ChapterTable {...createProps({ chapters: [cleared], onViewHistory })} />);
+
+    screen.getByRole("button", { name: "Translation history" }).click();
+    expect(onViewHistory).toHaveBeenCalledWith(cleared.id);
+  });
+
+  it("shows no history action on a chapter that was never translated", () => {
+    const never: ChapterRow = {
+      ...CHAPTER,
+      translatedTitle: null,
+      hasTranslation: false,
+      hasHistory: false,
+      status: "raw",
+    };
+
+    render(<ChapterTable {...createProps({ chapters: [never] })} />);
+
+    expect(screen.queryByRole("button", { name: "Translation history" })).toBeNull();
+  });
+
   it("shows foreign-script residue for admin rows", () => {
     render(
       <ChapterTable

@@ -3,6 +3,7 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 
 import { cn } from "@/lib/utils";
+import { OverlayScrollLockProbe } from "@/components/ui/overlay-scroll-lock";
 
 /**
  * An anchored panel: the reader's appearance controls, a filter body, a small form that
@@ -44,6 +45,7 @@ function PopoverContent({
           )}
           {...props}
         >
+          <OverlayScrollLockProbe slot="popover-content" />
           {children}
         </PopoverPrimitive.Popup>
       </PopoverPrimitive.Positioner>

@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, LogOut, Settings, ShieldCheck, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, Settings, ShieldCheck, UserRound, Users } from "lucide-react";
 
 import { useSignOut } from "@/components/shell/use-sign-out";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,10 @@ export function AccountMenu({ user, isAdmin }: AccountMenuProps) {
           <DropdownMenuItem render={<Link to="/settings" className={MENU_LINK_CLASS} />}>
             <Settings className="size-4" aria-hidden="true" />
             {t("settings")}
+          </DropdownMenuItem>
+          <DropdownMenuItem render={<Link to="/audience" className={MENU_LINK_CLASS} />}>
+            <Users className="size-4" aria-hidden="true" />
+            {t("audience")}
           </DropdownMenuItem>
           {isAdmin ? (
             <DropdownMenuItem render={<Link to="/admin" className={MENU_LINK_CLASS} />}>

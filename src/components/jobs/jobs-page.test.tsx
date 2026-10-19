@@ -12,6 +12,7 @@ import {
   JOB_STATS_QUERY_KEY,
 } from "@/lib/job-dashboard/query";
 import { JobHistoryTable } from "@/components/jobs/job-history-table";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import type {
   JobActivitySnapshot,
   JobHistoryEpubRow,
@@ -280,6 +281,29 @@ describe("JobsPage dashboard", () => {
       "All statuses",
     );
   });
+  it("resolves a stored failure code instead of printing it", () => {
+    const code = encodeMessage("errors.providerConnectionFailed");
+    const codedFailure: JobHistoryTranslationRow = {
+      ...translationRow,
+      id: "translation-coded",
+      error: code,
+    };
+    renderJobsPage({
+      rows: [codedFailure, scrapeRow],
+      rowCount: 2,
+      page: 1,
+      pageSize: 25,
+    });
+
+    // The worker stores a key rather than a sentence, and the attention band reads the same
+    // column as the history table — so both have to resolve it, not just the table.
+    const sentence = "Could not connect to the provider. Check the settings and try again.";
+    const attention = within(screen.getByRole("region", { name: "Jobs needing attention" }));
+    expect(attention.getByText(sentence)).toBeTruthy();
+    expect(screen.getByRole("table").textContent).toContain(sentence);
+    expect(screen.queryByText(code)).toBeNull();
+  });
+
   it("keeps every applicable job action reachable in compact mobile rows", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });

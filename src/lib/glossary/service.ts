@@ -9,6 +9,7 @@ import { chapters, glossaryTerms, novels, translationJobs } from "@/lib/db/schem
 import { mapWithConcurrency } from "@/lib/async";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { cancelActiveTranslationJobsInTransaction } from "@/lib/translation/workflow/cancel";
+import { recordChapterVersions } from "@/lib/content/chapter/chapter-history.service";
 import {
   type GlossaryListInput,
   type GlossaryListPage,
@@ -242,7 +243,9 @@ export async function updateGlossaryTermAtomic(
       propagationOutboxIds = cancellation.outboxIds;
 
       if (chapterIds.length > 0) {
-        await tx
+        // The replaced text is read back rather than recomputed: `replace` runs in the
+        // database, and the version row has to hold exactly what the chapter now holds.
+        const replaced = await tx
           .update(chapters)
           .set({
             translatedContent: sql`replace(${chapters.translatedContent}, ${oldTarget}, ${newTarget})`,
@@ -253,7 +256,30 @@ export async function updateGlossaryTermAtomic(
             editedAt: now,
             updatedAt: now,
           })
-          .where(inArray(chapters.id, chapterIds));
+          .where(inArray(chapters.id, chapterIds))
+          .returning({
+            id: chapters.id,
+            translatedTitle: chapters.translatedTitle,
+            translatedContent: chapters.translatedContent,
+            generation: chapters.translationGeneration,
+            sourceRevision: chapters.sourceRevision,
+          });
+        // This is why history exists: propagation rewrites every chapter holding the old
+        // target, and one over-eager term can touch dozens at once. Each rewritten chapter
+        // gets its own row in the same transaction, so the pass is one restore away from
+        // being undone.
+        await recordChapterVersions(
+          tx,
+          replaced.map((chapter) => ({
+            chapterId: chapter.id,
+            generation: chapter.generation,
+            sourceRevision: chapter.sourceRevision,
+            origin: "glossary" as const,
+            translatedTitle: chapter.translatedTitle,
+            content: chapter.translatedContent ?? "",
+            summary: null,
+          })),
+        );
         await tx
           .update(novels)
           .set({ storySummary: null, updatedAt: now })

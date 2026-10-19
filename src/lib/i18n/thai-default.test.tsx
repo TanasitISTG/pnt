@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { createTranslator } from "use-intl/core";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { JobErrorText } from "@/components/jobs/job-error-text";
 import { FieldError } from "@/components/ui/field";
 import { existingUserSignUpEmail } from "@/lib/email/templates";
 import {
@@ -43,6 +44,19 @@ describe("the Thai default", () => {
     expect(translateServerError(error, thai)).toBe(
       th.errors.epubTooManyChapters.replace("{max}", "5000"),
     );
+  });
+
+  it("renders a stored job failure through the Thai catalog", () => {
+    // The activity band and the history table read the same stored column, which holds a code
+    // rather than a sentence, so the shipped language is the one that has to resolve it.
+    render(
+      <ThaiI18nProvider>
+        <JobErrorText message={encodeMessage("errors.providerConnectionFailed")} />
+      </ThaiI18nProvider>,
+    );
+
+    expect(screen.getByText(th.errors.providerConnectionFailed)).toBeTruthy();
+    expect(screen.queryByText("errors.providerConnectionFailed")).toBeNull();
   });
 
   it("renders a field error through the Thai catalog", () => {

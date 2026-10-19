@@ -1,9 +1,9 @@
 import "@tanstack/react-start/server-only";
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, exists, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { chapters, novels } from "@/lib/db/schema";
+import { chapters, chapterTranslationVersions, novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { chapterHasTranslation } from "@/lib/content/publish/publish";
 import { encodeMessage } from "@/lib/i18n/message-code";
@@ -46,6 +46,13 @@ export async function getAdminNovelDetailCoreForUser(userId: string, novelId: st
       title: chapters.title,
       translatedTitle: chapters.translatedTitle,
       hasTranslation: chapterHasTranslation(),
+      // The same flag the public list carries, so the two cache entries hydrate one shape.
+      hasHistory: sql<boolean>`${exists(
+        db
+          .select({ id: chapterTranslationVersions.id })
+          .from(chapterTranslationVersions)
+          .where(eq(chapterTranslationVersions.chapterId, chapters.id)),
+      )}`,
       rawCharCount: chapters.rawCharCount,
       status: chapters.status,
       publishedAt: chapters.publishedAt,

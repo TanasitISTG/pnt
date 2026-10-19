@@ -12,6 +12,7 @@ import {
   translationJobs,
 } from "@/lib/db/schema";
 import { assertPersistableTokenCount } from "@/lib/translation/token-count";
+import { recordChapterVersion } from "@/lib/content/chapter/chapter-history.service";
 import { canRunJob } from "./job-state";
 import { logMessage } from "./log-entry";
 import {
@@ -326,6 +327,19 @@ export async function completeJob(input: CompleteJobInput) {
     if (chapterUpdated.length !== 1) {
       throw new Error(`Job ${input.jobId} lost chapter ownership during finalization`);
     }
+
+    // The finalized text is a generation of its own: the version row is written in this same
+    // transaction, so a chapter can never hold a translation its history does not name.
+    await recordChapterVersion(tx, {
+      chapterId: row.chapter.id,
+      generation: input.generation,
+      sourceRevision: row.job.sourceRevision,
+      origin: "translation",
+      jobId: input.jobId,
+      translatedTitle: input.translatedTitle ?? row.chapter.translatedTitle,
+      content: input.fullTranslation,
+      summary: input.chapterSummary ?? row.chapter.summary,
+    });
 
     if (input.storySummary) {
       await tx

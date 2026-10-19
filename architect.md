@@ -159,6 +159,82 @@ state is scoped to the current reader identity, so requests from an old novel/ac
 block or surface errors in its replacement.
 Guest bookmarks remain browser-local and do not use account paging.
 
+## Chapter translation history
+
+`chapters.translated_content` holds one generation; `chapter_translation_versions` holds the
+trail. Every write that sets that column appends its row in the same transaction — a finished
+run (`translation`, with the job id), a manual edit (`manual`), a glossary propagation
+(`glossary`), a backup import (`import`), and a restore (`rollback`) — so the newest row is the
+current text by construction and a crash can never leave a translation with no history. The
+row is a snapshot (`content`, title, summary, `source_revision`, `generation`), never a
+difference against a neighbour, which is why a version from an older source revision is still
+restorable and is merely labelled as such.
+
+Clearing text is the one write that appends nothing: a blank body is not a version, and
+absence is not a claim about what the chapter holds. The rows survive a clear because nothing
+deleting text touches them, so "delete all translations" remains recoverable. Chapter deletion
+cascades the trail; the job id deliberately carries no foreign key, so pruned jobs do not take
+history with them.
+
+The way back is part of the chapter list, not only of the history screen: each chapter row
+carries `hasHistory`, an `EXISTS` over the trail computed in the same read as the rows, so a
+chapter holding no translation at all still offers its history. The dialog serves the cleared
+state too — with no current text there is nothing to diff, so it shows the selected version's
+paragraphs as what restoring would put back, labels the newest row as not current, and leaves
+restore enabled.
+
+Restoring takes the novel mutation gate and refuses while `active_translation_job_id` is set —
+a rollback racing a translator would simply be overwritten by finalization. It replaces content
+and title, clears the chapter summary and the novel's rolling summary (the same derived state a
+manual edit clears), leaves publication alone, and appends a `rollback` row, so the restore is
+itself undoable and restoring the text already held is a no-op rather than a new row. The
+appending transaction trims each chapter to the newest twenty rows, so retention is a property
+of the table rather than a sweep. History is owner-only: both reads and the restore filter on
+the novel's `user_id`.
+
+## Audience report
+
+The owner's audience is a read model over rows the reader already writes: `reader_chapter_reads`
+(a row per reader per chapter, written on first finish, with `read_at` fixed at that moment) and
+`novel_follows`. Three rules decide every number, and each is deliberate. The owner is excluded
+from every count, so a chapter does not report its first reader before anyone else opens it.
+Only signed-in readers exist here at all — a guest leaves no row — so the report never
+approximates them. And a read is a finish, not a view, so "reads" is chapters completed and
+re-reads add nothing.
+
+One novel is read at a time in a bounded number of indexed aggregate queries, never a
+per-chapter round trip: totals, the follow counts, one grouped query per chapter, the stopping
+points (each reader's highest finished chapter in the window), and the daily buckets.
+`waitingFollowers` is computed against the newest live chapter, so with nothing published every
+follower counts as waiting. Daily buckets are UTC `YYYY-MM-DD` taken from `read_at` itself rather
+than cast through the database session's timezone, and the gaps are filled so a quiet day draws
+as zero instead of disappearing. `reader_chapter_reads_novel_chapter_read_at_idx` is the index
+those filters and groupings read.
+
+The report is read in one of four ranges — 7, 30 or 90 days, or all time — and the range is a
+server-side window, not a filter over a larger answer: distinct readers in a week cannot be
+recovered from a month's totals. Every figure derived from a read follows it: readers, finishes,
+the per-chapter counts, the stopping points and the curve. `followers`, `waitingFollowers`,
+`novels` and `publishedNovels` do not, because they describe a state rather than a period, and
+the screen says so. A fixed range draws exactly its own days, ending today; all time has no
+boundary and derives its bucket count from the first day that holds a read, so a lifetime curve
+costs no extra query. `hasAnyReads` is read unfiltered in the totals query, which is what lets a
+quiet week stay a report — zeros under a range selector — instead of being mistaken for a novel
+nobody has ever read. The query key carries the range, so two windows are two cached answers and
+switching back is free.
+
+The account rollup (`getAccountAudienceForUser`) widens the same rules to every novel the
+session owns, and the difference is exactly where a sum would be wrong: readers are distinct
+across the account, because one reader of three novels is one reader; reads, followers and
+waiting are summed, because each belongs to one novel; and waiting is still computed per novel
+against that novel's newest live chapter, so a follower caught up on one story is still waiting
+on another. Its range is the same window applied to the same figures, on the totals, each
+novel's row and the curve, while the novel and follower counts stay current. Every owned novel
+keeps a row, zero figures included — "followed but unread" is the question the screen exists to
+answer — and each row links to the per-novel report it was computed from, so a figure can be
+checked at the depth it came from. The read takes the range and the session, never novel ids: the
+only ones in the query are the ones the server looked up for that account.
+
 ## Notifications
 
 Following is a reader relation — an account plus a novel it may merely be reading, so the write gate is read visibility, not ownership — and the bell reads `notifications` newest-first with an unread count. The writers are: a live chapter fanning out to its novel's followers excluding the author; a top-level comment telling the novel's owner; a reply telling its parent's author; a new review telling the novel's owner; and a decided report telling each reporter whose claim was in the case. A comment and a reply on the same comment therefore reach different accounts, and a review's dedupe key is the review, so an edit notifies nobody. A single-chapter publish fans out inline after its transaction commits, because that is the one chapter an author is watching land; a bulk release and a scheduled chapter are left to a one-minute sweep, which makes the same idempotent write. Either path produces the row once.

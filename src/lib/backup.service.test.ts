@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/lib/db";
-import { chapters, glossaryTerms, novels } from "@/lib/db/schema";
+import { chapterTranslationVersions, chapters, glossaryTerms, novels } from "@/lib/db/schema";
 import { SafeServerError } from "@/lib/server-fn-error";
 import { exportBackupForUser, importBackupForUser, streamBackupForUser } from "./backup.service";
 
@@ -222,6 +222,9 @@ beforeEach(() => {
           insertedValues.push({ table, rows });
         },
       }),
+      // The history writer trims each chapter to its retention cap after the insert; the
+      // cap itself is the history suite's business, so this only has to not throw.
+      execute: async () => {},
     };
     return callback(tx);
   }) as never);
@@ -397,6 +400,19 @@ describe("backup import", () => {
         translatedContent: null,
       }),
     ]);
+
+    // Only the chapters that arrived with text get a version, and it names the chapter the
+    // import actually created: the trail is a snapshot of the archive, not of this run.
+    const versions = savedRows(chapterTranslationVersions);
+    expect(versions).toEqual([
+      expect.objectContaining({ origin: "import", content: "Retained translation" }),
+      expect.objectContaining({ origin: "import", content: "Retained while translating" }),
+    ]);
+    for (const version of versions) {
+      expect(restoredChapters.map((row) => (row as { id: string }).id)).toContain(
+        (version as { chapterId: string }).chapterId,
+      );
+    }
   });
 
   it("writes a valid cover, chapters and terms", async () => {

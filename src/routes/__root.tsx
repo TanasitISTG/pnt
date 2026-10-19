@@ -3,6 +3,7 @@ import { Asset, createRootRouteWithContext, Scripts, useTags } from "@tanstack/r
 import { ThemeProvider } from "next-themes";
 import { createTranslator } from "use-intl/core";
 import { Toaster } from "@/components/ui/sonner";
+import { useOverlayScrollLockRecovery } from "@/components/ui/overlay-scroll-lock";
 
 import appCss from "../styles/globals.css?inline";
 import sofiaSansUrl from "@fontsource-variable/sofia-sans/files/sofia-sans-latin-wght-normal.woff2?url";
@@ -195,6 +196,9 @@ function HeadContentWithoutModulePreloads() {
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { consent } = useConsent();
   const { locale } = Route.useRouteContext();
+  // A popup gives the page back when it closes; this is the guarantee that it does, even
+  // when a lock outlives the popup that took it, and the audit that names the popup.
+  useOverlayScrollLockRecovery();
 
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {

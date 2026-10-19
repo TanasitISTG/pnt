@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import en from "@/lib/i18n/messages/en";
+import { encodeMessage } from "@/lib/i18n/message-code";
 import { type EvalReviewSearch } from "@/lib/translation/evaluation/eval.schemas";
 
 const serverFunctions = vi.hoisted(() => ({
@@ -85,6 +86,34 @@ describe("TranslationQualityPanel", () => {
     expect(document.activeElement).toBe(selector);
     expect(serverFunctions.startTranslationEval).not.toHaveBeenCalled();
     expect(onReviewSearchChange).not.toHaveBeenCalled();
+  });
+
+  it("resolves a stored failure code in the latest check summary", async () => {
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    serverFunctions.listTranslationEvalReports.mockResolvedValue([
+      {
+        id: "report-2",
+        novelId: "novel-1",
+        status: "error",
+        chapterSelector: "first3",
+        chapterCount: 3,
+        residualScriptLetters: 0,
+        markerMismatches: 0,
+        matchedGlossaryTerms: 0,
+        adheredGlossaryTerms: 0,
+        error: encodeMessage("errors.qualityCheckFailed"),
+        createdAt,
+        updatedAt: createdAt,
+        completedAt: null,
+        meta: null,
+      },
+    ]);
+
+    renderPanel();
+
+    // The worker stores the key; the summary is one of the screens that reads it back.
+    expect(await screen.findByText(en.errors.qualityCheckFailed)).toBeTruthy();
+    expect(screen.queryByText("errors.qualityCheckFailed")).toBeNull();
   });
 
   it("queues the transformed selector and opens the queued report", async () => {

@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
-import { Check, Edit, Play, RotateCw, Square, Terminal, Trash2, X } from "lucide-react";
+import { Check, Edit, History, Play, RotateCw, Square, Terminal, Trash2, X } from "lucide-react";
 import { useLocale, useTranslations } from "use-intl";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,7 @@ export interface ChapterTableRowProps {
   onStartTranslate: (chapterId: string, mode: TranslationStartMode) => void;
   onRequestRetranslate: (chapterId: string) => void;
   onViewLogs: (chapterId: string) => void;
+  onViewHistory: (chapterId: string) => void;
   onSaveTitle?: (value: string) => Promise<void>;
   onStartEdit: (chapter: ChapterRow) => void;
   onCancelEdit: () => void;
@@ -427,6 +428,21 @@ function AdminActionsCell(props: ChapterTableRowProps) {
           onStartTranslate={props.onStartTranslate}
           onRequestRetranslate={props.onRequestRetranslate}
         />
+        {/* The trail outlives the text, which is exactly when it matters: a chapter cleared
+            by a bulk delete has no translation and no `translated` status, but its versions
+            are still the way back. */}
+        {chapter.hasTranslation || chapter.status === "translated" || chapter.hasHistory ? (
+          <Button
+            variant="ghostMuted"
+            size="icon"
+            className="size-8"
+            onClick={() => props.onViewHistory(chapter.id)}
+            aria-label={t("historyAction")}
+            title={t("historyAction")}
+          >
+            <History className="size-4" />
+          </Button>
+        ) : null}
         {activeJob || chapter.status !== "raw" ? (
           <Button
             variant="ghostMuted"
@@ -512,6 +528,7 @@ export const ChapterTableRow = memo(function ChapterTableRow({
   onStartTranslate,
   onRequestRetranslate,
   onViewLogs,
+  onViewHistory,
   onSaveTitle,
   onStartEdit,
   onCancelEdit,
@@ -538,6 +555,7 @@ export const ChapterTableRow = memo(function ChapterTableRow({
       onStartTranslate={onStartTranslate}
       onRequestRetranslate={onRequestRetranslate}
       onViewLogs={onViewLogs}
+      onViewHistory={onViewHistory}
       onSaveTitle={isTitleEditing ? onSaveTitle : undefined}
       onStartEdit={onStartEdit}
       onCancelEdit={onCancelEdit}

@@ -727,10 +727,17 @@
    * unmounts, so no script has to remember to. Popups that are not modal — selects,
    * popovers, menus — set their own slot and are deliberately absent from this list.
    * `scrollbar-gutter: stable` on the root means the lock costs no layout shift.
+   *
+   * A popup that is leaving does not hold the page: the reader has already dismissed it, and
+   * its exit is an animation they are meant to watch rather than a reason to keep them
+   * still. That is also what keeps a broken exit from freezing the page — a popup whose
+   * unmount never runs stays in its leaving state, and this rule stops holding the lock for
+   * it. The released attribute is the same release for a popup the recovery has given up on
+   * (`overlay-scroll-lock.tsx`), so there is no state left in which the reader cannot scroll.
    */
-  html:has([data-slot="sheet-content"]),
-  html:has([data-slot="drawer-content"]),
-  html:has([data-slot="dialog-content"]) {
+  html:has([data-slot="sheet-content"]:not([data-ending-style]):not([data-scroll-lock-released])),
+  html:has([data-slot="drawer-content"]:not([data-ending-style]):not([data-scroll-lock-released])),
+  html:has([data-slot="dialog-content"]:not([data-ending-style]):not([data-scroll-lock-released])) {
     overflow: hidden;
   }
 

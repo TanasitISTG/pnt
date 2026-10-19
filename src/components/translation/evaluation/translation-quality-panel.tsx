@@ -14,6 +14,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { formatDateTime } from "@/lib/i18n/format";
+import { translateMessage } from "@/lib/i18n/server-error";
 import { translationEvalReportsQueryOptions } from "@/lib/translation/evaluation/eval.query";
 import { startTranslationEval } from "@/lib/translation/evaluation/eval.functions";
 import {
@@ -68,6 +69,9 @@ function LatestSummary({
   onView: () => void;
 }) {
   const t = useTranslations("evaluation");
+  // The report's failure is stored as a code by the worker, which has no reader's language, so
+  // it is resolved here the way the report dialog resolves the same field.
+  const tRoot = useTranslations();
   const locale = useLocale();
   return (
     <div className="rounded-xl border border-border bg-muted/20 p-4" aria-live="polite">
@@ -87,7 +91,9 @@ function LatestSummary({
       </div>
 
       {report.status === "error" ? (
-        <p className="mt-3 text-sm text-destructive-text">{report.error}</p>
+        <p className="mt-3 text-sm text-destructive-text">
+          {translateMessage(report.error ?? "", tRoot) ?? report.error}
+        </p>
       ) : report.status !== "done" ? (
         <p className="mt-3 text-sm text-muted-foreground">{t("autoUpdate")}</p>
       ) : report.meta ? (

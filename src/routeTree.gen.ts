@@ -13,6 +13,7 @@ import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as Char123LocaleChar125RouteRouteImport } from './routes/{-$locale}/route'
 import { Route as ProtectedAdminRouteImport } from './routes/_protected/admin'
+import { Route as ProtectedAudienceRouteImport } from './routes/_protected/audience'
 import { Route as ProtectedJobsRouteImport } from './routes/_protected/jobs'
 import { Route as ProtectedLibraryRouteImport } from './routes/_protected/library'
 import { Route as ProtectedProfileRouteImport } from './routes/_protected/profile'
@@ -54,6 +55,7 @@ import { Route as ProtectedNovelsNovelIdManageRouteImport } from './routes/_prot
 import { Route as ProtectedNovelsNovelIdRelationshipsRouteImport } from './routes/_protected/novels/$novelId/relationships'
 import { Route as ProtectedNovelsNovelIdManageIndexRouteImport } from './routes/_protected/novels/$novelId/manage.index'
 import { Route as ProtectedNovelsNovelIdManageAddRouteImport } from './routes/_protected/novels/$novelId/manage.add'
+import { Route as ProtectedNovelsNovelIdManageAnalyticsRouteImport } from './routes/_protected/novels/$novelId/manage.analytics'
 import { Route as ProtectedNovelsNovelIdManageChaptersRouteImport } from './routes/_protected/novels/$novelId/manage.chapters'
 import { Route as ProtectedNovelsNovelIdManageGlossaryRouteImport } from './routes/_protected/novels/$novelId/manage.glossary'
 import { Route as ProtectedNovelsNovelIdManageQualityRouteImport } from './routes/_protected/novels/$novelId/manage.quality'
@@ -81,6 +83,11 @@ const Char123LocaleChar125RouteRoute =
 const ProtectedAdminRoute = ProtectedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => ProtectedRoute,
+} as any)
+const ProtectedAudienceRoute = ProtectedAudienceRouteImport.update({
+  id: '/audience',
+  path: '/audience',
   getParentRoute: () => ProtectedRoute,
 } as any)
 const ProtectedJobsRoute = ProtectedJobsRouteImport.update({
@@ -309,6 +316,12 @@ const ProtectedNovelsNovelIdManageAddRoute =
     path: '/add',
     getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
   } as any)
+const ProtectedNovelsNovelIdManageAnalyticsRoute =
+  ProtectedNovelsNovelIdManageAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => ProtectedNovelsNovelIdManageRoute,
+  } as any)
 const ProtectedNovelsNovelIdManageChaptersRoute =
   ProtectedNovelsNovelIdManageChaptersRouteImport.update({
     id: '/chapters',
@@ -363,6 +376,7 @@ export interface FileRoutesByFullPath {
   '/': typeof ProtectedRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/admin': typeof ProtectedAdminRouteWithChildren
+  '/audience': typeof ProtectedAudienceRoute
   '/jobs': typeof ProtectedJobsRoute
   '/library': typeof ProtectedLibraryRoute
   '/profile': typeof ProtectedProfileRoute
@@ -402,6 +416,7 @@ export interface FileRoutesByFullPath {
   '/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageRouteWithChildren
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
   '/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
+  '/novels/$novelId/manage/analytics': typeof ProtectedNovelsNovelIdManageAnalyticsRoute
   '/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
   '/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
   '/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
@@ -416,6 +431,7 @@ export interface FileRoutesByTo {
   '/{-$locale}': typeof Char123LocaleChar125PublicIndexRoute
   '/': typeof ProtectedRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
+  '/audience': typeof ProtectedAudienceRoute
   '/jobs': typeof ProtectedJobsRoute
   '/library': typeof ProtectedLibraryRoute
   '/profile': typeof ProtectedProfileRoute
@@ -452,6 +468,7 @@ export interface FileRoutesByTo {
   '/novels/$novelId/glossary': typeof ProtectedNovelsNovelIdGlossaryRoute
   '/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
   '/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
+  '/novels/$novelId/manage/analytics': typeof ProtectedNovelsNovelIdManageAnalyticsRoute
   '/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
   '/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
   '/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
@@ -468,6 +485,7 @@ export interface FileRoutesById {
   '/_protected': typeof ProtectedRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/_protected/admin': typeof ProtectedAdminRouteWithChildren
+  '/_protected/audience': typeof ProtectedAudienceRoute
   '/_protected/jobs': typeof ProtectedJobsRoute
   '/_protected/library': typeof ProtectedLibraryRoute
   '/_protected/profile': typeof ProtectedProfileRoute
@@ -508,6 +526,7 @@ export interface FileRoutesById {
   '/_protected/novels/$novelId/manage': typeof ProtectedNovelsNovelIdManageRouteWithChildren
   '/_protected/novels/$novelId/relationships': typeof ProtectedNovelsNovelIdRelationshipsRoute
   '/_protected/novels/$novelId/manage/add': typeof ProtectedNovelsNovelIdManageAddRoute
+  '/_protected/novels/$novelId/manage/analytics': typeof ProtectedNovelsNovelIdManageAnalyticsRoute
   '/_protected/novels/$novelId/manage/chapters': typeof ProtectedNovelsNovelIdManageChaptersRoute
   '/_protected/novels/$novelId/manage/glossary': typeof ProtectedNovelsNovelIdManageGlossaryRoute
   '/_protected/novels/$novelId/manage/quality': typeof ProtectedNovelsNovelIdManageQualityRoute
@@ -525,6 +544,7 @@ export interface FileRouteTypes {
     | '/'
     | '/robots.txt'
     | '/admin'
+    | '/audience'
     | '/jobs'
     | '/library'
     | '/profile'
@@ -564,6 +584,7 @@ export interface FileRouteTypes {
     | '/novels/$novelId/manage'
     | '/novels/$novelId/relationships'
     | '/novels/$novelId/manage/add'
+    | '/novels/$novelId/manage/analytics'
     | '/novels/$novelId/manage/chapters'
     | '/novels/$novelId/manage/glossary'
     | '/novels/$novelId/manage/quality'
@@ -578,6 +599,7 @@ export interface FileRouteTypes {
     | '/{-$locale}'
     | '/'
     | '/robots.txt'
+    | '/audience'
     | '/jobs'
     | '/library'
     | '/profile'
@@ -614,6 +636,7 @@ export interface FileRouteTypes {
     | '/novels/$novelId/glossary'
     | '/novels/$novelId/relationships'
     | '/novels/$novelId/manage/add'
+    | '/novels/$novelId/manage/analytics'
     | '/novels/$novelId/manage/chapters'
     | '/novels/$novelId/manage/glossary'
     | '/novels/$novelId/manage/quality'
@@ -629,6 +652,7 @@ export interface FileRouteTypes {
     | '/_protected'
     | '/robots.txt'
     | '/_protected/admin'
+    | '/_protected/audience'
     | '/_protected/jobs'
     | '/_protected/library'
     | '/_protected/profile'
@@ -669,6 +693,7 @@ export interface FileRouteTypes {
     | '/_protected/novels/$novelId/manage'
     | '/_protected/novels/$novelId/relationships'
     | '/_protected/novels/$novelId/manage/add'
+    | '/_protected/novels/$novelId/manage/analytics'
     | '/_protected/novels/$novelId/manage/chapters'
     | '/_protected/novels/$novelId/manage/glossary'
     | '/_protected/novels/$novelId/manage/quality'
@@ -723,6 +748,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof ProtectedAdminRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
+    '/_protected/audience': {
+      id: '/_protected/audience'
+      path: '/audience'
+      fullPath: '/audience'
+      preLoaderRoute: typeof ProtectedAudienceRouteImport
       parentRoute: typeof ProtectedRoute
     }
     '/_protected/jobs': {
@@ -1012,6 +1044,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedNovelsNovelIdManageAddRouteImport
       parentRoute: typeof ProtectedNovelsNovelIdManageRoute
     }
+    '/_protected/novels/$novelId/manage/analytics': {
+      id: '/_protected/novels/$novelId/manage/analytics'
+      path: '/analytics'
+      fullPath: '/novels/$novelId/manage/analytics'
+      preLoaderRoute: typeof ProtectedNovelsNovelIdManageAnalyticsRouteImport
+      parentRoute: typeof ProtectedNovelsNovelIdManageRoute
+    }
     '/_protected/novels/$novelId/manage/chapters': {
       id: '/_protected/novels/$novelId/manage/chapters'
       path: '/chapters'
@@ -1172,6 +1211,7 @@ const ProtectedSettingsRouteWithChildren =
 
 interface ProtectedNovelsNovelIdManageRouteChildren {
   ProtectedNovelsNovelIdManageAddRoute: typeof ProtectedNovelsNovelIdManageAddRoute
+  ProtectedNovelsNovelIdManageAnalyticsRoute: typeof ProtectedNovelsNovelIdManageAnalyticsRoute
   ProtectedNovelsNovelIdManageChaptersRoute: typeof ProtectedNovelsNovelIdManageChaptersRoute
   ProtectedNovelsNovelIdManageGlossaryRoute: typeof ProtectedNovelsNovelIdManageGlossaryRoute
   ProtectedNovelsNovelIdManageQualityRoute: typeof ProtectedNovelsNovelIdManageQualityRoute
@@ -1183,6 +1223,8 @@ interface ProtectedNovelsNovelIdManageRouteChildren {
 const ProtectedNovelsNovelIdManageRouteChildren: ProtectedNovelsNovelIdManageRouteChildren =
   {
     ProtectedNovelsNovelIdManageAddRoute: ProtectedNovelsNovelIdManageAddRoute,
+    ProtectedNovelsNovelIdManageAnalyticsRoute:
+      ProtectedNovelsNovelIdManageAnalyticsRoute,
     ProtectedNovelsNovelIdManageChaptersRoute:
       ProtectedNovelsNovelIdManageChaptersRoute,
     ProtectedNovelsNovelIdManageGlossaryRoute:
@@ -1204,6 +1246,7 @@ const ProtectedNovelsNovelIdManageRouteWithChildren =
 
 interface ProtectedRouteChildren {
   ProtectedAdminRoute: typeof ProtectedAdminRouteWithChildren
+  ProtectedAudienceRoute: typeof ProtectedAudienceRoute
   ProtectedJobsRoute: typeof ProtectedJobsRoute
   ProtectedLibraryRoute: typeof ProtectedLibraryRoute
   ProtectedProfileRoute: typeof ProtectedProfileRoute
@@ -1217,6 +1260,7 @@ interface ProtectedRouteChildren {
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedAdminRoute: ProtectedAdminRouteWithChildren,
+  ProtectedAudienceRoute: ProtectedAudienceRoute,
   ProtectedJobsRoute: ProtectedJobsRoute,
   ProtectedLibraryRoute: ProtectedLibraryRoute,
   ProtectedProfileRoute: ProtectedProfileRoute,
