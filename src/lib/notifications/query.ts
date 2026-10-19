@@ -18,7 +18,9 @@ export const notificationsQueryOptions = () =>
     queryKey: notificationKeys.all,
     queryFn: () => listNotifications(),
     staleTime: 15_000,
-    refetchInterval: 30_000,
+    // Ably is the instant path and the poll is the correctness fallback. A minute keeps
+    // the bell fresh without asking the database every thirty seconds per open tab.
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
 
