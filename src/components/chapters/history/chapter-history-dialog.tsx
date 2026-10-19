@@ -139,7 +139,7 @@ export function ChapterHistoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-4xl overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>
             {chapter ? t("title", { number: Number(chapter.number) }) : t("action")}
@@ -158,140 +158,148 @@ export function ChapterHistoryDialog({
             onRetry={() => void historyQuery.refetch()}
           />
         ) : versions && versions.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)]">
-            <ul className="flex max-h-[55vh] flex-col gap-1 overflow-y-auto rounded-lg border border-border p-1">
-              {versions.map((version, index) => {
-                const selected = version.id === activeVersionId;
-                return (
-                  <li key={version.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelection({ chapterId, versionId: version.id })}
-                      aria-pressed={selected}
-                      className={
-                        selected
-                          ? "flex w-full flex-col gap-0.5 rounded-md bg-surface px-3 py-2 text-left text-foreground"
-                          : "flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left text-muted-foreground transition-colors duration-150 hover:bg-surface hover:text-foreground"
-                      }
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="text-body">{originLabel(version.origin)}</span>
-                        {/* After a clear, even the newest row is not the chapter's text. */}
-                        {index === 0 && !cleared ? (
-                          <Badge variant="outline" className="text-badge-count uppercase">
-                            {t("current")}
-                          </Badge>
-                        ) : null}
-                      </span>
-                      <span className="text-caption">
-                        {formatDateTime(version.createdAt, locale)} ·{" "}
-                        {t("characters", { count: formatNumber(version.charCount, locale) })}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+          <>
+            <div className="grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)]">
+              <ul className="flex flex-col gap-1 overflow-y-auto rounded-lg border border-border p-1 md:max-h-[55vh]">
+                {versions.map((version, index) => {
+                  const selected = version.id === activeVersionId;
+                  return (
+                    <li key={version.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelection({ chapterId, versionId: version.id })}
+                        aria-pressed={selected}
+                        className={
+                          selected
+                            ? "flex w-full flex-col gap-0.5 rounded-md bg-surface px-3 py-2 text-left text-foreground"
+                            : "flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left text-muted-foreground transition-colors duration-150 hover:bg-surface hover:text-foreground"
+                        }
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="text-body">{originLabel(version.origin)}</span>
+                          {/* After a clear, even the newest row is not the chapter's text. */}
+                          {index === 0 && !cleared ? (
+                            <Badge variant="outline" className="text-badge-count uppercase">
+                              {t("current")}
+                            </Badge>
+                          ) : null}
+                        </span>
+                        <span className="text-caption">
+                          {formatDateTime(version.createdAt, locale)} ·{" "}
+                          {t("characters", { count: formatNumber(version.charCount, locale) })}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
 
-            <div className="flex min-w-0 flex-col gap-3">
-              {activeVersionId === null || versionQuery.isPending ? (
-                activeVersionId === null ? (
-                  <p className="py-8 text-center text-body text-muted-foreground">
-                    {t("selectHint")}
-                  </p>
-                ) : (
-                  <div className="flex justify-center py-8">
-                    <Spinner />
-                  </div>
-                )
-              ) : versionQuery.isError ? (
-                <QueryErrorState
-                  error={versionQuery.error}
-                  title={t("versionFailed")}
-                  onRetry={() => void versionQuery.refetch()}
-                />
-              ) : versionQuery.data && (diff || restoredParagraphs) ? (
-                <>
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p
-                      className={
-                        cleared ? "text-caption text-warning" : "text-caption text-muted-foreground"
-                      }
-                    >
-                      {cleared
-                        ? t("clearedNotice")
-                        : t("compareLabel", {
-                            date: formatDateTime(versionQuery.data.createdAt, locale),
-                          })}
+              <div className="flex min-w-0 flex-col gap-3">
+                {activeVersionId === null || versionQuery.isPending ? (
+                  activeVersionId === null ? (
+                    <p className="py-8 text-center text-body text-muted-foreground">
+                      {t("selectHint")}
                     </p>
-                    {diff ? (
-                      <p className="flex gap-3 text-caption tabular-nums">
-                        <span className="text-success">{t("added", { count: diff.added })}</span>
-                        <span className="text-destructive-text">
-                          {t("removed", { count: diff.removed })}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {t("unchanged", { count: diff.unchanged })}
-                        </span>
+                  ) : (
+                    <div className="flex justify-center py-8">
+                      <Spinner />
+                    </div>
+                  )
+                ) : versionQuery.isError ? (
+                  <QueryErrorState
+                    error={versionQuery.error}
+                    title={t("versionFailed")}
+                    onRetry={() => void versionQuery.refetch()}
+                  />
+                ) : versionQuery.data && (diff || restoredParagraphs) ? (
+                  <>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p
+                        className={
+                          cleared
+                            ? "text-caption text-warning"
+                            : "text-caption text-muted-foreground"
+                        }
+                      >
+                        {cleared
+                          ? t("clearedNotice")
+                          : t("compareLabel", {
+                              date: formatDateTime(versionQuery.data.createdAt, locale),
+                            })}
+                      </p>
+                      {diff ? (
+                        <p className="flex gap-3 text-caption tabular-nums">
+                          <span className="text-success">{t("added", { count: diff.added })}</span>
+                          <span className="text-destructive-text">
+                            {t("removed", { count: diff.removed })}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {t("unchanged", { count: diff.unchanged })}
+                          </span>
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {versionQuery.data.sourceRevision !== versions[0]?.sourceRevision ? (
+                      <p className="text-caption text-warning">
+                        {t("sourceRevisionOlder", { revision: versionQuery.data.sourceRevision })}
                       </p>
                     ) : null}
-                  </div>
 
-                  {versionQuery.data.sourceRevision !== versions[0]?.sourceRevision ? (
-                    <p className="text-caption text-warning">
-                      {t("sourceRevisionOlder", { revision: versionQuery.data.sourceRevision })}
-                    </p>
-                  ) : null}
-
-                  <ol className="max-h-[45vh] overflow-y-auto rounded-lg border border-border">
-                    {diff
-                      ? diff.lines.map((line, index) => (
-                          <li
-                            key={`${index}-${line.kind}`}
-                            className={
-                              line.kind === "added"
-                                ? "border-l-2 border-success bg-success/5 px-3 py-1.5 text-body text-foreground"
-                                : line.kind === "removed"
-                                  ? "border-l-2 border-destructive bg-destructive/5 px-3 py-1.5 text-body text-muted-foreground line-through"
-                                  : "px-3 py-1.5 text-body text-muted-foreground"
-                            }
-                          >
-                            {line.kind === "added" ? (
-                              <span className="sr-only">{t("addedParagraph")}: </span>
-                            ) : line.kind === "removed" ? (
-                              <span className="sr-only">{t("removedParagraph")}: </span>
-                            ) : null}
-                            {line.text}
-                          </li>
-                        ))
-                      : restoredParagraphs?.map((paragraph, index) => (
-                          <li
-                            key={`${index}-restored`}
-                            className="px-3 py-1.5 text-body text-foreground"
-                          >
-                            {paragraph}
-                          </li>
-                        ))}
-                  </ol>
-
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      disabled={isCurrentVersion || restore.isPending}
-                      onClick={() => {
-                        if (activeVersionId) {
-                          setRestoreTarget({ chapterId, versionId: activeVersionId });
-                        }
-                      }}
-                    >
-                      <History className="size-4" aria-hidden="true" />
-                      {t("restore")}
-                    </Button>
-                  </DialogFooter>
-                </>
-              ) : null}
+                    <ol className="overflow-y-auto rounded-lg border border-border md:max-h-[45vh]">
+                      {diff
+                        ? diff.lines.map((line, index) => (
+                            <li
+                              key={`${index}-${line.kind}`}
+                              className={
+                                line.kind === "added"
+                                  ? "border-l-2 border-success bg-success/5 px-3 py-1.5 text-body text-foreground"
+                                  : line.kind === "removed"
+                                    ? "border-l-2 border-destructive bg-destructive/5 px-3 py-1.5 text-body text-muted-foreground line-through"
+                                    : "px-3 py-1.5 text-body text-muted-foreground"
+                              }
+                            >
+                              {line.kind === "added" ? (
+                                <span className="sr-only">{t("addedParagraph")}: </span>
+                              ) : line.kind === "removed" ? (
+                                <span className="sr-only">{t("removedParagraph")}: </span>
+                              ) : null}
+                              {line.text}
+                            </li>
+                          ))
+                        : restoredParagraphs?.map((paragraph, index) => (
+                            <li
+                              key={`${index}-restored`}
+                              className="px-3 py-1.5 text-body text-foreground"
+                            >
+                              {paragraph}
+                            </li>
+                          ))}
+                    </ol>
+                  </>
+                ) : null}
+              </div>
             </div>
-          </div>
+
+            {/* The footer belongs to the dialog, not to the comparison column: nested in the
+                grid it drew a half-width bar that stopped at the column's edge. */}
+            {versionQuery.data && (diff || restoredParagraphs) ? (
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  disabled={isCurrentVersion || restore.isPending}
+                  onClick={() => {
+                    if (activeVersionId) {
+                      setRestoreTarget({ chapterId, versionId: activeVersionId });
+                    }
+                  }}
+                >
+                  <History className="size-4" aria-hidden="true" />
+                  {t("restore")}
+                </Button>
+              </DialogFooter>
+            ) : null}
+          </>
         ) : (
           <EmptyState title={t("emptyTitle")} description={t("emptyDescription")} size="compact" />
         )}
