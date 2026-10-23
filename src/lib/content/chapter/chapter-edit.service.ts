@@ -10,6 +10,7 @@ import { SafeServerError } from "@/lib/server-fn-error";
 import { dispatchWorkflowOutboxEventBestEffort } from "@/lib/inngest/outbox";
 import { cancelActiveTranslationJobsInTransaction } from "@/lib/translation/workflow/cancel";
 import { recordChapterVersion } from "@/lib/content/chapter/chapter-history.service";
+import { evaluatePublicationText, type PublicationBlock } from "@/lib/content/publish/readiness";
 import type { ReorderChaptersInput } from "@/lib/content/novel/novel.schemas";
 
 type OutboxDispatch = (outboxId: string) => Promise<void>;
@@ -24,6 +25,18 @@ export type ChapterUpdateInput = {
   sourceChangePolicy?: "keep" | "clear";
 };
 
+export type ChapterUpdateResult = {
+  id: string;
+  /**
+   * The block that withdrew a still-future publication, or null.
+   *
+   * A schedule is a promise the clock keeps without another write, so the only way it can be
+   * broken before its time is a text change — and this is the path where the owner is present
+   * to be told. The studio also re-reads the verdict afterwards, which is what marks the row.
+   */
+  withheld: PublicationBlock | null;
+};
+
 function normalizeTranslatedTitle(value: string | null): string | null {
   return value === null || value.trim().length === 0 ? null : value;
 }
@@ -32,8 +45,8 @@ export async function updateChapterForUser(
   userId: string,
   input: ChapterUpdateInput,
   dispatch: OutboxDispatch = dispatchWorkflowOutboxEventBestEffort,
-): Promise<{ id: string }> {
-  const outboxId = await db.transaction(async (tx) => {
+): Promise<ChapterUpdateResult> {
+  const outcome = await db.transaction(async (tx) => {
     const [parent] = await tx
       .select({ novelId: chapters.novelId })
       .from(chapters)
@@ -132,6 +145,16 @@ export async function updateChapterForUser(
           : chapter.editedAt;
     const clearDerivedArtifacts = sourceChanged || translatedContentChanged;
 
+    // Withdrawing a not-yet-visible schedule is the one publication side effect an edit may
+    // have: the chapter never reached readers, so nothing is taken away from them.
+    const withheld =
+      chapter.publishedAt !== null &&
+      chapter.publishedAt > now &&
+      nextTranslatedContent !== null &&
+      clearDerivedArtifacts
+        ? evaluatePublicationText(input.rawContent ?? chapter.rawContent, nextTranslatedContent)
+        : null;
+
     let cancellationOutboxId: string | null = null;
     if (chapter.activeTranslationJobId) {
       const [activeJob] = await tx
@@ -182,6 +205,7 @@ export async function updateChapterForUser(
       if (rawContentChanged) updateValues.rawCharCount = input.rawContent?.length;
     }
     if (clearDerivedArtifacts) updateValues.summary = null;
+    if (withheld) updateValues.publishedAt = null;
 
     await tx.update(chapters).set(updateValues).where(eq(chapters.id, input.chapterId));
 
@@ -209,11 +233,12 @@ export async function updateChapterForUser(
       });
     }
 
-    return cancellationOutboxId;
+    return { cancellationOutboxId, withheld };
   });
 
-  if (outboxId) await dispatch(outboxId);
-  return { id: input.chapterId };
+  if (!outcome) return { id: input.chapterId, withheld: null };
+  if (outcome.cancellationOutboxId) await dispatch(outcome.cancellationOutboxId);
+  return { id: input.chapterId, withheld: outcome.withheld };
 }
 
 export async function reorderChaptersForUser(

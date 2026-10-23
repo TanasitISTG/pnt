@@ -17,6 +17,7 @@ import {
 let sql: Sql;
 let completeChunk: typeof import("./job-store").completeChunk;
 let completeJob: typeof import("./job-store").completeJob;
+let failActiveJob: typeof import("./job-store").failActiveJob;
 let applyRelationshipAnalysis: typeof import("./job-store").applyRelationshipAnalysis;
 let enqueueTranslationJob: typeof import("../api/mutations").enqueueTranslationJob;
 let setRelationshipEntryEnabledForUser: typeof RelationshipService.setRelationshipEntryEnabledForUser;
@@ -214,7 +215,8 @@ describeIntegration("translation workflow PostgreSQL invariants", () => {
   // Load server modules only after DATABASE_URL points at the isolated integration database.
   beforeAll(async () => {
     ({ sql } = openIntegrationDatabase(import.meta.url, { connections: 10 }));
-    ({ completeChunk, completeJob, applyRelationshipAnalysis } = await import("./job-store"));
+    ({ completeChunk, completeJob, applyRelationshipAnalysis, failActiveJob } =
+      await import("./job-store"));
     ({ enqueueTranslationJob } = await import("../api/mutations"));
     ({ updateChapterForUser } = await import("@/lib/content/chapter/chapter-edit.service"));
     ({ updateGlossaryTermAtomic } = await import("@/lib/glossary/service"));
@@ -685,6 +687,79 @@ describeIntegration("translation workflow PostgreSQL invariants", () => {
       expect(chapter.translatedContent).toBeNull();
       expect(novel.storySummary).toBeNull();
       expect(terms).toHaveLength(0);
+    } finally {
+      await deleteFixture(fixture.userId);
+    }
+  });
+
+  it("keeps a readable chapter translated when a re-translation fails", async () => {
+    const fixture = await seedChapter();
+    const replacedJobId = `job-${randomUUID()}`;
+    const emptyJobId = `job-${randomUUID()}`;
+    try {
+      // A chapter that already holds a complete translation readers can see, and a second run
+      // that is replacing it. `failActiveJob` must not take the readable text off the catalog
+      // for a run that never replaced a word of it.
+      await sql`
+        UPDATE "chapters"
+        SET "translated_content" = 'Published body', "status" = 'translated',
+            "published_at" = now() - interval '1 day', "translation_generation" = 2
+        WHERE "id" = ${fixture.chapterId}
+      `;
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation", "total_chunks", "done_chunks"
+        ) VALUES (${replacedJobId}, ${fixture.chapterId}, 'running', 1, 2, 1, 0)
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET "active_translation_job_id" = ${replacedJobId}, "status" = 'translating'
+        WHERE "id" = ${fixture.chapterId}
+      `;
+
+      await expect(failActiveJob(replacedJobId, 2, "provider down", "[]")).resolves.toBe(true);
+
+      const [chapter] = await sql<
+        { status: string; translatedContent: string | null; activeJob: string | null }[]
+      >`
+        SELECT "status", "translated_content" AS "translatedContent",
+               "active_translation_job_id" AS "activeJob"
+        FROM "chapters" WHERE "id" = ${fixture.chapterId}
+      `;
+      const [job] = await sql<{ status: string }[]>`
+        SELECT "status" FROM "translation_jobs" WHERE "id" = ${replacedJobId}
+      `;
+
+      expect(chapter).toMatchObject({
+        status: "translated",
+        translatedContent: "Published body",
+        activeJob: null,
+      });
+      // The failure is still recorded, where the owner reads it: on the run.
+      expect(job?.status).toBe("error");
+
+      // A chapter with no body to fall back to is genuinely unreadable, so it still errors.
+      const empty = await seedChapter();
+      await sql`
+        INSERT INTO "translation_jobs" (
+          "id", "chapter_id", "status", "source_revision", "generation", "total_chunks", "done_chunks"
+        ) VALUES (${emptyJobId}, ${empty.chapterId}, 'running', 1, 1, 1, 0)
+      `;
+      await sql`
+        UPDATE "chapters"
+        SET "active_translation_job_id" = ${emptyJobId}, "status" = 'translating',
+            "translation_generation" = 1
+        WHERE "id" = ${empty.chapterId}
+      `;
+      try {
+        await expect(failActiveJob(emptyJobId, 1, "provider down", "[]")).resolves.toBe(true);
+        const [errored] = await sql<{ status: string }[]>`
+          SELECT "status" FROM "chapters" WHERE "id" = ${empty.chapterId}
+        `;
+        expect(errored?.status).toBe("error");
+      } finally {
+        await deleteFixture(empty.userId);
+      }
     } finally {
       await deleteFixture(fixture.userId);
     }

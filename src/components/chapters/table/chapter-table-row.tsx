@@ -12,6 +12,9 @@ import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ChapterStatusBadge } from "@/components/chapters/table/chapter-status-badge";
+import { ChapterPublicationBadge } from "@/components/chapters/table/chapter-publication-badge";
+import { publishState } from "@/lib/content/publish/publish";
+import type { PublicationBlock } from "@/lib/content/publish/readiness";
 import type { TitleEditState } from "@/components/chapters/table/use-chapter-title-edit";
 import { PublishMenu } from "@/components/publish-menu";
 import { formatNumber } from "@/lib/i18n/format";
@@ -30,6 +33,7 @@ export interface ChapterTableRowProps {
   activeJob: ActiveJobState | undefined;
   readState: "read" | "unread";
   residualScriptCount: number | undefined;
+  publicationBlocks: readonly PublicationBlock[] | undefined;
   chapterCost: ChapterCost | undefined;
   selected: boolean;
   translationState: "translating" | "idle";
@@ -189,7 +193,11 @@ function ChapterTitleLink({
   novelId,
   readState,
   residualScriptCount,
-}: Pick<ChapterTableRowProps, "chapter" | "novelId" | "readState" | "residualScriptCount">) {
+  publicationBlocks,
+}: Pick<
+  ChapterTableRowProps,
+  "chapter" | "novelId" | "readState" | "residualScriptCount" | "publicationBlocks"
+>) {
   const t = useTranslations("studio");
   return (
     <div className="flex items-center gap-2">
@@ -210,6 +218,12 @@ function ChapterTitleLink({
         <Badge variant="warningStrong" className="font-mono text-xs">
           {t("residualScriptLetters", { count: residualScriptCount })}
         </Badge>
+      ) : null}
+      {publicationBlocks && publicationBlocks.length > 0 ? (
+        <ChapterPublicationBadge
+          blockers={publicationBlocks}
+          live={publishState(chapter.publishedAt) === "live"}
+        />
       ) : null}
     </div>
   );
@@ -290,6 +304,7 @@ function ChapterTitleCell(props: ChapterTableRowProps) {
           novelId={props.novelId}
           readState={props.readState}
           residualScriptCount={props.residualScriptCount}
+          publicationBlocks={props.publicationBlocks}
         />
       )}
       <div className="sm:hidden mt-1.5 flex flex-col gap-1 text-caption text-muted-foreground">
@@ -516,6 +531,7 @@ export const ChapterTableRow = memo(function ChapterTableRow({
   activeJob,
   readState,
   residualScriptCount,
+  publicationBlocks,
   chapterCost,
   selected,
   translationState,
@@ -543,6 +559,7 @@ export const ChapterTableRow = memo(function ChapterTableRow({
       activeJob={activeJob}
       readState={readState}
       residualScriptCount={residualScriptCount}
+      publicationBlocks={publicationBlocks}
       chapterCost={chapterCost}
       selected={selected}
       translationState={translationState}

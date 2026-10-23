@@ -4,6 +4,7 @@ import type { AdminNovelDetailCore } from "@/lib/content/novel/admin-novel-detai
 import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
 import { getResidualScriptChapters } from "@/lib/content/chapter/chapter-ops.functions";
 import { getAdminNovelDetailMetrics, getNovel } from "@/lib/content/novel/novel.functions";
+import { getChapterPublicationReadiness } from "@/lib/content/publish/readiness.functions";
 
 export const novelQueryOptions = (novelId: string) =>
   queryOptions({
@@ -25,6 +26,16 @@ export const adminNovelResidualQueryOptions = (novelId: string, revision: string
   queryOptions({
     queryKey: ["adminNovelResidual", novelId, revision] as const,
     queryFn: () => getResidualScriptChapters({ data: { novelId } }),
+    staleTime: 5 * 60_000,
+  });
+
+// The publish pre-flight counts paragraphs over every translated body and joins the runs
+// behind them, so it is keyed by a content revision for the same reason the residual scan is:
+// a cached verdict may only be reused while nothing it read has moved.
+export const publicationReadinessQueryOptions = (novelId: string, revision: string) =>
+  queryOptions({
+    queryKey: ["publicationReadiness", novelId, revision] as const,
+    queryFn: () => getChapterPublicationReadiness({ data: { novelId } }),
     staleTime: 5 * 60_000,
   });
 

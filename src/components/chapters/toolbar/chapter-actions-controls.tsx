@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 export interface ChapterActionsControlsProps {
   readyUnpublishedCount: number;
   unreadyCount: number;
+  blockedCount: number;
   onPublishAll: () => void;
   publishingAll: boolean;
   missingTitleCount: number;
@@ -31,6 +32,7 @@ export interface ChapterActionsControlsProps {
 export function ChapterActionsControls({
   readyUnpublishedCount,
   unreadyCount,
+  blockedCount,
   onPublishAll,
   publishingAll,
   missingTitleCount,
@@ -66,6 +68,11 @@ export function ChapterActionsControls({
           {unreadyCount > 0 ? (
             <p className="px-2 py-1.5 text-xs text-muted-foreground">
               {t("notReadyToPublish", { count: unreadyCount })}
+            </p>
+          ) : null}
+          {blockedCount > 0 ? (
+            <p className="px-2 py-1.5 text-xs text-warning">
+              {t("publicationBlockedCount", { count: blockedCount })}
             </p>
           ) : null}
           {missingTitleCount > 0 ? (

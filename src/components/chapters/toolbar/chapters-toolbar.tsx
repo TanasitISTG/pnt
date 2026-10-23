@@ -18,6 +18,8 @@ export interface ChaptersToolbarProps {
   onSelectRange: (from: number, to: number) => void;
   readyUnpublishedCount: number;
   unreadyCount: number;
+  /** Translated, but the publish pre-flight would refuse them. */
+  blockedCount: number;
   onPublishAll: () => void;
   publishingAll: boolean;
   missingTitleCount: number;
@@ -47,6 +49,7 @@ export function ChaptersToolbar({
   onSelectRange,
   readyUnpublishedCount,
   unreadyCount,
+  blockedCount,
   onPublishAll,
   publishingAll,
   missingTitleCount,
@@ -80,6 +83,7 @@ export function ChaptersToolbar({
       <ChapterActionsControls
         readyUnpublishedCount={readyUnpublishedCount}
         unreadyCount={unreadyCount}
+        blockedCount={blockedCount}
         onPublishAll={onPublishAll}
         publishingAll={publishingAll}
         missingTitleCount={missingTitleCount}

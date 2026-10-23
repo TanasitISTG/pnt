@@ -11,8 +11,10 @@ import { chaptersQueryOptions } from "@/lib/content/chapter/chapter.query";
 import {
   adminNovelDetailMetricsQueryOptions,
   adminNovelResidualQueryOptions,
+  publicationReadinessQueryOptions,
 } from "@/lib/content/novel/novel.query";
 import { residualRevisionOf } from "@/lib/content/novel/residual-revision";
+import { publicationRevisionOf, type PublicationBlock } from "@/lib/content/publish/readiness";
 import { useReaderState } from "@/lib/reader/use-reader-state";
 import type { NovelDetailChapterPanelDetail } from "./studio-chapters";
 import type { NovelDetailDialogData } from "./studio-dialogs";
@@ -74,6 +76,7 @@ function getServerClockSnapshot() {
 
 const EMPTY_CHAPTERS: never[] = [];
 const EMPTY_RESIDUAL_SCRIPTS: never[] = [];
+const EMPTY_PUBLICATION_BLOCKS: never[] = [];
 
 export interface ChapterWorkspace {
   chapters: ChapterRow[];
@@ -126,6 +129,21 @@ export function useChapterWorkspace(novelId: string): ChapterWorkspace {
     }
     return map;
   }, [residualScriptChapters]);
+
+  // What the publish pre-flight would refuse, read from the server for the same reason the
+  // residual scan is: the studio cannot re-derive it without the run and chunk rows, and a
+  // client guess would disagree with the refusal it is meant to explain.
+  const publicationRevision = useMemo(() => publicationRevisionOf(chapters), [chapters]);
+  const publicationQuery = useQuery({
+    ...publicationReadinessQueryOptions(novelId, publicationRevision),
+    enabled: chaptersQuery.isSuccess,
+  });
+  const publicationReadinessRows = publicationQuery.data ?? EMPTY_PUBLICATION_BLOCKS;
+  const publicationBlockMap = useMemo(() => {
+    const map = new Map<string, readonly PublicationBlock[]>();
+    for (const row of publicationReadinessRows) map.set(row.chapterId, row.blockers);
+    return map;
+  }, [publicationReadinessRows]);
 
   const readerState = useReaderState(novelId, true);
   const readingProgress = useNovelReadingProgress(chapters, readerState);
@@ -222,6 +240,7 @@ export function useChapterWorkspace(novelId: string): ChapterWorkspace {
     queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
     queryClient.invalidateQueries({ queryKey: ["adminNovelDetailMetrics", novelId] });
     queryClient.invalidateQueries({ queryKey: ["adminNovelResidual", novelId] });
+    queryClient.invalidateQueries({ queryKey: ["publicationReadiness", novelId] });
     queryClient.invalidateQueries({ queryKey: ["novels"] });
   }, [queryClient, novelId]);
 
@@ -244,19 +263,27 @@ export function useChapterWorkspace(novelId: string): ChapterWorkspace {
     getClockSnapshot,
     getServerClockSnapshot,
   );
-  const { readyUnpublishedCount, unreadyCount } = useMemo(() => {
+  const { readyUnpublishedCount, unreadyCount, blockedCount } = useMemo(() => {
     let readyCount = 0;
     let unreadyChapterCount = 0;
+    let blockedChapterCount = 0;
     for (const chapter of chapters) {
-      const ready = chapter.status === "translated" && chapter.hasTranslation;
-      if (!ready) {
+      const translated = chapter.status === "translated" && chapter.hasTranslation;
+      if (!translated) {
         unreadyChapterCount++;
+      } else if (publicationBlockMap.has(chapter.id)) {
+        // Translated but refused: neither ready nor untranslated, and the toolbar says so.
+        blockedChapterCount++;
       } else if (!chapter.publishedAt || new Date(chapter.publishedAt).getTime() > now) {
         readyCount++;
       }
     }
-    return { readyUnpublishedCount: readyCount, unreadyCount: unreadyChapterCount };
-  }, [chapters, now]);
+    return {
+      readyUnpublishedCount: readyCount,
+      unreadyCount: unreadyChapterCount,
+      blockedCount: blockedChapterCount,
+    };
+  }, [chapters, now, publicationBlockMap]);
 
   const tableProps: Omit<ChapterTableProps, "chapters"> = {
     novelId,
@@ -264,6 +291,7 @@ export function useChapterWorkspace(novelId: string): ChapterWorkspace {
     activeJobs,
     readChapterIdSet: readingProgress.readChapterIdSet,
     residualScriptMap,
+    publicationBlockMap,
     costData: metrics?.costData,
     selectedIds,
     isTranslating: isRowTranslating,
@@ -309,6 +337,7 @@ export function useChapterWorkspace(novelId: string): ChapterWorkspace {
       selectByRange,
       readyUnpublishedCount,
       unreadyCount,
+      blockedCount,
       publishAllChapters,
       publishingAll,
       missingTitleCount,

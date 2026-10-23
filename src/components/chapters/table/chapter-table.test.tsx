@@ -62,6 +62,7 @@ function createProps(overrides: Partial<ChapterTableProps> = {}): ChapterTablePr
     activeJobs: new Map(),
     readChapterIdSet: new Set(),
     residualScriptMap: new Map(),
+    publicationBlockMap: new Map(),
     costData: undefined,
     selectedIds: new Set(),
     isTranslating: () => false,
@@ -186,6 +187,36 @@ describe("ChapterTable browsing behavior", () => {
     );
 
     expect(screen.getByText("13 foreign-script letters")).toBeTruthy();
+  });
+
+  it("marks a row the publish pre-flight refuses, and keeps publishing reachable", () => {
+    render(
+      <ChapterTable
+        {...createProps({
+          publicationBlockMap: new Map([
+            [CHAPTER.id, [{ reason: "missing-paragraphs", missingParagraphs: 1 }]],
+          ]),
+        })}
+      />,
+    );
+
+    expect(screen.getByText("1 paragraph missing")).toBeTruthy();
+    // The server is the authority: the control stays available so a refusal can be explained
+    // rather than silently hidden behind a stale readiness cache.
+    expect(screen.getByRole("button", { name: "Publishing options" })).toBeTruthy();
+  });
+
+  it("says a live chapter is at risk instead of naming a paragraph count", () => {
+    render(
+      <ChapterTable
+        {...createProps({
+          chapters: [{ ...CHAPTER, publishedAt: "2000-01-01T00:00:00.000Z" }],
+          publicationBlockMap: new Map([[CHAPTER.id, [{ reason: "run-incomplete" }]]]),
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Live · needs attention")).toBeTruthy();
   });
 
   it("allows selecting translating rows while keeping edit actions disabled", () => {

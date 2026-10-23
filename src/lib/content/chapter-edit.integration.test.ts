@@ -347,7 +347,7 @@ describeIntegration("chapter edit PostgreSQL invariants", () => {
           },
           skipEagerDispatch,
         ),
-      ).resolves.toEqual({ id: fixture.chapterIds[0] });
+      ).resolves.toEqual({ id: fixture.chapterIds[0], withheld: null });
 
       expect(await readChapters(fixture.novelId)).toEqual(before);
       const [afterUpdatedAt] = await sql<{ updatedAt: string }[]>`
@@ -410,7 +410,7 @@ describeIntegration("chapter edit PostgreSQL invariants", () => {
           { chapterId: fixture.chapterIds[0], translatedTitle: "Edited one" },
           skipEagerDispatch,
         ),
-      ).resolves.toEqual({ id: fixture.chapterIds[0] });
+      ).resolves.toEqual({ id: fixture.chapterIds[0], withheld: null });
 
       const [chapter] = await readChapters(fixture.novelId);
       const [novel] = await sql<{ storySummary: string | null }[]>`
@@ -478,7 +478,7 @@ describeIntegration("chapter edit PostgreSQL invariants", () => {
           },
           skipEagerDispatch,
         ),
-      ).resolves.toEqual({ id: fixture.chapterIds[0] });
+      ).resolves.toEqual({ id: fixture.chapterIds[0], withheld: null });
       const [cleared] = await readChapters(fixture.novelId);
       expect(cleared).toMatchObject({
         rawContent: "Cleared raw",
@@ -519,7 +519,7 @@ describeIntegration("chapter edit PostgreSQL invariants", () => {
             dispatched.push(outboxId);
           },
         ),
-      ).resolves.toEqual({ id: fixture.chapterIds[0] });
+      ).resolves.toEqual({ id: fixture.chapterIds[0], withheld: null });
 
       expect(dispatched).toHaveLength(1);
       const [job] = await sql<{ status: string }[]>`

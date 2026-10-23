@@ -40,6 +40,7 @@ function createTableProps(
     activeJobs: new Map(),
     readChapterIdSet: new Set(),
     residualScriptMap: new Map(),
+    publicationBlockMap: new Map(),
     costData: undefined,
     selectedIds: new Set(),
     isTranslating: () => false,

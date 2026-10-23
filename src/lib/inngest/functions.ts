@@ -19,6 +19,7 @@ import {
 } from "@/lib/notifications/service.server";
 import { dispatchPendingWorkflowOutbox } from "./outbox";
 import { runMaintenanceSweepSteps } from "./maintenance-sweep";
+import { withholdIncompleteScheduledPublications } from "@/lib/content/publish/readiness.service";
 import { TRANSLATION_CANCEL_IF } from "@/lib/translation/workflow/job-state";
 import { RETRY_COUNT } from "@/lib/retry";
 import { cleanupExpiredRateLimits } from "@/lib/rate-limit";
@@ -198,7 +199,8 @@ export const translationEvalFn = inngest.createFunction(
 );
 
 /**
- * The clock's half of publishing, and the retry path for the outbox, in one cron.
+ * The clock's half of publishing, the retry path for the outbox, and the pre-flight for a
+ * schedule that is about to arrive, in one cron.
  *
  * A scheduled chapter has no request behind it, and a bulk release deliberately leaves its
  * fan-out off the request, so the notification step turns "the time has passed" into the
@@ -206,9 +208,15 @@ export const translationEvalFn = inngest.createFunction(
  * inline fan-out failed. The outbox step is only the retry path; eager dispatch already
  * delivers promptly.
  *
- * The two steps are independent: one failing must not keep the other from running, so
- * `runMaintenanceSweepSteps` starts both and fails the run only after both settle, leaving
- * the successful step memoized for the retry.
+ * The publication step is the counterpart of the write-time gate for the one publication
+ * nobody clicks: a chapter whose text changed after it was scheduled must not arrive
+ * incomplete, so the chapters due within the next window are pre-flighted and their schedule
+ * is withdrawn if they no longer pass. That ordering is why it belongs in this sweep rather
+ * than in a write — nothing is written at a scheduled chapter's publication time.
+ *
+ * The three steps are independent: one failing must not keep the others from running, so
+ * `runMaintenanceSweepSteps` starts all of them and fails the run only after all settle, leaving
+ * the successful steps memoized for the retry.
  *
  * Ten minutes, not every minute: Neon suspends a compute after five minutes without a
  * query, and a one- or two-minute cron resets that timer forever. A scheduled chapter is
@@ -226,6 +234,8 @@ export const maintenanceSweepFn = inngest.createFunction(
     runMaintenanceSweepSteps({
       outbox: () => step.run("dispatch-pending", () => dispatchPendingWorkflowOutbox()),
       notifications: () => step.run("sweep-chapters", () => sweepPendingChapterNotifications()),
+      publication: () =>
+        step.run("withhold-unpublishable", () => withholdIncompleteScheduledPublications()),
     }),
 );
 

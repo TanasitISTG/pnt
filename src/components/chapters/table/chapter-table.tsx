@@ -5,6 +5,7 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components
 import type { TitleEditState } from "@/components/chapters/table/use-chapter-title-edit";
 import { ChapterTableRow } from "./chapter-table-row";
 import type { ChapterRow } from "@/components/chapters/types";
+import type { PublicationBlock } from "@/lib/content/publish/readiness";
 import type { TranslationStartMode } from "@/lib/translation/api/schemas";
 import type { NovelCostData, ActiveJobState } from "@/lib/translation/types/api";
 type CostData = NovelCostData | undefined;
@@ -16,6 +17,8 @@ export interface ChapterTableProps {
   activeJobs: Map<string, ActiveJobState>;
   readChapterIdSet: ReadonlySet<string>;
   residualScriptMap: Map<string, number>;
+  /** Server-read publish pre-flight verdicts: only chapters it would refuse appear here. */
+  publicationBlockMap: Map<string, readonly PublicationBlock[]>;
   costData: CostData;
   selectedIds: Set<string>;
   isTranslating: (chapterId: string, status: string) => boolean;
@@ -43,6 +46,7 @@ export const ChapterTable = memo(function ChapterTable({
   activeJobs,
   readChapterIdSet,
   residualScriptMap,
+  publicationBlockMap,
   costData,
   selectedIds,
   isTranslating,
@@ -80,6 +84,7 @@ export const ChapterTable = memo(function ChapterTable({
         activeJob={activeJob}
         readState={readChapterIdSet.has(chapter.id) ? "read" : "unread"}
         residualScriptCount={residualScriptMap.get(chapter.id)}
+        publicationBlocks={publicationBlockMap.get(chapter.id)}
         chapterCost={costData?.costs[chapter.id]}
         selected={selectedIds.has(chapter.id)}
         translationState={isRowTranslating ? "translating" : "idle"}

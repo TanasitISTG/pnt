@@ -32,6 +32,7 @@ export interface NovelDetailChapterPanelDetail {
   selectByRange: (from: number, to: number) => void;
   readyUnpublishedCount: number;
   unreadyCount: number;
+  blockedCount: number;
   publishAllChapters: () => void;
   publishingAll: boolean;
   missingTitleCount: number;
@@ -153,6 +154,7 @@ export function NovelDetailChapterPanel({
     selectByRange,
     readyUnpublishedCount,
     unreadyCount,
+    blockedCount,
     publishAllChapters,
     publishingAll,
     missingTitleCount,
@@ -215,6 +217,7 @@ export function NovelDetailChapterPanel({
           onSelectRange={selectByRange}
           readyUnpublishedCount={readyUnpublishedCount}
           unreadyCount={unreadyCount}
+          blockedCount={blockedCount}
           onPublishAll={() => publishAllChapters()}
           publishingAll={publishingAll}
           missingTitleCount={missingTitleCount}

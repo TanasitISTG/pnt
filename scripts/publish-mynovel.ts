@@ -4,6 +4,8 @@ import { createInterface } from "node:readline/promises";
 
 import { config as loadEnv } from "dotenv";
 
+import type { PublicationBlock, PublicationVerdict } from "@/lib/content/publish/readiness";
+
 const MY_NOVEL_ORIGIN = "https://api-mynovel.co";
 const REQUEST_TIMEOUT_MS = 20_000;
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -137,6 +139,11 @@ Options:
 Environment:
   MYNOVEL_AUTH_TOKEN             Replacement MyNovel bearer token (optional)
   MYNOVEL_REQUEST_SIGNING_KEY    Override the observed MyNovel signing key (optional)
+
+A run refuses to upload any selected chapter the app's own publish pre-flight
+blocks (no translation, a running translation, an unfinished run, a failed
+chunk, or lost paragraph breaks) whatever publishStatus is chosen, so the
+destination never receives a chapter PNT itself would not publish.
 
 Created chapters use the selected publishStatus and title-only names.`;
 }
@@ -394,6 +401,86 @@ export function preparePublishItems(
   }
 
   return items;
+}
+
+/**
+ * Why a chapter the app refuses to publish is refused, in the operator's words.
+ *
+ * The order is the pre-flight's own, so the first reason named here is the one a publish
+ * click in the studio would report first and the two screens never disagree. The phrases are
+ * the studio's labels because they are what an operator already reads there; this script has
+ * no reader to translate for, so it says them once, in English.
+ */
+export function describePublicationBlock(block: PublicationBlock): string {
+  switch (block.reason) {
+    case "translation-missing":
+      return "no translation yet";
+    case "translation-in-flight":
+      return "translation still running";
+    case "run-incomplete":
+      return "translation run unfinished";
+    case "chunk-failed": {
+      const count = block.failedChunks ?? 0;
+      return `${count} chunk${count === 1 ? "" : "s"} failed`;
+    }
+    case "missing-paragraphs": {
+      const count = block.missingParagraphs ?? 0;
+      return `${count} paragraph${count === 1 ? "" : "s"} missing`;
+    }
+  }
+}
+
+export interface UnpublishableChapter {
+  number: string;
+  reasons: string[];
+}
+
+/**
+ * The selected chapters this run must not send, for the reasons the app's own gate refuses.
+ *
+ * Read from the same verdict the publish path and the schedule sweep use, because a second
+ * opinion here is exactly how a chapter the app would refuse leaves over MyNovel anyway. A
+ * chapter with no verdict at all is refused as well: it vanished between the two queries, and
+ * a run that cannot prove a chapter is whole is not allowed to send it.
+ */
+export function findUnpublishableChapters(
+  rows: readonly Pick<PntChapterRow, "id" | "number">[],
+  verdicts: ReadonlyMap<string, PublicationVerdict>,
+): UnpublishableChapter[] {
+  const refused: UnpublishableChapter[] = [];
+  for (const row of rows) {
+    const verdict = verdicts.get(row.id);
+    if (verdict?.publishable) continue;
+    refused.push({
+      number: row.number,
+      reasons: verdict
+        ? verdict.blockers.map(describePublicationBlock)
+        : ["publication readiness could not be read"],
+    });
+  }
+  return refused.toSorted((left, right) => Number(left.number) - Number(right.number));
+}
+
+/**
+ * Stop the run before it can send a chapter PNT would refuse to publish.
+ *
+ * Every refusal is named at once: an operator fixing a range should learn all of it in one
+ * pass rather than one rerun at a time. Nothing has been uploaded at this point and the
+ * message says so, because the operator's next question is whether the remote book changed.
+ */
+export function assertChaptersPublishable(
+  rows: readonly Pick<PntChapterRow, "id" | "number">[],
+  verdicts: ReadonlyMap<string, PublicationVerdict>,
+): void {
+  const refused = findUnpublishableChapters(rows, verdicts);
+  if (refused.length === 0) return;
+  throw new Error(
+    [
+      `Refusing to upload ${refused.length} chapter(s) the publish pre-flight blocks:`,
+      ...refused.map((chapter) => `  ${chapter.number}: ${chapter.reasons.join("; ")}`),
+      "Fix these chapters (or narrow the range) and rerun. Nothing was uploaded.",
+    ].join("\n"),
+  );
 }
 
 export function createMyNovelSignature(
@@ -672,6 +759,23 @@ async function main(): Promise<void> {
       )
       .orderBy(drizzle.asc(drizzle.sql`COALESCE(${chapters.number}::numeric, 0)`));
 
+    // Asked twice on purpose — once now, so a blocked range costs no token and no remote
+    // preflight, and again immediately before the first write. The operator's own prompts sit
+    // between the two, and a translation restarted while they fetched a token would otherwise
+    // go out mid-run.
+    const assertSelectedChaptersPublishable = async (): Promise<void> => {
+      const { loadPublicationVerdicts } =
+        await import("@/lib/content/publish/readiness.service.ts");
+      assertChaptersPublishable(
+        rows,
+        await loadPublicationVerdicts(
+          db,
+          rows.map((row) => row.id),
+        ),
+      );
+    };
+    await assertSelectedChaptersPublishable();
+
     const items = preparePublishItems(rows, {
       bookId: operator.myNovelBookId,
       chapterPrice: operator.chapterPrice,
@@ -714,6 +818,7 @@ async function main(): Promise<void> {
       return;
     }
 
+    await assertSelectedChaptersPublishable();
     const created = await postChaptersSequentially(items, credentials);
     console.log(`Created ${created.length} ${operator.publishStatus} chapter(s).`);
   } catch (error) {

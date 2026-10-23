@@ -868,6 +868,17 @@ const en = {
     chaptersPublished: "{count, plural, one {Published # chapter} other {Published # chapters}}",
     chaptersPublishedSkipped:
       "{count, plural, one {Published # chapter} other {Published # chapters}}; skipped {skipped} not-ready",
+    chaptersPublishedWithBlocked:
+      "{count, plural, one {Published # chapter} other {Published # chapters}}; held back {blocked} ({chapters})",
+    publicationBlockedCount:
+      "{count, plural, one {# chapter can't be published yet} other {# chapters can't be published yet}}",
+    publicationBlockedMissingTranslation: "No translation yet",
+    publicationBlockedInFlight: "Translation still running",
+    publicationBlockedIncomplete: "Translation run unfinished",
+    publicationBlockedChunkFailed: "{count, plural, one {# chunk failed} other {# chunks failed}}",
+    publicationBlockedMissingParagraphs:
+      "{count, plural, one {# paragraph missing} other {# paragraphs missing}}",
+    publicationAtRisk: "Live · needs attention",
     titlesTranslated:
       "{count, plural, one {Translated # chapter title} other {Translated # chapter titles}}",
     noTitlesTranslated: "No titles translated",
@@ -2201,6 +2212,16 @@ const en = {
     chapterTranslationActive: "Stop the translation running on this chapter before restoring.",
     translationVersionNotFoundOrUnauthorized: "Version not found, or you do not have access to it.",
     chapterNotTranslatedForPublish: "Translate the chapter before publishing.",
+    // The publish pre-flight's refusals. Each names the fact that stopped the publish and the
+    // action that unblocks it, because the owner is the only one who can take that action.
+    chapterPublishBlockedInFlight:
+      "This chapter's translation is still running. Wait for it to finish before publishing.",
+    chapterPublishBlockedIncomplete:
+      "The translation behind this chapter never finished. Retry it before publishing.",
+    chapterPublishBlockedChunkFailed:
+      "{count, plural, one {This translation is missing # chunk.} other {This translation is missing # chunks.}} Retry it before publishing.",
+    chapterPublishBlockedMissingParagraphs:
+      "{count, plural, one {This translation is missing # paragraph from the source.} other {This translation is missing # paragraphs from the source.}} Restore or re-translate it before publishing.",
     languagePairNeedsCancel: "Cancel active translations before changing the language pair.",
     coverNotValidated: "The cover image data was not validated.",
     displayNameUpdateFailed: "Could not update your display name. Try again.",

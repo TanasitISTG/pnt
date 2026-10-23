@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { evaluatePublication, type PublicationFacts } from "@/lib/content/publish/readiness";
 import {
   ChapterPublishError,
   DEFAULT_MY_NOVEL_SIGNING_KEY,
+  assertChaptersPublishable,
   createMyNovelSignature,
+  describePublicationBlock,
+  findUnpublishableChapters,
   postChaptersSequentially,
   parsePublishStatus,
   preflightMyNovelDestination,
@@ -26,6 +30,20 @@ function chapter(overrides: Partial<PntChapterRow> = {}): PntChapterRow {
     title: "Source title",
     translatedTitle: "ชื่อตอน",
     translatedContent: "ย่อหน้าแรก\n\nย่อหน้าที่สอง",
+    ...overrides,
+  };
+}
+
+/** Whole chapter: the pipeline's own success case, and the base for every blocked fixture. */
+function facts(overrides: Partial<PublicationFacts> = {}): PublicationFacts {
+  return {
+    status: "translated",
+    hasBody: true,
+    activeTranslationJobId: null,
+    rawParagraphs: 2,
+    translatedParagraphs: 2,
+    run: { id: "job-1", status: "done", doneChunks: 3, totalChunks: 3 },
+    chunks: { total: 3, unusable: 0 },
     ...overrides,
   };
 }
@@ -170,6 +188,82 @@ describe("MyNovel chapter preparation", () => {
         publishStatus: "draft",
       }),
     ).toThrow("Selected chapters have duplicate generated titles: ชื่อตอน");
+  });
+});
+
+describe("MyNovel publication pre-flight", () => {
+  const ROWS = [
+    { id: "chapter-1", number: "1" },
+    { id: "chapter-2", number: "2" },
+    { id: "chapter-3", number: "3" },
+    { id: "chapter-4", number: "4" },
+  ];
+
+  it("refuses exactly the chapters the publish gate refuses", () => {
+    // Built from the gate itself, so this cannot drift from what publishing answers.
+    const verdicts = new Map([
+      ["chapter-1", evaluatePublication(facts())],
+      ["chapter-2", evaluatePublication(facts({ chunks: { total: 3, unusable: 1 } }))],
+      ["chapter-3", evaluatePublication(facts({ translatedParagraphs: 1 }))],
+      ["chapter-4", evaluatePublication(facts())],
+    ]);
+
+    expect(findUnpublishableChapters(ROWS, verdicts)).toEqual([
+      { number: "2", reasons: ["1 chunk failed"] },
+      { number: "3", reasons: ["1 paragraph missing"] },
+    ]);
+  });
+
+  it("names every refusal at once, in chapter order, before anything is uploaded", () => {
+    const verdicts = new Map([
+      ["chapter-3", evaluatePublication(facts({ translatedParagraphs: 0 }))],
+      ["chapter-1", evaluatePublication(facts({ activeTranslationJobId: "job-9" }))],
+      ["chapter-2", evaluatePublication(facts())],
+    ]);
+
+    let caught: unknown;
+    try {
+      assertChaptersPublishable([ROWS[2]!, ROWS[0]!, ROWS[1]!], verdicts);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    const message = (caught as Error).message;
+    expect(message).toContain("Refusing to upload 2 chapter(s) the publish pre-flight blocks:");
+    expect(message).toContain("  1: translation still running");
+    expect(message).toContain("  3: 2 paragraphs missing");
+    expect(message).toContain("Nothing was uploaded.");
+    expect(message.indexOf("  1:")).toBeLessThan(message.indexOf("  3:"));
+  });
+
+  it("lets a wholly publishable selection through", () => {
+    const verdicts = new Map([[ROWS[0]!.id, evaluatePublication(facts())]]);
+
+    expect(() => assertChaptersPublishable([ROWS[0]!], verdicts)).not.toThrow();
+    expect(findUnpublishableChapters([ROWS[0]!], verdicts)).toEqual([]);
+  });
+
+  it("refuses a chapter it could not read a verdict for", () => {
+    expect(findUnpublishableChapters([ROWS[0]!], new Map())).toEqual([
+      { number: "1", reasons: ["publication readiness could not be read"] },
+    ]);
+  });
+
+  it.each([
+    [evaluatePublication(facts({ status: "raw" })), "no translation yet"],
+    [evaluatePublication(facts({ activeTranslationJobId: "job-9" })), "translation still running"],
+    [
+      evaluatePublication(
+        facts({ run: { id: "job-1", status: "failed", doneChunks: 1, totalChunks: 3 } }),
+      ),
+      "translation run unfinished",
+    ],
+    [evaluatePublication(facts({ chunks: { total: 3, unusable: 2 } })), "2 chunks failed"],
+    [evaluatePublication(facts({ translatedParagraphs: 0 })), "2 paragraphs missing"],
+  ])("words %# like the studio's badge", (verdict, expected) => {
+    if (verdict.publishable) throw new Error("fixture must be blocked");
+    expect(verdict.blockers.map(describePublicationBlock)).toEqual([expected]);
   });
 });
 

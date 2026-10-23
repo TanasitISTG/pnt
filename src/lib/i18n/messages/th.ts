@@ -787,6 +787,15 @@ const th = {
     chaptersUnpublished: "{count, plural, other {ยกเลิกการเผยแพร่ # บท}}",
     chaptersPublished: "{count, plural, other {เผยแพร่ # บท}}",
     chaptersPublishedSkipped: "{count, plural, other {เผยแพร่ # บท}} ข้าม {skipped} บทยังไม่พร้อม",
+    chaptersPublishedWithBlocked:
+      "{count, plural, other {เผยแพร่ # บท}} · กันไว้ {blocked} บท ({chapters})",
+    publicationBlockedCount: "{count, plural, other {# บทยังเผยแพร่ไม่ได้}}",
+    publicationBlockedMissingTranslation: "ยังไม่มีคำแปล",
+    publicationBlockedInFlight: "กำลังแปลอยู่",
+    publicationBlockedIncomplete: "การแปลไม่เสร็จสิ้น",
+    publicationBlockedChunkFailed: "{count, plural, other {ขาด # ส่วน}}",
+    publicationBlockedMissingParagraphs: "{count, plural, other {ขาด # ย่อหน้า}}",
+    publicationAtRisk: "เผยแพร่อยู่ · ควรตรวจสอบ",
     titlesTranslated: "{count, plural, other {แปลชื่อเรื่องแล้ว # ชื่อ}}",
     noTitlesTranslated: "ไม่มีชื่อเรื่องที่ต้องแปล",
     titlesTranslateFailed: "แปลชื่อเรื่องไม่สำเร็จ",
@@ -1964,6 +1973,12 @@ const th = {
     chapterTranslationActive: "หยุดการแปลที่กำลังทำอยู่ในบทนี้ก่อนกู้คืน",
     translationVersionNotFoundOrUnauthorized: "ไม่พบเวอร์ชันนี้ หรือคุณไม่มีสิทธิ์เข้าถึง",
     chapterNotTranslatedForPublish: "แปลบทนี้ก่อนเผยแพร่",
+    chapterPublishBlockedInFlight: "การแปลบทนี้ยังทำงานอยู่ รอให้เสร็จก่อนเผยแพร่",
+    chapterPublishBlockedIncomplete: "การแปลที่สร้างบทนี้ยังไม่เสร็จสิ้น ลองแปลใหม่ก่อนเผยแพร่",
+    chapterPublishBlockedChunkFailed:
+      "{count, plural, other {คำแปลขาดหาย # ส่วน}} ลองแปลใหม่ก่อนเผยแพร่",
+    chapterPublishBlockedMissingParagraphs:
+      "{count, plural, other {คำแปลขาด # ย่อหน้าจากต้นฉบับ}} กู้คืนหรือแปลใหม่ก่อนเผยแพร่",
     languagePairNeedsCancel: "ยกเลิกการแปลที่ทำงานอยู่ก่อนเปลี่ยนคู่ภาษา",
     coverNotValidated: "ข้อมูลภาพปกไม่ผ่านการตรวจสอบ",
     displayNameUpdateFailed: "อัปเดตชื่อที่แสดงไม่สำเร็จ ลองอีกครั้ง",

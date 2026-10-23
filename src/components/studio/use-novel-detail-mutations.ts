@@ -111,18 +111,34 @@ export function useNovelDetailMutations(novelId: string, onTranslationsDeleted: 
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["chapters", novelId] });
       queryClient.invalidateQueries({ queryKey: ["readerChapterManifest", novelId] });
+      // The readiness read is what marks a refused chapter, so it is refreshed with the rows
+      // the refusal changed.
+      queryClient.invalidateQueries({ queryKey: ["publicationReadiness", novelId] });
       if ("unpublished" in result) {
         toast.success(t("chaptersUnpublished", { count: result.unpublished }));
-      } else {
-        toast.success(
-          result.skipped > 0
-            ? t("chaptersPublishedSkipped", {
-                count: result.published,
-                skipped: result.skipped,
-              })
-            : t("chaptersPublished", { count: result.published }),
-        );
+        return;
       }
+      if (result.blocked.length > 0) {
+        // A refusal is news whether or not anything else published: the owner clicked to put
+        // chapters live and some of them are not, so the ones that were held are named.
+        const chapterNumbers = result.blocked.map((chapter) => chapter.number).join(", ");
+        const message = t("chaptersPublishedWithBlocked", {
+          count: result.published,
+          blocked: result.blocked.length,
+          chapters: chapterNumbers,
+        });
+        if (result.published > 0) toast.success(message);
+        else toast.error(message);
+        return;
+      }
+      toast.success(
+        result.skipped > 0
+          ? t("chaptersPublishedSkipped", {
+              count: result.published,
+              skipped: result.skipped,
+            })
+          : t("chaptersPublished", { count: result.published }),
+      );
     },
     onError: (error) => {
       toast.error(translateServerError(error, tRoot, t("chapterPublishStateFailed")));

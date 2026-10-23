@@ -393,9 +393,18 @@ export async function failActiveJob(
           sql`${translationJobs.status} IN ('pending', 'running')`,
         ),
       );
+    // A failed run does not empty the chapter: the older text is still a finished
+    // translation, so a chapter that already held one keeps `translated` and the failure
+    // stays on the job row where the owner can read it. Marking it `error` here would take a
+    // live chapter off the catalog for a run that never replaced a word of it — the same rule
+    // the cancel path already applies, for the same reason.
     const chapterUpdated = await tx
       .update(chapters)
-      .set({ status: "error", activeTranslationJobId: null, updatedAt: new Date() })
+      .set({
+        status: row.chapter.translatedContent?.trim() ? "translated" : "error",
+        activeTranslationJobId: null,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(chapters.id, row.chapter.id),

@@ -91,4 +91,30 @@ describe("useNovelDetailMutations chapter publishing", () => {
 
     expect(chapterFunctions.setChapterPublished).toHaveBeenCalledTimes(2);
   });
+
+  it("names the chapters the publish pre-flight held back after a bulk release", async () => {
+    vi.mocked(chapterFunctions.setAllChaptersPublished).mockResolvedValueOnce({
+      id: "novel-1",
+      published: 1,
+      skipped: 0,
+      blocked: [
+        {
+          id: "chapter-7",
+          number: "7",
+          blockers: [{ reason: "missing-paragraphs", missingParagraphs: 1 }],
+        },
+      ],
+    } as never);
+    const { result } = renderHook(() => useNovelDetailMutations("novel-1", vi.fn()), {
+      wrapper,
+    });
+
+    await act(async () => {
+      result.current.publishAllChapters();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(toast.success).toHaveBeenCalled());
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("held back 1 (7)"));
+  });
 });
